@@ -45,9 +45,8 @@ class QXmlStreamWriter;
 
 class VCMatrixControl
 {
-
 public:
-    explicit VCMatrixControl(quint8 id);
+    VCMatrixControl(quint8 id = 0);
     VCMatrixControl(const VCMatrixControl &other);
 
     /** Destructor */

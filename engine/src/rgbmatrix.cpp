@@ -70,12 +70,12 @@ RGBMatrix::RGBMatrix(Doc *doc)
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     , m_algorithmMutex(QMutex::Recursive)
 #endif
-     , m_stepHandler(new RGBMatrixStep())
-     , m_stepsCount(0)
-     , m_stepBeatDuration(0)
-     , m_controlMode(RGBMatrix::ControlModeRgb)
- {
-     setName(tr("New RGB Matrix"));
+    , m_stepHandler(new RGBMatrixStep())
+    , m_stepsCount(0)
+    , m_stepBeatDuration(0)
+    , m_controlMode(RGBMatrix::ControlModeRgb)
+{
+    setName(tr("New RGB Matrix"));
     setDuration(500);
 
     m_rgbColors.fill(QColor(), RGBAlgorithmColorDisplayCount);
@@ -514,6 +514,7 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
 
     return true;
 }
+
 
 bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
 {

@@ -272,12 +272,12 @@ private:
     /** The number of steps returned by the currently loaded algorithm */
     int m_stepsCount;
 
-     /** The duration of a step based on the current BPM (Beats tempo only) */
-     uint m_stepBeatDuration;
- 
-     /*********************************************************************
-      * Attributes
-      *********************************************************************/
+    /** The duration of a step based on the current BPM (Beats tempo only) */
+    uint m_stepBeatDuration;
+
+    /*********************************************************************
+     * Attributes
+     *********************************************************************/
 public:
     /** @reimp */
     int adjustAttribute(qreal fraction, int attributeId);
