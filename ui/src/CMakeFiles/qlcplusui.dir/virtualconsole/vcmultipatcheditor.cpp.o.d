@@ -1101,6 +1101,30 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmultipatcheditor.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qtreeview.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qtreewidgetitemiterator.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QVBoxLayout \
+  /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../plugins/interfaces/qlcioplugin.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QStringList \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QtPlugin \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qplugin.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qpointer.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qjsonobject.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qjsonvalue.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qcborvalue.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qdatetime.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qcborcommon.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qdebug.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qtextstream.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qcontiguouscache.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qurl.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/quuid.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QObject \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QMap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/unistd.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/sys/unistd.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/sys/_types/_posix_vdisable.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/sys/select.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/sys/_select.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/sys/_types/_uuid_t.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/gethostuuid.h \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../engine/src/qlcinputsource.h \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QThread \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qthread.h \
@@ -1144,11 +1168,13 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmultipatcheditor.cpp.o: \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1/__format/formatter_string.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1/__format/formatter_tuple.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1/print \
-  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/unistd.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1/__thread/this_thread.h \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QMutex \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../engine/src/qlcinputfeedback.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QObject \
+  /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/virtualconsole/addressdelegate.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QStyledItemDelegate \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qstyleditemdelegate.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QLocale \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/virtualconsole/vcwidget.h \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/QKeySequence \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QWidget \
@@ -1160,9 +1186,7 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmultipatcheditor.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QFile \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qfile.h \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qfiledevice.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QMap \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../engine/src/qlcfixturedefcache.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QStringList \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QString \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QDir \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qdir.h \
@@ -1213,7 +1237,6 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmultipatcheditor.cpp.o: \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/clickandgoslider.h \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/QMouseEvent \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/qevent.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qurl.h \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/qvector2d.h \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/qtouchdevice.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QSlider \
@@ -1232,7 +1255,4 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmultipatcheditor.cpp.o: \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/virtualconsole/vcxypadfixture.h \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/virtualconsole/vcxypadpreset.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QTreeWidgetItem \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QDebug \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qdebug.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qtextstream.h \
-  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qcontiguouscache.h
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QDebug

@@ -1151,6 +1151,7 @@ ui/src/CMakeFiles/qlcplusui.dir/rgbmatrixeditor.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qpushbutton.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QRadioButton \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qradiobutton.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QScrollArea \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QSpacerItem \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QToolButton \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qtoolbutton.h \

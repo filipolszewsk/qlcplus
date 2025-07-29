@@ -1523,6 +1523,11 @@ ui/src/CMakeFiles/qlcplusui.dir/qlcplusui_autogen/mocs_compilation.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/qmetaobject.h \
   /opt/homebrew/opt/qt@5/lib/QtMultimedia.framework/Headers/qaudio.h \
   /opt/homebrew/opt/qt@5/lib/QtNetwork.framework/Headers/qnetworkconfiguration.h \
+  /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/qlcplusui_autogen/V6OUMXZR2W/moc_addressdelegate.cpp \
+  /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/qlcplusui_autogen/V6OUMXZR2W/../../virtualconsole/addressdelegate.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QStyledItemDelegate \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qstyleditemdelegate.h \
+  /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QLocale \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/qlcplusui_autogen/V6OUMXZR2W/moc_addvcbuttonmatrix.cpp \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/qlcplusui_autogen/V6OUMXZR2W/../../virtualconsole/addvcbuttonmatrix.h \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/qlcplusui_autogen/include/ui_addvcbuttonmatrix.h \
