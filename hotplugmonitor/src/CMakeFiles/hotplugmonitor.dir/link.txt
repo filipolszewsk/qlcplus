@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libhotplugmonitor.a CMakeFiles/hotplugmonitor.dir/hotplugmonitor_autogen/mocs_compilation.cpp.o CMakeFiles/hotplugmonitor.dir/hotplugmonitor.cpp.o "CMakeFiles/hotplugmonitor.dir/hpmprivate-iokit.cpp.o"
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libhotplugmonitor.a

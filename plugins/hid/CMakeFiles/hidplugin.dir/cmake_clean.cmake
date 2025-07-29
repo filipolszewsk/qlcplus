@@ -1,0 +1,40 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/hidplugin_autogen.dir/AutogenUsed.txt"
+  "CMakeFiles/hidplugin_autogen.dir/ParseCache.txt"
+  "hidplugin_autogen"
+  "CMakeFiles/hidplugin.dir/__/interfaces/qlcioplugin.cpp.o"
+  "CMakeFiles/hidplugin.dir/__/interfaces/qlcioplugin.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/configurehid.cpp.o"
+  "CMakeFiles/hidplugin.dir/configurehid.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/hiddevice.cpp.o"
+  "CMakeFiles/hidplugin.dir/hiddevice.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/hiddmxdevice.cpp.o"
+  "CMakeFiles/hidplugin.dir/hiddmxdevice.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/hidjsdevice.cpp.o"
+  "CMakeFiles/hidplugin.dir/hidjsdevice.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/hidplugin.cpp.o"
+  "CMakeFiles/hidplugin.dir/hidplugin.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/hidplugin_autogen/mocs_compilation.cpp.o"
+  "CMakeFiles/hidplugin.dir/hidplugin_autogen/mocs_compilation.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/macx/hidapi.cpp.o"
+  "CMakeFiles/hidplugin.dir/macx/hidapi.cpp.o.d"
+  "CMakeFiles/hidplugin.dir/macx/hidosxjoystick.cpp.o"
+  "CMakeFiles/hidplugin.dir/macx/hidosxjoystick.cpp.o.d"
+  "HID_ca_ES.qm"
+  "HID_cz_CZ.qm"
+  "HID_de_DE.qm"
+  "HID_es_ES.qm"
+  "HID_fi_FI.qm"
+  "HID_fr_FR.qm"
+  "HID_it_IT.qm"
+  "HID_ja_JP.qm"
+  "HID_nl_NL.qm"
+  "HID_pt_BR.qm"
+  "libhidplugin.dylib"
+  "libhidplugin.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/hidplugin.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
