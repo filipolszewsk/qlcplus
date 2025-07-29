@@ -1241,6 +1241,7 @@ ui/src/CMakeFiles/qlcplusui.dir/showmanager/showmanager.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QLineEdit \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QPushButton \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qpushbutton.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QScrollArea \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QSpacerItem \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QToolButton \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qtoolbutton.h \

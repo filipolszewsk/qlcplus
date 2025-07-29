@@ -76,6 +76,7 @@
 #include "EWIEGA46WW/moc_universeitemwidget.cpp"
 #include "EWIEGA46WW/moc_videoeditor.cpp"
 #include "EWIEGA46WW/moc_videoprovider.cpp"
+#include "V6OUMXZR2W/moc_addressdelegate.cpp"
 #include "V6OUMXZR2W/moc_addvcbuttonmatrix.cpp"
 #include "V6OUMXZR2W/moc_addvcslidermatrix.cpp"
 #include "V6OUMXZR2W/moc_vcaudiotriggers.cpp"

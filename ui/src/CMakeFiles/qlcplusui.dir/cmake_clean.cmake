@@ -172,6 +172,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/qlcplusui.dir/videoeditor.cpp.o.d"
   "CMakeFiles/qlcplusui.dir/videoprovider.cpp.o"
   "CMakeFiles/qlcplusui.dir/videoprovider.cpp.o.d"
+  "CMakeFiles/qlcplusui.dir/virtualconsole/addressdelegate.cpp.o"
+  "CMakeFiles/qlcplusui.dir/virtualconsole/addressdelegate.cpp.o.d"
   "CMakeFiles/qlcplusui.dir/virtualconsole/addvcbuttonmatrix.cpp.o"
   "CMakeFiles/qlcplusui.dir/virtualconsole/addvcbuttonmatrix.cpp.o.d"
   "CMakeFiles/qlcplusui.dir/virtualconsole/addvcslidermatrix.cpp.o"

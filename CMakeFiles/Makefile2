@@ -2917,7 +2917,7 @@ hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all: hotplugmonitor/src/CMakeFi
 
 # Build rule for subdir invocation for target.
 hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 1
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/rule
@@ -2938,12 +2938,12 @@ hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/clean:
 hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/all:
 	$(MAKE) $(MAKESILENT) -f hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/build.make hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/build.make hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=27 "Built target hotplugmonitor_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target hotplugmonitor_autogen"
 .PHONY : hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 1
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : hotplugmonitor/src/CMakeFiles/hotplugmonitor_autogen.dir/rule
@@ -2991,7 +2991,7 @@ hotplugmonitor/test/CMakeFiles/test.dir/clean:
 hotplugmonitor/test/CMakeFiles/test_autogen.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 	$(MAKE) $(MAKESILENT) -f hotplugmonitor/test/CMakeFiles/test_autogen.dir/build.make hotplugmonitor/test/CMakeFiles/test_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f hotplugmonitor/test/CMakeFiles/test_autogen.dir/build.make hotplugmonitor/test/CMakeFiles/test_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target test_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=89 "Built target test_autogen"
 .PHONY : hotplugmonitor/test/CMakeFiles/test_autogen.dir/all
 
 # Build rule for subdir invocation for target.
@@ -3128,7 +3128,7 @@ engine/src/CMakeFiles/qlcplusengine.dir/all: engine/src/CMakeFiles/qlcplusengine
 
 # Build rule for subdir invocation for target.
 engine/src/CMakeFiles/qlcplusengine.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/src/CMakeFiles/qlcplusengine.dir/rule
@@ -3155,7 +3155,7 @@ engine/src/CMakeFiles/qlcplusengine_autogen.dir/all: engine/audio/src/CMakeFiles
 
 # Build rule for subdir invocation for target.
 engine/src/CMakeFiles/qlcplusengine_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 2
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 1
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/src/CMakeFiles/qlcplusengine_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/src/CMakeFiles/qlcplusengine_autogen.dir/rule
@@ -3183,7 +3183,7 @@ engine/test/bus/CMakeFiles/bus_test.dir/all: engine/test/bus/CMakeFiles/bus_test
 
 # Build rule for subdir invocation for target.
 engine/test/bus/CMakeFiles/bus_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/bus/CMakeFiles/bus_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/bus/CMakeFiles/bus_test.dir/rule
@@ -3209,7 +3209,7 @@ engine/test/bus/CMakeFiles/bus_test_autogen.dir/all: engine/src/CMakeFiles/qlcpl
 
 # Build rule for subdir invocation for target.
 engine/test/bus/CMakeFiles/bus_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/bus/CMakeFiles/bus_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/bus/CMakeFiles/bus_test_autogen.dir/rule
@@ -3237,7 +3237,7 @@ engine/test/channelsgroup/CMakeFiles/channelsgroup_test.dir/all: engine/test/cha
 
 # Build rule for subdir invocation for target.
 engine/test/channelsgroup/CMakeFiles/channelsgroup_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/channelsgroup/CMakeFiles/channelsgroup_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/channelsgroup/CMakeFiles/channelsgroup_test.dir/rule
@@ -3263,7 +3263,7 @@ engine/test/channelsgroup/CMakeFiles/channelsgroup_test_autogen.dir/all: engine/
 
 # Build rule for subdir invocation for target.
 engine/test/channelsgroup/CMakeFiles/channelsgroup_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/channelsgroup/CMakeFiles/channelsgroup_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/channelsgroup/CMakeFiles/channelsgroup_test_autogen.dir/rule
@@ -3291,7 +3291,7 @@ engine/test/channelmodifier/CMakeFiles/channelmodifier_test.dir/all: engine/test
 
 # Build rule for subdir invocation for target.
 engine/test/channelmodifier/CMakeFiles/channelmodifier_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/channelmodifier/CMakeFiles/channelmodifier_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/channelmodifier/CMakeFiles/channelmodifier_test.dir/rule
@@ -3317,7 +3317,7 @@ engine/test/channelmodifier/CMakeFiles/channelmodifier_test_autogen.dir/all: eng
 
 # Build rule for subdir invocation for target.
 engine/test/channelmodifier/CMakeFiles/channelmodifier_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/channelmodifier/CMakeFiles/channelmodifier_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/channelmodifier/CMakeFiles/channelmodifier_test_autogen.dir/rule
@@ -3345,7 +3345,7 @@ engine/test/chaser/CMakeFiles/chaser_test.dir/all: engine/test/chaser/CMakeFiles
 
 # Build rule for subdir invocation for target.
 engine/test/chaser/CMakeFiles/chaser_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaser/CMakeFiles/chaser_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaser/CMakeFiles/chaser_test.dir/rule
@@ -3371,7 +3371,7 @@ engine/test/chaser/CMakeFiles/chaser_test_autogen.dir/all: engine/src/CMakeFiles
 
 # Build rule for subdir invocation for target.
 engine/test/chaser/CMakeFiles/chaser_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaser/CMakeFiles/chaser_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaser/CMakeFiles/chaser_test_autogen.dir/rule
@@ -3399,7 +3399,7 @@ engine/test/chaserrunner/CMakeFiles/chaserrunner_test.dir/all: engine/test/chase
 
 # Build rule for subdir invocation for target.
 engine/test/chaserrunner/CMakeFiles/chaserrunner_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaserrunner/CMakeFiles/chaserrunner_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaserrunner/CMakeFiles/chaserrunner_test.dir/rule
@@ -3425,7 +3425,7 @@ engine/test/chaserrunner/CMakeFiles/chaserrunner_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/chaserrunner/CMakeFiles/chaserrunner_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaserrunner/CMakeFiles/chaserrunner_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaserrunner/CMakeFiles/chaserrunner_test_autogen.dir/rule
@@ -3453,7 +3453,7 @@ engine/test/chaserstep/CMakeFiles/chaserstep_test.dir/all: engine/test/chaserste
 
 # Build rule for subdir invocation for target.
 engine/test/chaserstep/CMakeFiles/chaserstep_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaserstep/CMakeFiles/chaserstep_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaserstep/CMakeFiles/chaserstep_test.dir/rule
@@ -3479,7 +3479,7 @@ engine/test/chaserstep/CMakeFiles/chaserstep_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/chaserstep/CMakeFiles/chaserstep_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/chaserstep/CMakeFiles/chaserstep_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/chaserstep/CMakeFiles/chaserstep_test_autogen.dir/rule
@@ -3507,7 +3507,7 @@ engine/test/collection/CMakeFiles/collection_test.dir/all: engine/test/collectio
 
 # Build rule for subdir invocation for target.
 engine/test/collection/CMakeFiles/collection_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/collection/CMakeFiles/collection_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/collection/CMakeFiles/collection_test.dir/rule
@@ -3533,7 +3533,7 @@ engine/test/collection/CMakeFiles/collection_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/collection/CMakeFiles/collection_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/collection/CMakeFiles/collection_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/collection/CMakeFiles/collection_test_autogen.dir/rule
@@ -3561,7 +3561,7 @@ engine/test/cue/CMakeFiles/cue_test.dir/all: engine/test/cue/CMakeFiles/cue_test
 
 # Build rule for subdir invocation for target.
 engine/test/cue/CMakeFiles/cue_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/cue/CMakeFiles/cue_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/cue/CMakeFiles/cue_test.dir/rule
@@ -3587,7 +3587,7 @@ engine/test/cue/CMakeFiles/cue_test_autogen.dir/all: engine/src/CMakeFiles/qlcpl
 
 # Build rule for subdir invocation for target.
 engine/test/cue/CMakeFiles/cue_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/cue/CMakeFiles/cue_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/cue/CMakeFiles/cue_test_autogen.dir/rule
@@ -3615,7 +3615,7 @@ engine/test/cuestack/CMakeFiles/cuestack_test.dir/all: engine/test/cuestack/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/cuestack/CMakeFiles/cuestack_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/cuestack/CMakeFiles/cuestack_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/cuestack/CMakeFiles/cuestack_test.dir/rule
@@ -3641,7 +3641,7 @@ engine/test/cuestack/CMakeFiles/cuestack_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/cuestack/CMakeFiles/cuestack_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/cuestack/CMakeFiles/cuestack_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/cuestack/CMakeFiles/cuestack_test_autogen.dir/rule
@@ -3669,7 +3669,7 @@ engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test.di
 
 # Build rule for subdir invocation for target.
 engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test.dir/rule
@@ -3695,7 +3695,7 @@ engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test_au
 
 # Build rule for subdir invocation for target.
 engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/dmxdumpfactoryproperties/CMakeFiles/dmxdumpfactoryproperties_test_autogen.dir/rule
@@ -3723,7 +3723,7 @@ engine/test/doc/CMakeFiles/doc_test.dir/all: engine/test/doc/CMakeFiles/doc_test
 
 # Build rule for subdir invocation for target.
 engine/test/doc/CMakeFiles/doc_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/doc/CMakeFiles/doc_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/doc/CMakeFiles/doc_test.dir/rule
@@ -3749,7 +3749,7 @@ engine/test/doc/CMakeFiles/doc_test_autogen.dir/all: engine/src/CMakeFiles/qlcpl
 
 # Build rule for subdir invocation for target.
 engine/test/doc/CMakeFiles/doc_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/doc/CMakeFiles/doc_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/doc/CMakeFiles/doc_test_autogen.dir/rule
@@ -3777,7 +3777,7 @@ engine/test/efx/CMakeFiles/efx_test.dir/all: engine/test/efx/CMakeFiles/efx_test
 
 # Build rule for subdir invocation for target.
 engine/test/efx/CMakeFiles/efx_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/efx/CMakeFiles/efx_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/efx/CMakeFiles/efx_test.dir/rule
@@ -3803,7 +3803,7 @@ engine/test/efx/CMakeFiles/efx_test_autogen.dir/all: engine/src/CMakeFiles/qlcpl
 
 # Build rule for subdir invocation for target.
 engine/test/efx/CMakeFiles/efx_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/efx/CMakeFiles/efx_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/efx/CMakeFiles/efx_test_autogen.dir/rule
@@ -3831,7 +3831,7 @@ engine/test/efxfixture/CMakeFiles/efxfixture_test.dir/all: engine/test/efxfixtur
 
 # Build rule for subdir invocation for target.
 engine/test/efxfixture/CMakeFiles/efxfixture_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/efxfixture/CMakeFiles/efxfixture_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/efxfixture/CMakeFiles/efxfixture_test.dir/rule
@@ -3857,7 +3857,7 @@ engine/test/efxfixture/CMakeFiles/efxfixture_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/efxfixture/CMakeFiles/efxfixture_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/efxfixture/CMakeFiles/efxfixture_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/efxfixture/CMakeFiles/efxfixture_test_autogen.dir/rule
@@ -3875,9 +3875,9 @@ engine/test/efxfixture/CMakeFiles/efxfixture_test_autogen.dir/clean:
 # Target rules for target engine/test/fadechannel/CMakeFiles/fadechannel_test.dir
 
 # All Build rule for target.
+engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all: engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/all
 engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all: engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/build.make engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/build.make engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=20 "Built target fadechannel_test"
@@ -3885,7 +3885,7 @@ engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all: engine/test/fadecha
 
 # Build rule for subdir invocation for target.
 engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fadechannel/CMakeFiles/fadechannel_test.dir/rule
@@ -3911,7 +3911,7 @@ engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/all: engine/src/
 
 # Build rule for subdir invocation for target.
 engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/rule
@@ -3929,9 +3929,9 @@ engine/test/fadechannel/CMakeFiles/fadechannel_test_autogen.dir/clean:
 # Target rules for target engine/test/fixture/CMakeFiles/fixture_test.dir
 
 # All Build rule for target.
+engine/test/fixture/CMakeFiles/fixture_test.dir/all: engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/all
 engine/test/fixture/CMakeFiles/fixture_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/fixture/CMakeFiles/fixture_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/fixture/CMakeFiles/fixture_test.dir/all: engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/fixture/CMakeFiles/fixture_test.dir/build.make engine/test/fixture/CMakeFiles/fixture_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/fixture/CMakeFiles/fixture_test.dir/build.make engine/test/fixture/CMakeFiles/fixture_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target fixture_test"
@@ -3939,7 +3939,7 @@ engine/test/fixture/CMakeFiles/fixture_test.dir/all: engine/test/fixture/CMakeFi
 
 # Build rule for subdir invocation for target.
 engine/test/fixture/CMakeFiles/fixture_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fixture/CMakeFiles/fixture_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fixture/CMakeFiles/fixture_test.dir/rule
@@ -3965,7 +3965,7 @@ engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/all: engine/src/CMakeFil
 
 # Build rule for subdir invocation for target.
 engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/rule
@@ -3983,9 +3983,9 @@ engine/test/fixture/CMakeFiles/fixture_test_autogen.dir/clean:
 # Target rules for target engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir
 
 # All Build rule for target.
+engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all: engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/all
 engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all: engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/build.make engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/build.make engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target fixturegroup_test"
@@ -3993,7 +3993,7 @@ engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all: engine/test/fixtu
 
 # Build rule for subdir invocation for target.
 engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fixturegroup/CMakeFiles/fixturegroup_test.dir/rule
@@ -4019,7 +4019,7 @@ engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/rule
@@ -4037,9 +4037,9 @@ engine/test/fixturegroup/CMakeFiles/fixturegroup_test_autogen.dir/clean:
 # Target rules for target engine/test/function/CMakeFiles/function_test.dir
 
 # All Build rule for target.
+engine/test/function/CMakeFiles/function_test.dir/all: engine/test/function/CMakeFiles/function_test_autogen.dir/all
 engine/test/function/CMakeFiles/function_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/function/CMakeFiles/function_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/function/CMakeFiles/function_test.dir/all: engine/test/function/CMakeFiles/function_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/function/CMakeFiles/function_test.dir/build.make engine/test/function/CMakeFiles/function_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/function/CMakeFiles/function_test.dir/build.make engine/test/function/CMakeFiles/function_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=22 "Built target function_test"
@@ -4047,7 +4047,7 @@ engine/test/function/CMakeFiles/function_test.dir/all: engine/test/function/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/function/CMakeFiles/function_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/function/CMakeFiles/function_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/function/CMakeFiles/function_test.dir/rule
@@ -4073,7 +4073,7 @@ engine/test/function/CMakeFiles/function_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/function/CMakeFiles/function_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/function/CMakeFiles/function_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/function/CMakeFiles/function_test_autogen.dir/rule
@@ -4091,9 +4091,9 @@ engine/test/function/CMakeFiles/function_test_autogen.dir/clean:
 # Target rules for target engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir
 
 # All Build rule for target.
+engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all: engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/all
 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all: engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/build.make engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/build.make engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=23 "Built target genericdmxsource_test"
@@ -4101,7 +4101,7 @@ engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all: engine/te
 
 # Build rule for subdir invocation for target.
 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test.dir/rule
@@ -4127,7 +4127,7 @@ engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/all: e
 
 # Build rule for subdir invocation for target.
 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/rule
@@ -4145,9 +4145,9 @@ engine/test/genericdmxsource/CMakeFiles/genericdmxsource_test_autogen.dir/clean:
 # Target rules for target engine/test/genericfader/CMakeFiles/genericfader_test.dir
 
 # All Build rule for target.
+engine/test/genericfader/CMakeFiles/genericfader_test.dir/all: engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/all
 engine/test/genericfader/CMakeFiles/genericfader_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/genericfader/CMakeFiles/genericfader_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/genericfader/CMakeFiles/genericfader_test.dir/all: engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/genericfader/CMakeFiles/genericfader_test.dir/build.make engine/test/genericfader/CMakeFiles/genericfader_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/genericfader/CMakeFiles/genericfader_test.dir/build.make engine/test/genericfader/CMakeFiles/genericfader_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target genericfader_test"
@@ -4155,7 +4155,7 @@ engine/test/genericfader/CMakeFiles/genericfader_test.dir/all: engine/test/gener
 
 # Build rule for subdir invocation for target.
 engine/test/genericfader/CMakeFiles/genericfader_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/genericfader/CMakeFiles/genericfader_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/genericfader/CMakeFiles/genericfader_test.dir/rule
@@ -4181,7 +4181,7 @@ engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/rule
@@ -4199,9 +4199,9 @@ engine/test/genericfader/CMakeFiles/genericfader_test_autogen.dir/clean:
 # Target rules for target engine/test/grandmaster/CMakeFiles/grandmaster_test.dir
 
 # All Build rule for target.
+engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all: engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/all
 engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all: engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/build.make engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/build.make engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=24 "Built target grandmaster_test"
@@ -4209,7 +4209,7 @@ engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all: engine/test/grandma
 
 # Build rule for subdir invocation for target.
 engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/grandmaster/CMakeFiles/grandmaster_test.dir/rule
@@ -4235,7 +4235,7 @@ engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/all: engine/src/
 
 # Build rule for subdir invocation for target.
 engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/rule
@@ -4253,12 +4253,12 @@ engine/test/grandmaster/CMakeFiles/grandmaster_test_autogen.dir/clean:
 # Target rules for target engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir
 
 # All Build rule for target.
+engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/all: engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/all
 engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/all: engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/build.make engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/build.make engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target inputoutputmap_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=27 "Built target inputoutputmap_test"
 .PHONY : engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -4289,7 +4289,7 @@ engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/all: engin
 
 # Build rule for subdir invocation for target.
 engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/rule
@@ -4307,9 +4307,9 @@ engine/test/inputoutputmap/CMakeFiles/inputoutputmap_test_autogen.dir/clean:
 # Target rules for target engine/test/inputpatch/CMakeFiles/inputpatch_test.dir
 
 # All Build rule for target.
+engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all: engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/all
 engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all: engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/build.make engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/build.make engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target inputpatch_test"
@@ -4317,7 +4317,7 @@ engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all: engine/test/inputpatc
 
 # Build rule for subdir invocation for target.
 engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/inputpatch/CMakeFiles/inputpatch_test.dir/rule
@@ -4343,7 +4343,7 @@ engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/inputpatch/CMakeFiles/inputpatch_test_autogen.dir/rule
@@ -4371,7 +4371,7 @@ engine/test/keypadparser/CMakeFiles/keypadparser_test.dir/all: engine/test/keypa
 
 # Build rule for subdir invocation for target.
 engine/test/keypadparser/CMakeFiles/keypadparser_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/keypadparser/CMakeFiles/keypadparser_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/keypadparser/CMakeFiles/keypadparser_test.dir/rule
@@ -4397,7 +4397,7 @@ engine/test/keypadparser/CMakeFiles/keypadparser_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/keypadparser/CMakeFiles/keypadparser_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/keypadparser/CMakeFiles/keypadparser_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/keypadparser/CMakeFiles/keypadparser_test_autogen.dir/rule
@@ -4415,9 +4415,9 @@ engine/test/keypadparser/CMakeFiles/keypadparser_test_autogen.dir/clean:
 # Target rules for target engine/test/mastertimer/CMakeFiles/mastertimer_test.dir
 
 # All Build rule for target.
+engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all: engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/all
 engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all: engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/build.make engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/build.make engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=31 "Built target mastertimer_test"
@@ -4425,7 +4425,7 @@ engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all: engine/test/mastert
 
 # Build rule for subdir invocation for target.
 engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/mastertimer/CMakeFiles/mastertimer_test.dir/rule
@@ -4451,7 +4451,7 @@ engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/all: engine/src/
 
 # Build rule for subdir invocation for target.
 engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/mastertimer/CMakeFiles/mastertimer_test_autogen.dir/rule
@@ -4479,7 +4479,7 @@ engine/test/monitorproperties/CMakeFiles/monitorproperties_test.dir/all: engine/
 
 # Build rule for subdir invocation for target.
 engine/test/monitorproperties/CMakeFiles/monitorproperties_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/monitorproperties/CMakeFiles/monitorproperties_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/monitorproperties/CMakeFiles/monitorproperties_test.dir/rule
@@ -4505,7 +4505,7 @@ engine/test/monitorproperties/CMakeFiles/monitorproperties_test_autogen.dir/all:
 
 # Build rule for subdir invocation for target.
 engine/test/monitorproperties/CMakeFiles/monitorproperties_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/monitorproperties/CMakeFiles/monitorproperties_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/monitorproperties/CMakeFiles/monitorproperties_test_autogen.dir/rule
@@ -4533,7 +4533,7 @@ engine/test/outputpatch/CMakeFiles/outputpatch_test.dir/all: engine/test/outputp
 
 # Build rule for subdir invocation for target.
 engine/test/outputpatch/CMakeFiles/outputpatch_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/outputpatch/CMakeFiles/outputpatch_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/outputpatch/CMakeFiles/outputpatch_test.dir/rule
@@ -4559,7 +4559,7 @@ engine/test/outputpatch/CMakeFiles/outputpatch_test_autogen.dir/all: engine/src/
 
 # Build rule for subdir invocation for target.
 engine/test/outputpatch/CMakeFiles/outputpatch_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/outputpatch/CMakeFiles/outputpatch_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/outputpatch/CMakeFiles/outputpatch_test_autogen.dir/rule
@@ -4587,7 +4587,7 @@ engine/test/qlccapability/CMakeFiles/qlccapability_test.dir/all: engine/test/qlc
 
 # Build rule for subdir invocation for target.
 engine/test/qlccapability/CMakeFiles/qlccapability_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlccapability/CMakeFiles/qlccapability_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlccapability/CMakeFiles/qlccapability_test.dir/rule
@@ -4613,7 +4613,7 @@ engine/test/qlccapability/CMakeFiles/qlccapability_test_autogen.dir/all: engine/
 
 # Build rule for subdir invocation for target.
 engine/test/qlccapability/CMakeFiles/qlccapability_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlccapability/CMakeFiles/qlccapability_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlccapability/CMakeFiles/qlccapability_test_autogen.dir/rule
@@ -4631,17 +4631,17 @@ engine/test/qlccapability/CMakeFiles/qlccapability_test_autogen.dir/clean:
 # Target rules for target engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir
 
 # All Build rule for target.
+engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all: engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/all
 engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all: engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/build.make engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/build.make engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=43 "Built target qlcchannel_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcchannel_test"
 .PHONY : engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/rule
@@ -4662,7 +4662,7 @@ engine/test/qlcchannel/CMakeFiles/qlcchannel_test.dir/clean:
 engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/build.make engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/build.make engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcchannel_test_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=43 "Built target qlcchannel_test_autogen"
 .PHONY : engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/all
 
 # Build rule for subdir invocation for target.
@@ -4685,9 +4685,9 @@ engine/test/qlcchannel/CMakeFiles/qlcchannel_test_autogen.dir/clean:
 # Target rules for target engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir
 
 # All Build rule for target.
+engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all: engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/all
 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all: engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/build.make engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/build.make engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcclipboard_test"
@@ -4695,7 +4695,7 @@ engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all: engine/test/qlccl
 
 # Build rule for subdir invocation for target.
 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test.dir/rule
@@ -4721,7 +4721,7 @@ engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/rule
@@ -4739,9 +4739,9 @@ engine/test/qlcclipboard/CMakeFiles/qlcclipboard_test_autogen.dir/clean:
 # Target rules for target engine/test/qlcfile/CMakeFiles/qlcfile_test.dir
 
 # All Build rule for target.
+engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all: engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/all
 engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all: engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/build.make engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/build.make engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcfile_test"
@@ -4749,7 +4749,7 @@ engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all: engine/test/qlcfile/CMakeFi
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/rule
@@ -4770,12 +4770,12 @@ engine/test/qlcfile/CMakeFiles/qlcfile_test.dir/clean:
 engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/build.make engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/build.make engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=44 "Built target qlcfile_test_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcfile_test_autogen"
 .PHONY : engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfile/CMakeFiles/qlcfile_test_autogen.dir/rule
@@ -4798,7 +4798,7 @@ engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/all: engine/src/CMak
 engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/all: engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/build.make engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/build.make engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcfixturedef_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=44 "Built target qlcfixturedef_test"
 .PHONY : engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -4829,7 +4829,7 @@ engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test_autogen.dir/all: engine/
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturedef/CMakeFiles/qlcfixturedef_test_autogen.dir/rule
@@ -4857,7 +4857,7 @@ engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test.dir/all: engin
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test.dir/rule
@@ -4883,7 +4883,7 @@ engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test_autogen.dir/al
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturedefcache/CMakeFiles/qlcfixturedefcache_test_autogen.dir/rule
@@ -4911,7 +4911,7 @@ engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test.dir/all: engine/test/q
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test.dir/rule
@@ -4937,7 +4937,7 @@ engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test_autogen.dir/all: engin
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturehead/CMakeFiles/qlcfixturehead_test_autogen.dir/rule
@@ -4965,7 +4965,7 @@ engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test.dir/all: engine/test/q
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test.dir/rule
@@ -4991,7 +4991,7 @@ engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test_autogen.dir/all: engin
 
 # Build rule for subdir invocation for target.
 engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcfixturemode/CMakeFiles/qlcfixturemode_test_autogen.dir/rule
@@ -5019,7 +5019,7 @@ engine/test/qlci18n/CMakeFiles/qlci18n_test.dir/all: engine/test/qlci18n/CMakeFi
 
 # Build rule for subdir invocation for target.
 engine/test/qlci18n/CMakeFiles/qlci18n_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlci18n/CMakeFiles/qlci18n_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlci18n/CMakeFiles/qlci18n_test.dir/rule
@@ -5045,7 +5045,7 @@ engine/test/qlci18n/CMakeFiles/qlci18n_test_autogen.dir/all: engine/src/CMakeFil
 
 # Build rule for subdir invocation for target.
 engine/test/qlci18n/CMakeFiles/qlci18n_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlci18n/CMakeFiles/qlci18n_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlci18n/CMakeFiles/qlci18n_test_autogen.dir/rule
@@ -5073,7 +5073,7 @@ engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test.dir/all: engine/test
 
 # Build rule for subdir invocation for target.
 engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test.dir/rule
@@ -5099,7 +5099,7 @@ engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test_autogen.dir/all: eng
 
 # Build rule for subdir invocation for target.
 engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcinputchannel/CMakeFiles/qlcinputchannel_test_autogen.dir/rule
@@ -5127,7 +5127,7 @@ engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test.dir/all: engine/test
 
 # Build rule for subdir invocation for target.
 engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test.dir/rule
@@ -5153,7 +5153,7 @@ engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test_autogen.dir/all: eng
 
 # Build rule for subdir invocation for target.
 engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcinputprofile/CMakeFiles/qlcinputprofile_test_autogen.dir/rule
@@ -5181,7 +5181,7 @@ engine/test/qlcmacros/CMakeFiles/qlcmacros_test.dir/all: engine/test/qlcmacros/C
 
 # Build rule for subdir invocation for target.
 engine/test/qlcmacros/CMakeFiles/qlcmacros_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcmacros/CMakeFiles/qlcmacros_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcmacros/CMakeFiles/qlcmacros_test.dir/rule
@@ -5207,7 +5207,7 @@ engine/test/qlcmacros/CMakeFiles/qlcmacros_test_autogen.dir/all: engine/src/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/qlcmacros/CMakeFiles/qlcmacros_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcmacros/CMakeFiles/qlcmacros_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcmacros/CMakeFiles/qlcmacros_test_autogen.dir/rule
@@ -5235,7 +5235,7 @@ engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test.dir/all: engine/
 
 # Build rule for subdir invocation for target.
 engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test.dir/rule
@@ -5256,12 +5256,12 @@ engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test.dir/clean:
 engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/build.make engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/build.make engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=48 "Built target qlcmodifierscache_test_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcmodifierscache_test_autogen"
 .PHONY : engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcmodifierscache/CMakeFiles/qlcmodifierscache_test_autogen.dir/rule
@@ -5284,7 +5284,7 @@ engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/all: engine/src/CMakeFiles
 engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/all: engine/test/qlcpalette/CMakeFiles/qlcpalette_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/build.make engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/build.make engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcpalette_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=48 "Built target qlcpalette_test"
 .PHONY : engine/test/qlcpalette/CMakeFiles/qlcpalette_test.dir/all
 
 # Build rule for subdir invocation for target.
@@ -5315,7 +5315,7 @@ engine/test/qlcpalette/CMakeFiles/qlcpalette_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/qlcpalette/CMakeFiles/qlcpalette_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcpalette/CMakeFiles/qlcpalette_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcpalette/CMakeFiles/qlcpalette_test_autogen.dir/rule
@@ -5343,7 +5343,7 @@ engine/test/qlcphysical/CMakeFiles/qlcphysical_test.dir/all: engine/test/qlcphys
 
 # Build rule for subdir invocation for target.
 engine/test/qlcphysical/CMakeFiles/qlcphysical_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcphysical/CMakeFiles/qlcphysical_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcphysical/CMakeFiles/qlcphysical_test.dir/rule
@@ -5369,7 +5369,7 @@ engine/test/qlcphysical/CMakeFiles/qlcphysical_test_autogen.dir/all: engine/src/
 
 # Build rule for subdir invocation for target.
 engine/test/qlcphysical/CMakeFiles/qlcphysical_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcphysical/CMakeFiles/qlcphysical_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcphysical/CMakeFiles/qlcphysical_test_autogen.dir/rule
@@ -5387,9 +5387,9 @@ engine/test/qlcphysical/CMakeFiles/qlcphysical_test_autogen.dir/clean:
 # Target rules for target engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir
 
 # All Build rule for target.
+engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all: engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/all
 engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all: engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/build.make engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/build.make engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcpoint_test"
@@ -5397,7 +5397,7 @@ engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all: engine/test/qlcpoint/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcpoint/CMakeFiles/qlcpoint_test.dir/rule
@@ -5423,7 +5423,7 @@ engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/rule
@@ -5441,9 +5441,9 @@ engine/test/qlcpoint/CMakeFiles/qlcpoint_test_autogen.dir/clean:
 # Target rules for target engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir
 
 # All Build rule for target.
+engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all: engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/all
 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all: engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/build.make engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/build.make engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=81 "Built target rgbalgorithm_test"
@@ -5451,7 +5451,7 @@ engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all: engine/test/rgbal
 
 # Build rule for subdir invocation for target.
 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test.dir/rule
@@ -5477,7 +5477,7 @@ engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/rule
@@ -5495,9 +5495,9 @@ engine/test/rgbalgorithm/CMakeFiles/rgbalgorithm_test_autogen.dir/clean:
 # Target rules for target engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir
 
 # All Build rule for target.
+engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all: engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/all
 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all: engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/build.make engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/build.make engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=82 "Built target rgbmatrix_test"
@@ -5505,7 +5505,7 @@ engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all: engine/test/rgbmatrix/C
 
 # Build rule for subdir invocation for target.
 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test.dir/rule
@@ -5531,7 +5531,7 @@ engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/all: engine/src/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/rule
@@ -5549,9 +5549,9 @@ engine/test/rgbmatrix/CMakeFiles/rgbmatrix_test_autogen.dir/clean:
 # Target rules for target engine/test/rgbplain/CMakeFiles/rgbplain_test.dir
 
 # All Build rule for target.
+engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all: engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/all
 engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
-engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all: engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/build.make engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/build.make engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target rgbplain_test"
@@ -5559,7 +5559,7 @@ engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all: engine/test/rgbplain/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbplain/CMakeFiles/rgbplain_test.dir/rule
@@ -5585,7 +5585,7 @@ engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbplain/CMakeFiles/rgbplain_test_autogen.dir/rule
@@ -5613,7 +5613,7 @@ engine/test/rgbscript/CMakeFiles/rgbscript_test.dir/all: engine/test/rgbscript/C
 
 # Build rule for subdir invocation for target.
 engine/test/rgbscript/CMakeFiles/rgbscript_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbscript/CMakeFiles/rgbscript_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbscript/CMakeFiles/rgbscript_test.dir/rule
@@ -5639,7 +5639,7 @@ engine/test/rgbscript/CMakeFiles/rgbscript_test_autogen.dir/all: engine/src/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/rgbscript/CMakeFiles/rgbscript_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbscript/CMakeFiles/rgbscript_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbscript/CMakeFiles/rgbscript_test_autogen.dir/rule
@@ -5667,7 +5667,7 @@ engine/test/rgbtext/CMakeFiles/rgbtext_test.dir/all: engine/test/rgbtext/CMakeFi
 
 # Build rule for subdir invocation for target.
 engine/test/rgbtext/CMakeFiles/rgbtext_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbtext/CMakeFiles/rgbtext_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbtext/CMakeFiles/rgbtext_test.dir/rule
@@ -5693,7 +5693,7 @@ engine/test/rgbtext/CMakeFiles/rgbtext_test_autogen.dir/all: engine/src/CMakeFil
 
 # Build rule for subdir invocation for target.
 engine/test/rgbtext/CMakeFiles/rgbtext_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/rgbtext/CMakeFiles/rgbtext_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/rgbtext/CMakeFiles/rgbtext_test_autogen.dir/rule
@@ -5716,12 +5716,12 @@ engine/test/scene/CMakeFiles/scene_test.dir/all: engine/src/CMakeFiles/qlcplusen
 engine/test/scene/CMakeFiles/scene_test.dir/all: engine/test/scene/CMakeFiles/scene_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/scene/CMakeFiles/scene_test.dir/build.make engine/test/scene/CMakeFiles/scene_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/scene/CMakeFiles/scene_test.dir/build.make engine/test/scene/CMakeFiles/scene_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target scene_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=84 "Built target scene_test"
 .PHONY : engine/test/scene/CMakeFiles/scene_test.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/scene/CMakeFiles/scene_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/scene/CMakeFiles/scene_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/scene/CMakeFiles/scene_test.dir/rule
@@ -5742,12 +5742,12 @@ engine/test/scene/CMakeFiles/scene_test.dir/clean:
 engine/test/scene/CMakeFiles/scene_test_autogen.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/scene/CMakeFiles/scene_test_autogen.dir/build.make engine/test/scene/CMakeFiles/scene_test_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/scene/CMakeFiles/scene_test_autogen.dir/build.make engine/test/scene/CMakeFiles/scene_test_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=84 "Built target scene_test_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target scene_test_autogen"
 .PHONY : engine/test/scene/CMakeFiles/scene_test_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/scene/CMakeFiles/scene_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/scene/CMakeFiles/scene_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/scene/CMakeFiles/scene_test_autogen.dir/rule
@@ -5775,7 +5775,7 @@ engine/test/scenevalue/CMakeFiles/scenevalue_test.dir/all: engine/test/scenevalu
 
 # Build rule for subdir invocation for target.
 engine/test/scenevalue/CMakeFiles/scenevalue_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/scenevalue/CMakeFiles/scenevalue_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/scenevalue/CMakeFiles/scenevalue_test.dir/rule
@@ -5801,7 +5801,7 @@ engine/test/scenevalue/CMakeFiles/scenevalue_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/scenevalue/CMakeFiles/scenevalue_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/scenevalue/CMakeFiles/scenevalue_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/scenevalue/CMakeFiles/scenevalue_test_autogen.dir/rule
@@ -5829,7 +5829,7 @@ engine/test/script/CMakeFiles/script_test.dir/all: engine/test/script/CMakeFiles
 
 # Build rule for subdir invocation for target.
 engine/test/script/CMakeFiles/script_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/script/CMakeFiles/script_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/script/CMakeFiles/script_test.dir/rule
@@ -5855,7 +5855,7 @@ engine/test/script/CMakeFiles/script_test_autogen.dir/all: engine/src/CMakeFiles
 
 # Build rule for subdir invocation for target.
 engine/test/script/CMakeFiles/script_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/script/CMakeFiles/script_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/script/CMakeFiles/script_test_autogen.dir/rule
@@ -5883,7 +5883,7 @@ engine/test/sequence/CMakeFiles/sequence_test.dir/all: engine/test/sequence/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/sequence/CMakeFiles/sequence_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/sequence/CMakeFiles/sequence_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/sequence/CMakeFiles/sequence_test.dir/rule
@@ -5909,7 +5909,7 @@ engine/test/sequence/CMakeFiles/sequence_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/sequence/CMakeFiles/sequence_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/sequence/CMakeFiles/sequence_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/sequence/CMakeFiles/sequence_test_autogen.dir/rule
@@ -5937,7 +5937,7 @@ engine/test/show/CMakeFiles/show_test.dir/all: engine/test/show/CMakeFiles/show_
 
 # Build rule for subdir invocation for target.
 engine/test/show/CMakeFiles/show_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/show/CMakeFiles/show_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/show/CMakeFiles/show_test.dir/rule
@@ -5963,7 +5963,7 @@ engine/test/show/CMakeFiles/show_test_autogen.dir/all: engine/src/CMakeFiles/qlc
 
 # Build rule for subdir invocation for target.
 engine/test/show/CMakeFiles/show_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/show/CMakeFiles/show_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/show/CMakeFiles/show_test_autogen.dir/rule
@@ -5991,7 +5991,7 @@ engine/test/showfunction/CMakeFiles/showfunction_test.dir/all: engine/test/showf
 
 # Build rule for subdir invocation for target.
 engine/test/showfunction/CMakeFiles/showfunction_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/showfunction/CMakeFiles/showfunction_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/showfunction/CMakeFiles/showfunction_test.dir/rule
@@ -6017,7 +6017,7 @@ engine/test/showfunction/CMakeFiles/showfunction_test_autogen.dir/all: engine/sr
 
 # Build rule for subdir invocation for target.
 engine/test/showfunction/CMakeFiles/showfunction_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/showfunction/CMakeFiles/showfunction_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/showfunction/CMakeFiles/showfunction_test_autogen.dir/rule
@@ -6045,7 +6045,7 @@ engine/test/showrunner/CMakeFiles/showrunner_test.dir/all: engine/test/showrunne
 
 # Build rule for subdir invocation for target.
 engine/test/showrunner/CMakeFiles/showrunner_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/showrunner/CMakeFiles/showrunner_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/showrunner/CMakeFiles/showrunner_test.dir/rule
@@ -6071,7 +6071,7 @@ engine/test/showrunner/CMakeFiles/showrunner_test_autogen.dir/all: engine/src/CM
 
 # Build rule for subdir invocation for target.
 engine/test/showrunner/CMakeFiles/showrunner_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/showrunner/CMakeFiles/showrunner_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/showrunner/CMakeFiles/showrunner_test_autogen.dir/rule
@@ -6094,12 +6094,12 @@ engine/test/track/CMakeFiles/track_test.dir/all: engine/src/CMakeFiles/qlcplusen
 engine/test/track/CMakeFiles/track_test.dir/all: engine/test/track/CMakeFiles/track_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f engine/test/track/CMakeFiles/track_test.dir/build.make engine/test/track/CMakeFiles/track_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f engine/test/track/CMakeFiles/track_test.dir/build.make engine/test/track/CMakeFiles/track_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=89 "Built target track_test"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target track_test"
 .PHONY : engine/test/track/CMakeFiles/track_test.dir/all
 
 # Build rule for subdir invocation for target.
 engine/test/track/CMakeFiles/track_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/track/CMakeFiles/track_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/track/CMakeFiles/track_test.dir/rule
@@ -6125,7 +6125,7 @@ engine/test/track/CMakeFiles/track_test_autogen.dir/all: engine/src/CMakeFiles/q
 
 # Build rule for subdir invocation for target.
 engine/test/track/CMakeFiles/track_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/track/CMakeFiles/track_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/track/CMakeFiles/track_test_autogen.dir/rule
@@ -6153,7 +6153,7 @@ engine/test/universe/CMakeFiles/universe_test.dir/all: engine/test/universe/CMak
 
 # Build rule for subdir invocation for target.
 engine/test/universe/CMakeFiles/universe_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/universe/CMakeFiles/universe_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/universe/CMakeFiles/universe_test.dir/rule
@@ -6179,7 +6179,7 @@ engine/test/universe/CMakeFiles/universe_test_autogen.dir/all: engine/src/CMakeF
 
 # Build rule for subdir invocation for target.
 engine/test/universe/CMakeFiles/universe_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/universe/CMakeFiles/universe_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/universe/CMakeFiles/universe_test_autogen.dir/rule
@@ -6207,7 +6207,7 @@ engine/test/video/CMakeFiles/video_test.dir/all: engine/test/video/CMakeFiles/vi
 
 # Build rule for subdir invocation for target.
 engine/test/video/CMakeFiles/video_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/video/CMakeFiles/video_test.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/video/CMakeFiles/video_test.dir/rule
@@ -6233,7 +6233,7 @@ engine/test/video/CMakeFiles/video_test_autogen.dir/all: engine/src/CMakeFiles/q
 
 # Build rule for subdir invocation for target.
 engine/test/video/CMakeFiles/video_test_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 10
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 engine/test/video/CMakeFiles/video_test_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : engine/test/video/CMakeFiles/video_test_autogen.dir/rule
@@ -7169,7 +7169,7 @@ ui/src/CMakeFiles/qlcplusui.dir/clean:
 ui/src/CMakeFiles/qlcplusui_autogen.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/src/CMakeFiles/qlcplusui_autogen.dir/build.make ui/src/CMakeFiles/qlcplusui_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/src/CMakeFiles/qlcplusui_autogen.dir/build.make ui/src/CMakeFiles/qlcplusui_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcplusui_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=78 "Built target qlcplusui_autogen"
 .PHONY : ui/src/CMakeFiles/qlcplusui_autogen.dir/all
 
 # Build rule for subdir invocation for target.
@@ -7584,10 +7584,10 @@ ui/test/fixtureselection/CMakeFiles/fixtureselection_test_autogen.dir/clean:
 # Target rules for target ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir
 
 # All Build rule for target.
+ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/all: ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test_autogen.dir/all
 ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/all: ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/build.make ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/build.make ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target fixturetreewidget_test"
@@ -7640,10 +7640,10 @@ ui/test/fixturetreewidget/CMakeFiles/fixturetreewidget_test_autogen.dir/clean:
 # Target rules for target ui/test/functionselection/CMakeFiles/functionselection_test.dir
 
 # All Build rule for target.
+ui/test/functionselection/CMakeFiles/functionselection_test.dir/all: ui/test/functionselection/CMakeFiles/functionselection_test_autogen.dir/all
 ui/test/functionselection/CMakeFiles/functionselection_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/functionselection/CMakeFiles/functionselection_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/functionselection/CMakeFiles/functionselection_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/functionselection/CMakeFiles/functionselection_test.dir/all: ui/test/functionselection/CMakeFiles/functionselection_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/functionselection/CMakeFiles/functionselection_test.dir/build.make ui/test/functionselection/CMakeFiles/functionselection_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/functionselection/CMakeFiles/functionselection_test.dir/build.make ui/test/functionselection/CMakeFiles/functionselection_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target functionselection_test"
@@ -8144,10 +8144,10 @@ ui/test/vcbutton/CMakeFiles/vcbutton_test_autogen.dir/clean:
 # Target rules for target ui/test/vccuelist/CMakeFiles/vccuelist_test.dir
 
 # All Build rule for target.
+ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/all: ui/test/vccuelist/CMakeFiles/vccuelist_test_autogen.dir/all
 ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/all: ui/test/vccuelist/CMakeFiles/vccuelist_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/build.make ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/build.make ui/test/vccuelist/CMakeFiles/vccuelist_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vccuelist_test"
@@ -8200,10 +8200,10 @@ ui/test/vccuelist/CMakeFiles/vccuelist_test_autogen.dir/clean:
 # Target rules for target ui/test/vcframe/CMakeFiles/vcframe_test.dir
 
 # All Build rule for target.
+ui/test/vcframe/CMakeFiles/vcframe_test.dir/all: ui/test/vcframe/CMakeFiles/vcframe_test_autogen.dir/all
 ui/test/vcframe/CMakeFiles/vcframe_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcframe/CMakeFiles/vcframe_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcframe/CMakeFiles/vcframe_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcframe/CMakeFiles/vcframe_test.dir/all: ui/test/vcframe/CMakeFiles/vcframe_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcframe/CMakeFiles/vcframe_test.dir/build.make ui/test/vcframe/CMakeFiles/vcframe_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcframe/CMakeFiles/vcframe_test.dir/build.make ui/test/vcframe/CMakeFiles/vcframe_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vcframe_test"
@@ -8256,10 +8256,10 @@ ui/test/vcframe/CMakeFiles/vcframe_test_autogen.dir/clean:
 # Target rules for target ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir
 
 # All Build rule for target.
+ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/all: ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test_autogen.dir/all
 ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/all: ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/build.make ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/build.make ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vcframeproperties_test"
@@ -8312,10 +8312,10 @@ ui/test/vcframeproperties/CMakeFiles/vcframeproperties_test_autogen.dir/clean:
 # Target rules for target ui/test/vclabel/CMakeFiles/vclabel_test.dir
 
 # All Build rule for target.
+ui/test/vclabel/CMakeFiles/vclabel_test.dir/all: ui/test/vclabel/CMakeFiles/vclabel_test_autogen.dir/all
 ui/test/vclabel/CMakeFiles/vclabel_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vclabel/CMakeFiles/vclabel_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vclabel/CMakeFiles/vclabel_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vclabel/CMakeFiles/vclabel_test.dir/all: ui/test/vclabel/CMakeFiles/vclabel_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vclabel/CMakeFiles/vclabel_test.dir/build.make ui/test/vclabel/CMakeFiles/vclabel_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vclabel/CMakeFiles/vclabel_test.dir/build.make ui/test/vclabel/CMakeFiles/vclabel_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vclabel_test"
@@ -8368,10 +8368,10 @@ ui/test/vclabel/CMakeFiles/vclabel_test_autogen.dir/clean:
 # Target rules for target ui/test/vcproperties/CMakeFiles/vcproperties_test.dir
 
 # All Build rule for target.
+ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/all: ui/test/vcproperties/CMakeFiles/vcproperties_test_autogen.dir/all
 ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/all: ui/test/vcproperties/CMakeFiles/vcproperties_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/build.make ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/build.make ui/test/vcproperties/CMakeFiles/vcproperties_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=94 "Built target vcproperties_test"
@@ -8424,10 +8424,10 @@ ui/test/vcproperties/CMakeFiles/vcproperties_test_autogen.dir/clean:
 # Target rules for target ui/test/vcwidget/CMakeFiles/vcwidget_test.dir
 
 # All Build rule for target.
+ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/all: ui/test/vcwidget/CMakeFiles/vcwidget_test_autogen.dir/all
 ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/all: ui/test/vcwidget/CMakeFiles/vcwidget_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/build.make ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/build.make ui/test/vcwidget/CMakeFiles/vcwidget_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vcwidget_test"
@@ -8480,10 +8480,10 @@ ui/test/vcwidget/CMakeFiles/vcwidget_test_autogen.dir/clean:
 # Target rules for target ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir
 
 # All Build rule for target.
+ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/all: ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test_autogen.dir/all
 ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/all: ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/build.make ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/build.make ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=95 "Built target vcwidgetproperties_test"
@@ -8536,10 +8536,10 @@ ui/test/vcwidgetproperties/CMakeFiles/vcwidgetproperties_test_autogen.dir/clean:
 # Target rules for target ui/test/vcxypad/CMakeFiles/vcxypad_test.dir
 
 # All Build rule for target.
+ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/all: ui/test/vcxypad/CMakeFiles/vcxypad_test_autogen.dir/all
 ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/all: hotplugmonitor/src/CMakeFiles/hotplugmonitor.dir/all
 ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/all: engine/src/CMakeFiles/qlcplusengine.dir/all
 ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
-ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/all: ui/test/vcxypad/CMakeFiles/vcxypad_test_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/build.make ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/depend
 	$(MAKE) $(MAKESILENT) -f ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/build.make ui/test/vcxypad/CMakeFiles/vcxypad_test.dir/build
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target vcxypad_test"
@@ -8766,12 +8766,12 @@ webaccess/src/CMakeFiles/qlcpluswebaccess.dir/all: ui/src/CMakeFiles/qlcplusui.d
 webaccess/src/CMakeFiles/qlcpluswebaccess.dir/all: webaccess/src/CMakeFiles/qlcpluswebaccess_autogen.dir/all
 	$(MAKE) $(MAKESILENT) -f webaccess/src/CMakeFiles/qlcpluswebaccess.dir/build.make webaccess/src/CMakeFiles/qlcpluswebaccess.dir/depend
 	$(MAKE) $(MAKESILENT) -f webaccess/src/CMakeFiles/qlcpluswebaccess.dir/build.make webaccess/src/CMakeFiles/qlcpluswebaccess.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=78,79,80 "Built target qlcpluswebaccess"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=79,80 "Built target qlcpluswebaccess"
 .PHONY : webaccess/src/CMakeFiles/qlcpluswebaccess.dir/all
 
 # Build rule for subdir invocation for target.
 webaccess/src/CMakeFiles/qlcpluswebaccess.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 27
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 26
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 webaccess/src/CMakeFiles/qlcpluswebaccess.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : webaccess/src/CMakeFiles/qlcpluswebaccess.dir/rule
@@ -8851,7 +8851,7 @@ main/CMakeFiles/qlcplus_autogen.dir/all: ui/src/CMakeFiles/qlcplusui.dir/all
 main/CMakeFiles/qlcplus_autogen.dir/all: webaccess/src/CMakeFiles/qlcpluswebaccess.dir/all
 	$(MAKE) $(MAKESILENT) -f main/CMakeFiles/qlcplus_autogen.dir/build.make main/CMakeFiles/qlcplus_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f main/CMakeFiles/qlcplus_autogen.dir/build.make main/CMakeFiles/qlcplus_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcplus_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=54 "Built target qlcplus_autogen"
 .PHONY : main/CMakeFiles/qlcplus_autogen.dir/all
 
 # Build rule for subdir invocation for target.
@@ -8884,7 +8884,7 @@ fixtureeditor/CMakeFiles/qlcplus-fixtureeditor.dir/all: fixtureeditor/CMakeFiles
 
 # Build rule for subdir invocation for target.
 fixtureeditor/CMakeFiles/qlcplus-fixtureeditor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 12
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 11
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 fixtureeditor/CMakeFiles/qlcplus-fixtureeditor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : fixtureeditor/CMakeFiles/qlcplus-fixtureeditor.dir/rule
@@ -8910,7 +8910,7 @@ fixtureeditor/CMakeFiles/qlcplus-fixtureeditor_autogen.dir/all: engine/src/CMake
 
 # Build rule for subdir invocation for target.
 fixtureeditor/CMakeFiles/qlcplus-fixtureeditor_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 9
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 fixtureeditor/CMakeFiles/qlcplus-fixtureeditor_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : fixtureeditor/CMakeFiles/qlcplus-fixtureeditor_autogen.dir/rule
@@ -8936,7 +8936,7 @@ launcher/CMakeFiles/qlcplus-launcher.dir/all: launcher/CMakeFiles/qlcplus-launch
 
 # Build rule for subdir invocation for target.
 launcher/CMakeFiles/qlcplus-launcher.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 2
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 1
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 launcher/CMakeFiles/qlcplus-launcher.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : launcher/CMakeFiles/qlcplus-launcher.dir/rule
@@ -8957,12 +8957,12 @@ launcher/CMakeFiles/qlcplus-launcher.dir/clean:
 launcher/CMakeFiles/qlcplus-launcher_autogen.dir/all:
 	$(MAKE) $(MAKESILENT) -f launcher/CMakeFiles/qlcplus-launcher_autogen.dir/build.make launcher/CMakeFiles/qlcplus-launcher_autogen.dir/depend
 	$(MAKE) $(MAKESILENT) -f launcher/CMakeFiles/qlcplus-launcher_autogen.dir/build.make launcher/CMakeFiles/qlcplus-launcher_autogen.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num=54 "Built target qlcplus-launcher_autogen"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" --progress-num= "Built target qlcplus-launcher_autogen"
 .PHONY : launcher/CMakeFiles/qlcplus-launcher_autogen.dir/all
 
 # Build rule for subdir invocation for target.
 launcher/CMakeFiles/qlcplus-launcher_autogen.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 1
+	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 launcher/CMakeFiles/qlcplus-launcher_autogen.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/filipolszewski/Documents/qlc projekty/qlcplus/CMakeFiles" 0
 .PHONY : launcher/CMakeFiles/qlcplus-launcher_autogen.dir/rule

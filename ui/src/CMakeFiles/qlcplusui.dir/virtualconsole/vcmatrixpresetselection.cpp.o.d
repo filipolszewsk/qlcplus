@@ -1076,6 +1076,9 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmatrixpresetselection.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers/qtextoption.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QSpinBox \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qspinbox.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QCheckBox \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qcheckbox.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qabstractbutton.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QLabel \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qlabel.h \
   /opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers/QDebug \
@@ -1109,8 +1112,12 @@ ui/src/CMakeFiles/qlcplusui.dir/virtualconsole/vcmatrixpresetselection.cpp.o: \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QGroupBox \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qgroupbox.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QHBoxLayout \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QScrollArea \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qscrollarea.h \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/qabstractscrollarea.h \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QSpacerItem \
   /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QVBoxLayout \
+  /opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers/QWidget \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../engine/src/rgbscriptscache.h \
   /Users/filipolszewski/Documents/qlc\ projekty/qlcplus/ui/src/../../engine/src/rgbscript.h \
   /opt/homebrew/opt/qt@5/lib/QtScript.framework/Headers/QScriptValue \

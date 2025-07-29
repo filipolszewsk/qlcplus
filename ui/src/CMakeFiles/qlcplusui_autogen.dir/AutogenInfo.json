@@ -514,6 +514,12 @@
 			null
 		],
 		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addressdelegate.h",
+			"MU",
+			"V6OUMXZR2W/moc_addressdelegate.cpp",
+			null
+		],
+		[
 			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addvcbuttonmatrix.h",
 			"MU",
 			"V6OUMXZR2W/moc_addvcbuttonmatrix.cpp",
@@ -1250,6 +1256,11 @@
 		],
 		[
 			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/videoprovider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addressdelegate.cpp",
 			"MU",
 			null
 		],
