@@ -1,0 +1,1465 @@
+{
+	"BUILD_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qlcplusui_autogen",
+	"CMAKE_BINARY_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus",
+	"CMAKE_CURRENT_BINARY_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src",
+	"CMAKE_EXECUTABLE" : "/opt/homebrew/lib/python3.11/site-packages/cmake/data/bin/cmake",
+	"CMAKE_LIST_FILES" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/CMakeLists.txt",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/variables.cmake",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qlcui.qrc"
+	],
+	"CMAKE_SOURCE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : 
+	[
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces/rdmprotocol.h",
+			"MU",
+			"Z5NZOC3L2Z/moc_rdmprotocol.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/aboutbox.h",
+			"MU",
+			"EWIEGA46WW/moc_aboutbox.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addchannelsgroup.h",
+			"MU",
+			"EWIEGA46WW/moc_addchannelsgroup.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addfixture.h",
+			"MU",
+			"EWIEGA46WW/moc_addfixture.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addresstool.h",
+			"MU",
+			"EWIEGA46WW/moc_addresstool.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addrgbpanel.h",
+			"MU",
+			"EWIEGA46WW/moc_addrgbpanel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/app.h",
+			"MU",
+			"EWIEGA46WW/moc_app.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/apputil.h",
+			"MU",
+			"EWIEGA46WW/moc_apputil.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/assignhotkey.h",
+			"MU",
+			"EWIEGA46WW/moc_assignhotkey.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audiobar.h",
+			"MU",
+			"EWIEGA46WW/moc_audiobar.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audioeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_audioeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audiotriggerwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_audiotriggerwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelmodifiereditor.h",
+			"MU",
+			"EWIEGA46WW/moc_channelmodifiereditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelmodifiergraphicsview.h",
+			"MU",
+			"EWIEGA46WW/moc_channelmodifiergraphicsview.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelsselection.h",
+			"MU",
+			"EWIEGA46WW/moc_channelsselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/chasereditor.h",
+			"MU",
+			"EWIEGA46WW/moc_chasereditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/clickandgoslider.h",
+			"MU",
+			"EWIEGA46WW/moc_clickandgoslider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/clickandgowidget.h",
+			"MU",
+			"EWIEGA46WW/moc_clickandgowidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/collectioneditor.h",
+			"MU",
+			"EWIEGA46WW/moc_collectioneditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/consolechannel.h",
+			"MU",
+			"EWIEGA46WW/moc_consolechannel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/createfixturegroup.h",
+			"MU",
+			"EWIEGA46WW/moc_createfixturegroup.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/ctkrangeslider.h",
+			"MU",
+			"EWIEGA46WW/moc_ctkrangeslider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/cuestackmodel.h",
+			"MU",
+			"EWIEGA46WW/moc_cuestackmodel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/customfeedbackdialog.h",
+			"MU",
+			"EWIEGA46WW/moc_customfeedbackdialog.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/dmxdumpfactory.h",
+			"MU",
+			"EWIEGA46WW/moc_dmxdumpfactory.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/efxeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_efxeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/efxpreviewarea.h",
+			"MU",
+			"EWIEGA46WW/moc_efxpreviewarea.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureconsole.h",
+			"MU",
+			"EWIEGA46WW/moc_fixtureconsole.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturegroupeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_fixturegroupeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturemanager.h",
+			"MU",
+			"EWIEGA46WW/moc_fixturemanager.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureremap.h",
+			"MU",
+			"EWIEGA46WW/moc_fixtureremap.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureselection.h",
+			"MU",
+			"EWIEGA46WW/moc_fixtureselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturetreewidget.h",
+			"MU",
+			"EWIEGA46WW/moc_fixturetreewidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/flowlayout.h",
+			"MU",
+			"EWIEGA46WW/moc_flowlayout.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionliveeditdialog.h",
+			"MU",
+			"EWIEGA46WW/moc_functionliveeditdialog.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionmanager.h",
+			"MU",
+			"EWIEGA46WW/moc_functionmanager.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionselection.h",
+			"MU",
+			"EWIEGA46WW/moc_functionselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionstreewidget.h",
+			"MU",
+			"EWIEGA46WW/moc_functionstreewidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionwizard.h",
+			"MU",
+			"EWIEGA46WW/moc_functionwizard.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/grandmasterslider.h",
+			"MU",
+			"EWIEGA46WW/moc_grandmasterslider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/groupsconsole.h",
+			"MU",
+			"EWIEGA46WW/moc_groupsconsole.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputchanneleditor.h",
+			"MU",
+			"EWIEGA46WW/moc_inputchanneleditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputoutputmanager.h",
+			"MU",
+			"EWIEGA46WW/moc_inputoutputmanager.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputoutputpatcheditor.h",
+			"MU",
+			"EWIEGA46WW/moc_inputoutputpatcheditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputprofileeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_inputprofileeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputselectionwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_inputselectionwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/knobwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_knobwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitor.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorbackgroundselection.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorbackgroundselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixture.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorfixture.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixtureitem.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorfixtureitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixturepropertieseditor.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorfixturepropertieseditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorgraphicsview.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorgraphicsview.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorlayout.h",
+			"MU",
+			"T5U2TTTZLX/moc_monitorlayout.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/palettegenerator.h",
+			"MU",
+			"EWIEGA46WW/moc_palettegenerator.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/playbackslider.h",
+			"MU",
+			"EWIEGA46WW/moc_playbackslider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/positiontool.h",
+			"MU",
+			"EWIEGA46WW/moc_positiontool.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rdmmanager.h",
+			"MU",
+			"EWIEGA46WW/moc_rdmmanager.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/remapwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_remapwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rgbitem.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rgbmatrixeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbmatrixeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/sceneeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_sceneeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/scripteditor.h",
+			"MU",
+			"EWIEGA46WW/moc_scripteditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/selectinputchannel.h",
+			"MU",
+			"EWIEGA46WW/moc_selectinputchannel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/audioitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_audioitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/efxitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_efxitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/headeritems.h",
+			"MU",
+			"ZE2CC5M3WB/moc_headeritems.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/multitrackview.h",
+			"MU",
+			"ZE2CC5M3WB/moc_multitrackview.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/rgbmatrixitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_rgbmatrixitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/sequenceitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_sequenceitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showeditor.h",
+			"MU",
+			"ZE2CC5M3WB/moc_showeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_showitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showmanager.h",
+			"MU",
+			"ZE2CC5M3WB/moc_showmanager.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/timingstool.h",
+			"MU",
+			"ZE2CC5M3WB/moc_timingstool.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/trackitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_trackitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/videoitem.h",
+			"MU",
+			"ZE2CC5M3WB/moc_videoitem.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/simpledesk.h",
+			"MU",
+			"EWIEGA46WW/moc_simpledesk.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/simpledeskengine.h",
+			"MU",
+			"EWIEGA46WW/moc_simpledeskengine.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/speeddial.h",
+			"MU",
+			"EWIEGA46WW/moc_speeddial.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/speeddialwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_speeddialwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/universeitemwidget.h",
+			"MU",
+			"EWIEGA46WW/moc_universeitemwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/videoeditor.h",
+			"MU",
+			"EWIEGA46WW/moc_videoeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/videoprovider.h",
+			"MU",
+			"EWIEGA46WW/moc_videoprovider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addvcbuttonmatrix.h",
+			"MU",
+			"V6OUMXZR2W/moc_addvcbuttonmatrix.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addvcslidermatrix.h",
+			"MU",
+			"V6OUMXZR2W/moc_addvcslidermatrix.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcaudiotriggers.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcaudiotriggers.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcaudiotriggersproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcaudiotriggersproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcbutton.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcbutton.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcbuttonproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcbuttonproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcclock.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcclock.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcclockproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcclockproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vccuelist.h",
+			"MU",
+			"V6OUMXZR2W/moc_vccuelist.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vccuelistproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vccuelistproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcdockarea.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcdockarea.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframe.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcframe.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframepageshortcut.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcframepageshortcut.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframeproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcframeproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vclabel.h",
+			"MU",
+			"V6OUMXZR2W/moc_vclabel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrix.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcmatrix.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixcontrol.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcmatrixcontrol.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixpresetselection.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcmatrixpresetselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcmatrixproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmultipatcheditor.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcmultipatcheditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcpropertieseditor.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcpropertieseditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcslider.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcslider.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsliderproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcsliderproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsoloframe.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcsoloframe.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsoloframeproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcsoloframeproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddial.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcspeeddial.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialfunction.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcspeeddialfunction.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialpreset.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcspeeddialpreset.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcspeeddialproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidget.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcwidget.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidgetproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcwidgetproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidgetselection.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcwidgetselection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypad.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypad.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadarea.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypadarea.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadfixture.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypadfixture.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadfixtureeditor.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypadfixtureeditor.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadpreset.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypadpreset.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadproperties.h",
+			"MU",
+			"V6OUMXZR2W/moc_vcxypadproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/virtualconsole.h",
+			"MU",
+			"V6OUMXZR2W/moc_virtualconsole.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qlcplusui_autogen/include",
+	"MOC_COMPILATION_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qlcplusui_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"HAS_FFTW3",
+		"QT_CORE_LIB",
+		"QT_GUI_LIB",
+		"QT_MULTIMEDIAWIDGETS_LIB",
+		"QT_MULTIMEDIA_LIB",
+		"QT_NETWORK_LIB",
+		"QT_SCRIPT_LIB",
+		"QT_WIDGETS_LIB",
+		"UNICODE",
+		"qlcplusui_EXPORTS"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/audio/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/webaccess",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/audio/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/hotplugmonitor/src",
+		"/opt/homebrew/opt/qt@5/lib/QtCore.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers",
+		"/opt/homebrew/opt/qt@5/mkspecs/macx-clang",
+		"/opt/homebrew/opt/qt@5/lib/QtGui.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/Library/Frameworks/OpenGL.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimedia.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimedia.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtNetwork.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtNetwork.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimediaWidgets.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimediaWidgets.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtWidgets.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtWidgets.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtScript.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtScript.framework/Headers",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1",
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include",
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include"
+	],
+	"MOC_MACRO_NAMES" : [ "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" ],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/opt/homebrew/lib/python3.11/site-packages/cmake/data/share/cmake-3.27/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qlcplusui_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qrc_qlcui.cpp"
+	],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 10,
+	"PARSE_CACHE_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/CMakeFiles/qlcplusui_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/opt/homebrew/opt/qt@5/bin/moc",
+	"QT_UIC_EXECUTABLE" : "/opt/homebrew/opt/qt@5/bin/uic",
+	"QT_VERSION_MAJOR" : 5,
+	"QT_VERSION_MINOR" : 15,
+	"SETTINGS_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/CMakeFiles/qlcplusui_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces/rdmprotocol.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/aboutbox.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addchannelsgroup.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addfixture.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addresstool.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/addrgbpanel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/app.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/apputil.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/assignhotkey.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audiobar.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audioeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/audiotriggerwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelmodifiereditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelmodifiergraphicsview.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/channelsselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/chasereditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/clickandgoslider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/clickandgowidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/collectioneditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/consolechannel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/createfixturegroup.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/ctkrangeslider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/cuestackmodel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/customfeedbackdialog.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/dmxdumpfactory.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/efxeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/efxpreviewarea.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureconsole.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturegroupeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturemanager.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureremap.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixtureselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/fixturetreewidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/flowlayout.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionliveeditdialog.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionmanager.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionstreewidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/functionwizard.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/grandmasterslider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/groupsconsole.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputchanneleditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputoutputmanager.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputoutputpatcheditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputprofileeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/inputselectionwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/knobwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorbackgroundselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixture.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixtureitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorfixturepropertieseditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorgraphicsview.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/monitor/monitorlayout.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/palettegenerator.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/playbackslider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/positiontool.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rdmmanager.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/remapwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rgbitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/rgbmatrixeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/sceneeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/scripteditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/selectinputchannel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/audioitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/efxitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/headeritems.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/multitrackview.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/rgbmatrixitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/sequenceitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/showmanager.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/timingstool.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/trackitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/showmanager/videoitem.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/simpledesk.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/simpledeskengine.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/speeddial.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/speeddialwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/universeitemwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/videoeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/videoprovider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addvcbuttonmatrix.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/addvcslidermatrix.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcaudiotriggers.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcaudiotriggersproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcbutton.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcbuttonproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcclock.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcclockproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vccuelist.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vccuelistproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcdockarea.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframe.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframepageshortcut.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcframeproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vclabel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrix.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixcontrol.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixpresetselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmatrixproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcmultipatcheditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcpropertieseditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcslider.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsliderproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsoloframe.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcsoloframeproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddial.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialfunction.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialpreset.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcspeeddialproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidget.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidgetproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcwidgetselection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypad.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadarea.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadfixture.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadfixtureeditor.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadpreset.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/vcxypadproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/virtualconsole/virtualconsole.cpp",
+			"MU",
+			null
+		]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/ui/src/qrc_qlcui.cpp"
+	],
+	"UIC_UI_FILES" : [],
+	"VERBOSITY" : 0
+}

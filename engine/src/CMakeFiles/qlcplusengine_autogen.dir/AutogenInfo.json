@@ -1,0 +1,863 @@
+{
+	"BUILD_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcplusengine_autogen",
+	"CMAKE_BINARY_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus",
+	"CMAKE_CURRENT_BINARY_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src",
+	"CMAKE_EXECUTABLE" : "/opt/homebrew/lib/python3.11/site-packages/cmake/data/bin/cmake",
+	"CMAKE_LIST_FILES" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/CMakeLists.txt",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/variables.cmake",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcconfig.h.noroot.in"
+	],
+	"CMAKE_SOURCE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus",
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : 
+	[
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/avolitesd4parser.h",
+			"MU",
+			"EWIEGA46WW/moc_avolitesd4parser.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/bus.h",
+			"MU",
+			"EWIEGA46WW/moc_bus.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/channelmodifier.h",
+			"MU",
+			"EWIEGA46WW/moc_channelmodifier.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/channelsgroup.h",
+			"MU",
+			"EWIEGA46WW/moc_channelsgroup.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaser.h",
+			"MU",
+			"EWIEGA46WW/moc_chaser.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaseraction.h",
+			"MU",
+			"EWIEGA46WW/moc_chaseraction.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaserrunner.h",
+			"MU",
+			"EWIEGA46WW/moc_chaserrunner.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaserstep.h",
+			"MU",
+			"EWIEGA46WW/moc_chaserstep.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/collection.h",
+			"MU",
+			"EWIEGA46WW/moc_collection.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/cue.h",
+			"MU",
+			"EWIEGA46WW/moc_cue.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/cuestack.h",
+			"MU",
+			"EWIEGA46WW/moc_cuestack.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/dmxdumpfactoryproperties.h",
+			"MU",
+			"EWIEGA46WW/moc_dmxdumpfactoryproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/dmxsource.h",
+			"MU",
+			"EWIEGA46WW/moc_dmxsource.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/doc.h",
+			"MU",
+			"EWIEGA46WW/moc_doc.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/efx.h",
+			"MU",
+			"EWIEGA46WW/moc_efx.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/efxfixture.h",
+			"MU",
+			"EWIEGA46WW/moc_efxfixture.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fadechannel.h",
+			"MU",
+			"EWIEGA46WW/moc_fadechannel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fixture.h",
+			"MU",
+			"EWIEGA46WW/moc_fixture.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fixturegroup.h",
+			"MU",
+			"EWIEGA46WW/moc_fixturegroup.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/function.h",
+			"MU",
+			"EWIEGA46WW/moc_function.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/genericdmxsource.h",
+			"MU",
+			"EWIEGA46WW/moc_genericdmxsource.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/genericfader.h",
+			"MU",
+			"EWIEGA46WW/moc_genericfader.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/gradient.h",
+			"MU",
+			"EWIEGA46WW/moc_gradient.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/grandmaster.h",
+			"MU",
+			"EWIEGA46WW/moc_grandmaster.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/grouphead.h",
+			"MU",
+			"EWIEGA46WW/moc_grouphead.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/inputoutputmap.h",
+			"MU",
+			"EWIEGA46WW/moc_inputoutputmap.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/inputpatch.h",
+			"MU",
+			"EWIEGA46WW/moc_inputpatch.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/ioplugincache.h",
+			"MU",
+			"EWIEGA46WW/moc_ioplugincache.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/keypadparser.h",
+			"MU",
+			"EWIEGA46WW/moc_keypadparser.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/mastertimer-unix.h",
+			"MU",
+			"EWIEGA46WW/moc_mastertimer-unix.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/mastertimer.h",
+			"MU",
+			"EWIEGA46WW/moc_mastertimer.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/monitorproperties.h",
+			"MU",
+			"EWIEGA46WW/moc_monitorproperties.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/outputpatch.h",
+			"MU",
+			"EWIEGA46WW/moc_outputpatch.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlccapability.h",
+			"MU",
+			"EWIEGA46WW/moc_qlccapability.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcchannel.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcchannel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcclipboard.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcclipboard.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfile.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcfile.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturedef.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcfixturedef.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturedefcache.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcfixturedefcache.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturehead.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcfixturehead.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturemode.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcfixturemode.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlci18n.h",
+			"MU",
+			"EWIEGA46WW/moc_qlci18n.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputchannel.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcinputchannel.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputfeedback.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcinputfeedback.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputprofile.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcinputprofile.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputsource.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcinputsource.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcmodifierscache.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcmodifierscache.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcpalette.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcpalette.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcphysical.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcphysical.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcpoint.h",
+			"MU",
+			"EWIEGA46WW/moc_qlcpoint.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbalgorithm.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbalgorithm.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbaudio.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbaudio.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbimage.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbimage.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbmatrix.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbmatrix.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbplain.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbplain.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbscript.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbscript.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbscriptproperty.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbscriptproperty.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbscriptscache.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbscriptscache.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbtext.h",
+			"MU",
+			"EWIEGA46WW/moc_rgbtext.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/scene.h",
+			"MU",
+			"EWIEGA46WW/moc_scene.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/scenevalue.h",
+			"MU",
+			"EWIEGA46WW/moc_scenevalue.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/script.h",
+			"MU",
+			"EWIEGA46WW/moc_script.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/scriptwrapper.h",
+			"MU",
+			"EWIEGA46WW/moc_scriptwrapper.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/sequence.h",
+			"MU",
+			"EWIEGA46WW/moc_sequence.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/show.h",
+			"MU",
+			"EWIEGA46WW/moc_show.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/showfunction.h",
+			"MU",
+			"EWIEGA46WW/moc_showfunction.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/showrunner.h",
+			"MU",
+			"EWIEGA46WW/moc_showrunner.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/track.h",
+			"MU",
+			"EWIEGA46WW/moc_track.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/universe.h",
+			"MU",
+			"EWIEGA46WW/moc_universe.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/utils.h",
+			"MU",
+			"EWIEGA46WW/moc_utils.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/video.h",
+			"MU",
+			"EWIEGA46WW/moc_video.cpp",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces/qlcioplugin.h",
+			"MU",
+			"Z5NZOC3L2Z/moc_qlcioplugin.cpp",
+			null
+		]
+	],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcplusengine_autogen/include",
+	"MOC_COMPILATION_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcplusengine_autogen/mocs_compilation.cpp",
+	"MOC_DEFINITIONS" : 
+	[
+		"HAS_FFTW3",
+		"QT_CORE_LIB",
+		"QT_GUI_LIB",
+		"QT_MULTIMEDIA_LIB",
+		"QT_NETWORK_LIB",
+		"QT_SCRIPT_LIB",
+		"UNICODE",
+		"qlcplusengine_EXPORTS"
+	],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : 
+	[
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/audio/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/hotplugmonitor/src",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces",
+		"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src",
+		"/opt/homebrew/Cellar/fftw/3.3.10_2/include",
+		"/opt/homebrew/opt/qt@5/lib/QtCore.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtCore.framework/Headers",
+		"/opt/homebrew/opt/qt@5/mkspecs/macx-clang",
+		"/opt/homebrew/opt/qt@5/lib/QtGui.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtGui.framework/Headers",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/System/Library/Frameworks/OpenGL.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimedia.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtMultimedia.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtNetwork.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtNetwork.framework/Headers",
+		"/opt/homebrew/opt/qt@5/lib/QtScript.framework",
+		"/opt/homebrew/opt/qt@5/lib/QtScript.framework/Headers",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include/c++/v1",
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include",
+		"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk/usr/include",
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include"
+	],
+	"MOC_MACRO_NAMES" : [ "Q_OBJECT", "Q_GADGET", "Q_NAMESPACE", "Q_NAMESPACE_EXPORT" ],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : 
+	[
+		"/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++",
+		"-dM",
+		"-E",
+		"-c",
+		"/opt/homebrew/lib/python3.11/site-packages/cmake/data/share/cmake-3.27/Modules/CMakeCXXCompilerABI.cpp"
+	],
+	"MOC_PREDEFS_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcplusengine_autogen/moc_predefs.h",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : [],
+	"MULTI_CONFIG" : false,
+	"PARALLEL" : 10,
+	"PARSE_CACHE_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/CMakeFiles/qlcplusengine_autogen.dir/ParseCache.txt",
+	"QT_MOC_EXECUTABLE" : "/opt/homebrew/opt/qt@5/bin/moc",
+	"QT_UIC_EXECUTABLE" : "/opt/homebrew/opt/qt@5/bin/uic",
+	"QT_VERSION_MAJOR" : 5,
+	"QT_VERSION_MINOR" : 15,
+	"SETTINGS_FILE" : "/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/CMakeFiles/qlcplusengine_autogen.dir/AutogenUsed.txt",
+	"SOURCES" : 
+	[
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/avolitesd4parser.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/bus.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/channelmodifier.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/channelsgroup.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaser.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaserrunner.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/chaserstep.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/collection.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/cue.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/cuestack.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/dmxdumpfactoryproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/doc.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/efx.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/efxfixture.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fadechannel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fixture.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/fixturegroup.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/function.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/genericdmxsource.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/genericfader.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/gradient.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/grandmaster.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/grouphead.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/inputoutputmap.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/inputpatch.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/ioplugincache.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/keypadparser.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/mastertimer-unix.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/mastertimer.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/monitorproperties.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/outputpatch.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlccapability.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcchannel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcclipboard.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfile.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturedef.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturedefcache.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturehead.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcfixturemode.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlci18n.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputchannel.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputfeedback.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputprofile.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcinputsource.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcmodifierscache.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcpalette.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcphysical.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/qlcpoint.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbalgorithm.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbaudio.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbimage.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbmatrix.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbplain.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbscript.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbscriptscache.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/rgbtext.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/scene.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/scenevalue.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/script.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/sequence.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/show.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/showfunction.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/showrunner.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/track.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/universe.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/engine/src/video.cpp",
+			"MU",
+			null
+		],
+		[
+			"/Users/filipolszewski/Documents/qlc projekty/qlcplus/plugins/interfaces/qlcioplugin.cpp",
+			"MU",
+			null
+		]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : [],
+	"UIC_UI_FILES" : [],
+	"VERBOSITY" : 0
+}
