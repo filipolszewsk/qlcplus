@@ -40,6 +40,9 @@ VCMultiPatchEditor::VCMultiPatchEditor(QList<VCWidget *> widgets, Doc *doc, QWid
     setupUi(this);
     m_tree->setItemDelegateForColumn(1, new AddressDelegate(this));
     fillTree();
+
+    connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+            this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
 }
 
 VCMultiPatchEditor::~VCMultiPatchEditor()
@@ -90,8 +93,44 @@ void VCMultiPatchEditor::accept()
 
 void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
 {
-    Q_UNUSED(item)
-    Q_UNUSED(column)
+    if (column != 1)
+        return;
+
+    QList<QTreeWidgetItem*> selection = m_tree->selectedItems();
+    if (selection.count() > 1 && item == selection.last())
+    {
+        QVariant data = item->data(1, Qt::EditRole);
+        if (data.isValid() == false)
+            return;
+
+        quint32 startAddress = data.toUInt();
+        quint32 universe = startAddress >> 16;
+        quint32 channel = startAddress & 0xFFFF;
+
+        // disconnect the signal to avoid recursion
+        disconnect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                   this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
+
+        for (int i = 0; i < selection.count(); ++i)
+        {
+            QTreeWidgetItem *selectedItem = selection.at(i);
+            if (selectedItem->flags() & Qt::ItemIsEditable)
+            {
+                quint32 currentChannel = channel + i;
+                quint32 currentUniverse = universe;
+                while (currentChannel > 512)
+                {
+                    currentChannel -= 512;
+                    currentUniverse++;
+                }
+                selectedItem->setData(1, Qt::EditRole, (currentUniverse << 16) | currentChannel);
+            }
+        }
+
+        // and reconnect it back
+        connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
+    }
 }
 
 void VCMultiPatchEditor::fillTree()
