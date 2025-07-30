@@ -103,27 +103,39 @@ void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
         if (data.isValid() == false)
             return;
 
-        quint32 startAddress = data.toUInt();
-        quint32 universe = startAddress >> 16;
-        quint32 channel = startAddress & 0xFFFF;
-
         // disconnect the signal to avoid recursion
         disconnect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
                    this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
 
-        for (int i = 0; i < selection.count(); ++i)
+        if (m_incrementalCheck->isChecked())
         {
-            QTreeWidgetItem *selectedItem = selection.at(i);
-            if (selectedItem->flags() & Qt::ItemIsEditable)
+            quint32 startAddress = data.toUInt();
+            quint32 universe = startAddress >> 16;
+            quint32 channel = startAddress & 0xFFFF;
+
+            for (int i = 0; i < selection.count(); ++i)
             {
-                quint32 currentChannel = channel + i;
-                quint32 currentUniverse = universe;
-                while (currentChannel > 512)
+                QTreeWidgetItem *selectedItem = selection.at(i);
+                if (selectedItem->flags() & Qt::ItemIsEditable)
                 {
-                    currentChannel -= 512;
-                    currentUniverse++;
+                    quint32 currentChannel = channel + i;
+                    quint32 currentUniverse = universe;
+                    while (currentChannel > 512)
+                    {
+                        currentChannel -= 512;
+                        currentUniverse++;
+                    }
+                    selectedItem->setData(1, Qt::EditRole, (currentUniverse << 16) | currentChannel);
                 }
-                selectedItem->setData(1, Qt::EditRole, (currentUniverse << 16) | currentChannel);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < selection.count(); ++i)
+            {
+                QTreeWidgetItem *selectedItem = selection.at(i);
+                if (selectedItem->flags() & Qt::ItemIsEditable)
+                    selectedItem->setData(1, Qt::EditRole, data);
             }
         }
 
