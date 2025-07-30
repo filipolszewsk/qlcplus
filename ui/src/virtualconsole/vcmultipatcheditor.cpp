@@ -97,7 +97,7 @@ void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
         return;
 
     QList<QTreeWidgetItem*> selection = m_tree->selectedItems();
-    if (selection.count() > 1 && item == selection.last())
+    if (selection.count() > 1)
     {
         QVariant data = item->data(1, Qt::EditRole);
         if (data.isValid() == false)
