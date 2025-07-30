@@ -49,7 +49,9 @@ coverage/
 
 # Development IDEs
 .vscode/
+.history/
 
 # CMake build
 CMakeLists.txt.user
 build*
+install_manifest.txt
