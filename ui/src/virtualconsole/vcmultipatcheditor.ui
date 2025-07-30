@@ -39,6 +39,9 @@
      <property name="checked">
       <bool>true</bool>
      </property>
+     <property name="multi">
+      <bool>true</bool>
+     </property>
     </widget>
    </item>
    <item>
