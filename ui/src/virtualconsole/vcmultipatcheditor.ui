@@ -32,6 +32,16 @@
     </widget>
    </item>
    <item>
+    <widget class="QCheckBox" name="m_incrementalCheck">
+     <property name="text">
+      <string>Incremental</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QDialogButtonBox" name="m_buttonBox">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
