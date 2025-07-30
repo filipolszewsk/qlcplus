@@ -55,3 +55,4 @@ coverage/
 CMakeLists.txt.user
 build*
 install_manifest.txt
+CMakeFiles/
