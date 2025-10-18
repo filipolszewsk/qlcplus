@@ -228,6 +228,15 @@ private:
      */
     float calculateDirection(Function::Direction direction, float iterator) const;
 
+    /**
+     * Apply wave shape to input value (DimmerWave helper)
+     *
+     * @param input Input value (0-1)
+     * @param shape Wave shape (0=sine, 1=square, 2=triangle)
+     * @return Shaped output value (0-1)
+     */
+    float applyWaveShape(float input, int shape) const;
+
 private:
     /** Current algorithm used by the EFX */
     Algorithm m_algorithm;
