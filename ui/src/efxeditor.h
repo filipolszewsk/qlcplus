@@ -149,6 +149,11 @@ private slots:
     void slotXPhaseSpinChanged(int value);
     void slotYPhaseSpinChanged(int value);
 
+    void slotWaveWidthSpinChanged(int value);
+    void slotWaveShapeComboChanged(int index);
+    void slotWaveFadeInSpinChanged(int value);
+    void slotWaveFadeOutSpinChanged(int value);
+
     void slotLoopClicked();
     void slotSingleShotClicked();
     void slotPingPongClicked();

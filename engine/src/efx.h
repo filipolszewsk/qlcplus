@@ -67,6 +67,12 @@ class Fixture;
 #define KXMLQLCEFXSquareTrueAlgorithmName   QStringLiteral("SquareTrue")
 #define KXMLQLCEFXLeafAlgorithmName         QStringLiteral("Leaf")
 #define KXMLQLCEFXLissajousAlgorithmName    QStringLiteral("Lissajous")
+#define KXMLQLCEFXDimmerWaveAlgorithmName   QStringLiteral("DimmerWave")
+
+#define KXMLQLCEFXWaveWidth      QStringLiteral("WaveWidth")
+#define KXMLQLCEFXWaveShape      QStringLiteral("WaveShape")
+#define KXMLQLCEFXWaveFadeIn     QStringLiteral("WaveFadeIn")
+#define KXMLQLCEFXWaveFadeOut    QStringLiteral("WaveFadeOut")
 
 /**
  * An EFX (effects) function that is used to create
@@ -137,7 +143,8 @@ public:
         SquareChoppy,
 		SquareTrue,
         Leaf,
-        Lissajous
+        Lissajous,
+        DimmerWave
     };
 
     /** Get the current algorithm */
@@ -463,6 +470,71 @@ public:
      */
     bool isPhaseEnabled() const;
 
+    /*********************************************************************
+     * Wave Parameters (DimmerWave)
+     *********************************************************************/
+public:
+    /**
+     * Set the wave width (active portion of cycle)
+     *
+     * @param degrees Wave width in degrees (0-360)
+     */
+    void setWaveWidth(int degrees);
+
+    /**
+     * Get the wave width
+     *
+     * @return Wave width in degrees (0-360)
+     */
+    int waveWidth() const;
+
+    /**
+     * Set the wave shape
+     *
+     * @param shape 0=sine, 1=square, 2=triangle
+     */
+    void setWaveShape(int shape);
+
+    /**
+     * Get the wave shape
+     *
+     * @return Wave shape (0=sine, 1=square, 2=triangle)
+     */
+    int waveShape() const;
+
+    /**
+     * Set the wave fade in time
+     *
+     * @param percent Fade in time as percentage of wave width (0-100)
+     */
+    void setWaveFadeIn(int percent);
+
+    /**
+     * Get the wave fade in time
+     *
+     * @return Fade in time as percentage (0-100)
+     */
+    int waveFadeIn() const;
+
+    /**
+     * Set the wave fade out time
+     *
+     * @param percent Fade out time as percentage of wave width (0-100)
+     */
+    void setWaveFadeOut(int percent);
+
+    /**
+     * Get the wave fade out time
+     *
+     * @return Fade out time as percentage (0-100)
+     */
+    int waveFadeOut() const;
+
+    /**
+     * Returns true when DimmerWave has been selected
+     */
+    bool isWaveParametersEnabled() const;
+
 private:
     /**
      * Lissajous pattern X phase, see setXPhase()
@@ -473,6 +545,14 @@ private:
      * Lissajous pattern Y phase, see setYPhase()
      */
     float m_yPhase;
+
+    /**
+     * DimmerWave parameters
+     */
+    float m_waveWidth;        // 0-360° (active portion)
+    int m_waveShape;          // 0=sine, 1=square, 2=triangle
+    float m_waveFadeIn;       // 0-1 (as fraction)
+    float m_waveFadeOut;      // 0-1 (as fraction)
 
     /*********************************************************************
      * Fixtures

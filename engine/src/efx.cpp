@@ -45,6 +45,10 @@ EFX::EFX(Doc* doc)
     , m_yFrequency(3)
     , m_xPhase(M_PI / 2.0)
     , m_yPhase(0)
+    , m_waveWidth(180.0)      // Default: 180° (half cycle)
+    , m_waveShape(0)          // Default: sine
+    , m_waveFadeIn(0.2)       // Default: 20% fade in
+    , m_waveFadeOut(0.2)      // Default: 20% fade out
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
@@ -183,6 +187,7 @@ QStringList EFX::algorithmList()
 	list << algorithmToString(EFX::SquareTrue);
     list << algorithmToString(EFX::Leaf);
     list << algorithmToString(EFX::Lissajous);
+    list << algorithmToString(EFX::DimmerWave);
     return list;
 }
 
@@ -211,6 +216,8 @@ QString EFX::algorithmToString(EFX::Algorithm algo)
             return QString(KXMLQLCEFXLeafAlgorithmName);
         case EFX::Lissajous:
             return QString(KXMLQLCEFXLissajousAlgorithmName);
+        case EFX::DimmerWave:
+            return QString(KXMLQLCEFXDimmerWaveAlgorithmName);
     }
 }
 
@@ -234,6 +241,8 @@ EFX::Algorithm EFX::stringToAlgorithm(const QString& str)
         return EFX::Leaf;
     else if (str == QString(KXMLQLCEFXLissajousAlgorithmName))
         return EFX::Lissajous;
+    else if (str == QString(KXMLQLCEFXDimmerWaveAlgorithmName))
+        return EFX::DimmerWave;
     else
         return EFX::Circle;
 }
@@ -331,9 +340,33 @@ float EFX::calculateDirection(Function::Direction direction, float iterator) con
 	case SquareTrue:
     case Leaf:
     case Lissajous:
+    case DimmerWave:
         return (M_PI * 2.0) - iterator;
     case Line:
         return (iterator > M_PI) ? (iterator - M_PI) : (iterator + M_PI);
+    }
+}
+
+// Helper function to apply wave shape to input value (0-1)
+float EFX::applyWaveShape(float input, int shape) const
+{
+    // input: 0-1
+    // shape: 0=sine, 1=square, 2=triangle
+    // output: 0-1
+    
+    switch (shape)
+    {
+    case 0: // Sine
+        return (1.0 - cos(input * M_PI)) / 2.0;  // Smooth sine curve
+    
+    case 1: // Square
+        return input > 0.5 ? 1.0 : 0.0;  // Hard switch
+    
+    case 2: // Triangle
+        return input;  // Linear ramp
+    
+    default:
+        return input;
     }
 }
 
@@ -450,6 +483,56 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
                 iterator0 = iterator0 - floor(iterator0);
                 *y = (forward * iterator0 + backward * (1 - iterator0)) * 2 - 1;
             }
+        }
+        break;
+
+    case DimmerWave:
+        {
+            // This algorithm outputs dimmer value directly
+            // iterator is 0 to 2π (full cycle)
+            // m_waveWidth defines active portion (0-360°)
+            // m_waveShape: 0=sine, 1=square, 2=triangle
+            
+            float widthRadians = (m_waveWidth / 360.0) * M_PI * 2.0;
+            
+            float dimmerValue = 0.0;
+            
+            if (iterator < widthRadians) {
+                // Inside active width
+                float phaseInWidth = iterator / widthRadians;  // 0-1 within active width
+                
+                // Calculate fade zones
+                float fadeInZone = m_waveFadeIn;
+                float fadeOutZone = m_waveFadeOut;
+                float sustainZone = 1.0 - fadeInZone - fadeOutZone;
+                
+                if (fadeInZone > 0 && phaseInWidth < fadeInZone) {
+                    // Fade in zone
+                    float fadeProgress = phaseInWidth / fadeInZone;
+                    dimmerValue = applyWaveShape(fadeProgress, m_waveShape);
+                }
+                else if (phaseInWidth < fadeInZone + sustainZone) {
+                    // Sustain zone (full brightness)
+                    dimmerValue = 1.0;
+                }
+                else if (fadeOutZone > 0) {
+                    // Fade out zone
+                    float fadeProgress = (phaseInWidth - fadeInZone - sustainZone) / fadeOutZone;
+                    dimmerValue = applyWaveShape(1.0 - fadeProgress, m_waveShape);
+                }
+                else {
+                    // No fade out, sustain to the end
+                    dimmerValue = 1.0;
+                }
+            }
+            else {
+                // Outside active width = OFF
+                dimmerValue = 0.0;
+            }
+            
+            // Output to Y axis (used by Dimmer mode)
+            *x = 0.0;  // X unused for dimmer
+            *y = dimmerValue;  // Y = dimmer value (0-1, will be scaled to 0-255)
         }
         break;
     }
@@ -640,8 +723,61 @@ bool EFX::isPhaseEnabled() const
 }
 
 /*****************************************************************************
- * Fixtures
+ * Wave Parameters (DimmerWave)
  *****************************************************************************/
+
+void EFX::setWaveWidth(int degrees)
+{
+    m_waveWidth = static_cast<float>(CLAMP(degrees, 0, 360));
+    emit changed(this->id());
+}
+
+int EFX::waveWidth() const
+{
+    return static_cast<int>(m_waveWidth);
+}
+
+void EFX::setWaveShape(int shape)
+{
+    m_waveShape = CLAMP(shape, 0, 2);
+    emit changed(this->id());
+}
+
+int EFX::waveShape() const
+{
+    return m_waveShape;
+}
+
+void EFX::setWaveFadeIn(int percent)
+{
+    m_waveFadeIn = static_cast<float>(CLAMP(percent, 0, 100)) / 100.0;
+    emit changed(this->id());
+}
+
+int EFX::waveFadeIn() const
+{
+    return static_cast<int>(m_waveFadeIn * 100.0);
+}
+
+void EFX::setWaveFadeOut(int percent)
+{
+    m_waveFadeOut = static_cast<float>(CLAMP(percent, 0, 100)) / 100.0;
+    emit changed(this->id());
+}
+
+int EFX::waveFadeOut() const
+{
+    return static_cast<int>(m_waveFadeOut * 100.0);
+}
+
+bool EFX::isWaveParametersEnabled() const
+{
+    return (m_algorithm == EFX::DimmerWave);
+}
+
+/*****************************************************************************
+ * Fixtures
+ *****************************************************************************/ 
 
 bool EFX::addFixture(EFXFixture* ef)
 {
@@ -901,6 +1037,17 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
     /* End the (Y) <Axis> tag */
     doc->writeEndElement();
 
+    /********************************************
+     * DimmerWave Parameters
+     ********************************************/
+    if (isWaveParametersEnabled())
+    {
+        doc->writeTextElement(KXMLQLCEFXWaveWidth, QString::number(waveWidth()));
+        doc->writeTextElement(KXMLQLCEFXWaveShape, QString::number(waveShape()));
+        doc->writeTextElement(KXMLQLCEFXWaveFadeIn, QString::number(waveFadeIn()));
+        doc->writeTextElement(KXMLQLCEFXWaveFadeOut, QString::number(waveFadeOut()));
+    }
+
     /* End the <Function> tag */
     doc->writeEndElement();
 
@@ -994,6 +1141,26 @@ bool EFX::loadXML(QXmlStreamReader &root)
         {
             /* Axes */
             loadXMLAxis(root);
+        }
+        else if (root.name() == KXMLQLCEFXWaveWidth)
+        {
+            /* Wave Width */
+            setWaveWidth(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXWaveShape)
+        {
+            /* Wave Shape */
+            setWaveShape(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXWaveFadeIn)
+        {
+            /* Wave Fade In */
+            setWaveFadeIn(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXWaveFadeOut)
+        {
+            /* Wave Fade Out */
+            setWaveFadeOut(root.readElementText().toInt());
         }
         else
         {

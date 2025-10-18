@@ -232,6 +232,11 @@ void EFXEditor::initMovementPage()
     m_xPhaseSpin->setValue(m_efx->xPhase());
     m_yPhaseSpin->setValue(m_efx->yPhase());
 
+    m_waveWidthSpin->setValue(m_efx->waveWidth());
+    m_waveShapeCombo->setCurrentIndex(m_efx->waveShape());
+    m_waveFadeInSpin->setValue(m_efx->waveFadeIn());
+    m_waveFadeOutSpin->setValue(m_efx->waveFadeOut());
+
     /* Running order */
     switch (m_efx->runOrder())
     {
@@ -296,6 +301,15 @@ void EFXEditor::initMovementPage()
             this, SLOT(slotXPhaseSpinChanged(int)));
     connect(m_yPhaseSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotYPhaseSpinChanged(int)));
+
+    connect(m_waveWidthSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotWaveWidthSpinChanged(int)));
+    connect(m_waveShapeCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotWaveShapeComboChanged(int)));
+    connect(m_waveFadeInSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotWaveFadeInSpinChanged(int)));
+    connect(m_waveFadeOutSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotWaveFadeOutSpinChanged(int)));
 
     connect(m_colorCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotSetColorBackground(bool)));
@@ -937,6 +951,29 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
         m_yPhaseSpin->setEnabled(false);
     }
 
+    if (m_efx->isWaveParametersEnabled())
+    {
+        m_waveWidthLabel->setEnabled(true);
+        m_waveWidthSpin->setEnabled(true);
+        m_waveShapeLabel->setEnabled(true);
+        m_waveShapeCombo->setEnabled(true);
+        m_waveFadeInLabel->setEnabled(true);
+        m_waveFadeInSpin->setEnabled(true);
+        m_waveFadeOutLabel->setEnabled(true);
+        m_waveFadeOutSpin->setEnabled(true);
+    }
+    else
+    {
+        m_waveWidthLabel->setEnabled(false);
+        m_waveWidthSpin->setEnabled(false);
+        m_waveShapeLabel->setEnabled(false);
+        m_waveShapeCombo->setEnabled(false);
+        m_waveFadeInLabel->setEnabled(false);
+        m_waveFadeInSpin->setEnabled(false);
+        m_waveFadeOutLabel->setEnabled(false);
+        m_waveFadeOutSpin->setEnabled(false);
+    }
+
     redrawPreview();
 }
 
@@ -1013,6 +1050,34 @@ void EFXEditor::slotYPhaseSpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
     m_efx->setYPhase(value);
+    redrawPreview();
+}
+
+void EFXEditor::slotWaveWidthSpinChanged(int value)
+{
+    Q_ASSERT(m_efx != NULL);
+    m_efx->setWaveWidth(value);
+    redrawPreview();
+}
+
+void EFXEditor::slotWaveShapeComboChanged(int index)
+{
+    Q_ASSERT(m_efx != NULL);
+    m_efx->setWaveShape(index);
+    redrawPreview();
+}
+
+void EFXEditor::slotWaveFadeInSpinChanged(int value)
+{
+    Q_ASSERT(m_efx != NULL);
+    m_efx->setWaveFadeIn(value);
+    redrawPreview();
+}
+
+void EFXEditor::slotWaveFadeOutSpinChanged(int value)
+{
+    Q_ASSERT(m_efx != NULL);
+    m_efx->setWaveFadeOut(value);
     redrawPreview();
 }
 
