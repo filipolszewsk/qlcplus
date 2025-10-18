@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="qlcplus-fixtureeditor.png">/Users/filipolszewski/Documents/qlc projekty/qlcplus/launcher/../resources/icons/png/qlcplus-fixtureeditor.png</file>
+    <file alias="qlcplus.png">/Users/filipolszewski/Documents/qlc projekty/qlcplus/launcher/../resources/icons/png/qlcplus.png</file>
+  </qresource>
+</RCC>
+

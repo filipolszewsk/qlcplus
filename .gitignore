@@ -56,3 +56,8 @@ CMakeLists.txt.user
 build*
 install_manifest.txt
 CMakeFiles/
+CMakeCache.txt
+CPackConfig.cmake
+CPackSourceConfig.cmake
+cmake_install.cmake
+cmake_uninstall.cmake
