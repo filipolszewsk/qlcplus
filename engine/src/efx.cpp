@@ -531,8 +531,9 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
             }
             
             // Output to Y axis (used by Dimmer mode)
+            // Convert 0-1 to -1..1 range (required by rotateAndScale)
             *x = 0.0;  // X unused for dimmer
-            *y = dimmerValue;  // Y = dimmer value (0-1, will be scaled to 0-255)
+            *y = dimmerValue * 2.0 - 1.0;  // 0-1 → -1..1
         }
         break;
     }
