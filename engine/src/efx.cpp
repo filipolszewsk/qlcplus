@@ -166,7 +166,7 @@ void EFX::setAlgorithm(EFX::Algorithm algo)
     if (algo == m_algorithm)
         return;
 
-    if (algo >= EFX::Circle && algo <= EFX::Lissajous)
+    if (algo >= EFX::Circle && algo <= EFX::DimmerWave)
         m_algorithm = algo;
     else
         m_algorithm = EFX::Circle;

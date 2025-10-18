@@ -951,8 +951,11 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
         m_yPhaseSpin->setEnabled(false);
     }
 
+    qDebug() << "DimmerWave check: algorithm =" << m_efx->algorithm() << ", isWaveParametersEnabled =" << m_efx->isWaveParametersEnabled();
+    
     if (m_efx->isWaveParametersEnabled())
     {
+        qDebug() << "ENABLING DimmerWave parameters!";
         m_waveWidthLabel->setEnabled(true);
         m_waveWidthSpin->setEnabled(true);
         m_waveShapeLabel->setEnabled(true);
@@ -964,6 +967,7 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
     }
     else
     {
+        qDebug() << "DISABLING DimmerWave parameters";
         m_waveWidthLabel->setEnabled(false);
         m_waveWidthSpin->setEnabled(false);
         m_waveShapeLabel->setEnabled(false);
