@@ -168,6 +168,9 @@ void EFXEditor::initGeneralPage()
     m_offsetDirectionCombo->setEnabled(m_efx->isFixtureGroupMode());
     m_offsetStepSpin->setEnabled(m_efx->isFixtureGroupMode());
     m_wingsSpin->setEnabled(m_efx->isFixtureGroupMode());
+    
+    /* Initialize Row Selection checkboxes */
+    updateRowSelection();
 
     /* Disable test button if we're in operate mode */
     if (m_doc->mode() == Doc::Operate)
@@ -434,6 +437,22 @@ FunctionParent EFXEditor::functionParent() const
 
 void EFXEditor::updateFixtureTree()
 {
+    // Save current Mode settings from tree before clearing (for empty columns)
+    QMap<int, QString> savedColumnModes;
+    if (m_efx->isFixtureGroupMode())
+    {
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+        {
+            QTreeWidgetItem *item = m_tree->topLevelItem(i);
+            int colIndex = item->data(0, Qt::UserRole).toInt();
+            QComboBox *combo = qobject_cast<QComboBox*>(m_tree->itemWidget(item, KColumnMode));
+            if (combo != nullptr)
+            {
+                savedColumnModes[colIndex] = combo->currentText();
+            }
+        }
+    }
+    
     m_tree->clear();
     
     if (m_efx->isFixtureGroupMode())
@@ -531,6 +550,14 @@ void EFXEditor::updateFixtureTree()
                     // Note: widgets are enabled so user can set template values
                     // but they won't affect anything until fixtures are added to this column
                     m_tree->setItemWidget(item, KColumnMode, combo);
+                    
+                    // Restore saved mode for this column
+                    if (savedColumnModes.contains(col))
+                    {
+                        int idx = combo->findText(savedColumnModes[col]);
+                        if (idx >= 0)
+                            combo->setCurrentIndex(idx);
+                    }
                     
                     // Start offset spin
                     QSpinBox* spin = new QSpinBox(m_tree);
