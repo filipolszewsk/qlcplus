@@ -1292,6 +1292,29 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
         // Update row selection UI
         updateRowSelection();
         
+        // Save fixture settings before clearing (X/Y ranges) - in case user had edited them
+        QList<VCXYPadFixture> savedFixtures;
+        QTreeWidgetItemIterator saveIt(m_tree);
+        while (*saveIt != NULL)
+        {
+            bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
+            if (isColumnItem)
+            {
+                QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
+                foreach (const QVariant& var, fixtureList)
+                {
+                    savedFixtures.append(VCXYPadFixture(m_doc, var));
+                }
+            }
+            else
+            {
+                // Normal fixture item
+                QVariant var((*saveIt)->data(KColumnFixture, Qt::UserRole));
+                savedFixtures.append(VCXYPadFixture(m_doc, var));
+            }
+            ++saveIt;
+        }
+        
         // Clear existing fixtures
         m_tree->clear();
         
@@ -1331,9 +1354,26 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
                     GroupHead head = group->head(QLCPoint(col, row));
                     if (head.isValid())
                     {
-                        VCXYPadFixture fxi(m_doc);
-                        fxi.setHead(head);
-                        columnFixtures[col].append(fxi);
+                        // Find matching saved fixture
+                        bool found = false;
+                        foreach (const VCXYPadFixture& savedFxi, savedFixtures)
+                        {
+                            if (savedFxi.head() == head)
+                            {
+                                // Use saved fixture with preserved X/Y ranges
+                                columnFixtures[col].append(savedFxi);
+                                found = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!found)
+                        {
+                            // Create new fixture with defaults
+                            VCXYPadFixture fxi(m_doc);
+                            fxi.setHead(head);
+                            columnFixtures[col].append(fxi);
+                        }
                     }
                 }
             }
@@ -1396,6 +1436,23 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
     
     updateRowSelection();
     
+    // Save fixture settings before clearing (X/Y ranges)
+    QList<VCXYPadFixture> savedFixtures;
+    QTreeWidgetItemIterator saveIt(m_tree);
+    while (*saveIt != NULL)
+    {
+        bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
+        if (isColumnItem)
+        {
+            QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
+            foreach (const QVariant& var, fixtureList)
+            {
+                savedFixtures.append(VCXYPadFixture(m_doc, var));
+            }
+        }
+        ++saveIt;
+    }
+    
     // Clear existing fixtures
     m_tree->clear();
     
@@ -1435,9 +1492,26 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
                 GroupHead head = group->head(QLCPoint(col, row));
                 if (head.isValid())
                 {
-                    VCXYPadFixture fxi(m_doc);
-                    fxi.setHead(head);
-                    columnFixtures[col].append(fxi);
+                    // Find matching saved fixture
+                    bool found = false;
+                    foreach (const VCXYPadFixture& savedFxi, savedFixtures)
+                    {
+                        if (savedFxi.head() == head)
+                        {
+                            // Use saved fixture with preserved X/Y ranges
+                            columnFixtures[col].append(savedFxi);
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found)
+                    {
+                        // Create new fixture with defaults
+                        VCXYPadFixture fxi(m_doc);
+                        fxi.setHead(head);
+                        columnFixtures[col].append(fxi);
+                    }
                 }
             }
         }
@@ -1518,6 +1592,23 @@ void VCXYPadProperties::slotRowSelectionChanged()
     
     m_xypad->setSelectedRows(selectedRows);
     
+    // Save fixture settings before clearing (X/Y ranges)
+    QList<VCXYPadFixture> savedFixtures;
+    QTreeWidgetItemIterator saveIt(m_tree);
+    while (*saveIt != NULL)
+    {
+        bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
+        if (isColumnItem)
+        {
+            QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
+            foreach (const QVariant& var, fixtureList)
+            {
+                savedFixtures.append(VCXYPadFixture(m_doc, var));
+            }
+        }
+        ++saveIt;
+    }
+    
     // Clear tree
     m_tree->clear();
     
@@ -1548,9 +1639,26 @@ void VCXYPadProperties::slotRowSelectionChanged()
                         GroupHead head = group->head(QLCPoint(col, row));
                         if (head.isValid())
                         {
-                            VCXYPadFixture fxi(m_doc);
-                            fxi.setHead(head);
-                            columnFixtures[col].append(fxi);
+                            // Find matching saved fixture
+                            bool found = false;
+                            foreach (const VCXYPadFixture& savedFxi, savedFixtures)
+                            {
+                                if (savedFxi.head() == head)
+                                {
+                                    // Use saved fixture with preserved X/Y ranges
+                                    columnFixtures[col].append(savedFxi);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!found)
+                            {
+                                // Create new fixture with defaults
+                                VCXYPadFixture fxi(m_doc);
+                                fxi.setHead(head);
+                                columnFixtures[col].append(fxi);
+                            }
                         }
                     }
                 }
