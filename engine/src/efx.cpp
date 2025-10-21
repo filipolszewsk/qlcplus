@@ -53,6 +53,7 @@ EFX::EFX(Doc* doc)
     , m_fixtureGroupID(FixtureGroup::invalidId())
     , m_offsetDirection(LeftToRight)
     , m_offsetStep(90)
+    , m_wings(1)
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
@@ -142,6 +143,7 @@ bool EFX::copyFrom(const Function* function)
     m_fixtureGroupID = efx->m_fixtureGroupID;
     m_offsetDirection = efx->m_offsetDirection;
     m_offsetStep = efx->m_offsetStep;
+    m_wings = efx->m_wings;
 
     return Function::copyFrom(function);
 }
@@ -993,6 +995,17 @@ int EFX::offsetStep() const
     return m_offsetStep;
 }
 
+void EFX::setWings(int wings)
+{
+    m_wings = CLAMP(wings, 1, 20);
+    emit changed(this->id());
+}
+
+int EFX::wings() const
+{
+    return m_wings;
+}
+
 QString EFX::offsetDirectionToString(OffsetDirection dir)
 {
     switch (dir)
@@ -1010,8 +1023,6 @@ QString EFX::offsetDirectionToString(OffsetDirection dir)
             return QString("Alternate");
         case Symmetric:
             return QString("Symmetric");
-        case Wings:
-            return QString("Wings");
     }
 }
 
@@ -1027,8 +1038,6 @@ EFX::OffsetDirection EFX::stringToOffsetDirection(const QString& str)
         return Alternate;
     else if (str == "Symmetric")
         return Symmetric;
-    else if (str == "Wings")
-        return Wings;
     else
         return LeftToRight;
 }
@@ -1096,6 +1105,7 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
         
         doc->writeTextElement(KXMLQLCEFXOffsetDirection, offsetDirectionToString(m_offsetDirection));
         doc->writeTextElement(KXMLQLCEFXOffsetStep, QString::number(m_offsetStep));
+        doc->writeTextElement(KXMLQLCEFXWings, QString::number(m_wings));
     }
 
     /* Propagation mode */
@@ -1225,6 +1235,11 @@ bool EFX::loadXML(QXmlStreamReader &root)
         {
             /* Offset Step */
             setOffsetStep(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXWings)
+        {
+            /* Wings */
+            setWings(root.readElementText().toInt());
         }
         else if (root.name() == KXMLQLCEFXPropagationMode)
         {

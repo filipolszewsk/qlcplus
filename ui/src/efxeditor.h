@@ -126,6 +126,7 @@ private slots:
     void slotFixtureGroupChanged(int index);
     void slotOffsetDirectionChanged(int index);
     void slotOffsetStepChanged(int value);
+    void slotWingsChanged(int value);
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);

@@ -59,6 +59,7 @@ class Fixture;
 #define KXMLQLCEFXFixtureGroup              QStringLiteral("FixtureGroup")
 #define KXMLQLCEFXOffsetDirection           QStringLiteral("OffsetDirection")
 #define KXMLQLCEFXOffsetStep                QStringLiteral("OffsetStep")
+#define KXMLQLCEFXWings                     QStringLiteral("Wings")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -621,8 +622,7 @@ public:
         CenterToSides = 2,   /**< Propagate from center to sides */
         SidesToCenter = 3,   /**< Propagate from sides to center */
         Alternate = 4,       /**< Alternate columns (odd then even) */
-        Symmetric = 5,       /**< Symmetric mirror from center */
-        Wings = 6            /**< Center + symmetric wings */
+        Symmetric = 5        /**< Symmetric mirror from center */
     };
 #if QT_VERSION >= 0x050500
     Q_ENUM(OffsetDirection)
@@ -649,6 +649,12 @@ public:
     /** Get the offset step */
     int offsetStep() const;
     
+    /** Set the wings (number of blocks) for symmetric division */
+    void setWings(int wings);
+    
+    /** Get the wings value */
+    int wings() const;
+    
     /** Convert offset direction to string */
     static QString offsetDirectionToString(OffsetDirection dir);
     
@@ -659,6 +665,7 @@ private:
     quint32 m_fixtureGroupID;
     OffsetDirection m_offsetDirection;
     int m_offsetStep;
+    int m_wings;
 
     /*********************************************************************
      * Fixture propagation mode

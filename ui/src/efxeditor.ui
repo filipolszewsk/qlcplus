@@ -215,11 +215,6 @@
                 <string>Symmetric</string>
                </property>
               </item>
-              <item>
-               <property name="text">
-                <string>Wings</string>
-               </property>
-              </item>
              </widget>
             </item>
            </layout>
@@ -249,6 +244,36 @@
               </property>
               <property name="value">
                <number>90</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_wings">
+            <item>
+             <widget class="QLabel" name="m_wingsLabel">
+              <property name="text">
+               <string>Wings:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="m_wingsSpin">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>10</number>
+              </property>
+              <property name="value">
+               <number>1</number>
+              </property>
+              <property name="toolTip">
+               <string>Divide columns into symmetric blocks (1 = no division, 2+ = multiple blocks)</string>
               </property>
              </widget>
             </item>

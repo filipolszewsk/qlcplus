@@ -164,8 +164,10 @@ void EFXEditor::initGeneralPage()
     /* Offset Direction and Step */
     m_offsetDirectionCombo->setCurrentIndex((int)m_efx->offsetDirection());
     m_offsetStepSpin->setValue(m_efx->offsetStep());
+    m_wingsSpin->setValue(m_efx->wings());
     m_offsetDirectionCombo->setEnabled(m_efx->isFixtureGroupMode());
     m_offsetStepSpin->setEnabled(m_efx->isFixtureGroupMode());
+    m_wingsSpin->setEnabled(m_efx->isFixtureGroupMode());
 
     /* Disable test button if we're in operate mode */
     if (m_doc->mode() == Doc::Operate)
@@ -202,6 +204,8 @@ void EFXEditor::initGeneralPage()
             this, SLOT(slotOffsetDirectionChanged(int)));
     connect(m_offsetStepSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotOffsetStepChanged(int)));
+    connect(m_wingsSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotWingsChanged(int)));
 
     // Test slots
     connect(m_testButton, SIGNAL(clicked()),
@@ -1217,6 +1221,7 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
     m_fixtureGroupCombo->setEnabled(checked);
     m_offsetDirectionCombo->setEnabled(checked);
     m_offsetStepSpin->setEnabled(checked);
+    m_wingsSpin->setEnabled(checked);
     
     if (checked && m_fixtureGroupCombo->count() > 0)
     {
@@ -1347,8 +1352,64 @@ int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHe
     Q_UNUSED(row);
     Q_UNUSED(gridHeight);
     
-    int index = 0;
+    int wings = m_efx->wings();
     int step = m_efx->offsetStep();
+    
+    // Wings mode: divide columns into symmetric blocks
+    if (wings > 1 && gridWidth > 0)
+    {
+        int blockSize = gridWidth / wings;
+        if (blockSize < 1) blockSize = 1;
+        
+        int blockIndex = col / blockSize;  // Which block (0, 1, 2, ...)
+        int posInBlock = col % blockSize;  // Position within block (0 to blockSize-1)
+        
+        // Calculate offset within the block based on direction
+        int index = 0;
+        switch (m_efx->offsetDirection())
+        {
+            case EFX::LeftToRight:
+                index = posInBlock;
+                break;
+            case EFX::RightToLeft:
+                index = (blockSize - 1) - posInBlock;
+                break;
+            case EFX::CenterToSides:
+                {
+                    int center = blockSize / 2;
+                    index = abs(posInBlock - center);
+                }
+                break;
+            case EFX::SidesToCenter:
+                {
+                    int center = blockSize / 2;
+                    int distance = abs(posInBlock - center);
+                    int maxDistance = (blockSize + 1) / 2;
+                    index = maxDistance - distance - 1;
+                }
+                break;
+            case EFX::Alternate:
+                if (posInBlock % 2 == 0)
+                    index = posInBlock / 2;
+                else
+                    index = (blockSize / 2) + ((posInBlock + 1) / 2);
+                break;
+            case EFX::Symmetric:
+                {
+                    int center = blockSize / 2;
+                    if (posInBlock <= center)
+                        index = posInBlock;
+                    else
+                        index = blockSize - 1 - posInBlock;
+                }
+                break;
+        }
+        
+        return (step * index) % 360;
+    }
+    
+    // No wings (wings = 1): normal propagation across all columns
+    int index = 0;
     
     switch (m_efx->offsetDirection())
     {
@@ -1415,53 +1476,6 @@ int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHe
                 }
             }
             break;
-            
-        case EFX::Wings:
-            // Wings mode: center (0°) + symmetric left/right propagation
-            // For even width: two center columns both get index 0
-            {
-                if (gridWidth % 2 == 0)
-                {
-                    // Even width - two center columns
-                    int centerLeft = (gridWidth / 2) - 1;
-                    int centerRight = gridWidth / 2;
-                    
-                    if (col == centerLeft || col == centerRight)
-                    {
-                        index = 0; // Both center columns = 0
-                    }
-                    else if (col < centerLeft)
-                    {
-                        // Left wing: distance from center
-                        index = centerLeft - col;
-                    }
-                    else // col > centerRight
-                    {
-                        // Right wing: same distance as left wing (symmetric)
-                        index = col - centerRight;
-                    }
-                }
-                else
-                {
-                    // Odd width - single center
-                    int center = gridWidth / 2;
-                    if (col == center)
-                    {
-                        index = 0; // Center = 0
-                    }
-                    else if (col < center)
-                    {
-                        // Left wing
-                        index = center - col;
-                    }
-                    else
-                    {
-                        // Right wing (symmetric)
-                        index = col - center;
-                    }
-                }
-            }
-            break;
     }
     
     return (step * index) % 360;
@@ -1483,6 +1497,19 @@ void EFXEditor::slotOffsetDirectionChanged(int index)
 void EFXEditor::slotOffsetStepChanged(int value)
 {
     m_efx->setOffsetStep(value);
+    
+    // Recreate fixtures with new offsets
+    if (m_efx->isFixtureGroupMode())
+    {
+        bool running = interruptRunning();
+        slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+        continueRunning(running);
+    }
+}
+
+void EFXEditor::slotWingsChanged(int value)
+{
+    m_efx->setWings(value);
     
     // Recreate fixtures with new offsets
     if (m_efx->isFixtureGroupMode())
