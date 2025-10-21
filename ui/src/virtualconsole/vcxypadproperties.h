@@ -83,6 +83,16 @@ private slots:
     void slotDegreesRadioChecked();
     void slotDMXRadioChecked();
 
+    void slotUseFixtureGroupToggled(bool checked);
+    void slotFixtureGroupChanged(int index);
+    void slotRowSelectionChanged();
+    void slotFixtureGroupRemoved(quint32 id);
+
+private:
+    void updateFixtureGroupCombo();
+    void updateRowSelection();
+    QList<QCheckBox*> m_rowCheckboxes;
+
     /********************************************************************
      * External controls
      ********************************************************************/

@@ -38,6 +38,7 @@
 #include "vcxypadpreset.h"
 #include "vcxypadarea.h"
 #include "vcxypad.h"
+#include "fixturegroup.h"
 #include "apputil.h"
 #include "scene.h"
 #include "doc.h"
@@ -161,6 +162,32 @@ VCXYPadProperties::VCXYPadProperties(VCXYPad* xypad, Doc* doc)
             this, SLOT(slotDegreesRadioChecked()));
     connect(m_dmxRadio, SIGNAL(clicked(bool)),
             this, SLOT(slotDMXRadioChecked()));
+
+    // Fixture Group controls
+    connect(m_useFixtureGroupCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotUseFixtureGroupToggled(bool)));
+    connect(m_fixtureGroupCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotFixtureGroupChanged(int)));
+    connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
+            this, SLOT(slotFixtureGroupRemoved(quint32)));
+
+    updateFixtureGroupCombo();
+    updateRowSelection();
+
+    // Load current state
+    if (m_xypad->isFixtureGroupMode())
+    {
+        m_useFixtureGroupCheck->setChecked(true);
+        // Find and select current group in combo
+        for (int i = 0; i < m_fixtureGroupCombo->count(); i++)
+        {
+            if (m_fixtureGroupCombo->itemData(i).toUInt() == m_xypad->fixtureGroupID())
+            {
+                m_fixtureGroupCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
 
     /********************************************************************
      * Presets page
@@ -995,6 +1022,136 @@ void VCXYPadProperties::slotKeySequenceChanged(QKeySequence key)
 }
 
 /****************************************************************************
+ * Fixture Group
+ ****************************************************************************/
+
+void VCXYPadProperties::updateFixtureGroupCombo()
+{
+    m_fixtureGroupCombo->clear();
+    
+    foreach (FixtureGroup* grp, m_doc->fixtureGroups())
+    {
+        m_fixtureGroupCombo->addItem(grp->name(), grp->id());
+    }
+}
+
+void VCXYPadProperties::updateRowSelection()
+{
+    // Delete existing checkboxes
+    foreach (QCheckBox* cb, m_rowCheckboxes)
+    {
+        m_rowSelectionLayout->removeWidget(cb);
+        delete cb;
+    }
+    m_rowCheckboxes.clear();
+    
+    // Remove placeholder if it exists
+    if (m_rowSelectionPlaceholder != nullptr)
+    {
+        m_rowSelectionLayout->removeWidget(m_rowSelectionPlaceholder);
+        delete m_rowSelectionPlaceholder;
+        m_rowSelectionPlaceholder = nullptr;
+    }
+    
+    if (!m_useFixtureGroupCheck->isChecked() || m_fixtureGroupCombo->currentIndex() < 0)
+    {
+        // Add placeholder back
+        m_rowSelectionPlaceholder = new QLabel(tr("Select a fixture group to enable row filtering"));
+        m_rowSelectionLayout->addWidget(m_rowSelectionPlaceholder);
+        m_rowSelectionGroup->setEnabled(false);
+        return;
+    }
+    
+    quint32 groupId = m_fixtureGroupCombo->currentData().toUInt();
+    FixtureGroup* group = m_doc->fixtureGroup(groupId);
+    if (group == nullptr)
+    {
+        m_rowSelectionPlaceholder = new QLabel(tr("Select a fixture group to enable row filtering"));
+        m_rowSelectionLayout->addWidget(m_rowSelectionPlaceholder);
+        m_rowSelectionGroup->setEnabled(false);
+        return;
+    }
+    
+    int gridHeight = group->size().height();
+    if (gridHeight <= 0)
+    {
+        m_rowSelectionPlaceholder = new QLabel(tr("Fixture group is empty"));
+        m_rowSelectionLayout->addWidget(m_rowSelectionPlaceholder);
+        m_rowSelectionGroup->setEnabled(false);
+        return;
+    }
+    
+    m_rowSelectionGroup->setEnabled(true);
+    
+    // Create checkbox for each row
+    QList<int> selectedRows = m_xypad->selectedRows();
+    for (int row = 0; row < gridHeight; row++)
+    {
+        QCheckBox* cb = new QCheckBox(tr("Row %1").arg(row + 1));
+        cb->setProperty("row_index", row);
+        
+        // Check if this row is selected (or all if empty)
+        if (selectedRows.isEmpty() || selectedRows.contains(row))
+            cb->setChecked(true);
+        
+        connect(cb, SIGNAL(toggled(bool)),
+                this, SLOT(slotRowSelectionChanged()));
+        
+        m_rowSelectionLayout->addWidget(cb);
+        m_rowCheckboxes.append(cb);
+    }
+}
+
+void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
+{
+    m_fixtureGroupCombo->setEnabled(checked);
+    
+    if (checked && m_fixtureGroupCombo->count() > 0)
+    {
+        // Update row selection UI
+        updateRowSelection();
+    }
+    else
+    {
+        m_fixtureGroupCombo->setCurrentIndex(-1);
+        updateRowSelection();
+    }
+}
+
+void VCXYPadProperties::slotFixtureGroupChanged(int index)
+{
+    if (!m_useFixtureGroupCheck->isChecked() || index < 0)
+        return;
+    
+    updateRowSelection();
+}
+
+void VCXYPadProperties::slotRowSelectionChanged()
+{
+    // This will be called when user changes row checkboxes
+    // We don't need to do anything here as the state is saved in accept()
+}
+
+void VCXYPadProperties::slotFixtureGroupRemoved(quint32 id)
+{
+    // Find and remove the deleted group from combo
+    for (int i = 0; i < m_fixtureGroupCombo->count(); i++)
+    {
+        if (m_fixtureGroupCombo->itemData(i).toUInt() == id)
+        {
+            m_fixtureGroupCombo->removeItem(i);
+            break;
+        }
+    }
+    
+    // If current group was removed, uncheck
+    if (m_xypad->fixtureGroupID() == id)
+    {
+        m_useFixtureGroupCheck->setChecked(false);
+    }
+}
+
+/****************************************************************************
  * OK/Cancel
  ****************************************************************************/
 
@@ -1012,6 +1169,29 @@ void VCXYPadProperties::accept()
         m_xypad->setInvertedAppearance(false);
     else
         m_xypad->setInvertedAppearance(true);
+
+    // Save fixture group mode settings
+    if (m_useFixtureGroupCheck->isChecked() && m_fixtureGroupCombo->currentIndex() >= 0)
+    {
+        m_xypad->setFixtureGroupID(m_fixtureGroupCombo->currentData().toUInt());
+        
+        // Collect selected rows
+        QList<int> selectedRows;
+        foreach (QCheckBox* cb, m_rowCheckboxes)
+        {
+            if (cb->isChecked())
+            {
+                int rowIndex = cb->property("row_index").toInt();
+                selectedRows.append(rowIndex);
+            }
+        }
+        m_xypad->setSelectedRows(selectedRows);
+    }
+    else
+    {
+        m_xypad->setFixtureGroupID(FixtureGroup::invalidId());
+        m_xypad->setSelectedRows(QList<int>());
+    }
 
     QTreeWidgetItemIterator it(m_tree);
     while (*it != NULL)

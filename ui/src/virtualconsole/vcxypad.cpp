@@ -47,6 +47,7 @@
 #include "vcxypadarea.h"
 #include "flowlayout.h"
 #include "vcxypad.h"
+#include "fixturegroup.h"
 #include "fixture.h"
 #include "apputil.h"
 #include "scene.h"
@@ -174,6 +175,12 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     slotModeChanged(m_doc->mode());
     setLiveEdit(m_liveEdit);
 
+    m_fixtureGroupID = FixtureGroup::invalidId();
+
+    // Connect to fixture group removal signal
+    connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
+            this, SLOT(slotFixtureGroupRemoved(quint32)));
+
     m_doc->masterTimer()->registerDMXSource(this);
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32,QByteArray)),
             this, SLOT(slotUniverseWritten(quint32,QByteArray)));
@@ -255,6 +262,9 @@ bool VCXYPad::copyFrom(const VCWidget* widget)
     /* Copy the other widget's fixtures */
     m_fixtures = xypad->fixtures();
 
+    m_fixtureGroupID = xypad->m_fixtureGroupID;
+    m_selectedRows = xypad->m_selectedRows;
+
     /* Copy the current position */
     m_area->setPosition(xypad->m_area->position());
     m_vSlider->setValue(xypad->m_vSlider->value());
@@ -330,6 +340,48 @@ void VCXYPad::clearFixtures()
 QList <VCXYPadFixture> VCXYPad::fixtures() const
 {
     return m_fixtures;
+}
+
+void VCXYPad::setFixtureGroupID(quint32 id)
+{
+    m_fixtureGroupID = id;
+}
+
+quint32 VCXYPad::fixtureGroupID() const
+{
+    return m_fixtureGroupID;
+}
+
+bool VCXYPad::isFixtureGroupMode() const
+{
+    return m_fixtureGroupID != FixtureGroup::invalidId();
+}
+
+void VCXYPad::setSelectedRows(const QList<int>& rows)
+{
+    m_selectedRows = rows;
+}
+
+QList<int> VCXYPad::selectedRows() const
+{
+    return m_selectedRows;
+}
+
+bool VCXYPad::isRowSelected(int row) const
+{
+    if (m_selectedRows.isEmpty())
+        return true;  // All rows selected by default
+    return m_selectedRows.contains(row);
+}
+
+void VCXYPad::slotFixtureGroupRemoved(quint32 id)
+{
+    if (m_fixtureGroupID == id)
+    {
+        m_fixtureGroupID = FixtureGroup::invalidId();
+        m_selectedRows.clear();
+        clearFixtures();
+    }
 }
 
 QRectF VCXYPad::computeCommonDegreesRange() const
@@ -1217,6 +1269,25 @@ bool VCXYPad::loadXML(QXmlStreamReader &root)
             if (fxi.loadXML(root) == true)
                 appendFixture(fxi);
         }
+        else if (root.name() == KXMLQLCVCXYPadFixtureGroup)
+        {
+            m_fixtureGroupID = root.attributes().value(KXMLQLCFixtureGroupID).toUInt();
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCVCXYPadSelectedRows)
+        {
+            QString rowsStr = root.readElementText();
+            QStringList rowsList = rowsStr.split(",", Qt::SkipEmptyParts);
+            QList<int> rows;
+            foreach (QString rowStr, rowsList)
+            {
+                bool ok;
+                int row = rowStr.toInt(&ok);
+                if (ok)
+                    rows.append(row);
+            }
+            setSelectedRows(rows);
+        }
         else if (root.name() == KXMLQLCVCXYPadPreset)
         {
             VCXYPadPreset preset(0xff);
@@ -1260,6 +1331,23 @@ bool VCXYPad::saveXML(QXmlStreamWriter *doc)
     /* Fixtures */
     foreach (VCXYPadFixture fixture, m_fixtures)
         fixture.saveXML(doc);
+
+    // Save fixture group mode if active
+    if (isFixtureGroupMode())
+    {
+        doc->writeStartElement(KXMLQLCVCXYPadFixtureGroup);
+        doc->writeAttribute(KXMLQLCFixtureGroupID, QString::number(m_fixtureGroupID));
+        doc->writeEndElement();
+        
+        // Save selected rows if not all
+        if (!m_selectedRows.isEmpty())
+        {
+            QStringList rowStrings;
+            foreach (int row, m_selectedRows)
+                rowStrings << QString::number(row);
+            doc->writeTextElement(KXMLQLCVCXYPadSelectedRows, rowStrings.join(","));
+        }
+    }
 
     /* Current XY position */
     QPointF pt(m_area->position(false));

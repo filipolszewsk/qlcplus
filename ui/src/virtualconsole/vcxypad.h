@@ -70,6 +70,8 @@ class Doc;
 #define KXMLQLCVCXYPadPositionY "Y" // Legacy
 
 #define KXMLQLCVCXYPadInvertedAppearance "InvertedAppearance"
+#define KXMLQLCVCXYPadFixtureGroup      QStringLiteral("FixtureGroup")
+#define KXMLQLCVCXYPadSelectedRows      QStringLiteral("SelectedRows")
 
 typedef struct
 {
@@ -176,6 +178,25 @@ public:
 private:
     QRectF computeCommonDegreesRange() const;
     void updateDegreesRange();
+
+private:
+    quint32 m_fixtureGroupID;          // Selected fixture group ID (or FixtureGroup::invalidId())
+    QList<int> m_selectedRows;         // Which rows from grid are active
+    
+public:
+    /** Set/get fixture group for column mode */
+    void setFixtureGroupID(quint32 id);
+    quint32 fixtureGroupID() const;
+    bool isFixtureGroupMode() const;
+    
+    /** Set/get selected rows filter */
+    void setSelectedRows(const QList<int>& rows);
+    QList<int> selectedRows() const;
+    bool isRowSelected(int row) const;
+
+public slots:
+    /** Handle fixture group deletion */
+    void slotFixtureGroupRemoved(quint32 id);
 
 private:
     QList <VCXYPadFixture> m_fixtures;
