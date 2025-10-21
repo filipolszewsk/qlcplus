@@ -1166,7 +1166,8 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
                         // Set start offset based on column (each column = 360/gridWidth degrees)
                         int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
                         ef->setStartOffset(columnOffset);
-                        m_efx->addFixture(ef);
+                        if (!m_efx->addFixture(ef))
+                            delete ef;
                     }
                 }
             }
@@ -1225,7 +1226,8 @@ void EFXEditor::slotFixtureGroupChanged(int index)
                     // Set start offset based on column
                     int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
                     ef->setStartOffset(columnOffset);
-                    m_efx->addFixture(ef);
+                    if (!m_efx->addFixture(ef))
+                        delete ef;
                 }
             }
         }
