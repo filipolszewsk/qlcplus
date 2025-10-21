@@ -437,6 +437,13 @@ void EFXEditor::updateFixtureTree()
             int gridWidth = group->size().width();
             int gridHeight = group->size().height();
             
+            if (gridWidth <= 0 || gridHeight <= 0)
+            {
+                // Empty grid, nothing to show
+                m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
+                return;
+            }
+            
             // Group fixtures by column based on their position in the grid
             QMap<int, QList<EFXFixture*>> columnFixtures;
             
@@ -1180,6 +1187,14 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
             int gridWidth = group->size().width();
             int gridHeight = group->size().height();
             
+            if (gridWidth <= 0 || gridHeight <= 0)
+            {
+                // Empty grid, don't create fixtures
+                updateFixtureTree();
+                redrawPreview();
+                return;
+            }
+            
             // Create EFXFixture for each fixture in the group
             for (int col = 0; col < gridWidth; col++)
             {
@@ -1239,6 +1254,15 @@ void EFXEditor::slotFixtureGroupChanged(int index)
     {
         int gridWidth = group->size().width();
         int gridHeight = group->size().height();
+        
+        if (gridWidth <= 0 || gridHeight <= 0)
+        {
+            // Empty grid
+            updateFixtureTree();
+            redrawPreview();
+            continueRunning(running);
+            return;
+        }
         
         // Create EFXFixture for each fixture in the group
         for (int col = 0; col < gridWidth; col++)
