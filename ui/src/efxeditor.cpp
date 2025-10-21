@@ -1218,23 +1218,34 @@ void EFXEditor::updateFixtureGroupCombo()
 
 void EFXEditor::updateRowSelection()
 {
+    // Block signals to prevent recursion
+    bool wasBlocked = m_rowSelectionGroup->signalsBlocked();
+    m_rowSelectionGroup->blockSignals(true);
+    
     // Clear existing checkboxes
     foreach (QCheckBox *cb, m_rowCheckboxes)
+    {
+        cb->blockSignals(true);
+        m_rowSelectionLayout->removeWidget(cb);
         delete cb;
+    }
     m_rowCheckboxes.clear();
     
-    // Remove placeholder if exists
-    if (m_rowSelectionPlaceholder != nullptr)
+    // Clear placeholder if exists
+    QLayoutItem *child;
+    while ((child = m_rowSelectionLayout->takeAt(0)) != nullptr)
     {
-        m_rowSelectionLayout->removeWidget(m_rowSelectionPlaceholder);
-        m_rowSelectionPlaceholder->hide();
+        if (child->widget())
+            child->widget()->deleteLater();
+        delete child;
     }
     
     if (!m_efx->isFixtureGroupMode())
     {
         m_rowSelectionGroup->setEnabled(false);
-        if (m_rowSelectionPlaceholder)
-            m_rowSelectionPlaceholder->show();
+        QLabel *placeholder = new QLabel(tr("Select a fixture group to see rows"));
+        m_rowSelectionLayout->addWidget(placeholder);
+        m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
     
@@ -1242,6 +1253,9 @@ void EFXEditor::updateRowSelection()
     if (group == nullptr)
     {
         m_rowSelectionGroup->setEnabled(false);
+        QLabel *placeholder = new QLabel(tr("Invalid fixture group"));
+        m_rowSelectionLayout->addWidget(placeholder);
+        m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
     
@@ -1249,6 +1263,9 @@ void EFXEditor::updateRowSelection()
     if (gridHeight <= 0)
     {
         m_rowSelectionGroup->setEnabled(false);
+        QLabel *placeholder = new QLabel(tr("Empty grid"));
+        m_rowSelectionLayout->addWidget(placeholder);
+        m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
     
@@ -1259,18 +1276,31 @@ void EFXEditor::updateRowSelection()
     for (int row = 0; row < gridHeight; row++)
     {
         QCheckBox *cb = new QCheckBox(QString("Row %1").arg(row + 1));
+        cb->blockSignals(true);
         // If no selection saved, select all by default
         cb->setChecked(currentSelection.isEmpty() || currentSelection.contains(row));
         cb->setProperty("row_index", row);
-        connect(cb, SIGNAL(toggled(bool)), this, SLOT(slotRowSelectionChanged()));
         
         m_rowSelectionLayout->addWidget(cb);
         m_rowCheckboxes.append(cb);
+        
+        // Now connect signal after setting initial state
+        cb->blockSignals(false);
+        connect(cb, SIGNAL(toggled(bool)), this, SLOT(slotRowSelectionChanged()));
     }
+    
+    m_rowSelectionGroup->blockSignals(wasBlocked);
 }
 
 void EFXEditor::slotRowSelectionChanged()
 {
+    // Prevent recursion
+    static bool updating = false;
+    if (updating)
+        return;
+    
+    updating = true;
+    
     // Collect selected rows from checkboxes
     QList<int> selectedRows;
     foreach (QCheckBox *cb, m_rowCheckboxes)
@@ -1282,12 +1312,34 @@ void EFXEditor::slotRowSelectionChanged()
         }
     }
     
+    // Ensure at least one row is selected
+    if (selectedRows.isEmpty())
+    {
+        // Re-check the first checkbox to prevent empty selection
+        if (!m_rowCheckboxes.isEmpty())
+        {
+            m_rowCheckboxes.first()->setChecked(true);
+            selectedRows.append(0);
+        }
+    }
+    
     m_efx->setSelectedRows(selectedRows);
     
     // Recreate fixtures with new row selection
     bool running = interruptRunning();
+    
+    // Block checkbox signals during fixture recreation
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+        cb->blockSignals(true);
+    
     slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+    
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+        cb->blockSignals(false);
+    
     continueRunning(running);
+    
+    updating = false;
 }
 
 void EFXEditor::slotUseFixtureGroupToggled(bool checked)
