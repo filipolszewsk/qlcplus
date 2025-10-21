@@ -95,7 +95,7 @@
          </property>
         </widget>
        </item>
-       <item row="8" column="0" colspan="2">
+       <item row="9" column="0" colspan="2">
         <widget class="QGroupBox" name="m_orderGroup">
          <property name="title">
           <string>Fixture order</string>
@@ -151,7 +151,30 @@
          </property>
         </widget>
        </item>
-       <item row="1" column="0" rowspan="7" colspan="2">
+       <item row="7" column="0" colspan="2">
+        <widget class="QGroupBox" name="groupBox">
+         <property name="title">
+          <string>Fixture Group Mode</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_6">
+          <item>
+           <widget class="QCheckBox" name="m_useFixtureGroupCheck">
+            <property name="text">
+             <string>Use Fixture Group</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QComboBox" name="m_fixtureGroupCombo">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="1" column="0" rowspan="6" colspan="2">
         <widget class="QTreeWidget" name="m_tree">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
