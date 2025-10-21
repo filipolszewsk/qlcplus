@@ -1133,8 +1133,15 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
     
     if (checked && m_fixtureGroupCombo->count() > 0)
     {
+        // Validate combo data
+        if (!m_fixtureGroupCombo->currentData().isValid())
+            return;
+        
         // Enable group mode
         quint32 groupId = m_fixtureGroupCombo->currentData().toUInt();
+        if (groupId == FixtureGroup::invalidId())
+            return;
+        
         m_efx->setFixtureGroupID(groupId);
         
         // Clear existing fixtures and create fixture entries for each fixture in group
@@ -1184,7 +1191,14 @@ void EFXEditor::slotFixtureGroupChanged(int index)
     if (index < 0)
         return;
     
+    // Validate combo data
+    if (!m_fixtureGroupCombo->itemData(index).isValid())
+        return;
+    
     quint32 groupId = m_fixtureGroupCombo->itemData(index).toUInt();
+    if (groupId == FixtureGroup::invalidId())
+        return;
+    
     m_efx->setFixtureGroupID(groupId);
     
     // Recreate fixture entries for new group
