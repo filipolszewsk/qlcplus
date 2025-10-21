@@ -170,6 +170,8 @@ VCXYPadProperties::VCXYPadProperties(VCXYPad* xypad, Doc* doc)
             this, SLOT(slotFixtureGroupChanged(int)));
     connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
             this, SLOT(slotFixtureGroupRemoved(quint32)));
+    connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)),
+            this, SLOT(slotFixtureGroupContentChanged(quint32)));
 
     updateFixtureGroupCombo();
     updateRowSelection();
@@ -1668,6 +1670,99 @@ void VCXYPadProperties::slotRowSelectionChanged()
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     
     updating = false;
+}
+
+void VCXYPadProperties::slotFixtureGroupContentChanged(quint32 id)
+{
+    // If this is our current group and we're in group mode, refresh the tree
+    if (!m_useFixtureGroupCheck->isChecked())
+        return;
+    
+    if (m_fixtureGroupCombo->currentIndex() < 0)
+        return;
+    
+    quint32 currentGroupId = m_fixtureGroupCombo->currentData().toUInt();
+    if (currentGroupId != id)
+        return;  // Not our group, ignore
+    
+    // Our fixture group content changed (fixtures moved in grid)
+    // Rebuild tree while preserving column ranges
+    m_tree->clear();
+    
+    FixtureGroup* group = m_doc->fixtureGroup(id);
+    if (group != nullptr)
+    {
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        if (gridWidth > 0 && gridHeight > 0)
+        {
+            // Group fixtures by column
+            QMap<int, QList<VCXYPadFixture>> columnFixtures;
+            
+            // Create VCXYPadFixture for each fixture (respecting row filter and column ranges)
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    // Check if this row is selected
+                    if (!m_xypad->isRowSelected(row))
+                        continue;
+                    
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (head.isValid())
+                    {
+                        VCXYPadFixture fxi(m_doc);
+                        fxi.setHead(head);
+                        
+                        // Apply column ranges (persistent, per-column)
+                        VCXYPad::ColumnRanges ranges = m_xypad->columnRanges(col);
+                        fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                        fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                        
+                        columnFixtures[col].append(fxi);
+                    }
+                }
+            }
+            
+            // Create column tree items
+            for (int col = 0; col < gridWidth; col++)
+            {
+                // Skip excluded columns
+                if (m_xypad->isColumnExcluded(col))
+                    continue;
+                
+                int fixtureCount = columnFixtures[col].size();
+                
+                QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                item->setText(KColumnFixture, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
+                item->setData(KColumnFixture, Qt::UserRole, col);
+                item->setData(KColumnFixture, Qt::UserRole + 1, true);
+                
+                // Store all fixtures from this column in item data
+                QVariantList fixtureList;
+                foreach (const VCXYPadFixture& fxi, columnFixtures[col])
+                {
+                    fixtureList.append(QVariant(fxi));
+                }
+                item->setData(KColumnFixture, Qt::UserRole + 2, fixtureList);
+                
+                if (fixtureCount > 0)
+                {
+                    VCXYPadFixture firstFxi = columnFixtures[col].first();
+                    item->setText(KColumnXAxis, firstFxi.xBrief());
+                    item->setText(KColumnYAxis, firstFxi.yBrief());
+                }
+                else
+                {
+                    item->setText(KColumnXAxis, "");
+                    item->setText(KColumnYAxis, "");
+                }
+            }
+        }
+    }
+    
+    m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
 void VCXYPadProperties::slotFixtureGroupRemoved(quint32 id)

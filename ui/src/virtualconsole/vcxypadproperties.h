@@ -87,6 +87,7 @@ private slots:
     void slotFixtureGroupChanged(int index);
     void slotRowSelectionChanged();
     void slotFixtureGroupRemoved(quint32 id);
+    void slotFixtureGroupContentChanged(quint32 id);
 
 private:
     void updateFixtureGroupCombo();
