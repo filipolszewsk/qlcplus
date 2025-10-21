@@ -35,6 +35,7 @@
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
 #include "efxpreviewarea.h"
+#include "fixturegroup.h"
 #include "efxeditor.h"
 #include "fixture.h"
 #include "doc.h"
@@ -150,6 +151,15 @@ void EFXEditor::initGeneralPage()
     else
         m_parallelRadio->setChecked(true);
 
+    /* Fixture Group Mode */
+    m_useFixtureGroupCheck->setChecked(m_efx->isFixtureGroupMode());
+    updateFixtureGroupCombo();
+    if (m_efx->isFixtureGroupMode())
+    {
+        m_fixtureGroupCombo->setCurrentIndex(
+            m_fixtureGroupCombo->findData(m_efx->fixtureGroupID()));
+    }
+
     /* Disable test button if we're in operate mode */
     if (m_doc->mode() == Doc::Operate)
         m_testButton->setEnabled(false);
@@ -176,6 +186,11 @@ void EFXEditor::initGeneralPage()
             this, SLOT(slotSerialRadioToggled(bool)));
     connect(m_asymmetricRadio, SIGNAL(toggled(bool)),
             this, SLOT(slotAsymmetricRadioToggled(bool)));
+
+    connect(m_useFixtureGroupCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotUseFixtureGroupToggled(bool)));
+    connect(m_fixtureGroupCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotFixtureGroupChanged(int)));
 
     // Test slots
     connect(m_testButton, SIGNAL(clicked()),
@@ -405,9 +420,74 @@ FunctionParent EFXEditor::functionParent() const
 void EFXEditor::updateFixtureTree()
 {
     m_tree->clear();
-    QListIterator <EFXFixture*> it(m_efx->fixtures());
-    while (it.hasNext() == true)
-        addFixtureItem(it.next());
+    
+    if (m_efx->isFixtureGroupMode())
+    {
+        // Fixture Group Mode: show columns with ability to change offset for entire column
+        FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+        if (group != nullptr)
+        {
+            int gridWidth = group->size().width();
+            int gridHeight = group->size().height();
+            
+            // Group fixtures by column based on their position in the grid
+            QMap<int, QList<EFXFixture*>> columnFixtures;
+            
+            // Iterate through the grid and find which column each fixture belongs to
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    GroupHead gridHead = group->head(QLCPoint(col, row));
+                    if (gridHead.isValid())
+                    {
+                        // Find the EFXFixture that corresponds to this grid position
+                        foreach (EFXFixture *ef, m_efx->fixtures())
+                        {
+                            if (ef->head().fxi == gridHead.fxi && ef->head().head == gridHead.head)
+                            {
+                                columnFixtures[col].append(ef);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Create tree items for each column
+            for (int col = 0; col < gridWidth; col++)
+            {
+                if (!columnFixtures.contains(col) || columnFixtures[col].isEmpty())
+                    continue;
+                
+                // Use the first fixture in column as representative
+                EFXFixture *firstFixture = columnFixtures[col].first();
+                
+                QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                item->setText(KColumnNumber, QString("%1").arg(col + 1, 3, 10, QChar('0')));
+                item->setText(KColumnName, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(columnFixtures[col].size()));
+                item->setData(0, Qt::UserRole, QVariant(col)); // Store column index
+                item->setData(0, Qt::UserRole + 1, QVariant(true)); // Mark as column item
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                
+                if (firstFixture->direction() == Function::Backward)
+                    item->setCheckState(KColumnReverse, Qt::Checked);
+                else
+                    item->setCheckState(KColumnReverse, Qt::Unchecked);
+                
+                updateModeColumn(item, firstFixture);
+                updateStartOffsetColumn(item, firstFixture);
+            }
+        }
+    }
+    else
+    {
+        // Normal mode: show individual fixtures
+        QListIterator <EFXFixture*> it(m_efx->fixtures());
+        while (it.hasNext())
+            addFixtureItem(it.next());
+    }
+    
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
@@ -504,7 +584,19 @@ void EFXEditor::updateModeColumn(QTreeWidgetItem* item, EFXFixture* ef)
         QComboBox* combo = new QComboBox(m_tree);
         combo->setAutoFillBackground(true);
         combo->addItems(ef->modeList());
-        combo->setProperty(PROPERTY_FIXTURE, (qulonglong) ef);
+        
+        if (m_efx->isFixtureGroupMode())
+        {
+            // In group mode, store column index
+            int columnIndex = item->data(0, Qt::UserRole).toInt();
+            combo->setProperty(PROPERTY_FIXTURE, columnIndex);
+        }
+        else
+        {
+            // Normal mode, store EFXFixture pointer
+            combo->setProperty(PROPERTY_FIXTURE, (qulonglong) ef);
+        }
+        
         m_tree->setItemWidget(item, KColumnMode, combo);
 
         const int index = combo->findText(ef->modeToString(ef->mode()));
@@ -528,7 +620,19 @@ void EFXEditor::updateStartOffsetColumn(QTreeWidgetItem* item, EFXFixture* ef)
         spin->setValue(ef->startOffset());
         spin->setSuffix(QChar(0x00b0)); // degree
         m_tree->setItemWidget(item, KColumnStartOffset, spin);
-        spin->setProperty(PROPERTY_FIXTURE, (qulonglong) ef);
+        
+        if (m_efx->isFixtureGroupMode())
+        {
+            // In group mode, store column index
+            int columnIndex = item->data(0, Qt::UserRole).toInt();
+            spin->setProperty(PROPERTY_FIXTURE, columnIndex);
+        }
+        else
+        {
+            // Normal mode, store EFXFixture pointer
+            spin->setProperty(PROPERTY_FIXTURE, (qulonglong) ef);
+        }
+        
         connect(spin, SIGNAL(valueChanged(int)),
                 this, SLOT(slotFixtureStartOffsetChanged(int)));
     }
@@ -616,14 +720,42 @@ void EFXEditor::slotFixtureItemChanged(QTreeWidgetItem* item, int column)
 {
     if (column == KColumnReverse)
     {
-        EFXFixture* ef = reinterpret_cast <EFXFixture*>
-                         (item->data(0, Qt::UserRole).toULongLong());
-        Q_ASSERT(ef != NULL);
-
-        if (item->checkState(column) == Qt::Checked)
-            ef->setDirection(Function::Backward);
+        if (m_efx->isFixtureGroupMode())
+        {
+            // In group mode, update all fixtures in this column
+            int columnIndex = item->data(0, Qt::UserRole).toInt();
+            Function::Direction dir = (item->checkState(column) == Qt::Checked) ? Function::Backward : Function::Forward;
+            
+            FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+            if (group != nullptr)
+            {
+                int gridHeight = group->size().height();
+                foreach (EFXFixture *ef, m_efx->fixtures())
+                {
+                    for (int row = 0; row < gridHeight; row++)
+                    {
+                        GroupHead head = group->head(QLCPoint(columnIndex, row));
+                        if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
+                        {
+                            ef->setDirection(dir);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         else
-            ef->setDirection(Function::Forward);
+        {
+            // Normal mode
+            EFXFixture* ef = reinterpret_cast <EFXFixture*>
+                             (item->data(0, Qt::UserRole).toULongLong());
+            Q_ASSERT(ef != NULL);
+
+            if (item->checkState(column) == Qt::Checked)
+                ef->setDirection(Function::Backward);
+            else
+                ef->setDirection(Function::Forward);
+        }
 
         redrawPreview();
     }
@@ -634,10 +766,41 @@ void EFXEditor::slotFixtureModeChanged(int index)
     QComboBox *combo = qobject_cast<QComboBox*>(QObject::sender());
     Q_ASSERT(combo != NULL);
 
-    EFXFixture *ef = (EFXFixture*) combo->property(PROPERTY_FIXTURE).toULongLong();
-    Q_ASSERT(ef != NULL);
+    if (m_efx->isFixtureGroupMode())
+    {
+        // In group mode, update all fixtures in this column
+        int columnIndex = combo->property(PROPERTY_FIXTURE).toInt();
+        
+        FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+        if (group != nullptr && !m_efx->fixtures().isEmpty())
+        {
+            // Get mode from first fixture (they should all use same mode)
+            EFXFixture *firstEf = m_efx->fixtures().first();
+            EFXFixture::Mode mode = firstEf->stringToMode(combo->itemText(index));
+            
+            int gridHeight = group->size().height();
+            foreach (EFXFixture *ef, m_efx->fixtures())
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    GroupHead head = group->head(QLCPoint(columnIndex, row));
+                    if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
+                    {
+                        ef->setMode(mode);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // Normal mode
+        EFXFixture *ef = (EFXFixture*) combo->property(PROPERTY_FIXTURE).toULongLong();
+        Q_ASSERT(ef != NULL);
 
-    ef->setMode(ef->stringToMode (combo->itemText(index)));
+        ef->setMode(ef->stringToMode(combo->itemText(index)));
+    }
 
     // Restart the test after the latest mode change, delayed
     m_testTimer.start();
@@ -647,9 +810,39 @@ void EFXEditor::slotFixtureStartOffsetChanged(int startOffset)
 {
     QSpinBox *spin = qobject_cast<QSpinBox*>(QObject::sender());
     Q_ASSERT(spin != NULL);
-    EFXFixture *ef = (EFXFixture*) spin->property(PROPERTY_FIXTURE).toULongLong();
-    Q_ASSERT(ef != NULL);
-    ef->setStartOffset(startOffset);
+    
+    if (m_efx->isFixtureGroupMode())
+    {
+        // In group mode, the spin box stores column index instead of EFXFixture pointer
+        int columnIndex = spin->property(PROPERTY_FIXTURE).toInt();
+        
+        // Update all fixtures in this column
+        FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+        if (group != nullptr)
+        {
+            int gridHeight = group->size().height();
+            foreach (EFXFixture *ef, m_efx->fixtures())
+            {
+                // Check if this fixture is in the column
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    GroupHead head = group->head(QLCPoint(columnIndex, row));
+                    if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
+                    {
+                        ef->setStartOffset(startOffset);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // Normal mode
+        EFXFixture *ef = (EFXFixture*) spin->property(PROPERTY_FIXTURE).toULongLong();
+        Q_ASSERT(ef != NULL);
+        ef->setStartOffset(startOffset);
+    }
 
     redrawPreview();
 
@@ -905,6 +1098,113 @@ void EFXEditor::slotFixtureChanged()
 {
     // Update the tree in case fixture's name changes
     updateFixtureTree();
+}
+
+void EFXEditor::updateFixtureGroupCombo()
+{
+    m_fixtureGroupCombo->clear();
+    
+    foreach (FixtureGroup *grp, m_doc->fixtureGroups())
+    {
+        m_fixtureGroupCombo->addItem(grp->name(), grp->id());
+    }
+    
+    m_fixtureGroupCombo->setEnabled(m_useFixtureGroupCheck->isChecked());
+}
+
+void EFXEditor::slotUseFixtureGroupToggled(bool checked)
+{
+    m_fixtureGroupCombo->setEnabled(checked);
+    
+    if (checked && m_fixtureGroupCombo->count() > 0)
+    {
+        // Enable group mode
+        quint32 groupId = m_fixtureGroupCombo->currentData().toUInt();
+        m_efx->setFixtureGroupID(groupId);
+        
+        // Clear existing fixtures and create fixture entries for each fixture in group
+        m_efx->removeAllFixtures();
+        
+        FixtureGroup *group = m_doc->fixtureGroup(groupId);
+        if (group != nullptr)
+        {
+            int gridWidth = group->size().width();
+            int gridHeight = group->size().height();
+            
+            // Create EFXFixture for each fixture in the group
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (head.isValid())
+                    {
+                        EFXFixture *ef = new EFXFixture(m_efx);
+                        ef->setHead(head);
+                        // Set start offset based on column (each column = 360/gridWidth degrees)
+                        int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                        ef->setStartOffset(columnOffset);
+                        m_efx->addFixture(ef);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // Disable group mode
+        m_efx->setFixtureGroupID(FixtureGroup::invalidId());
+        m_efx->removeAllFixtures();
+    }
+    
+    updateFixtureTree();
+    redrawPreview();
+}
+
+void EFXEditor::slotFixtureGroupChanged(int index)
+{
+    if (!m_useFixtureGroupCheck->isChecked())
+        return;
+    
+    if (index < 0)
+        return;
+    
+    quint32 groupId = m_fixtureGroupCombo->itemData(index).toUInt();
+    m_efx->setFixtureGroupID(groupId);
+    
+    // Recreate fixture entries for new group
+    bool running = interruptRunning();
+    
+    m_efx->removeAllFixtures();
+    
+    FixtureGroup *group = m_doc->fixtureGroup(groupId);
+    if (group != nullptr)
+    {
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        // Create EFXFixture for each fixture in the group
+        for (int col = 0; col < gridWidth; col++)
+        {
+            for (int row = 0; row < gridHeight; row++)
+            {
+                GroupHead head = group->head(QLCPoint(col, row));
+                if (head.isValid())
+                {
+                    EFXFixture *ef = new EFXFixture(m_efx);
+                    ef->setHead(head);
+                    // Set start offset based on column
+                    int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                    ef->setStartOffset(columnOffset);
+                    m_efx->addFixture(ef);
+                }
+            }
+        }
+    }
+    
+    updateFixtureTree();
+    redrawPreview();
+    continueRunning(running);
 }
 
 /*****************************************************************************
