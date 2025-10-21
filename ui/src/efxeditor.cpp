@@ -1325,6 +1325,15 @@ void EFXEditor::slotRowSelectionChanged()
     
     m_efx->setSelectedRows(selectedRows);
     
+    // Save fixture settings before removing (mode, direction)
+    QMap<QPair<quint32, int>, QPair<EFXFixture::Mode, Function::Direction>> fixtureSettings;
+    foreach (EFXFixture *ef, m_efx->fixtures())
+    {
+        QPair<quint32, int> key(ef->head().fxi, ef->head().head);
+        QPair<EFXFixture::Mode, Function::Direction> value(ef->mode(), ef->direction());
+        fixtureSettings[key] = value;
+    }
+    
     // Recreate fixtures WITHOUT calling slotFixtureGroupChanged
     // (which would call updateRowSelection and destroy our checkboxes!)
     bool running = interruptRunning();
@@ -1354,6 +1363,15 @@ void EFXEditor::slotRowSelectionChanged()
                         ef->setHead(head);
                         int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                         ef->setStartOffset(columnOffset);
+                        
+                        // Restore saved settings (mode, direction)
+                        QPair<quint32, int> key(head.fxi, head.head);
+                        if (fixtureSettings.contains(key))
+                        {
+                            ef->setMode(fixtureSettings[key].first);
+                            ef->setDirection(fixtureSettings[key].second);
+                        }
+                        
                         if (!m_efx->addFixture(ef))
                             delete ef;
                     }
