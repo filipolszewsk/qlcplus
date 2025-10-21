@@ -264,6 +264,8 @@ bool VCXYPad::copyFrom(const VCWidget* widget)
 
     m_fixtureGroupID = xypad->m_fixtureGroupID;
     m_selectedRows = xypad->m_selectedRows;
+    m_excludedColumns = xypad->m_excludedColumns;
+    m_columnRanges = xypad->m_columnRanges;
 
     /* Copy the current position */
     m_area->setPosition(xypad->m_area->position());
@@ -380,8 +382,45 @@ void VCXYPad::slotFixtureGroupRemoved(quint32 id)
     {
         m_fixtureGroupID = FixtureGroup::invalidId();
         m_selectedRows.clear();
+        m_excludedColumns.clear();
+        m_columnRanges.clear();
         clearFixtures();
     }
+}
+
+void VCXYPad::setExcludedColumns(const QList<int>& cols)
+{
+    m_excludedColumns = cols;
+}
+
+QList<int> VCXYPad::excludedColumns() const
+{
+    return m_excludedColumns;
+}
+
+bool VCXYPad::isColumnExcluded(int col) const
+{
+    return m_excludedColumns.contains(col);
+}
+
+void VCXYPad::setColumnRanges(int col, const ColumnRanges& ranges)
+{
+    m_columnRanges[col] = ranges;
+}
+
+VCXYPad::ColumnRanges VCXYPad::columnRanges(int col) const
+{
+    if (m_columnRanges.contains(col))
+        return m_columnRanges[col];
+    
+    // Return defaults
+    ColumnRanges defaults;
+    return defaults;
+}
+
+QMap<int, VCXYPad::ColumnRanges> VCXYPad::allColumnRanges() const
+{
+    return m_columnRanges;
 }
 
 QRectF VCXYPad::computeCommonDegreesRange() const
@@ -1288,6 +1327,43 @@ bool VCXYPad::loadXML(QXmlStreamReader &root)
             }
             setSelectedRows(rows);
         }
+        else if (root.name() == KXMLQLCVCXYPadExcludedColumns)
+        {
+            QString colsStr = root.readElementText();
+            QStringList colsList = colsStr.split(",", Qt::SkipEmptyParts);
+            QList<int> cols;
+            foreach (QString colStr, colsList)
+            {
+                bool ok;
+                int col = colStr.toInt(&ok);
+                if (ok)
+                    cols.append(col);
+            }
+            setExcludedColumns(cols);
+        }
+        else if (root.name() == KXMLQLCVCXYPadColumnRanges)
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLQLCVCXYPadColumnRange)
+                {
+                    int col = root.attributes().value(KXMLQLCVCXYPadColumnIndex).toInt();
+                    ColumnRanges ranges;
+                    ranges.xMin = root.attributes().value(KXMLQLCVCXYPadColumnXMin).toDouble();
+                    ranges.xMax = root.attributes().value(KXMLQLCVCXYPadColumnXMax).toDouble();
+                    ranges.xReverse = root.attributes().value(KXMLQLCVCXYPadColumnXReverse).toInt() == 1;
+                    ranges.yMin = root.attributes().value(KXMLQLCVCXYPadColumnYMin).toDouble();
+                    ranges.yMax = root.attributes().value(KXMLQLCVCXYPadColumnYMax).toDouble();
+                    ranges.yReverse = root.attributes().value(KXMLQLCVCXYPadColumnYReverse).toInt() == 1;
+                    m_columnRanges[col] = ranges;
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
+        }
         else if (root.name() == KXMLQLCVCXYPadPreset)
         {
             VCXYPadPreset preset(0xff);
@@ -1346,6 +1422,36 @@ bool VCXYPad::saveXML(QXmlStreamWriter *doc)
             foreach (int row, m_selectedRows)
                 rowStrings << QString::number(row);
             doc->writeTextElement(KXMLQLCVCXYPadSelectedRows, rowStrings.join(","));
+        }
+        
+        // Save excluded columns if any
+        if (!m_excludedColumns.isEmpty())
+        {
+            QStringList colStrings;
+            foreach (int col, m_excludedColumns)
+                colStrings << QString::number(col);
+            doc->writeTextElement(KXMLQLCVCXYPadExcludedColumns, colStrings.join(","));
+        }
+        
+        // Save column ranges if any
+        if (!m_columnRanges.isEmpty())
+        {
+            doc->writeStartElement(KXMLQLCVCXYPadColumnRanges);
+            QMapIterator<int, ColumnRanges> it(m_columnRanges);
+            while (it.hasNext())
+            {
+                it.next();
+                doc->writeStartElement(KXMLQLCVCXYPadColumnRange);
+                doc->writeAttribute(KXMLQLCVCXYPadColumnIndex, QString::number(it.key()));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnXMin, QString::number(it.value().xMin));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnXMax, QString::number(it.value().xMax));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnXReverse, QString::number(it.value().xReverse ? 1 : 0));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnYMin, QString::number(it.value().yMin));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnYMax, QString::number(it.value().yMax));
+                doc->writeAttribute(KXMLQLCVCXYPadColumnYReverse, QString::number(it.value().yReverse ? 1 : 0));
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
         }
     }
 

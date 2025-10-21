@@ -316,6 +316,10 @@ void VCXYPadProperties::fillFixturesTree()
         // Create tree items for each column
         for (int col = 0; col < gridWidth; col++)
         {
+            // Skip excluded columns
+            if (m_xypad->isColumnExcluded(col))
+                continue;
+            
             int fixtureCount = columnFixtures[col].size();
             
             QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
@@ -345,10 +349,9 @@ void VCXYPadProperties::fillFixturesTree()
             }
         }
         
-        // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
+        // Disable Add button in group mode (Remove and Edit allowed for columns)
         m_addButton->setEnabled(false);
-        m_removeButton->setEnabled(false);
-        // Edit will be enabled/disabled by slotSelectionChanged
+        // Remove and Edit will be enabled/disabled by slotSelectionChanged
     }
     else
     {
@@ -514,16 +517,49 @@ void VCXYPadProperties::slotAddClicked()
 
 void VCXYPadProperties::slotRemoveClicked()
 {
-    int r = QMessageBox::question(
-                this, tr("Remove fixtures"),
-                tr("Do you want to remove the selected fixtures?"),
-                QMessageBox::Yes, QMessageBox::No);
-
-    if (r == QMessageBox::Yes)
+    if (m_xypad->isFixtureGroupMode())
     {
-        QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
-        while (it.hasNext() == true)
-            delete it.next();
+        // In fixture group mode, remove columns by adding them to excluded list
+        int r = QMessageBox::question(
+                    this, tr("Remove columns"),
+                    tr("Do you want to remove the selected columns?"),
+                    QMessageBox::Yes, QMessageBox::No);
+
+        if (r == QMessageBox::Yes)
+        {
+            QList<int> excludedCols = m_xypad->excludedColumns();
+            
+            QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
+            while (it.hasNext() == true)
+            {
+                QTreeWidgetItem* item = it.next();
+                bool isColumnItem = item->data(KColumnFixture, Qt::UserRole + 1).toBool();
+                if (isColumnItem)
+                {
+                    int colIndex = item->data(KColumnFixture, Qt::UserRole).toInt();
+                    if (!excludedCols.contains(colIndex))
+                        excludedCols.append(colIndex);
+                }
+                delete item;
+            }
+            
+            m_xypad->setExcludedColumns(excludedCols);
+        }
+    }
+    else
+    {
+        // Normal mode - remove individual fixtures
+        int r = QMessageBox::question(
+                    this, tr("Remove fixtures"),
+                    tr("Do you want to remove the selected fixtures?"),
+                    QMessageBox::Yes, QMessageBox::No);
+
+        if (r == QMessageBox::Yes)
+        {
+            QListIterator <QTreeWidgetItem*> it(m_tree->selectedItems());
+            while (it.hasNext() == true)
+                delete it.next();
+        }
     }
 }
 
@@ -572,48 +608,53 @@ void VCXYPadProperties::slotEditClicked()
                 editedFixtures.append(it.next());
             }
             
-            // Update column items with edited fixtures
-            foreach (QTreeWidgetItem* item, selectedItems)
+            // In group mode, save ranges to COLUMN (not individual fixtures)
+            // Take first edited fixture and save its ranges to the column
+            if (!editedFixtures.isEmpty())
             {
-                bool isColumnItem = item->data(KColumnFixture, Qt::UserRole + 1).toBool();
+                VCXYPadFixture firstEdited = editedFixtures.first();
                 
-                if (isColumnItem)
+                // Save ranges to all selected columns
+                foreach (QTreeWidgetItem* item, selectedItems)
                 {
-                    QVariantList fixtureList = item->data(KColumnFixture, Qt::UserRole + 2).toList();
-                    QVariantList updatedList;
+                    bool isColumnItem = item->data(KColumnFixture, Qt::UserRole + 1).toBool();
                     
-                    foreach (const QVariant& var, fixtureList)
+                    if (isColumnItem)
                     {
-                        VCXYPadFixture fxi(m_doc, var);
+                        int columnIndex = item->data(KColumnFixture, Qt::UserRole).toInt();
                         
-                        // Find matching edited fixture by GroupHead
-                        bool found = false;
-                        foreach (const VCXYPadFixture& editedFxi, editedFixtures)
+                        // Save ranges to backend (per-column, persistent)
+                        VCXYPad::ColumnRanges ranges;
+                        ranges.xMin = firstEdited.xMin();
+                        ranges.xMax = firstEdited.xMax();
+                        ranges.xReverse = firstEdited.xReverse();
+                        ranges.yMin = firstEdited.yMin();
+                        ranges.yMax = firstEdited.yMax();
+                        ranges.yReverse = firstEdited.yReverse();
+                        m_xypad->setColumnRanges(columnIndex, ranges);
+                        
+                        // Apply these ranges to ALL fixtures in this column
+                        QVariantList fixtureList = item->data(KColumnFixture, Qt::UserRole + 2).toList();
+                        QVariantList updatedList;
+                        
+                        foreach (const QVariant& var, fixtureList)
                         {
-                            if (fxi.head() == editedFxi.head())
-                            {
-                                // Use edited fixture
-                                updatedList.append(QVariant(editedFxi));
-                                found = true;
-                                break;
-                            }
+                            VCXYPadFixture fxi(m_doc, var);
+                            fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                            fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                            updatedList.append(QVariant(fxi));
                         }
                         
-                        if (!found)
+                        // Store updated list back
+                        item->setData(KColumnFixture, Qt::UserRole + 2, updatedList);
+                        
+                        // Update tree display
+                        if (!updatedList.isEmpty())
                         {
-                            updatedList.append(var);
+                            VCXYPadFixture firstFxi(m_doc, updatedList.first());
+                            item->setText(KColumnXAxis, firstFxi.xBrief());
+                            item->setText(KColumnYAxis, firstFxi.yBrief());
                         }
-                    }
-                    
-                    // Store updated list back
-                    item->setData(KColumnFixture, Qt::UserRole + 2, updatedList);
-                    
-                    // Update tree display with first fixture settings
-                    if (!updatedList.isEmpty())
-                    {
-                        VCXYPadFixture firstFxi(m_doc, updatedList.first());
-                        item->setText(KColumnXAxis, firstFxi.xBrief());
-                        item->setText(KColumnYAxis, firstFxi.yBrief());
                     }
                 }
             }
@@ -1292,29 +1333,6 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
         // Update row selection UI
         updateRowSelection();
         
-        // Save fixture settings before clearing (X/Y ranges) - in case user had edited them
-        QList<VCXYPadFixture> savedFixtures;
-        QTreeWidgetItemIterator saveIt(m_tree);
-        while (*saveIt != NULL)
-        {
-            bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
-            if (isColumnItem)
-            {
-                QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
-                foreach (const QVariant& var, fixtureList)
-                {
-                    savedFixtures.append(VCXYPadFixture(m_doc, var));
-                }
-            }
-            else
-            {
-                // Normal fixture item
-                QVariant var((*saveIt)->data(KColumnFixture, Qt::UserRole));
-                savedFixtures.append(VCXYPadFixture(m_doc, var));
-            }
-            ++saveIt;
-        }
-        
         // Clear existing fixtures
         m_tree->clear();
         
@@ -1354,26 +1372,15 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
                     GroupHead head = group->head(QLCPoint(col, row));
                     if (head.isValid())
                     {
-                        // Find matching saved fixture
-                        bool found = false;
-                        foreach (const VCXYPadFixture& savedFxi, savedFixtures)
-                        {
-                            if (savedFxi.head() == head)
-                            {
-                                // Use saved fixture with preserved X/Y ranges
-                                columnFixtures[col].append(savedFxi);
-                                found = true;
-                                break;
-                            }
-                        }
+                        VCXYPadFixture fxi(m_doc);
+                        fxi.setHead(head);
                         
-                        if (!found)
-                        {
-                            // Create new fixture with defaults
-                            VCXYPadFixture fxi(m_doc);
-                            fxi.setHead(head);
-                            columnFixtures[col].append(fxi);
-                        }
+                        // Apply column ranges (persistent, per-column)
+                        VCXYPad::ColumnRanges ranges = m_xypad->columnRanges(col);
+                        fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                        fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                        
+                        columnFixtures[col].append(fxi);
                     }
                 }
             }
@@ -1381,6 +1388,10 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
             // Create column tree items
             for (int col = 0; col < gridWidth; col++)
             {
+                // Skip excluded columns
+                if (m_xypad->isColumnExcluded(col))
+                    continue;
+                
                 int fixtureCount = columnFixtures[col].size();
                 
                 QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
@@ -1436,23 +1447,6 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
     
     updateRowSelection();
     
-    // Save fixture settings before clearing (X/Y ranges)
-    QList<VCXYPadFixture> savedFixtures;
-    QTreeWidgetItemIterator saveIt(m_tree);
-    while (*saveIt != NULL)
-    {
-        bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
-        if (isColumnItem)
-        {
-            QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
-            foreach (const QVariant& var, fixtureList)
-            {
-                savedFixtures.append(VCXYPadFixture(m_doc, var));
-            }
-        }
-        ++saveIt;
-    }
-    
     // Clear existing fixtures
     m_tree->clear();
     
@@ -1492,26 +1486,15 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
                 GroupHead head = group->head(QLCPoint(col, row));
                 if (head.isValid())
                 {
-                    // Find matching saved fixture
-                    bool found = false;
-                    foreach (const VCXYPadFixture& savedFxi, savedFixtures)
-                    {
-                        if (savedFxi.head() == head)
-                        {
-                            // Use saved fixture with preserved X/Y ranges
-                            columnFixtures[col].append(savedFxi);
-                            found = true;
-                            break;
-                        }
-                    }
+                    VCXYPadFixture fxi(m_doc);
+                    fxi.setHead(head);
                     
-                    if (!found)
-                    {
-                        // Create new fixture with defaults
-                        VCXYPadFixture fxi(m_doc);
-                        fxi.setHead(head);
-                        columnFixtures[col].append(fxi);
-                    }
+                    // Apply column ranges (persistent, per-column)
+                    VCXYPad::ColumnRanges ranges = m_xypad->columnRanges(col);
+                    fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                    fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                    
+                    columnFixtures[col].append(fxi);
                 }
             }
         }
@@ -1519,6 +1502,10 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
         // Create column tree items
         for (int col = 0; col < gridWidth; col++)
         {
+            // Skip excluded columns
+            if (m_xypad->isColumnExcluded(col))
+                continue;
+            
             int fixtureCount = columnFixtures[col].size();
             
             QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
@@ -1548,10 +1535,9 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
             }
         }
         
-        // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
+        // Disable Add button in group mode (Remove and Edit allowed for columns)
         m_addButton->setEnabled(false);
-        m_removeButton->setEnabled(false);
-        // Edit will be enabled/disabled by slotSelectionChanged
+        // Remove and Edit will be enabled/disabled by slotSelectionChanged
     }
     
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
@@ -1592,23 +1578,6 @@ void VCXYPadProperties::slotRowSelectionChanged()
     
     m_xypad->setSelectedRows(selectedRows);
     
-    // Save fixture settings before clearing (X/Y ranges)
-    QList<VCXYPadFixture> savedFixtures;
-    QTreeWidgetItemIterator saveIt(m_tree);
-    while (*saveIt != NULL)
-    {
-        bool isColumnItem = (*saveIt)->data(KColumnFixture, Qt::UserRole + 1).toBool();
-        if (isColumnItem)
-        {
-            QVariantList fixtureList = (*saveIt)->data(KColumnFixture, Qt::UserRole + 2).toList();
-            foreach (const QVariant& var, fixtureList)
-            {
-                savedFixtures.append(VCXYPadFixture(m_doc, var));
-            }
-        }
-        ++saveIt;
-    }
-    
     // Clear tree
     m_tree->clear();
     
@@ -1639,26 +1608,15 @@ void VCXYPadProperties::slotRowSelectionChanged()
                         GroupHead head = group->head(QLCPoint(col, row));
                         if (head.isValid())
                         {
-                            // Find matching saved fixture
-                            bool found = false;
-                            foreach (const VCXYPadFixture& savedFxi, savedFixtures)
-                            {
-                                if (savedFxi.head() == head)
-                                {
-                                    // Use saved fixture with preserved X/Y ranges
-                                    columnFixtures[col].append(savedFxi);
-                                    found = true;
-                                    break;
-                                }
-                            }
+                            VCXYPadFixture fxi(m_doc);
+                            fxi.setHead(head);
                             
-                            if (!found)
-                            {
-                                // Create new fixture with defaults
-                                VCXYPadFixture fxi(m_doc);
-                                fxi.setHead(head);
-                                columnFixtures[col].append(fxi);
-                            }
+                            // Apply column ranges (persistent, per-column)
+                            VCXYPad::ColumnRanges ranges = m_xypad->columnRanges(col);
+                            fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                            fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                            
+                            columnFixtures[col].append(fxi);
                         }
                     }
                 }
@@ -1666,6 +1624,10 @@ void VCXYPadProperties::slotRowSelectionChanged()
                 // Create column tree items
                 for (int col = 0; col < gridWidth; col++)
                 {
+                    // Skip excluded columns
+                    if (m_xypad->isColumnExcluded(col))
+                        continue;
+                    
                     int fixtureCount = columnFixtures[col].size();
                     
                     QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);

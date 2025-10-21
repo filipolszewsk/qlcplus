@@ -72,6 +72,16 @@ class Doc;
 #define KXMLQLCVCXYPadInvertedAppearance "InvertedAppearance"
 #define KXMLQLCVCXYPadFixtureGroup      QStringLiteral("FixtureGroup")
 #define KXMLQLCVCXYPadSelectedRows      QStringLiteral("SelectedRows")
+#define KXMLQLCVCXYPadExcludedColumns   QStringLiteral("ExcludedColumns")
+#define KXMLQLCVCXYPadColumnRanges      QStringLiteral("ColumnRanges")
+#define KXMLQLCVCXYPadColumnRange       QStringLiteral("ColumnRange")
+#define KXMLQLCVCXYPadColumnIndex       QStringLiteral("Index")
+#define KXMLQLCVCXYPadColumnXMin        QStringLiteral("XMin")
+#define KXMLQLCVCXYPadColumnXMax        QStringLiteral("XMax")
+#define KXMLQLCVCXYPadColumnXReverse    QStringLiteral("XReverse")
+#define KXMLQLCVCXYPadColumnYMin        QStringLiteral("YMin")
+#define KXMLQLCVCXYPadColumnYMax        QStringLiteral("YMax")
+#define KXMLQLCVCXYPadColumnYReverse    QStringLiteral("YReverse")
 
 typedef struct
 {
@@ -179,9 +189,22 @@ private:
     QRectF computeCommonDegreesRange() const;
     void updateDegreesRange();
 
+public:
+    struct ColumnRanges
+    {
+        qreal xMin = 0.0;
+        qreal xMax = 1.0;
+        bool xReverse = false;
+        qreal yMin = 0.0;
+        qreal yMax = 1.0;
+        bool yReverse = false;
+    };
+
 private:
     quint32 m_fixtureGroupID;          // Selected fixture group ID (or FixtureGroup::invalidId())
     QList<int> m_selectedRows;         // Which rows from grid are active
+    QList<int> m_excludedColumns;      // Which columns user has removed
+    QMap<int, ColumnRanges> m_columnRanges;  // X/Y ranges per column
     
 public:
     /** Set/get fixture group for column mode */
@@ -193,6 +216,16 @@ public:
     void setSelectedRows(const QList<int>& rows);
     QList<int> selectedRows() const;
     bool isRowSelected(int row) const;
+    
+    /** Set/get excluded columns */
+    void setExcludedColumns(const QList<int>& cols);
+    QList<int> excludedColumns() const;
+    bool isColumnExcluded(int col) const;
+    
+    /** Set/get column ranges */
+    void setColumnRanges(int col, const ColumnRanges& ranges);
+    ColumnRanges columnRanges(int col) const;
+    QMap<int, ColumnRanges> allColumnRanges() const;
 
 public slots:
     /** Handle fixture group deletion */
