@@ -468,29 +468,70 @@ void EFXEditor::updateFixtureTree()
                 }
             }
             
-            // Create tree items for each column
+            // Create tree items for each column (including empty ones)
             for (int col = 0; col < gridWidth; col++)
             {
-                if (!columnFixtures.contains(col) || columnFixtures[col].isEmpty())
-                    continue;
-                
-                // Use the first fixture in column as representative
-                EFXFixture *firstFixture = columnFixtures[col].first();
+                int fixtureCount = columnFixtures.contains(col) ? columnFixtures[col].size() : 0;
                 
                 QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
                 item->setText(KColumnNumber, QString("%1").arg(col + 1, 3, 10, QChar('0')));
-                item->setText(KColumnName, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(columnFixtures[col].size()));
+                item->setText(KColumnName, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
                 item->setData(0, Qt::UserRole, QVariant(col)); // Store column index
                 item->setData(0, Qt::UserRole + 1, QVariant(true)); // Mark as column item
                 item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
                 
-                if (firstFixture->direction() == Function::Backward)
-                    item->setCheckState(KColumnReverse, Qt::Checked);
+                if (fixtureCount > 0)
+                {
+                    // Use the first fixture in column as representative
+                    EFXFixture *firstFixture = columnFixtures[col].first();
+                    
+                    if (firstFixture->direction() == Function::Backward)
+                        item->setCheckState(KColumnReverse, Qt::Checked);
+                    else
+                        item->setCheckState(KColumnReverse, Qt::Unchecked);
+                    
+                    updateModeColumn(item, firstFixture);
+                    updateStartOffsetColumn(item, firstFixture);
+                }
                 else
+                {
+                    // Empty column - show with default values (can be used as template)
                     item->setCheckState(KColumnReverse, Qt::Unchecked);
-                
-                updateModeColumn(item, firstFixture);
-                updateStartOffsetColumn(item, firstFixture);
+                    
+                    // Create widgets with defaults for empty columns (enabled for template use)
+                    // Mode combo
+                    QComboBox* combo = new QComboBox(m_tree);
+                    combo->setAutoFillBackground(true);
+                    // Use mode list from any fixture, or default list
+                    if (!m_efx->fixtures().isEmpty())
+                    {
+                        combo->addItems(m_efx->fixtures().first()->modeList());
+                    }
+                    else
+                    {
+                        // If no fixtures at all, add basic modes
+                        combo->addItem("PanTilt");
+                        combo->addItem("Dimmer");
+                    }
+                    combo->setProperty(PROPERTY_FIXTURE, col);
+                    // Note: widgets are enabled so user can set template values
+                    // but they won't affect anything until fixtures are added to this column
+                    m_tree->setItemWidget(item, KColumnMode, combo);
+                    
+                    // Start offset spin
+                    QSpinBox* spin = new QSpinBox(m_tree);
+                    spin->setAutoFillBackground(true);
+                    spin->setRange(0, 359);
+                    // Calculate default offset based on column position
+                    int defaultOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                    spin->setValue(defaultOffset);
+                    spin->setSuffix(QChar(0x00b0)); // degree
+                    spin->setProperty(PROPERTY_FIXTURE, col);
+                    // Connect signal even for empty columns (for future use)
+                    connect(spin, SIGNAL(valueChanged(int)),
+                            this, SLOT(slotFixtureStartOffsetChanged(int)));
+                    m_tree->setItemWidget(item, KColumnStartOffset, spin);
+                }
             }
         }
     }
