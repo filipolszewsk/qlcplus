@@ -60,6 +60,7 @@ class Fixture;
 #define KXMLQLCEFXOffsetDirection           QStringLiteral("OffsetDirection")
 #define KXMLQLCEFXOffsetStep                QStringLiteral("OffsetStep")
 #define KXMLQLCEFXWings                     QStringLiteral("Wings")
+#define KXMLQLCEFXSelectedRows              QStringLiteral("SelectedRows")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -655,6 +656,15 @@ public:
     /** Get the wings value */
     int wings() const;
     
+    /** Set selected rows (which rows from grid are affected) */
+    void setSelectedRows(const QList<int>& rows);
+    
+    /** Get selected rows */
+    QList<int> selectedRows() const;
+    
+    /** Check if a specific row is selected */
+    bool isRowSelected(int row) const;
+    
     /** Convert offset direction to string */
     static QString offsetDirectionToString(OffsetDirection dir);
     
@@ -666,6 +676,7 @@ private:
     OffsetDirection m_offsetDirection;
     int m_offsetStep;
     int m_wings;
+    QList<int> m_selectedRows;
 
     /*********************************************************************
      * Fixture propagation mode

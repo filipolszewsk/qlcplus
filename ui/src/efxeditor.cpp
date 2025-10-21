@@ -1216,6 +1216,80 @@ void EFXEditor::updateFixtureGroupCombo()
     m_fixtureGroupCombo->setEnabled(m_useFixtureGroupCheck->isChecked());
 }
 
+void EFXEditor::updateRowSelection()
+{
+    // Clear existing checkboxes
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+        delete cb;
+    m_rowCheckboxes.clear();
+    
+    // Remove placeholder if exists
+    if (m_rowSelectionPlaceholder != nullptr)
+    {
+        m_rowSelectionLayout->removeWidget(m_rowSelectionPlaceholder);
+        m_rowSelectionPlaceholder->hide();
+    }
+    
+    if (!m_efx->isFixtureGroupMode())
+    {
+        m_rowSelectionGroup->setEnabled(false);
+        if (m_rowSelectionPlaceholder)
+            m_rowSelectionPlaceholder->show();
+        return;
+    }
+    
+    FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+    if (group == nullptr)
+    {
+        m_rowSelectionGroup->setEnabled(false);
+        return;
+    }
+    
+    int gridHeight = group->size().height();
+    if (gridHeight <= 0)
+    {
+        m_rowSelectionGroup->setEnabled(false);
+        return;
+    }
+    
+    m_rowSelectionGroup->setEnabled(true);
+    
+    // Create checkbox for each row
+    QList<int> currentSelection = m_efx->selectedRows();
+    for (int row = 0; row < gridHeight; row++)
+    {
+        QCheckBox *cb = new QCheckBox(QString("Row %1").arg(row + 1));
+        // If no selection saved, select all by default
+        cb->setChecked(currentSelection.isEmpty() || currentSelection.contains(row));
+        cb->setProperty("row_index", row);
+        connect(cb, SIGNAL(toggled(bool)), this, SLOT(slotRowSelectionChanged()));
+        
+        m_rowSelectionLayout->addWidget(cb);
+        m_rowCheckboxes.append(cb);
+    }
+}
+
+void EFXEditor::slotRowSelectionChanged()
+{
+    // Collect selected rows from checkboxes
+    QList<int> selectedRows;
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+    {
+        if (cb->isChecked())
+        {
+            int rowIndex = cb->property("row_index").toInt();
+            selectedRows.append(rowIndex);
+        }
+    }
+    
+    m_efx->setSelectedRows(selectedRows);
+    
+    // Recreate fixtures with new row selection
+    bool running = interruptRunning();
+    slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+    continueRunning(running);
+}
+
 void EFXEditor::slotUseFixtureGroupToggled(bool checked)
 {
     m_fixtureGroupCombo->setEnabled(checked);
@@ -1258,6 +1332,10 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
             {
                 for (int row = 0; row < gridHeight; row++)
                 {
+                    // Check if this row is selected
+                    if (!m_efx->isRowSelected(row))
+                        continue;
+                    
                     GroupHead head = group->head(QLCPoint(col, row));
                     if (head.isValid())
                     {
@@ -1281,6 +1359,7 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
     }
     
     updateFixtureTree();
+    updateRowSelection();
     redrawPreview();
 }
 
@@ -1327,6 +1406,10 @@ void EFXEditor::slotFixtureGroupChanged(int index)
         {
             for (int row = 0; row < gridHeight; row++)
             {
+                // Check if this row is selected
+                if (!m_efx->isRowSelected(row))
+                    continue;
+                
                 GroupHead head = group->head(QLCPoint(col, row));
                 if (head.isValid())
                 {
@@ -1343,6 +1426,7 @@ void EFXEditor::slotFixtureGroupChanged(int index)
     }
     
     updateFixtureTree();
+    updateRowSelection();
     redrawPreview();
     continueRunning(running);
 }

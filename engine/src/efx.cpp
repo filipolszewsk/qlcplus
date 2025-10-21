@@ -144,6 +144,7 @@ bool EFX::copyFrom(const Function* function)
     m_offsetDirection = efx->m_offsetDirection;
     m_offsetStep = efx->m_offsetStep;
     m_wings = efx->m_wings;
+    m_selectedRows = efx->m_selectedRows;
 
     return Function::copyFrom(function);
 }
@@ -1006,6 +1007,26 @@ int EFX::wings() const
     return m_wings;
 }
 
+void EFX::setSelectedRows(const QList<int>& rows)
+{
+    m_selectedRows = rows;
+    emit changed(this->id());
+}
+
+QList<int> EFX::selectedRows() const
+{
+    return m_selectedRows;
+}
+
+bool EFX::isRowSelected(int row) const
+{
+    // If list is empty, all rows are selected (default behavior)
+    if (m_selectedRows.isEmpty())
+        return true;
+    
+    return m_selectedRows.contains(row);
+}
+
 QString EFX::offsetDirectionToString(OffsetDirection dir)
 {
     switch (dir)
@@ -1106,6 +1127,15 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
         doc->writeTextElement(KXMLQLCEFXOffsetDirection, offsetDirectionToString(m_offsetDirection));
         doc->writeTextElement(KXMLQLCEFXOffsetStep, QString::number(m_offsetStep));
         doc->writeTextElement(KXMLQLCEFXWings, QString::number(m_wings));
+        
+        // Save selected rows (if not all rows)
+        if (!m_selectedRows.isEmpty())
+        {
+            QStringList rowStrings;
+            foreach (int row, m_selectedRows)
+                rowStrings << QString::number(row);
+            doc->writeTextElement(KXMLQLCEFXSelectedRows, rowStrings.join(","));
+        }
     }
 
     /* Propagation mode */
@@ -1240,6 +1270,21 @@ bool EFX::loadXML(QXmlStreamReader &root)
         {
             /* Wings */
             setWings(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXSelectedRows)
+        {
+            /* Selected Rows */
+            QString rowsStr = root.readElementText();
+            QStringList rowsList = rowsStr.split(",", Qt::SkipEmptyParts);
+            QList<int> rows;
+            foreach (QString rowStr, rowsList)
+            {
+                bool ok;
+                int row = rowStr.toInt(&ok);
+                if (ok)
+                    rows.append(row);
+            }
+            setSelectedRows(rows);
         }
         else if (root.name() == KXMLQLCEFXPropagationMode)
         {

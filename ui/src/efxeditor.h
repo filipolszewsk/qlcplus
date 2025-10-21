@@ -105,6 +105,7 @@ private:
     void createSpeedDials();
     void updateSpeedDials();
     void updateFixtureGroupCombo();
+    void updateRowSelection();
     int calculateColumnOffset(int col, int row, int gridWidth, int gridHeight);
 
 private slots:
@@ -127,6 +128,7 @@ private slots:
     void slotOffsetDirectionChanged(int index);
     void slotOffsetStepChanged(int value);
     void slotWingsChanged(int value);
+    void slotRowSelectionChanged();
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);
@@ -139,6 +141,7 @@ private slots:
 
 private:
     SpeedDialWidget *m_speedDials;
+    QList<QCheckBox*> m_rowCheckboxes;
 
     /*********************************************************************
      * Movement page

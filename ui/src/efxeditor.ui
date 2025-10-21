@@ -279,6 +279,25 @@
             </item>
            </layout>
           </item>
+          <item>
+           <widget class="QGroupBox" name="m_rowSelectionGroup">
+            <property name="title">
+             <string>Row Selection</string>
+            </property>
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <layout class="QVBoxLayout" name="m_rowSelectionLayout">
+             <item>
+              <widget class="QLabel" name="m_rowSelectionPlaceholder">
+               <property name="text">
+                <string>Select a fixture group to see rows</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
