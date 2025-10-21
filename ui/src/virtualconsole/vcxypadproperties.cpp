@@ -272,9 +272,88 @@ void VCXYPadProperties::fillFixturesTree()
 {
     m_tree->clear();
 
-    QListIterator <VCXYPadFixture> it(m_xypad->fixtures());
-    while (it.hasNext() == true)
-        updateFixtureItem(new QTreeWidgetItem(m_tree), it.next());
+    if (m_xypad->isFixtureGroupMode())
+    {
+        // In fixture group mode, show columns instead of individual fixtures
+        FixtureGroup* group = m_doc->fixtureGroup(m_xypad->fixtureGroupID());
+        if (group == nullptr)
+        {
+            m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
+            return;
+        }
+        
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        if (gridWidth <= 0 || gridHeight <= 0)
+        {
+            m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
+            return;
+        }
+        
+        // Group fixtures by column
+        QMap<int, QList<VCXYPadFixture>> columnFixtures;
+        foreach (const VCXYPadFixture& fxi, m_xypad->fixtures())
+        {
+            // Find which column this fixture belongs to
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    if (!m_xypad->isRowSelected(row))
+                        continue;
+                        
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (head.isValid() && head.fxi == fxi.head().fxi && head.head == fxi.head().head)
+                    {
+                        columnFixtures[col].append(fxi);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Create tree items for each column
+        for (int col = 0; col < gridWidth; col++)
+        {
+            int fixtureCount = columnFixtures[col].size();
+            
+            QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+            item->setText(KColumnFixture, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
+            item->setData(KColumnFixture, Qt::UserRole, col); // Store column index
+            item->setData(KColumnFixture, Qt::UserRole + 1, true); // Mark as column item
+            
+            if (fixtureCount > 0)
+            {
+                // Use first fixture as representative for X/Y display
+                VCXYPadFixture firstFxi = columnFixtures[col].first();
+                item->setText(KColumnXAxis, firstFxi.xBrief());
+                item->setText(KColumnYAxis, firstFxi.yBrief());
+            }
+            else
+            {
+                item->setText(KColumnXAxis, "");
+                item->setText(KColumnYAxis, "");
+            }
+        }
+        
+        // Disable Add, Remove, Edit buttons in group mode
+        m_addButton->setEnabled(false);
+        m_removeButton->setEnabled(false);
+        m_editButton->setEnabled(false);
+    }
+    else
+    {
+        // Normal mode - show individual fixtures
+        QListIterator <VCXYPadFixture> it(m_xypad->fixtures());
+        while (it.hasNext() == true)
+            updateFixtureItem(new QTreeWidgetItem(m_tree), it.next());
+        
+        // Enable buttons in normal mode
+        m_addButton->setEnabled(true);
+        // Remove and Edit will be enabled/disabled by slotSelectionChanged
+    }
+    
     m_tree->setCurrentItem(m_tree->topLevelItem(0));
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
@@ -349,6 +428,15 @@ void VCXYPadProperties::removeFixtureItem(GroupHead const & head)
 
 void VCXYPadProperties::slotAddClicked()
 {
+    // Block adding fixtures in fixture group mode
+    if (m_useFixtureGroupCheck->isChecked())
+    {
+        QMessageBox::information(this, tr("Fixture Group Mode"),
+            tr("Cannot add individual fixtures in Fixture Group mode.\n"
+               "Disable 'Use Fixture Group' to add fixtures manually."));
+        return;
+    }
+    
     /* Put all fixtures already present into a list of fixtures that
        will be disabled in the fixture selection dialog */
     QList <GroupHead> disabled;
@@ -1110,11 +1198,63 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
     {
         // Update row selection UI
         updateRowSelection();
+        
+        // Clear existing fixtures
+        m_tree->clear();
+        
+        // Validate combo data
+        if (!m_fixtureGroupCombo->currentData().isValid())
+            return;
+        
+        quint32 groupId = m_fixtureGroupCombo->currentData().toUInt();
+        if (groupId == FixtureGroup::invalidId())
+            return;
+        
+        // Create fixtures for the selected group
+        FixtureGroup* group = m_doc->fixtureGroup(groupId);
+        if (group != nullptr)
+        {
+            int gridWidth = group->size().width();
+            int gridHeight = group->size().height();
+            
+            if (gridWidth <= 0 || gridHeight <= 0)
+            {
+                fillFixturesTree();
+                return;
+            }
+            
+            // Create VCXYPadFixture for each fixture in the group (respecting row filter)
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    // Check if this row is selected
+                    if (!m_xypad->isRowSelected(row))
+                        continue;
+                    
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (head.isValid())
+                    {
+                        VCXYPadFixture fxi(m_doc);
+                        fxi.setHead(head);
+                        
+                        QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                        updateFixtureItem(item, fxi);
+                    }
+                }
+            }
+        }
+        
+        fillFixturesTree();
     }
     else
     {
         m_fixtureGroupCombo->setCurrentIndex(-1);
         updateRowSelection();
+        
+        // Clear fixtures when disabling group mode
+        m_tree->clear();
+        fillFixturesTree();
     }
 }
 
@@ -1124,12 +1264,133 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
         return;
     
     updateRowSelection();
+    
+    // Clear existing fixtures
+    m_tree->clear();
+    
+    // Validate combo data
+    if (!m_fixtureGroupCombo->itemData(index).isValid())
+        return;
+    
+    quint32 groupId = m_fixtureGroupCombo->itemData(index).toUInt();
+    if (groupId == FixtureGroup::invalidId())
+        return;
+    
+    // Recreate fixtures for new group
+    FixtureGroup* group = m_doc->fixtureGroup(groupId);
+    if (group != nullptr)
+    {
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        if (gridWidth <= 0 || gridHeight <= 0)
+        {
+            fillFixturesTree();
+            return;
+        }
+        
+        // Create VCXYPadFixture for each fixture in the group (respecting row filter)
+        for (int col = 0; col < gridWidth; col++)
+        {
+            for (int row = 0; row < gridHeight; row++)
+            {
+                // Check if this row is selected
+                if (!m_xypad->isRowSelected(row))
+                    continue;
+                
+                GroupHead head = group->head(QLCPoint(col, row));
+                if (head.isValid())
+                {
+                    VCXYPadFixture fxi(m_doc);
+                    fxi.setHead(head);
+                    
+                    QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                    updateFixtureItem(item, fxi);
+                }
+            }
+        }
+    }
+    
+    fillFixturesTree();
 }
 
 void VCXYPadProperties::slotRowSelectionChanged()
 {
-    // This will be called when user changes row checkboxes
-    // We don't need to do anything here as the state is saved in accept()
+    // Prevent recursion
+    static bool updating = false;
+    if (updating)
+        return;
+    
+    updating = true;
+    
+    // Collect selected rows from checkboxes
+    QList<int> selectedRows;
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+    {
+        if (cb->isChecked())
+        {
+            int rowIndex = cb->property("row_index").toInt();
+            selectedRows.append(rowIndex);
+        }
+    }
+    
+    // Ensure at least one row is selected
+    if (selectedRows.isEmpty())
+    {
+        // Re-check the first checkbox to prevent empty selection
+        if (!m_rowCheckboxes.isEmpty())
+        {
+            m_rowCheckboxes.first()->blockSignals(true);
+            m_rowCheckboxes.first()->setChecked(true);
+            m_rowCheckboxes.first()->blockSignals(false);
+            selectedRows.append(0);
+        }
+    }
+    
+    m_xypad->setSelectedRows(selectedRows);
+    
+    // Clear tree
+    m_tree->clear();
+    
+    // Recreate fixtures for currently selected group
+    if (m_fixtureGroupCombo->currentIndex() >= 0)
+    {
+        quint32 groupId = m_fixtureGroupCombo->currentData().toUInt();
+        FixtureGroup* group = m_doc->fixtureGroup(groupId);
+        if (group != nullptr)
+        {
+            int gridWidth = group->size().width();
+            int gridHeight = group->size().height();
+            
+            if (gridWidth > 0 && gridHeight > 0)
+            {
+                // Create VCXYPadFixture for each fixture (respecting row filter)
+                for (int col = 0; col < gridWidth; col++)
+                {
+                    for (int row = 0; row < gridHeight; row++)
+                    {
+                        // Check if this row is selected
+                        if (!m_xypad->isRowSelected(row))
+                            continue;
+                        
+                        GroupHead head = group->head(QLCPoint(col, row));
+                        if (head.isValid())
+                        {
+                            VCXYPadFixture fxi(m_doc);
+                            fxi.setHead(head);
+                            
+                            QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                            updateFixtureItem(item, fxi);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    fillFixturesTree();
+    
+    updating = false;
 }
 
 void VCXYPadProperties::slotFixtureGroupRemoved(quint32 id)
