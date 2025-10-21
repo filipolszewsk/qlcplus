@@ -230,6 +230,9 @@ public:
 public slots:
     /** Handle fixture group deletion */
     void slotFixtureGroupRemoved(quint32 id);
+    
+    /** Handle fixture group content changes (fixtures moved in grid) */
+    void slotFixtureGroupContentChanged(quint32 id);
 
 private:
     QList <VCXYPadFixture> m_fixtures;

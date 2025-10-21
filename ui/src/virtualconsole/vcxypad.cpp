@@ -177,9 +177,11 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
 
     m_fixtureGroupID = FixtureGroup::invalidId();
 
-    // Connect to fixture group removal signal
+    // Connect to fixture group signals
     connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
             this, SLOT(slotFixtureGroupRemoved(quint32)));
+    connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)),
+            this, SLOT(slotFixtureGroupContentChanged(quint32)));
 
     m_doc->masterTimer()->registerDMXSource(this);
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32,QByteArray)),
@@ -385,6 +387,54 @@ void VCXYPad::slotFixtureGroupRemoved(quint32 id)
         m_excludedColumns.clear();
         m_columnRanges.clear();
         clearFixtures();
+    }
+}
+
+void VCXYPad::slotFixtureGroupContentChanged(quint32 id)
+{
+    if (m_fixtureGroupID != id)
+        return;  // Not our group
+    
+    // Our fixture group changed (fixtures moved in grid) - rebuild fixtures
+    clearFixtures();
+    
+    FixtureGroup* group = m_doc->fixtureGroup(id);
+    if (group != nullptr)
+    {
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        if (gridWidth <= 0 || gridHeight <= 0)
+            return;
+        
+        // Recreate fixtures with current column settings
+        for (int col = 0; col < gridWidth; col++)
+        {
+            // Skip excluded columns
+            if (isColumnExcluded(col))
+                continue;
+            
+            for (int row = 0; row < gridHeight; row++)
+            {
+                // Check if this row is selected
+                if (!isRowSelected(row))
+                    continue;
+                
+                GroupHead head = group->head(QLCPoint(col, row));
+                if (head.isValid())
+                {
+                    VCXYPadFixture fxi(m_doc);
+                    fxi.setHead(head);
+                    
+                    // Apply column ranges (persistent, per-column)
+                    ColumnRanges ranges = columnRanges(col);
+                    fxi.setX(ranges.xMin, ranges.xMax, ranges.xReverse);
+                    fxi.setY(ranges.yMin, ranges.yMax, ranges.yReverse);
+                    
+                    appendFixture(fxi);
+                }
+            }
+        }
     }
 }
 
