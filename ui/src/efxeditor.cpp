@@ -160,6 +160,12 @@ void EFXEditor::initGeneralPage()
         m_fixtureGroupCombo->setCurrentIndex(
             m_fixtureGroupCombo->findData(m_efx->fixtureGroupID()));
     }
+    
+    /* Offset Direction and Step */
+    m_offsetDirectionCombo->setCurrentIndex((int)m_efx->offsetDirection());
+    m_offsetStepSpin->setValue(m_efx->offsetStep());
+    m_offsetDirectionCombo->setEnabled(m_efx->isFixtureGroupMode());
+    m_offsetStepSpin->setEnabled(m_efx->isFixtureGroupMode());
 
     /* Disable test button if we're in operate mode */
     if (m_doc->mode() == Doc::Operate)
@@ -192,6 +198,10 @@ void EFXEditor::initGeneralPage()
             this, SLOT(slotUseFixtureGroupToggled(bool)));
     connect(m_fixtureGroupCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotFixtureGroupChanged(int)));
+    connect(m_offsetDirectionCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotOffsetDirectionChanged(int)));
+    connect(m_offsetStepSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotOffsetStepChanged(int)));
 
     // Test slots
     connect(m_testButton, SIGNAL(clicked()),
@@ -522,8 +532,8 @@ void EFXEditor::updateFixtureTree()
                     QSpinBox* spin = new QSpinBox(m_tree);
                     spin->setAutoFillBackground(true);
                     spin->setRange(0, 359);
-                    // Calculate default offset based on column position
-                    int defaultOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                    // Calculate default offset based on column position and direction
+                    int defaultOffset = calculateColumnOffset(col, 0, gridWidth, gridHeight);
                     spin->setValue(defaultOffset);
                     spin->setSuffix(QChar(0x00b0)); // degree
                     spin->setProperty(PROPERTY_FIXTURE, col);
@@ -1205,6 +1215,8 @@ void EFXEditor::updateFixtureGroupCombo()
 void EFXEditor::slotUseFixtureGroupToggled(bool checked)
 {
     m_fixtureGroupCombo->setEnabled(checked);
+    m_offsetDirectionCombo->setEnabled(checked);
+    m_offsetStepSpin->setEnabled(checked);
     
     if (checked && m_fixtureGroupCombo->count() > 0)
     {
@@ -1246,8 +1258,8 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
                     {
                         EFXFixture *ef = new EFXFixture(m_efx);
                         ef->setHead(head);
-                        // Set start offset based on column (each column = 360/gridWidth degrees)
-                        int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                        // Calculate offset based on direction and step
+                        int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                         ef->setStartOffset(columnOffset);
                         if (!m_efx->addFixture(ef))
                             delete ef;
@@ -1315,8 +1327,8 @@ void EFXEditor::slotFixtureGroupChanged(int index)
                 {
                     EFXFixture *ef = new EFXFixture(m_efx);
                     ef->setHead(head);
-                    // Set start offset based on column
-                    int columnOffset = (gridWidth > 0) ? (360 / gridWidth) * col : 0;
+                    // Calculate offset based on direction and step
+                    int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                     ef->setStartOffset(columnOffset);
                     if (!m_efx->addFixture(ef))
                         delete ef;
@@ -1328,6 +1340,94 @@ void EFXEditor::slotFixtureGroupChanged(int index)
     updateFixtureTree();
     redrawPreview();
     continueRunning(running);
+}
+
+int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHeight)
+{
+    Q_UNUSED(row);
+    Q_UNUSED(gridHeight);
+    
+    int index = 0;
+    int step = m_efx->offsetStep();
+    
+    switch (m_efx->offsetDirection())
+    {
+        case EFX::LeftToRight:
+            // 0, 1, 2, 3, ...
+            index = col;
+            break;
+            
+        case EFX::RightToLeft:
+            // N-1, N-2, ..., 1, 0
+            index = (gridWidth - 1) - col;
+            break;
+            
+        case EFX::CenterToSides:
+            // Center goes first, then alternating left/right
+            {
+                int center = gridWidth / 2;
+                int distance = abs(col - center);
+                index = distance;
+            }
+            break;
+            
+        case EFX::SidesToCenter:
+            // Sides first, center last
+            {
+                int center = gridWidth / 2;
+                int distance = abs(col - center);
+                int maxDistance = (gridWidth + 1) / 2;
+                index = maxDistance - distance - 1;
+            }
+            break;
+            
+        case EFX::Alternate:
+            // Odd columns first (0,2,4...), then even (1,3,5...)
+            if (col % 2 == 0)
+                index = col / 2;
+            else
+                index = (gridWidth / 2) + ((col + 1) / 2);
+            break;
+            
+        case EFX::Symmetric:
+            // Mirror: 0 and N-1 together, 1 and N-2 together, etc.
+            {
+                int center = gridWidth / 2;
+                if (col <= center)
+                    index = col;
+                else
+                    index = gridWidth - 1 - col;
+            }
+            break;
+    }
+    
+    return (step * index) % 360;
+}
+
+void EFXEditor::slotOffsetDirectionChanged(int index)
+{
+    m_efx->setOffsetDirection((EFX::OffsetDirection)index);
+    
+    // Recreate fixtures with new offsets
+    if (m_efx->isFixtureGroupMode())
+    {
+        bool running = interruptRunning();
+        slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+        continueRunning(running);
+    }
+}
+
+void EFXEditor::slotOffsetStepChanged(int value)
+{
+    m_efx->setOffsetStep(value);
+    
+    // Recreate fixtures with new offsets
+    if (m_efx->isFixtureGroupMode())
+    {
+        bool running = interruptRunning();
+        slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+        continueRunning(running);
+    }
 }
 
 /*****************************************************************************

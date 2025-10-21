@@ -171,6 +171,84 @@
             </property>
            </widget>
           </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_offset_dir">
+            <item>
+             <widget class="QLabel" name="m_offsetDirectionLabel">
+              <property name="text">
+               <string>Offset Direction:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="m_offsetDirectionCombo">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <item>
+               <property name="text">
+                <string>Left to Right</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Right to Left</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Center to Sides</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Sides to Center</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Alternate</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Symmetric</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_offset_step">
+            <item>
+             <widget class="QLabel" name="m_offsetStepLabel">
+              <property name="text">
+               <string>Offset Step:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QSpinBox" name="m_offsetStepSpin">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="suffix">
+               <string>°</string>
+              </property>
+              <property name="minimum">
+               <number>0</number>
+              </property>
+              <property name="maximum">
+               <number>359</number>
+              </property>
+              <property name="value">
+               <number>90</number>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
          </layout>
         </widget>
        </item>

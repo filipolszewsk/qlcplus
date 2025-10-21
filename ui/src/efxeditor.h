@@ -105,6 +105,7 @@ private:
     void createSpeedDials();
     void updateSpeedDials();
     void updateFixtureGroupCombo();
+    int calculateColumnOffset(int col, int row, int gridWidth, int gridHeight);
 
 private slots:
     void slotNameEdited(const QString &text);
@@ -123,6 +124,8 @@ private slots:
 
     void slotUseFixtureGroupToggled(bool checked);
     void slotFixtureGroupChanged(int index);
+    void slotOffsetDirectionChanged(int index);
+    void slotOffsetStepChanged(int value);
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);
