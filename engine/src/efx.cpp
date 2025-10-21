@@ -51,6 +51,8 @@ EFX::EFX(Doc* doc)
     , m_waveFadeIn(0.2)       // Default: 20% fade in
     , m_waveFadeOut(0.2)      // Default: 20% fade out
     , m_fixtureGroupID(FixtureGroup::invalidId())
+    , m_offsetDirection(LeftToRight)
+    , m_offsetStep(90)
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
@@ -136,6 +138,10 @@ bool EFX::copyFrom(const Function* function)
     m_yPhase = efx->m_yPhase;
 
     m_algorithm = efx->m_algorithm;
+    
+    m_fixtureGroupID = efx->m_fixtureGroupID;
+    m_offsetDirection = efx->m_offsetDirection;
+    m_offsetStep = efx->m_offsetStep;
 
     return Function::copyFrom(function);
 }
@@ -965,6 +971,64 @@ bool EFX::isFixtureGroupMode() const
     return m_fixtureGroupID != FixtureGroup::invalidId();
 }
 
+void EFX::setOffsetDirection(OffsetDirection dir)
+{
+    m_offsetDirection = dir;
+    emit changed(this->id());
+}
+
+EFX::OffsetDirection EFX::offsetDirection() const
+{
+    return m_offsetDirection;
+}
+
+void EFX::setOffsetStep(int degrees)
+{
+    m_offsetStep = CLAMP(degrees, 0, 359);
+    emit changed(this->id());
+}
+
+int EFX::offsetStep() const
+{
+    return m_offsetStep;
+}
+
+QString EFX::offsetDirectionToString(OffsetDirection dir)
+{
+    switch (dir)
+    {
+        default:
+        case LeftToRight:
+            return QString("LeftToRight");
+        case RightToLeft:
+            return QString("RightToLeft");
+        case CenterToSides:
+            return QString("CenterToSides");
+        case SidesToCenter:
+            return QString("SidesToCenter");
+        case Alternate:
+            return QString("Alternate");
+        case Symmetric:
+            return QString("Symmetric");
+    }
+}
+
+EFX::OffsetDirection EFX::stringToOffsetDirection(const QString& str)
+{
+    if (str == "RightToLeft")
+        return RightToLeft;
+    else if (str == "CenterToSides")
+        return CenterToSides;
+    else if (str == "SidesToCenter")
+        return SidesToCenter;
+    else if (str == "Alternate")
+        return Alternate;
+    else if (str == "Symmetric")
+        return Symmetric;
+    else
+        return LeftToRight;
+}
+
 /*****************************************************************************
  * Fixture propagation mode
  *****************************************************************************/
@@ -1025,6 +1089,9 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
         doc->writeStartElement(KXMLQLCEFXFixtureGroup);
         doc->writeAttribute(KXMLQLCFixtureGroupID, QString::number(m_fixtureGroupID));
         doc->writeEndElement();
+        
+        doc->writeTextElement(KXMLQLCEFXOffsetDirection, offsetDirectionToString(m_offsetDirection));
+        doc->writeTextElement(KXMLQLCEFXOffsetStep, QString::number(m_offsetStep));
     }
 
     /* Propagation mode */
@@ -1144,6 +1211,16 @@ bool EFX::loadXML(QXmlStreamReader &root)
             /* Fixture Group Mode */
             m_fixtureGroupID = root.attributes().value(KXMLQLCFixtureGroupID).toString().toUInt();
             root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCEFXOffsetDirection)
+        {
+            /* Offset Direction */
+            setOffsetDirection(stringToOffsetDirection(root.readElementText()));
+        }
+        else if (root.name() == KXMLQLCEFXOffsetStep)
+        {
+            /* Offset Step */
+            setOffsetStep(root.readElementText().toInt());
         }
         else if (root.name() == KXMLQLCEFXPropagationMode)
         {

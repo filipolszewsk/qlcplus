@@ -57,6 +57,8 @@ class Fixture;
 #define KXMLQLCEFXStartScene                QStringLiteral("StartScene")
 #define KXMLQLCEFXStopScene                 QStringLiteral("StopScene")
 #define KXMLQLCEFXFixtureGroup              QStringLiteral("FixtureGroup")
+#define KXMLQLCEFXOffsetDirection           QStringLiteral("OffsetDirection")
+#define KXMLQLCEFXOffsetStep                QStringLiteral("OffsetStep")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -612,6 +614,19 @@ private:
      * Fixture Group Mode
      *********************************************************************/
 public:
+    enum OffsetDirection
+    {
+        LeftToRight = 0,     /**< Propagate from left to right */
+        RightToLeft = 1,     /**< Propagate from right to left */
+        CenterToSides = 2,   /**< Propagate from center to sides */
+        SidesToCenter = 3,   /**< Propagate from sides to center */
+        Alternate = 4,       /**< Alternate columns (odd then even) */
+        Symmetric = 5        /**< Symmetric mirror from center */
+    };
+#if QT_VERSION >= 0x050500
+    Q_ENUM(OffsetDirection)
+#endif
+    
     /** Set the fixture group ID to use for spatial mode */
     void setFixtureGroupID(quint32 id);
     
@@ -620,9 +635,29 @@ public:
     
     /** Check if this EFX is using fixture group mode */
     bool isFixtureGroupMode() const;
+    
+    /** Set the offset direction for fixture group mode */
+    void setOffsetDirection(OffsetDirection dir);
+    
+    /** Get the offset direction */
+    OffsetDirection offsetDirection() const;
+    
+    /** Set the offset step between columns/rows in degrees */
+    void setOffsetStep(int degrees);
+    
+    /** Get the offset step */
+    int offsetStep() const;
+    
+    /** Convert offset direction to string */
+    static QString offsetDirectionToString(OffsetDirection dir);
+    
+    /** Convert string to offset direction */
+    static OffsetDirection stringToOffsetDirection(const QString& str);
 
 private:
     quint32 m_fixtureGroupID;
+    OffsetDirection m_offsetDirection;
+    int m_offsetStep;
 
     /*********************************************************************
      * Fixture propagation mode
