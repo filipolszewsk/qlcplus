@@ -549,6 +549,11 @@ void EFXEditor::updateFixtureTree()
                     combo->setProperty(PROPERTY_FIXTURE, col);
                     // Note: widgets are enabled so user can set template values
                     // but they won't affect anything until fixtures are added to this column
+                    
+                    // Connect signal so Mode changes are saved to backend
+                    connect(combo, SIGNAL(currentIndexChanged(int)),
+                            this, SLOT(slotFixtureModeChanged(int)));
+                    
                     m_tree->setItemWidget(item, KColumnMode, combo);
                     
                     // Restore mode for this column (backend first, then UI cache)
