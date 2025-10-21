@@ -424,6 +424,12 @@ void EFXEditor::updateFixtureTree()
     
     if (m_efx->isFixtureGroupMode())
     {
+        // Disable operations that don't work with columns
+        m_removeFixtureButton->setEnabled(false);
+        m_raiseFixtureButton->setEnabled(false);
+        m_lowerFixtureButton->setEnabled(false);
+        m_addFixtureButton->setEnabled(false);
+        
         // Fixture Group Mode: show columns with ability to change offset for entire column
         FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
         if (group != nullptr)
@@ -483,6 +489,12 @@ void EFXEditor::updateFixtureTree()
     }
     else
     {
+        // Re-enable buttons in normal mode
+        m_removeFixtureButton->setEnabled(true);
+        m_raiseFixtureButton->setEnabled(true);
+        m_lowerFixtureButton->setEnabled(true);
+        m_addFixtureButton->setEnabled(true);
+        
         // Normal mode: show individual fixtures
         QListIterator <EFXFixture*> it(m_efx->fixtures());
         while (it.hasNext())
