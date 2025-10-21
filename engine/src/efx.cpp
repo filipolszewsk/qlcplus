@@ -29,6 +29,7 @@
 #include "genericfader.h"
 #include "mastertimer.h"
 #include "qlcmacros.h"
+#include "fixturegroup.h"
 #include "doc.h"
 #include "efx.h"
 #include "bus.h"
@@ -49,6 +50,7 @@ EFX::EFX(Doc* doc)
     , m_waveShape(0)          // Default: sine
     , m_waveFadeIn(0.2)       // Default: 20% fade in
     , m_waveFadeOut(0.2)      // Default: 20% fade out
+    , m_fixtureGroupID(FixtureGroup::invalidId())
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
@@ -56,6 +58,9 @@ EFX::EFX(Doc* doc)
     updateRotationCache();
     setName(tr("New EFX"));
     setDuration(20000); // 20s
+    
+    connect(doc, SIGNAL(fixtureGroupRemoved(quint32)),
+            this, SLOT(slotFixtureGroupRemoved(quint32)));
 
     registerAttribute(tr("Width"), Function::LastWins, 0.0, 127.0, 127.0);
     registerAttribute(tr("Height"), Function::LastWins, 0.0, 127.0, 127.0);
@@ -929,6 +934,37 @@ void EFX::slotFixtureRemoved(quint32 fxi_id)
     }
 }
 
+void EFX::slotFixtureGroupRemoved(quint32 grp_id)
+{
+    if (m_fixtureGroupID == grp_id)
+    {
+        // Group was deleted, revert to normal mode
+        m_fixtureGroupID = FixtureGroup::invalidId();
+        removeAllFixtures();
+        emit changed(this->id());
+    }
+}
+
+/*****************************************************************************
+ * Fixture Group Mode
+ *****************************************************************************/
+
+void EFX::setFixtureGroupID(quint32 id)
+{
+    m_fixtureGroupID = id;
+    emit changed(this->id());
+}
+
+quint32 EFX::fixtureGroupID() const
+{
+    return m_fixtureGroupID;
+}
+
+bool EFX::isFixtureGroupMode() const
+{
+    return m_fixtureGroupID != FixtureGroup::invalidId();
+}
+
 /*****************************************************************************
  * Fixture propagation mode
  *****************************************************************************/
@@ -982,6 +1018,14 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
     QListIterator <EFXFixture*> it(m_fixtures);
     while (it.hasNext() == true)
         it.next()->saveXML(doc);
+
+    /* Fixture Group Mode */
+    if (isFixtureGroupMode())
+    {
+        doc->writeStartElement(KXMLQLCEFXFixtureGroup);
+        doc->writeAttribute(KXMLQLCFixtureGroupID, QString::number(m_fixtureGroupID));
+        doc->writeEndElement();
+    }
 
     /* Propagation mode */
     doc->writeTextElement(KXMLQLCEFXPropagationMode, propagationModeToString(m_propagationMode));
@@ -1094,6 +1138,12 @@ bool EFX::loadXML(QXmlStreamReader &root)
                 if (addFixture(ef) == false)
                     delete ef;
             }
+        }
+        else if (root.name() == KXMLQLCEFXFixtureGroup)
+        {
+            /* Fixture Group Mode */
+            m_fixtureGroupID = root.attributes().value(KXMLQLCFixtureGroupID).toString().toUInt();
+            root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCEFXPropagationMode)
         {
@@ -1288,6 +1338,7 @@ void EFX::write(MasterTimer *timer, QList<Universe*> universes)
 
     int done = 0;
 
+    // Both modes use the same logic now - each fixture has its own EFXFixture
     QListIterator <EFXFixture*> it(m_fixtures);
     while (it.hasNext() == true)
     {

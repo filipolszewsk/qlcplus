@@ -56,6 +56,7 @@ class Fixture;
 #define KXMLQLCEFXY                         QStringLiteral("Y")
 #define KXMLQLCEFXStartScene                QStringLiteral("StartScene")
 #define KXMLQLCEFXStopScene                 QStringLiteral("StopScene")
+#define KXMLQLCEFXFixtureGroup              QStringLiteral("FixtureGroup")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -600,9 +601,28 @@ public:
 public slots:
     /** Slot that captures Doc::fixtureRemoved signals */
     void slotFixtureRemoved(quint32 fxi_id);
+    
+    /** Slot that captures Doc::fixtureGroupRemoved signals */
+    void slotFixtureGroupRemoved(quint32 grp_id);
 
 private:
     QList <EFXFixture *> m_fixtures;
+
+    /*********************************************************************
+     * Fixture Group Mode
+     *********************************************************************/
+public:
+    /** Set the fixture group ID to use for spatial mode */
+    void setFixtureGroupID(quint32 id);
+    
+    /** Get the fixture group ID (FixtureGroup::invalidId() if not using group mode) */
+    quint32 fixtureGroupID() const;
+    
+    /** Check if this EFX is using fixture group mode */
+    bool isFixtureGroupMode() const;
+
+private:
+    quint32 m_fixtureGroupID;
 
     /*********************************************************************
      * Fixture propagation mode

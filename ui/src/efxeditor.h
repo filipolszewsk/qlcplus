@@ -104,6 +104,7 @@ private:
     void removeFixtureItem(EFXFixture* ef);
     void createSpeedDials();
     void updateSpeedDials();
+    void updateFixtureGroupCombo();
 
 private slots:
     void slotNameEdited(const QString &text);
@@ -120,6 +121,9 @@ private slots:
     void slotSerialRadioToggled(bool state);
     void slotAsymmetricRadioToggled(bool state);
 
+    void slotUseFixtureGroupToggled(bool checked);
+    void slotFixtureGroupChanged(int index);
+
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);
     void slotHoldChanged(int ms);
@@ -127,6 +131,7 @@ private slots:
 
     void slotFixtureRemoved();
     void slotFixtureChanged();
+    void slotFixtureGroupRemoved(quint32 id);
 
 private:
     SpeedDialWidget *m_speedDials;

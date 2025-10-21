@@ -135,6 +135,7 @@ void EFXEditor::initGeneralPage()
     // Doc
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)), this, SLOT(slotFixtureRemoved()));
     connect(m_doc, SIGNAL(fixtureChanged(quint32)), this, SLOT(slotFixtureChanged()));
+    connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)), this, SLOT(slotFixtureGroupRemoved(quint32)));
 
     /* Set the EFX's name to the name field */
     m_nameEdit->setText(m_efx->name());
@@ -1098,6 +1099,20 @@ void EFXEditor::slotFixtureChanged()
 {
     // Update the tree in case fixture's name changes
     updateFixtureTree();
+}
+
+void EFXEditor::slotFixtureGroupRemoved(quint32 id)
+{
+    if (m_efx->fixtureGroupID() == id)
+    {
+        // Our group was deleted, uncheck and disable
+        m_useFixtureGroupCheck->setChecked(false);
+        updateFixtureTree();
+        redrawPreview();
+    }
+    
+    // Refresh combo list
+    updateFixtureGroupCombo();
 }
 
 void EFXEditor::updateFixtureGroupCombo()
