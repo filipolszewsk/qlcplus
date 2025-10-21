@@ -61,6 +61,10 @@ class Fixture;
 #define KXMLQLCEFXOffsetStep                QStringLiteral("OffsetStep")
 #define KXMLQLCEFXWings                     QStringLiteral("Wings")
 #define KXMLQLCEFXSelectedRows              QStringLiteral("SelectedRows")
+#define KXMLQLCEFXColumnModes               QStringLiteral("ColumnModes")
+#define KXMLQLCEFXColumnMode                QStringLiteral("ColumnMode")
+#define KXMLQLCEFXColumnIndex               QStringLiteral("Index")
+#define KXMLQLCEFXColumnModeValue           QStringLiteral("Mode")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -670,6 +674,15 @@ public:
     
     /** Convert string to offset direction */
     static OffsetDirection stringToOffsetDirection(const QString& str);
+    
+    /** Set mode for a specific column in fixture group mode */
+    void setColumnMode(int column, int mode);
+    
+    /** Get mode for a specific column (returns 0 = PanTilt if not set) */
+    int columnMode(int column) const;
+    
+    /** Get all column modes */
+    QMap<int, int> columnModes() const;
 
 private:
     quint32 m_fixtureGroupID;
@@ -677,6 +690,7 @@ private:
     int m_offsetStep;
     int m_wings;
     QList<int> m_selectedRows;
+    QMap<int, int> m_columnModes;  // Column index -> EFXFixture::Mode (as int)
 
     /*********************************************************************
      * Fixture propagation mode

@@ -551,9 +551,19 @@ void EFXEditor::updateFixtureTree()
                     // but they won't affect anything until fixtures are added to this column
                     m_tree->setItemWidget(item, KColumnMode, combo);
                     
-                    // Restore saved mode for this column
-                    if (savedColumnModes.contains(col))
+                    // Restore mode for this column (backend first, then UI cache)
+                    int backendMode = m_efx->columnMode(col);
+                    if (backendMode != 0)  // 0 = PanTilt (default), any other value means it was explicitly set
                     {
+                        // Use mode from backend (persistent, from XML)
+                        QString modeStr = EFXFixture::modeToString((EFXFixture::Mode)backendMode);
+                        int idx = combo->findText(modeStr);
+                        if (idx >= 0)
+                            combo->setCurrentIndex(idx);
+                    }
+                    else if (savedColumnModes.contains(col))
+                    {
+                        // Fallback to UI cache if backend has nothing
                         int idx = combo->findText(savedColumnModes[col]);
                         if (idx >= 0)
                             combo->setCurrentIndex(idx);
@@ -889,6 +899,9 @@ void EFXEditor::slotFixtureModeChanged(int index)
         // Get mode from first fixture (they should all use same mode)
         EFXFixture *firstEf = m_efx->fixtures().first();
         EFXFixture::Mode mode = firstEf->stringToMode(combo->itemText(index));
+        
+        // Save mode for this column in backend (persistent)
+        m_efx->setColumnMode(columnIndex, (int)mode);
         
         int gridHeight = group->size().height();
         
@@ -1391,11 +1404,14 @@ void EFXEditor::slotRowSelectionChanged()
                         int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                         ef->setStartOffset(columnOffset);
                         
-                        // Restore saved settings (mode, direction)
+                        // Restore mode from backend (column-specific, persistent)
+                        EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
+                        ef->setMode(columnMode);
+                        
+                        // Restore direction from saved settings if available
                         QPair<quint32, int> key(head.fxi, head.head);
                         if (fixtureSettings.contains(key))
                         {
-                            ef->setMode(fixtureSettings[key].first);
                             ef->setDirection(fixtureSettings[key].second);
                         }
                         
@@ -1468,6 +1484,11 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
                         // Calculate offset based on direction and step
                         int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                         ef->setStartOffset(columnOffset);
+                        
+                        // Restore mode from backend (column-specific, persistent)
+                        EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
+                        ef->setMode(columnMode);
+                        
                         if (!m_efx->addFixture(ef))
                             delete ef;
                     }
@@ -1542,6 +1563,11 @@ void EFXEditor::slotFixtureGroupChanged(int index)
                     // Calculate offset based on direction and step
                     int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
                     ef->setStartOffset(columnOffset);
+                    
+                    // Restore mode from backend (column-specific, persistent)
+                    EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
+                    ef->setMode(columnMode);
+                    
                     if (!m_efx->addFixture(ef))
                         delete ef;
                 }

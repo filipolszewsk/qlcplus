@@ -145,6 +145,7 @@ bool EFX::copyFrom(const Function* function)
     m_offsetStep = efx->m_offsetStep;
     m_wings = efx->m_wings;
     m_selectedRows = efx->m_selectedRows;
+    m_columnModes = efx->m_columnModes;
 
     return Function::copyFrom(function);
 }
@@ -1063,6 +1064,25 @@ EFX::OffsetDirection EFX::stringToOffsetDirection(const QString& str)
         return LeftToRight;
 }
 
+void EFX::setColumnMode(int column, int mode)
+{
+    m_columnModes[column] = mode;
+    emit changed(this->id());
+}
+
+int EFX::columnMode(int column) const
+{
+    if (m_columnModes.contains(column))
+        return m_columnModes[column];
+    
+    return 0;  // Default to PanTilt (EFXFixture::Mode enum value 0)
+}
+
+QMap<int, int> EFX::columnModes() const
+{
+    return m_columnModes;
+}
+
 /*****************************************************************************
  * Fixture propagation mode
  *****************************************************************************/
@@ -1135,6 +1155,22 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
             foreach (int row, m_selectedRows)
                 rowStrings << QString::number(row);
             doc->writeTextElement(KXMLQLCEFXSelectedRows, rowStrings.join(","));
+        }
+        
+        // Save column modes (if any)
+        if (!m_columnModes.isEmpty())
+        {
+            doc->writeStartElement(KXMLQLCEFXColumnModes);
+            QMapIterator<int, int> it(m_columnModes);
+            while (it.hasNext())
+            {
+                it.next();
+                doc->writeStartElement(KXMLQLCEFXColumnMode);
+                doc->writeAttribute(KXMLQLCEFXColumnIndex, QString::number(it.key()));
+                doc->writeAttribute(KXMLQLCEFXColumnModeValue, QString::number(it.value()));
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
         }
     }
 
@@ -1285,6 +1321,24 @@ bool EFX::loadXML(QXmlStreamReader &root)
                     rows.append(row);
             }
             setSelectedRows(rows);
+        }
+        else if (root.name() == KXMLQLCEFXColumnModes)
+        {
+            /* Column Modes */
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLQLCEFXColumnMode)
+                {
+                    int col = root.attributes().value(KXMLQLCEFXColumnIndex).toInt();
+                    int mode = root.attributes().value(KXMLQLCEFXColumnModeValue).toInt();
+                    m_columnModes[col] = mode;
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
         }
         else if (root.name() == KXMLQLCEFXPropagationMode)
         {
