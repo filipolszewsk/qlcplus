@@ -1325,18 +1325,45 @@ void EFXEditor::slotRowSelectionChanged()
     
     m_efx->setSelectedRows(selectedRows);
     
-    // Recreate fixtures with new row selection
+    // Recreate fixtures WITHOUT calling slotFixtureGroupChanged
+    // (which would call updateRowSelection and destroy our checkboxes!)
     bool running = interruptRunning();
     
-    // Block checkbox signals during fixture recreation
-    foreach (QCheckBox *cb, m_rowCheckboxes)
-        cb->blockSignals(true);
+    m_efx->removeAllFixtures();
     
-    slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
+    FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+    if (group != nullptr)
+    {
+        int gridWidth = group->size().width();
+        int gridHeight = group->size().height();
+        
+        if (gridWidth > 0 && gridHeight > 0)
+        {
+            for (int col = 0; col < gridWidth; col++)
+            {
+                for (int row = 0; row < gridHeight; row++)
+                {
+                    // Check if this row is selected
+                    if (!m_efx->isRowSelected(row))
+                        continue;
+                    
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (head.isValid())
+                    {
+                        EFXFixture *ef = new EFXFixture(m_efx);
+                        ef->setHead(head);
+                        int columnOffset = calculateColumnOffset(col, row, gridWidth, gridHeight);
+                        ef->setStartOffset(columnOffset);
+                        if (!m_efx->addFixture(ef))
+                            delete ef;
+                    }
+                }
+            }
+        }
+    }
     
-    foreach (QCheckBox *cb, m_rowCheckboxes)
-        cb->blockSignals(false);
-    
+    updateFixtureTree();  // Only update tree, NOT row selection!
+    redrawPreview();
     continueRunning(running);
     
     updating = false;
