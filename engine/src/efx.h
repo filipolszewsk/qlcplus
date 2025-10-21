@@ -621,7 +621,8 @@ public:
         CenterToSides = 2,   /**< Propagate from center to sides */
         SidesToCenter = 3,   /**< Propagate from sides to center */
         Alternate = 4,       /**< Alternate columns (odd then even) */
-        Symmetric = 5        /**< Symmetric mirror from center */
+        Symmetric = 5,       /**< Symmetric mirror from center */
+        Wings = 6            /**< Center + symmetric wings */
     };
 #if QT_VERSION >= 0x050500
     Q_ENUM(OffsetDirection)

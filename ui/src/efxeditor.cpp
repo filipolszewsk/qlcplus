@@ -1391,12 +1391,75 @@ int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHe
             
         case EFX::Symmetric:
             // Mirror: 0 and N-1 together, 1 and N-2 together, etc.
+            // For even width: middle two columns get same index
             {
-                int center = gridWidth / 2;
-                if (col <= center)
-                    index = col;
+                if (gridWidth % 2 == 0)
+                {
+                    // Even: middle two columns get same index
+                    int centerLeft = (gridWidth / 2) - 1;
+                    int centerRight = gridWidth / 2;
+                    
+                    if (col <= centerLeft)
+                        index = col;
+                    else
+                        index = gridWidth - 1 - col;
+                }
                 else
-                    index = gridWidth - 1 - col;
+                {
+                    // Odd: normal mirror
+                    int center = gridWidth / 2;
+                    if (col <= center)
+                        index = col;
+                    else
+                        index = gridWidth - 1 - col;
+                }
+            }
+            break;
+            
+        case EFX::Wings:
+            // Wings mode: center (0°) + symmetric left/right propagation
+            // For even width: two center columns both get index 0
+            {
+                if (gridWidth % 2 == 0)
+                {
+                    // Even width - two center columns
+                    int centerLeft = (gridWidth / 2) - 1;
+                    int centerRight = gridWidth / 2;
+                    
+                    if (col == centerLeft || col == centerRight)
+                    {
+                        index = 0; // Both center columns = 0
+                    }
+                    else if (col < centerLeft)
+                    {
+                        // Left wing: distance from center
+                        index = centerLeft - col;
+                    }
+                    else // col > centerRight
+                    {
+                        // Right wing: same distance as left wing (symmetric)
+                        index = col - centerRight;
+                    }
+                }
+                else
+                {
+                    // Odd width - single center
+                    int center = gridWidth / 2;
+                    if (col == center)
+                    {
+                        index = 0; // Center = 0
+                    }
+                    else if (col < center)
+                    {
+                        // Left wing
+                        index = center - col;
+                    }
+                    else
+                    {
+                        // Right wing (symmetric)
+                        index = col - center;
+                    }
+                }
             }
             break;
     }

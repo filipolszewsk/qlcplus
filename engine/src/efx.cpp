@@ -1010,6 +1010,8 @@ QString EFX::offsetDirectionToString(OffsetDirection dir)
             return QString("Alternate");
         case Symmetric:
             return QString("Symmetric");
+        case Wings:
+            return QString("Wings");
     }
 }
 
@@ -1025,6 +1027,8 @@ EFX::OffsetDirection EFX::stringToOffsetDirection(const QString& str)
         return Alternate;
     else if (str == "Symmetric")
         return Symmetric;
+    else if (str == "Wings")
+        return Wings;
     else
         return LeftToRight;
 }
