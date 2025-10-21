@@ -737,22 +737,27 @@ void EFXEditor::slotFixtureItemChanged(QTreeWidgetItem* item, int column)
         {
             // In group mode, update all fixtures in this column
             int columnIndex = item->data(0, Qt::UserRole).toInt();
-            Function::Direction dir = (item->checkState(column) == Qt::Checked) ? Function::Backward : Function::Forward;
             
             FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
-            if (group != nullptr)
+            if (group == nullptr)
+                return;
+            
+            int gridWidth = group->size().width();
+            if (columnIndex < 0 || columnIndex >= gridWidth)
+                return;
+            
+            Function::Direction dir = (item->checkState(column) == Qt::Checked) ? Function::Backward : Function::Forward;
+            int gridHeight = group->size().height();
+            
+            foreach (EFXFixture *ef, m_efx->fixtures())
             {
-                int gridHeight = group->size().height();
-                foreach (EFXFixture *ef, m_efx->fixtures())
+                for (int row = 0; row < gridHeight; row++)
                 {
-                    for (int row = 0; row < gridHeight; row++)
+                    GroupHead head = group->head(QLCPoint(columnIndex, row));
+                    if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                     {
-                        GroupHead head = group->head(QLCPoint(columnIndex, row));
-                        if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
-                        {
-                            ef->setDirection(dir);
-                            break;
-                        }
+                        ef->setDirection(dir);
+                        break;
                     }
                 }
             }
@@ -785,23 +790,28 @@ void EFXEditor::slotFixtureModeChanged(int index)
         int columnIndex = combo->property(PROPERTY_FIXTURE).toInt();
         
         FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
-        if (group != nullptr && !m_efx->fixtures().isEmpty())
+        if (group == nullptr || m_efx->fixtures().isEmpty())
+            return;
+        
+        int gridWidth = group->size().width();
+        if (columnIndex < 0 || columnIndex >= gridWidth)
+            return;
+        
+        // Get mode from first fixture (they should all use same mode)
+        EFXFixture *firstEf = m_efx->fixtures().first();
+        EFXFixture::Mode mode = firstEf->stringToMode(combo->itemText(index));
+        
+        int gridHeight = group->size().height();
+        
+        foreach (EFXFixture *ef, m_efx->fixtures())
         {
-            // Get mode from first fixture (they should all use same mode)
-            EFXFixture *firstEf = m_efx->fixtures().first();
-            EFXFixture::Mode mode = firstEf->stringToMode(combo->itemText(index));
-            
-            int gridHeight = group->size().height();
-            foreach (EFXFixture *ef, m_efx->fixtures())
+            for (int row = 0; row < gridHeight; row++)
             {
-                for (int row = 0; row < gridHeight; row++)
+                GroupHead head = group->head(QLCPoint(columnIndex, row));
+                if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                 {
-                    GroupHead head = group->head(QLCPoint(columnIndex, row));
-                    if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
-                    {
-                        ef->setMode(mode);
-                        break;
-                    }
+                    ef->setMode(mode);
+                    break;
                 }
             }
         }
@@ -831,20 +841,25 @@ void EFXEditor::slotFixtureStartOffsetChanged(int startOffset)
         
         // Update all fixtures in this column
         FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
-        if (group != nullptr)
+        if (group == nullptr)
+            return;
+        
+        int gridWidth = group->size().width();
+        if (columnIndex < 0 || columnIndex >= gridWidth)
+            return;
+        
+        int gridHeight = group->size().height();
+        
+        foreach (EFXFixture *ef, m_efx->fixtures())
         {
-            int gridHeight = group->size().height();
-            foreach (EFXFixture *ef, m_efx->fixtures())
+            // Check if this fixture is in the column
+            for (int row = 0; row < gridHeight; row++)
             {
-                // Check if this fixture is in the column
-                for (int row = 0; row < gridHeight; row++)
+                GroupHead head = group->head(QLCPoint(columnIndex, row));
+                if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                 {
-                    GroupHead head = group->head(QLCPoint(columnIndex, row));
-                    if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
-                    {
-                        ef->setStartOffset(startOffset);
-                        break;
-                    }
+                    ef->setStartOffset(startOffset);
+                    break;
                 }
             }
         }
