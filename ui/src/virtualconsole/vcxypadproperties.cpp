@@ -345,10 +345,10 @@ void VCXYPadProperties::fillFixturesTree()
             }
         }
         
-        // Disable Add, Remove, Edit buttons in group mode
+        // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
         m_addButton->setEnabled(false);
         m_removeButton->setEnabled(false);
-        m_editButton->setEnabled(false);
+        // Edit will be enabled/disabled by slotSelectionChanged
     }
     else
     {
@@ -529,21 +529,106 @@ void VCXYPadProperties::slotRemoveClicked()
 
 void VCXYPadProperties::slotEditClicked()
 {
-    /* Get a list of selected fixtures */
-    QList <VCXYPadFixture> list(selectedFixtures());
+    QList <VCXYPadFixture> list;
+    QList<QTreeWidgetItem*> selectedItems = m_tree->selectedItems();
+    
+    // Check if we're editing columns (fixture group mode)
+    if (m_xypad->isFixtureGroupMode() && !selectedItems.isEmpty())
+    {
+        // Get fixtures from selected column(s)
+        foreach (QTreeWidgetItem* item, selectedItems)
+        {
+            bool isColumnItem = item->data(KColumnFixture, Qt::UserRole + 1).toBool();
+            if (isColumnItem)
+            {
+                // Extract all fixtures from this column
+                QVariantList fixtureList = item->data(KColumnFixture, Qt::UserRole + 2).toList();
+                foreach (const QVariant& var, fixtureList)
+                {
+                    list.append(VCXYPadFixture(m_doc, var));
+                }
+            }
+        }
+    }
+    else
+    {
+        // Normal mode - get selected fixtures
+        list = selectedFixtures();
+    }
 
     /* Start editor */
     VCXYPadFixtureEditor editor(this, list);
     if (editor.exec() == QDialog::Accepted)
     {
         QListIterator <VCXYPadFixture> it(editor.fixtures());
-        while (it.hasNext() == true)
+        
+        if (m_xypad->isFixtureGroupMode())
         {
-            VCXYPadFixture fxi(it.next());
-            QTreeWidgetItem* item = fixtureItem(fxi);
-
-            updateFixtureItem(item, fxi);
+            // In group mode, update ALL fixtures in selected column(s) with edited settings
+            // Build list of edited fixtures
+            QList<VCXYPadFixture> editedFixtures;
+            while (it.hasNext())
+            {
+                editedFixtures.append(it.next());
+            }
+            
+            // Update column items with edited fixtures
+            foreach (QTreeWidgetItem* item, selectedItems)
+            {
+                bool isColumnItem = item->data(KColumnFixture, Qt::UserRole + 1).toBool();
+                
+                if (isColumnItem)
+                {
+                    QVariantList fixtureList = item->data(KColumnFixture, Qt::UserRole + 2).toList();
+                    QVariantList updatedList;
+                    
+                    foreach (const QVariant& var, fixtureList)
+                    {
+                        VCXYPadFixture fxi(m_doc, var);
+                        
+                        // Find matching edited fixture by GroupHead
+                        bool found = false;
+                        foreach (const VCXYPadFixture& editedFxi, editedFixtures)
+                        {
+                            if (fxi.head() == editedFxi.head())
+                            {
+                                // Use edited fixture
+                                updatedList.append(QVariant(editedFxi));
+                                found = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!found)
+                        {
+                            updatedList.append(var);
+                        }
+                    }
+                    
+                    // Store updated list back
+                    item->setData(KColumnFixture, Qt::UserRole + 2, updatedList);
+                    
+                    // Update tree display with first fixture settings
+                    if (!updatedList.isEmpty())
+                    {
+                        VCXYPadFixture firstFxi(m_doc, updatedList.first());
+                        item->setText(KColumnXAxis, firstFxi.xBrief());
+                        item->setText(KColumnYAxis, firstFxi.yBrief());
+                    }
+                }
+            }
         }
+        else
+        {
+            // Normal mode
+            while (it.hasNext() == true)
+            {
+                VCXYPadFixture fxi(it.next());
+                QTreeWidgetItem* item = fixtureItem(fxi);
+                updateFixtureItem(item, fxi);
+            }
+        }
+        
         m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     }
 }
@@ -1285,10 +1370,10 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
                 }
             }
             
-            // Disable Add, Remove, Edit buttons in group mode
+            // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
             m_addButton->setEnabled(false);
             m_removeButton->setEnabled(false);
-            m_editButton->setEnabled(false);
+            // Edit will be enabled/disabled by slotSelectionChanged
         }
         
         m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
@@ -1389,10 +1474,10 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
             }
         }
         
-        // Disable Add, Remove, Edit buttons in group mode
+        // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
         m_addButton->setEnabled(false);
         m_removeButton->setEnabled(false);
-        m_editButton->setEnabled(false);
+        // Edit will be enabled/disabled by slotSelectionChanged
     }
     
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
@@ -1502,10 +1587,10 @@ void VCXYPadProperties::slotRowSelectionChanged()
                     }
                 }
                 
-                // Disable Add, Remove, Edit buttons in group mode
+                // Disable Add and Remove buttons in group mode (Edit is allowed for columns)
                 m_addButton->setEnabled(false);
                 m_removeButton->setEnabled(false);
-                m_editButton->setEnabled(false);
+                // Edit will be enabled/disabled by slotSelectionChanged
             }
         }
     }
