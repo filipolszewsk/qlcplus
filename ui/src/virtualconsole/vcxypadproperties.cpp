@@ -323,6 +323,14 @@ void VCXYPadProperties::fillFixturesTree()
             item->setData(KColumnFixture, Qt::UserRole, col); // Store column index
             item->setData(KColumnFixture, Qt::UserRole + 1, true); // Mark as column item
             
+            // Store all fixtures from this column in item data (as list)
+            QVariantList fixtureList;
+            foreach (const VCXYPadFixture& fxi, columnFixtures[col])
+            {
+                fixtureList.append(QVariant(fxi));
+            }
+            item->setData(KColumnFixture, Qt::UserRole + 2, fixtureList);
+            
             if (fixtureCount > 0)
             {
                 // Use first fixture as representative for X/Y display
@@ -1219,9 +1227,12 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
             
             if (gridWidth <= 0 || gridHeight <= 0)
             {
-                fillFixturesTree();
+                m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
                 return;
             }
+            
+            // Group fixtures by column and add them to tree
+            QMap<int, QList<VCXYPadFixture>> columnFixtures;
             
             // Create VCXYPadFixture for each fixture in the group (respecting row filter)
             for (int col = 0; col < gridWidth; col++)
@@ -1237,15 +1248,50 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
                     {
                         VCXYPadFixture fxi(m_doc);
                         fxi.setHead(head);
-                        
-                        QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
-                        updateFixtureItem(item, fxi);
+                        columnFixtures[col].append(fxi);
                     }
                 }
             }
+            
+            // Create column tree items
+            for (int col = 0; col < gridWidth; col++)
+            {
+                int fixtureCount = columnFixtures[col].size();
+                
+                QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                item->setText(KColumnFixture, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
+                item->setData(KColumnFixture, Qt::UserRole, col); // Store column index
+                item->setData(KColumnFixture, Qt::UserRole + 1, true); // Mark as column item
+                
+                // Store all fixtures from this column in item data (as list)
+                QVariantList fixtureList;
+                foreach (const VCXYPadFixture& fxi, columnFixtures[col])
+                {
+                    fixtureList.append(QVariant(fxi));
+                }
+                item->setData(KColumnFixture, Qt::UserRole + 2, fixtureList);
+                
+                if (fixtureCount > 0)
+                {
+                    // Use first fixture as representative for X/Y display
+                    VCXYPadFixture firstFxi = columnFixtures[col].first();
+                    item->setText(KColumnXAxis, firstFxi.xBrief());
+                    item->setText(KColumnYAxis, firstFxi.yBrief());
+                }
+                else
+                {
+                    item->setText(KColumnXAxis, "");
+                    item->setText(KColumnYAxis, "");
+                }
+            }
+            
+            // Disable Add, Remove, Edit buttons in group mode
+            m_addButton->setEnabled(false);
+            m_removeButton->setEnabled(false);
+            m_editButton->setEnabled(false);
         }
         
-        fillFixturesTree();
+        m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     }
     else
     {
@@ -1285,9 +1331,12 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
         
         if (gridWidth <= 0 || gridHeight <= 0)
         {
-            fillFixturesTree();
+            m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
             return;
         }
+        
+        // Group fixtures by column and add them to tree
+        QMap<int, QList<VCXYPadFixture>> columnFixtures;
         
         // Create VCXYPadFixture for each fixture in the group (respecting row filter)
         for (int col = 0; col < gridWidth; col++)
@@ -1303,15 +1352,50 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
                 {
                     VCXYPadFixture fxi(m_doc);
                     fxi.setHead(head);
-                    
-                    QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
-                    updateFixtureItem(item, fxi);
+                    columnFixtures[col].append(fxi);
                 }
             }
         }
+        
+        // Create column tree items
+        for (int col = 0; col < gridWidth; col++)
+        {
+            int fixtureCount = columnFixtures[col].size();
+            
+            QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+            item->setText(KColumnFixture, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
+            item->setData(KColumnFixture, Qt::UserRole, col); // Store column index
+            item->setData(KColumnFixture, Qt::UserRole + 1, true); // Mark as column item
+            
+            // Store all fixtures from this column in item data (as list)
+            QVariantList fixtureList;
+            foreach (const VCXYPadFixture& fxi, columnFixtures[col])
+            {
+                fixtureList.append(QVariant(fxi));
+            }
+            item->setData(KColumnFixture, Qt::UserRole + 2, fixtureList);
+            
+            if (fixtureCount > 0)
+            {
+                // Use first fixture as representative for X/Y display
+                VCXYPadFixture firstFxi = columnFixtures[col].first();
+                item->setText(KColumnXAxis, firstFxi.xBrief());
+                item->setText(KColumnYAxis, firstFxi.yBrief());
+            }
+            else
+            {
+                item->setText(KColumnXAxis, "");
+                item->setText(KColumnYAxis, "");
+            }
+        }
+        
+        // Disable Add, Remove, Edit buttons in group mode
+        m_addButton->setEnabled(false);
+        m_removeButton->setEnabled(false);
+        m_editButton->setEnabled(false);
     }
     
-    fillFixturesTree();
+    m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
 void VCXYPadProperties::slotRowSelectionChanged()
@@ -1364,6 +1448,9 @@ void VCXYPadProperties::slotRowSelectionChanged()
             
             if (gridWidth > 0 && gridHeight > 0)
             {
+                // Group fixtures by column and add them to tree
+                QMap<int, QList<VCXYPadFixture>> columnFixtures;
+                
                 // Create VCXYPadFixture for each fixture (respecting row filter)
                 for (int col = 0; col < gridWidth; col++)
                 {
@@ -1378,17 +1465,52 @@ void VCXYPadProperties::slotRowSelectionChanged()
                         {
                             VCXYPadFixture fxi(m_doc);
                             fxi.setHead(head);
-                            
-                            QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
-                            updateFixtureItem(item, fxi);
+                            columnFixtures[col].append(fxi);
                         }
                     }
                 }
+                
+                // Create column tree items
+                for (int col = 0; col < gridWidth; col++)
+                {
+                    int fixtureCount = columnFixtures[col].size();
+                    
+                    QTreeWidgetItem* item = new QTreeWidgetItem(m_tree);
+                    item->setText(KColumnFixture, QString("Column %1 (%2 fixtures)").arg(col + 1).arg(fixtureCount));
+                    item->setData(KColumnFixture, Qt::UserRole, col); // Store column index
+                    item->setData(KColumnFixture, Qt::UserRole + 1, true); // Mark as column item
+                    
+                    // Store all fixtures from this column in item data (as list)
+                    QVariantList fixtureList;
+                    foreach (const VCXYPadFixture& fxi, columnFixtures[col])
+                    {
+                        fixtureList.append(QVariant(fxi));
+                    }
+                    item->setData(KColumnFixture, Qt::UserRole + 2, fixtureList);
+                    
+                    if (fixtureCount > 0)
+                    {
+                        // Use first fixture as representative for X/Y display
+                        VCXYPadFixture firstFxi = columnFixtures[col].first();
+                        item->setText(KColumnXAxis, firstFxi.xBrief());
+                        item->setText(KColumnYAxis, firstFxi.yBrief());
+                    }
+                    else
+                    {
+                        item->setText(KColumnXAxis, "");
+                        item->setText(KColumnYAxis, "");
+                    }
+                }
+                
+                // Disable Add, Remove, Edit buttons in group mode
+                m_addButton->setEnabled(false);
+                m_removeButton->setEnabled(false);
+                m_editButton->setEnabled(false);
             }
         }
     }
     
-    fillFixturesTree();
+    m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     
     updating = false;
 }
@@ -1457,8 +1579,24 @@ void VCXYPadProperties::accept()
     QTreeWidgetItemIterator it(m_tree);
     while (*it != NULL)
     {
-        QVariant var((*it)->data(KColumnFixture, Qt::UserRole));
-        m_xypad->appendFixture(VCXYPadFixture(m_doc, var));
+        // Check if this is a column item (fixture group mode)
+        bool isColumnItem = (*it)->data(KColumnFixture, Qt::UserRole + 1).toBool();
+        
+        if (isColumnItem)
+        {
+            // Extract all fixtures from this column
+            QVariantList fixtureList = (*it)->data(KColumnFixture, Qt::UserRole + 2).toList();
+            foreach (const QVariant& var, fixtureList)
+            {
+                m_xypad->appendFixture(VCXYPadFixture(m_doc, var));
+            }
+        }
+        else
+        {
+            // Regular fixture item
+            QVariant var((*it)->data(KColumnFixture, Qt::UserRole));
+            m_xypad->appendFixture(VCXYPadFixture(m_doc, var));
+        }
         ++it;
     }
 
