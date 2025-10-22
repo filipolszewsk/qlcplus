@@ -542,34 +542,9 @@ uchar Universe::applyPassthrough(int channel, uchar value)
 
 void Universe::updatePostGMValue(int channel)
 {
-    // ⭐ GUARD: Is this channel an LSB of a registered Pan/Tilt pair?
-    // If yes, IGNORE - it's updated only through MSB scaling
+    // Skip LSB channels of Pan/Tilt pairs - they're updated by MSB scaling
     if (m_panTiltLSBChannels.contains(channel))
-    {
-        // This LSB has already been scaled by its MSB partner
-        // Don't process it independently to avoid overwriting the scaled value
-        uchar value = preGMValue(channel);
-        if (value != 0)
-            value = applyGM(channel, value);
-        value = applyModifiers(channel, value);
-        value = applyPassthrough(channel, value);
-        (*m_postGMValues)[channel] = static_cast<char>(value);
         return;
-    }
-    
-    // Apply Pan/Tilt scaling FIRST (only for MSB channels)
-    if (isPanTiltChannel(channel))
-    {
-        const PanTiltChannelPair &pair = m_panTiltPairs[channel];
-        // Only scale once for the MSB channel
-        if (channel == pair.msbChannel)
-        {
-            applyPanTiltScaling(pair.msbChannel);
-            // Explicitly trigger LSB update after scaling
-            if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel < UNIVERSE_SIZE)
-                updatePostGMValue(pair.lsbChannel);
-        }
-    }
     
     uchar value = preGMValue(channel);
 
@@ -577,8 +552,18 @@ void Universe::updatePostGMValue(int channel)
         value = applyGM(channel, value);
 
     value = applyModifiers(channel, value);
+    
+    // ⭐ Apply Pan/Tilt scaling AFTER modifiers (like channel modifier)
+    // This converts 8-bit MSB → 16-bit (MSB+LSB) and writes to postGM
+    if (isPanTiltChannel(channel))
+    {
+        value = applyPassthrough(channel, value);
+        applyPanTiltScaling(channel, value);
+        // LSB postGM is already updated by applyPanTiltScaling()
+        return;
+    }
+    
     value = applyPassthrough(channel, value);
-
     (*m_postGMValues)[channel] = static_cast<char>(value);
 }
 
@@ -880,11 +865,7 @@ void Universe::setChannelDefaultValue(ushort channel, uchar value)
     if (channel >= m_usedChannels)
         m_usedChannels = channel + 1;
 
-    // ⭐ GUARD: Don't overwrite preGM for LSB channels of Pan/Tilt pairs
-    if (!m_panTiltLSBChannels.contains(channel))
-    {
-        (*m_preGMValues)[channel] = value;
-    }
+    (*m_preGMValues)[channel] = value;
     updatePostGMValue(channel);
 }
 
@@ -953,38 +934,33 @@ bool Universe::isPanTiltChannel(ushort channel) const
     return m_panTiltPairs.contains(channel);
 }
 
-void Universe::applyPanTiltScaling(ushort msbChannel)
+void Universe::applyPanTiltScaling(ushort msbChannel, uchar msbValue)
 {
     if (!m_panTiltPairs.contains(msbChannel))
         return;
     
     const PanTiltChannelPair &pair = m_panTiltPairs[msbChannel];
     
-    // Read 16-bit DMX input
-    uchar msbValue = static_cast<uchar>((*m_preGMValues)[pair.msbChannel]);
-    uchar lsbValue = 0;
-    if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel < UNIVERSE_SIZE)
-        lsbValue = static_cast<uchar>((*m_preGMValues)[pair.lsbChannel]);
+    // Input: 8-bit MSB value (AFTER GM and modifiers, like channel modifier)
+    // We treat this as the full range input (0-255 → full custom range)
     
-    quint16 dmx16bit = (msbValue << 8) | lsbValue;
-    
-    // STEP 1: Map DMX input (0-65535) → custom range degrees (absolute 0-540)
+    // STEP 1: Map 8-bit input (0-255) → custom range degrees (absolute 0-540)
     qreal customSpan = pair.rangeMax - pair.rangeMin;
-    qreal degrees = pair.rangeMin + (dmx16bit / 65535.0) * customSpan;
+    qreal degrees = pair.rangeMin + (msbValue / 255.0) * customSpan;
     
-    // STEP 2: Map degrees (absolute) → physical DMX output
+    // STEP 2: Map degrees (absolute) → physical DMX output (16-bit)
     qreal normalized = degrees / pair.physicalMax;  // 0.0 to 1.0
     quint16 dmxOutput = qBound(quint16(0), quint16(qRound(normalized * 65535.0)), quint16(65535));
     
-    // Write back to preGM
-    (*m_preGMValues)[pair.msbChannel] = static_cast<char>(dmxOutput >> 8);
+    // Write DIRECTLY to postGM (bypassing normal flow, like channel modifier does)
+    (*m_postGMValues)[pair.msbChannel] = static_cast<char>(dmxOutput >> 8);
     if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel < UNIVERSE_SIZE)
-        (*m_preGMValues)[pair.lsbChannel] = static_cast<char>(dmxOutput & 0xFF);
+        (*m_postGMValues)[pair.lsbChannel] = static_cast<char>(dmxOutput & 0xFF);
     
     qDebug() << "[PanTilt Scale]" << (pair.isPan ? "Pan" : "Tilt")
              << "Head:" << pair.headIndex
-             << "In:" << dmx16bit << "→ Degrees:" << degrees 
-             << "→ Out:" << dmxOutput;
+             << "8-bit In:" << (int)msbValue << "→ Degrees:" << degrees 
+             << "→ 16-bit Out:" << dmxOutput << "(" << (dmxOutput >> 8) << "," << (dmxOutput & 0xFF) << ")";
 }
 
 void Universe::updateIntensityChannelsRanges()
@@ -1044,14 +1020,7 @@ bool Universe::write(int address, uchar value, bool forceLTP)
         (*m_blackoutValues)[address] = char(value);
     }
 
-    // ⭐ GUARD: Don't overwrite preGM for LSB channels of Pan/Tilt pairs
-    // These are updated only through MSB scaling in applyPanTiltScaling()
-    if (!m_panTiltLSBChannels.contains(address))
-    {
-        (*m_preGMValues)[address] = char(value);
-    }
-    // If this is an LSB, the scaled value is already in preGMValues
-    // from applyPanTiltScaling() when the MSB was processed
+    (*m_preGMValues)[address] = char(value);
 
     updatePostGMValue(address);
 
@@ -1068,12 +1037,7 @@ bool Universe::writeMultiple(int address, quint32 value, int channelCount)
         if ((m_channelsMask->at(address + i) & HTP) == 0)
             (*m_blackoutValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
 
-        // ⭐ GUARD: Don't overwrite preGM for LSB channels of Pan/Tilt pairs
-        // These are updated only through MSB scaling in applyPanTiltScaling()
-        if (!m_panTiltLSBChannels.contains(address + i))
-        {
-            (*m_preGMValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
-        }
+        (*m_preGMValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
 
         updatePostGMValue(address + i);
     }
