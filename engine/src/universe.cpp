@@ -1111,10 +1111,15 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
         currentValue = qint32(CLAMP((qint32)currentValue + (qint32)value - RELATIVE_ZERO_16BIT, 0, 0xFFFF));
 
+        // ⭐ Special handling for Pan/Tilt MSB channels in relative mode
+        // In relative mode, we need to update BOTH MSB and LSB before scaling
+        bool isPanTiltMSB = isPanTiltChannel(address);
+        
         for (int i = 0; i < channelCount; i++)
         {
-            // ⭐ GUARD: Don't overwrite preGM for LSB channels of Pan/Tilt pairs
-            if (!m_panTiltLSBChannels.contains(address + i))
+            // For Pan/Tilt MSB, ALLOW writing both MSB and LSB in relative mode
+            // The scaling will happen in updatePostGMValue() with both values updated
+            if (isPanTiltMSB || !m_panTiltLSBChannels.contains(address + i))
             {
                 (*m_preGMValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
                 (*m_blackoutValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
