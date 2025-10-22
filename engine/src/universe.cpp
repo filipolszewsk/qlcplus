@@ -1042,6 +1042,7 @@ bool Universe::write(int address, uchar value, bool forceLTP)
 
 bool Universe::writeMultiple(int address, quint32 value, int channelCount)
 {
+    // ⭐ STEP 1: First, write ALL values to preGM
     for (int i = 0; i < channelCount; i++)
     {
         //qDebug() << "[Universe]" << id() << ": write channel" << (address + i) << ", value:" << QString::number(((uchar *)&value)[channelCount - 1 - i]);
@@ -1051,7 +1052,11 @@ bool Universe::writeMultiple(int address, quint32 value, int channelCount)
             (*m_blackoutValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
 
         (*m_preGMValues)[address + i] = ((uchar *)&value)[channelCount - 1 - i];
-
+    }
+    
+    // ⭐ STEP 2: Then process them (now LSB is already in preGM when MSB reads it!)
+    for (int i = 0; i < channelCount; i++)
+    {
         updatePostGMValue(address + i);
     }
 
@@ -1087,12 +1092,16 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
         currentValue = qint32(CLAMP((qint32)currentValue + (qint32)value - RELATIVE_ZERO_16BIT, 0, 0xFFFF));
 
-        // In relative mode, ALWAYS allow updates (no guard for LSB)
-        // The 16-bit value includes both MSB and LSB deltas
+        // ⭐ STEP 1: First, write ALL values to preGM
         for (int i = 0; i < channelCount; i++)
         {
             (*m_preGMValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
             (*m_blackoutValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
+        }
+        
+        // ⭐ STEP 2: Then process them (now LSB is already in preGM when MSB reads it!)
+        for (int i = 0; i < channelCount; i++)
+        {
             updatePostGMValue(address + i);
         }
     }
