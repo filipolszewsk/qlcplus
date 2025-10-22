@@ -1095,12 +1095,11 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
         short newVal = uchar((*m_preGMValues)[address]);
         newVal += short(value) - RELATIVE_ZERO_8BIT;
         
-        // ⭐ GUARD: Don't overwrite preGM for LSB channels of Pan/Tilt pairs
-        if (!m_panTiltLSBChannels.contains(address))
-        {
-            (*m_preGMValues)[address] = char(CLAMP(newVal, 0, UCHAR_MAX));
-            (*m_blackoutValues)[address] = char(CLAMP(newVal, 0, UCHAR_MAX));
-        }
+        // In relative mode, ALWAYS allow updates (no guard for LSB)
+        // Both MSB and LSB get their own relative deltas
+        (*m_preGMValues)[address] = char(CLAMP(newVal, 0, UCHAR_MAX));
+        (*m_blackoutValues)[address] = char(CLAMP(newVal, 0, UCHAR_MAX));
+        
         updatePostGMValue(address);
     }
     else
@@ -1111,19 +1110,12 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
 
         currentValue = qint32(CLAMP((qint32)currentValue + (qint32)value - RELATIVE_ZERO_16BIT, 0, 0xFFFF));
 
-        // ⭐ Special handling for Pan/Tilt MSB channels in relative mode
-        // In relative mode, we need to update BOTH MSB and LSB before scaling
-        bool isPanTiltMSB = isPanTiltChannel(address);
-        
+        // In relative mode, ALWAYS allow updates (no guard for LSB)
+        // The 16-bit value includes both MSB and LSB deltas
         for (int i = 0; i < channelCount; i++)
         {
-            // For Pan/Tilt MSB, ALLOW writing both MSB and LSB in relative mode
-            // The scaling will happen in updatePostGMValue() with both values updated
-            if (isPanTiltMSB || !m_panTiltLSBChannels.contains(address + i))
-            {
-                (*m_preGMValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
-                (*m_blackoutValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
-            }
+            (*m_preGMValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
+            (*m_blackoutValues)[address + i] = ((uchar *)&currentValue)[channelCount - 1 - i];
             updatePostGMValue(address + i);
         }
     }
