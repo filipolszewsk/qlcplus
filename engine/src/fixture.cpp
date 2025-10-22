@@ -1161,6 +1161,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     QList<int> forcedLTP;
     QList<quint32>modifierIndices;
     QList<ChannelModifier *>modifierPointers;
+    QMap<int, PanTiltRange> tempPanTiltRanges;
 
     if (xmlDoc.name() != KXMLFixture)
     {
@@ -1266,7 +1267,8 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
             range.panMax = attrs.value(KXMLFixturePanMax).toString().toDouble();
             range.tiltMin = attrs.value(KXMLFixtureTiltMin).toString().toDouble();
             range.tiltMax = attrs.value(KXMLFixtureTiltMax).toString().toDouble();
-            setPanTiltRange(head, range);
+            // Store temporarily - will be applied after fixture mode is set
+            tempPanTiltRanges[head] = range;
             xmlDoc.skipCurrentElement();
         }
         else
@@ -1379,6 +1381,15 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setForcedLTPChannels(forcedLTP);
     for (int i = 0; i < modifierIndices.count(); i++)
         setChannelModifier(modifierIndices.at(i), modifierPointers.at(i));
+    
+    // Apply Pan/Tilt ranges (now that fixture mode is set and heads() is valid)
+    QMapIterator<int, PanTiltRange> ptIt(tempPanTiltRanges);
+    while (ptIt.hasNext())
+    {
+        ptIt.next();
+        setPanTiltRange(ptIt.key(), ptIt.value());
+    }
+    
     setID(id);
 
     return true;
