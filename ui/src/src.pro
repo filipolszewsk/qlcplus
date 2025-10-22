@@ -60,6 +60,7 @@ HEADERS += aboutbox.h \
            channelmodifiereditor.h \
            channelmodifiergraphicsview.h \
            channelsselection.h \
+           pantiltrangeeditor.h \
            chasereditor.h \
            clickandgoslider.h \
            clickandgowidget.h \
@@ -185,6 +186,7 @@ FORMS += aboutbox.ui \
          chasereditor.ui \
          channelmodifiereditor.ui \
          channelsselection.ui \
+         pantiltrangeeditor.ui \
          collectioneditor.ui \
          createfixturegroup.ui \
          customfeedbackdialog.ui \
@@ -242,6 +244,7 @@ SOURCES += aboutbox.cpp \
            channelmodifiereditor.cpp \
            channelmodifiergraphicsview.cpp \
            channelsselection.cpp \
+           pantiltrangeeditor.cpp \
            chasereditor.cpp \
            clickandgoslider.cpp \
            clickandgowidget.cpp \

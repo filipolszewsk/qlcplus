@@ -62,11 +62,35 @@ class Doc;
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
 #define KXMLFixtureModifierName     QStringLiteral("Name")
 
+#define KXMLFixturePanTiltRange     QStringLiteral("PanTiltRange")
+#define KXMLFixturePanTiltHead      QStringLiteral("Head")
+#define KXMLFixturePanTiltEnabled   QStringLiteral("Enabled")
+#define KXMLFixturePanMin           QStringLiteral("PanMin")
+#define KXMLFixturePanMax           QStringLiteral("PanMax")
+#define KXMLFixtureTiltMin          QStringLiteral("TiltMin")
+#define KXMLFixtureTiltMax          QStringLiteral("TiltMax")
+
 typedef struct
 {
     bool m_hasAlias;        /** Flag to enable/disable aliases check */
     QLCCapability *m_currCap; /** The current capability in use */
 } ChannelAlias;
+
+struct PanTiltRange
+{
+    bool enabled;           /** Flag to enable/disable custom range */
+    qreal panMin;           /** Minimum Pan angle in degrees (absolute: 0-540) */
+    qreal panMax;           /** Maximum Pan angle in degrees (absolute: 0-540) */
+    qreal tiltMin;          /** Minimum Tilt angle in degrees (absolute: 0-270) */
+    qreal tiltMax;          /** Maximum Tilt angle in degrees (absolute: 0-270) */
+    
+    /** Default constructor */
+    PanTiltRange() : enabled(false), panMin(0), panMax(0), tiltMin(0), tiltMax(0) {}
+    
+    /** Constructor with values */
+    PanTiltRange(bool en, qreal pMin, qreal pMax, qreal tMin, qreal tMax)
+        : enabled(en), panMin(pMin), panMax(pMax), tiltMin(tMin), tiltMax(tMax) {}
+};
 
 class Fixture : public QObject
 {
@@ -327,6 +351,18 @@ public:
      *  Returns NULL if no modifier has been assigned */
     ChannelModifier *channelModifier(quint32 idx);
 
+    /** Set a custom Pan/Tilt range for the given head */
+    void setPanTiltRange(int head, const PanTiltRange &range);
+
+    /** Get the custom Pan/Tilt range for the given head */
+    PanTiltRange getPanTiltRange(int head) const;
+
+    /** Check if a head has a custom Pan/Tilt range enabled */
+    bool hasPanTiltRange(int head) const;
+
+    /** Clear the custom Pan/Tilt range for the given head */
+    void clearPanTiltRange(int head);
+
 protected:
     /** Find and store channel numbers (pan, tilt, intensity) */
     void findChannels();
@@ -354,6 +390,9 @@ protected:
      *  This is basically the place to store them to be saved/loaded
      *  on the project XML file */
     QMap<quint32, ChannelModifier*> m_channelModifiers;
+
+    /** Map holding custom Pan/Tilt ranges per head index */
+    QMap<int, PanTiltRange> m_panTiltRanges;
 
     /*********************************************************************
      * Channel info

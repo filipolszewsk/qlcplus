@@ -24,9 +24,13 @@
 #include <QSettings>
 
 #include "channelmodifiereditor.h"
+#include "pantiltrangeeditor.h"
 #include "channelsselection.h"
 #include "channelmodifier.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
 #include "universe.h"
 #include "doc.h"
 
@@ -35,8 +39,9 @@
 #define KColumnSelection    2
 #define KColumnBehaviour    3
 #define KColumnModifier     4
-#define KColumnChIdx        5
-#define KColumnID           6
+#define KColumnPanTiltRange 5
+#define KColumnChIdx        6
+#define KColumnID           7
 
 #define SETTINGS_GEOMETRY "channelsselection/geometry"
 
@@ -60,7 +65,7 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
     {
         setWindowTitle(tr("Channel properties configuration"));
         setWindowIcon(QIcon(":/fade.png"));
-        hdrLabels << tr("Can fade") << tr("Behaviour") << tr("Modifier");
+        hdrLabels << tr("Can fade") << tr("Behaviour") << tr("Modifier") << tr("Pan/Tilt Range");
     }
 
     m_channelsTree->setHeaderLabels(hdrLabels);
@@ -194,6 +199,50 @@ void ChannelsSelection::updateFixturesTree()
                         this, SLOT(slotComboChanged(int)));
                 connect(button, SIGNAL(clicked()),
                         this, SLOT(slotModifierButtonClicked()));
+                
+                // Add Pan/Tilt range button for Pan/Tilt channels
+                if (channel->group() == QLCChannel::Pan || channel->group() == QLCChannel::Tilt)
+                {
+                    QPushButton *ptButton = new QPushButton();
+                    ptButton->setMaximumWidth(80);
+                    
+                    // Determine head index for this channel
+                    int headIdx = -1;
+                    for (int h = 0; h < fxi->heads(); h++)
+                    {
+                        quint32 chNum = fxi->channelNumber(
+                            channel->group() == QLCChannel::Pan ? QLCChannel::Pan : QLCChannel::Tilt,
+                            QLCChannel::MSB, h);
+                        if (chNum == c)
+                        {
+                            headIdx = h;
+                            break;
+                        }
+                    }
+                    
+                    if (headIdx >= 0)
+                    {
+                        ptButton->setProperty("fixtureID", fxi->id());
+                        ptButton->setProperty("headIndex", headIdx);
+                        ptButton->setProperty("treeItem", QVariant::fromValue((void *)item));
+                        
+                        if (fxi->hasPanTiltRange(headIdx))
+                        {
+                            PanTiltRange range = fxi->getPanTiltRange(headIdx);
+                            ptButton->setText(QString("P:%1-%2 T:%3-%4")
+                                             .arg((int)range.panMin).arg((int)range.panMax)
+                                             .arg((int)range.tiltMin).arg((int)range.tiltMax));
+                        }
+                        else
+                        {
+                            ptButton->setText("...");
+                        }
+                        
+                        connect(ptButton, SIGNAL(clicked()),
+                                this, SLOT(slotPanTiltRangeButtonClicked()));
+                        m_channelsTree->setItemWidget(item, KColumnPanTiltRange, ptButton);
+                    }
+                }
             }
             else
             {
@@ -331,6 +380,91 @@ void ChannelsSelection::slotModifierButtonClicked()
             if (chButton != NULL)
                 chButton->setText(displayName);
         }
+    }
+}
+
+void ChannelsSelection::slotPanTiltRangeButtonClicked()
+{
+    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    if (btn == NULL)
+        return;
+    
+    quint32 fxID = btn->property("fixtureID").toUInt();
+    int headIdx = btn->property("headIndex").toInt();
+    
+    Fixture *fxi = m_doc->fixture(fxID);
+    if (!fxi)
+        return;
+    
+    QLCFixtureMode* mode = fxi->fixtureMode();
+    if (!mode)
+        return;
+    
+    QLCPhysical phy = mode->physical();
+    qreal panMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360;
+    qreal tiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270;
+    
+    PanTiltRangeEditor editor(this);
+    editor.setPhysicalLimits(panMax, tiltMax);
+    editor.setRange(fxi->getPanTiltRange(headIdx));
+    
+    if (editor.exec() == QDialog::Accepted)
+    {
+        PanTiltRange range = editor.getRange();
+        fxi->setPanTiltRange(headIdx, range);
+        
+        // Update button text
+        if (range.enabled)
+        {
+            btn->setText(QString("P:%1-%2 T:%3-%4")
+                        .arg((int)range.panMin).arg((int)range.panMax)
+                        .arg((int)range.tiltMin).arg((int)range.tiltMax));
+        }
+        else
+        {
+            btn->setText("...");
+        }
+        
+        // Apply to same type fixtures if checkbox checked
+        if (m_applyAllCheck->isChecked())
+        {
+            QVariant var = btn->property("treeItem");
+            QTreeWidgetItem *item = (QTreeWidgetItem *)var.value<void *>();
+            
+            foreach (QTreeWidgetItem *chItem, getSameChannels(item))
+            {
+                quint32 chFxID = chItem->text(KColumnID).toUInt();
+                Fixture *chFxi = m_doc->fixture(chFxID);
+                if (chFxi && chFxi->id() != fxID &&
+                    chFxi->fixtureDef() == fxi->fixtureDef() &&
+                    chFxi->fixtureMode() == fxi->fixtureMode())
+                {
+                    chFxi->setPanTiltRange(headIdx, range);
+                    
+                    // Update button for this channel too
+                    QPushButton *chButton = qobject_cast<QPushButton *>(
+                        m_channelsTree->itemWidget(chItem, KColumnPanTiltRange));
+                    if (chButton != NULL)
+                    {
+                        if (range.enabled)
+                        {
+                            chButton->setText(QString("P:%1-%2 T:%3-%4")
+                                            .arg((int)range.panMin).arg((int)range.panMax)
+                                            .arg((int)range.tiltMin).arg((int)range.tiltMax));
+                        }
+                        else
+                        {
+                            chButton->setText("...");
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Trigger Universe update to register/unregister Pan/Tilt pairs
+        m_doc->updateFixtureChannelCapabilities(fxID, 
+                                                fxi->forcedHTPChannels(),
+                                                fxi->forcedLTPChannels());
     }
 }
 

@@ -89,6 +89,9 @@ protected slots:
     /** Slot called when user clicks on a channel modifier button */
     void slotModifierButtonClicked();
 
+    /** Slot called when user clicks on a Pan/Tilt range button */
+    void slotPanTiltRangeButtonClicked();
+
     /** Callback for OK button clicks */
     void accept();
 };

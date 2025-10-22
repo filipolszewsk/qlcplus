@@ -38,6 +38,7 @@ add_library(${module_name}
     channelmodifiereditor.cpp channelmodifiereditor.h channelmodifiereditor.ui
     channelmodifiergraphicsview.cpp channelmodifiergraphicsview.h
     channelsselection.cpp channelsselection.h channelsselection.ui
+    pantiltrangeeditor.cpp pantiltrangeeditor.h pantiltrangeeditor.ui
     chasereditor.cpp chasereditor.h chasereditor.ui
     clickandgoslider.cpp clickandgoslider.h
     clickandgowidget.cpp clickandgowidget.h

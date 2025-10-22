@@ -49,6 +49,7 @@
 #include "T5U2TTTZLX/moc_monitorfixturepropertieseditor.cpp"
 #include "T5U2TTTZLX/moc_monitorgraphicsview.cpp"
 #include "EWIEGA46WW/moc_palettegenerator.cpp"
+#include "EWIEGA46WW/moc_pantiltrangeeditor.cpp"
 #include "EWIEGA46WW/moc_playbackslider.cpp"
 #include "EWIEGA46WW/moc_positiontool.cpp"
 #include "EWIEGA46WW/moc_rdmmanager.cpp"

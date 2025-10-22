@@ -62,6 +62,24 @@ class Doc;
 #define KXMLQLCUniverseProfileName      QStringLiteral("Profile")
 #define KXMLQLCUniversePluginParameters QStringLiteral("PluginParameters")
 
+/** Structure to hold Pan/Tilt channel pair information for range scaling */
+struct PanTiltChannelPair
+{
+    quint32 fixtureID;      /** ID of fixture this channel belongs to */
+    quint32 channelIndex;   /** MSB channel index within fixture */
+    int headIndex;          /** Index of the fixture head */
+    bool isPan;             /** true = Pan, false = Tilt */
+    ushort msbChannel;      /** Absolute MSB channel in universe (0-511) */
+    ushort lsbChannel;      /** Absolute LSB channel in universe (invalid if 8-bit only) */
+    qreal rangeMin;         /** Custom range minimum in degrees (absolute: 0-540) */
+    qreal rangeMax;         /** Custom range maximum in degrees (absolute: 0-540) */
+    qreal physicalMax;      /** Physical limit from fixture definition (540 for Pan, 270 for Tilt) */
+    
+    PanTiltChannelPair() : fixtureID(0), channelIndex(0), headIndex(0), isPan(true),
+                           msbChannel(0), lsbChannel(QLCChannel::invalid()),
+                           rangeMin(0), rangeMax(0), physicalMax(360) {}
+};
+
 /** Universe class contains input/output data for one DMX universe
  */
 class Universe: public QThread
@@ -311,6 +329,15 @@ public:
       * or NULL if none or not valid */
     ChannelModifier *channelModifier(ushort channel);
 
+    /** Register a Pan/Tilt channel pair for range scaling */
+    void registerPanTiltPair(const PanTiltChannelPair &pair);
+
+    /** Unregister a Pan/Tilt channel pair */
+    void unregisterPanTiltPair(ushort msbChannel);
+
+    /** Check if a channel is registered as a Pan/Tilt MSB channel */
+    bool isPanTiltChannel(ushort channel) const;
+
 protected:
     /** An array of each channel's capabilities. This helps to optimize HTP/LTP/Relative checks */
     QScopedPointer<QByteArray> m_channelsMask;
@@ -322,6 +349,15 @@ protected:
     /** Modified channels with the non-modified value at 0.
      *  This is used for ranged initialization operations. */
     QScopedPointer<QByteArray> m_modifiedZeroValues;
+
+    /** Map of Pan/Tilt channel pairs for custom range scaling */
+    QMap<ushort, PanTiltChannelPair> m_panTiltPairs;
+    
+    /** Set of LSB channels that are part of Pan/Tilt pairs (for fast lookup) */
+    QSet<ushort> m_panTiltLSBChannels;
+
+    /** Apply Pan/Tilt scaling to a 16-bit channel pair */
+    void applyPanTiltScaling(ushort msbChannel);
 
     /************************************************************************
      * Faders

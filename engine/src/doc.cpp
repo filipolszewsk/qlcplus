@@ -31,6 +31,8 @@
 #endif
 
 #include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
 #include "qlcfixturedef.h"
 
 #include "monitorproperties.h"
@@ -488,6 +490,107 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
         ChannelModifier *mod = fixture->channelModifier(i);
         universes.at(uni)->setChannelModifier(addr, mod);
     }
+    
+    // Register Pan/Tilt pairs for custom range scaling
+    for (int h = 0; h < fixture->heads(); h++)
+    {
+        if (!fixture->hasPanTiltRange(h))
+            continue;
+        
+        PanTiltRange range = fixture->getPanTiltRange(h);
+        QLCFixtureMode* mode = fixture->fixtureMode();
+        if (!mode) 
+            continue;
+        
+        QLCPhysical phy = mode->physical();
+        qreal physPanMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360;
+        qreal physTiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270;
+        
+        // Register Pan channels (MSB + LSB if exists)
+        quint32 panMSB = fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB, h);
+        if (panMSB != QLCChannel::invalid())
+        {
+            PanTiltChannelPair panPair;
+            panPair.fixtureID = fixture->id();
+            panPair.channelIndex = panMSB;
+            panPair.headIndex = h;
+            panPair.isPan = true;
+            
+            quint32 addr = fxAddress + panMSB;
+            quint32 targetUni = uni;
+            if (crossUniverse)
+            {
+                targetUni = floor((fixture->universeAddress() + panMSB) / 512);
+                addr = (fixture->universeAddress() + panMSB) - (targetUni * 512);
+            }
+            panPair.msbChannel = addr;
+            
+            quint32 panLSB = fixture->channelNumber(QLCChannel::Pan, QLCChannel::LSB, h);
+            if (panLSB != QLCChannel::invalid())
+            {
+                quint32 lsbAddr = fxAddress + panLSB;
+                if (crossUniverse)
+                {
+                    quint32 lsbUni = floor((fixture->universeAddress() + panLSB) / 512);
+                    lsbAddr = (fixture->universeAddress() + panLSB) - (lsbUni * 512);
+                }
+                panPair.lsbChannel = lsbAddr;
+            }
+            else
+            {
+                panPair.lsbChannel = QLCChannel::invalid();
+            }
+            
+            panPair.rangeMin = qMax(range.panMin, qreal(0));
+            panPair.rangeMax = qMin(range.panMax, physPanMax);
+            panPair.physicalMax = physPanMax;
+            
+            universes.at(targetUni)->registerPanTiltPair(panPair);
+        }
+        
+        // Register Tilt channels (MSB + LSB if exists)
+        quint32 tiltMSB = fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, h);
+        if (tiltMSB != QLCChannel::invalid())
+        {
+            PanTiltChannelPair tiltPair;
+            tiltPair.fixtureID = fixture->id();
+            tiltPair.channelIndex = tiltMSB;
+            tiltPair.headIndex = h;
+            tiltPair.isPan = false;
+            
+            quint32 addr = fxAddress + tiltMSB;
+            quint32 targetUni = uni;
+            if (crossUniverse)
+            {
+                targetUni = floor((fixture->universeAddress() + tiltMSB) / 512);
+                addr = (fixture->universeAddress() + tiltMSB) - (targetUni * 512);
+            }
+            tiltPair.msbChannel = addr;
+            
+            quint32 tiltLSB = fixture->channelNumber(QLCChannel::Tilt, QLCChannel::LSB, h);
+            if (tiltLSB != QLCChannel::invalid())
+            {
+                quint32 lsbAddr = fxAddress + tiltLSB;
+                if (crossUniverse)
+                {
+                    quint32 lsbUni = floor((fixture->universeAddress() + tiltLSB) / 512);
+                    lsbAddr = (fixture->universeAddress() + tiltLSB) - (lsbUni * 512);
+                }
+                tiltPair.lsbChannel = lsbAddr;
+            }
+            else
+            {
+                tiltPair.lsbChannel = QLCChannel::invalid();
+            }
+            
+            tiltPair.rangeMin = qMax(range.tiltMin, qreal(0));
+            tiltPair.rangeMax = qMin(range.tiltMax, physTiltMax);
+            tiltPair.physicalMax = physTiltMax;
+            
+            universes.at(targetUni)->registerPanTiltPair(tiltPair);
+        }
+    }
+    
     inputOutputMap()->releaseUniverses(true);
 
     emit fixtureAdded(id);
@@ -651,6 +754,76 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
         // Apply a channel modifier, if defined
         ChannelModifier *mod = fixture->channelModifier(i);
         universe->setChannelModifier(fxAddress + i, mod);
+    }
+    
+    // Unregister old Pan/Tilt pairs
+    for (int h = 0; h < fixture->heads(); h++)
+    {
+        quint32 panMSB = fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB, h);
+        if (panMSB != QLCChannel::invalid())
+            universe->unregisterPanTiltPair(fxAddress + panMSB);
+        
+        quint32 tiltMSB = fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, h);
+        if (tiltMSB != QLCChannel::invalid())
+            universe->unregisterPanTiltPair(fxAddress + tiltMSB);
+    }
+    
+    // Re-register Pan/Tilt pairs with updated settings
+    for (int h = 0; h < fixture->heads(); h++)
+    {
+        if (!fixture->hasPanTiltRange(h))
+            continue;
+        
+        PanTiltRange range = fixture->getPanTiltRange(h);
+        QLCFixtureMode* mode = fixture->fixtureMode();
+        if (!mode) 
+            continue;
+        
+        QLCPhysical phy = mode->physical();
+        qreal physPanMax = phy.focusPanMax() > 0 ? phy.focusPanMax() : 360;
+        qreal physTiltMax = phy.focusTiltMax() > 0 ? phy.focusTiltMax() : 270;
+        
+        // Register Pan channels
+        quint32 panMSB = fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB, h);
+        if (panMSB != QLCChannel::invalid())
+        {
+            PanTiltChannelPair panPair;
+            panPair.fixtureID = fixture->id();
+            panPair.channelIndex = panMSB;
+            panPair.headIndex = h;
+            panPair.isPan = true;
+            panPair.msbChannel = fxAddress + panMSB;
+            
+            quint32 panLSB = fixture->channelNumber(QLCChannel::Pan, QLCChannel::LSB, h);
+            panPair.lsbChannel = (panLSB != QLCChannel::invalid()) ? fxAddress + panLSB : QLCChannel::invalid();
+            
+            panPair.rangeMin = qMax(range.panMin, qreal(0));
+            panPair.rangeMax = qMin(range.panMax, physPanMax);
+            panPair.physicalMax = physPanMax;
+            
+            universe->registerPanTiltPair(panPair);
+        }
+        
+        // Register Tilt channels
+        quint32 tiltMSB = fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, h);
+        if (tiltMSB != QLCChannel::invalid())
+        {
+            PanTiltChannelPair tiltPair;
+            tiltPair.fixtureID = fixture->id();
+            tiltPair.channelIndex = tiltMSB;
+            tiltPair.headIndex = h;
+            tiltPair.isPan = false;
+            tiltPair.msbChannel = fxAddress + tiltMSB;
+            
+            quint32 tiltLSB = fixture->channelNumber(QLCChannel::Tilt, QLCChannel::LSB, h);
+            tiltPair.lsbChannel = (tiltLSB != QLCChannel::invalid()) ? fxAddress + tiltLSB : QLCChannel::invalid();
+            
+            tiltPair.rangeMin = qMax(range.tiltMin, qreal(0));
+            tiltPair.rangeMax = qMin(range.tiltMax, physTiltMax);
+            tiltPair.physicalMax = physTiltMax;
+            
+            universe->registerPanTiltPair(tiltPair);
+        }
     }
 
     inputOutputMap()->releaseUniverses(true);

@@ -560,6 +560,27 @@ ChannelModifier *Fixture::channelModifier(quint32 idx)
     return m_channelModifiers.value(idx, NULL);
 }
 
+void Fixture::setPanTiltRange(int head, const PanTiltRange &range)
+{
+    if (head >= 0 && head < heads())
+        m_panTiltRanges[head] = range;
+}
+
+PanTiltRange Fixture::getPanTiltRange(int head) const
+{
+    return m_panTiltRanges.value(head, PanTiltRange());
+}
+
+bool Fixture::hasPanTiltRange(int head) const
+{
+    return m_panTiltRanges.contains(head) && m_panTiltRanges[head].enabled;
+}
+
+void Fixture::clearPanTiltRange(int head)
+{
+    m_panTiltRanges.remove(head);
+}
+
 /*********************************************************************
  * Channel info
  *********************************************************************/
@@ -783,7 +804,16 @@ QRectF Fixture::degreesRange(int head) const
 
         if (pan != 0 && tilt != 0)
         {
-            return QRectF(-pan/2, -tilt/2, pan, tilt);
+            // If custom range enabled for this head, return it
+            if (hasPanTiltRange(head))
+            {
+                PanTiltRange range = getPanTiltRange(head);
+                return QRectF(range.panMin, range.tiltMin, 
+                              range.panMax - range.panMin, 
+                              range.tiltMax - range.tiltMin);
+            }
+            // Otherwise return physical limits as absolute range (0-540 not ±270)
+            return QRectF(0, 0, pan, tilt);
         }
     }
 
@@ -1226,6 +1256,19 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
                 xmlDoc.skipCurrentElement();
             }
         }
+        else if (xmlDoc.name() == KXMLFixturePanTiltRange)
+        {
+            QXmlStreamAttributes attrs = xmlDoc.attributes();
+            int head = attrs.value(KXMLFixturePanTiltHead).toString().toInt();
+            PanTiltRange range;
+            range.enabled = (attrs.value(KXMLFixturePanTiltEnabled).toString() == "1");
+            range.panMin = attrs.value(KXMLFixturePanMin).toString().toDouble();
+            range.panMax = attrs.value(KXMLFixturePanMax).toString().toDouble();
+            range.tiltMin = attrs.value(KXMLFixtureTiltMin).toString().toDouble();
+            range.tiltMax = attrs.value(KXMLFixtureTiltMax).toString().toDouble();
+            setPanTiltRange(head, range);
+            xmlDoc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown fixture tag:" << xmlDoc.name();
@@ -1439,6 +1482,25 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
                 doc->writeAttribute(KXMLFixtureModifierName, mod->name());
                 doc->writeEndElement();
             }
+        }
+    }
+
+    // Save Pan/Tilt ranges
+    {
+        QMapIterator<int, PanTiltRange> it(m_panTiltRanges);
+        while (it.hasNext())
+        {
+            it.next();
+            const PanTiltRange &range = it.value();
+            
+            doc->writeStartElement(KXMLFixturePanTiltRange);
+            doc->writeAttribute(KXMLFixturePanTiltHead, QString::number(it.key()));
+            doc->writeAttribute(KXMLFixturePanTiltEnabled, range.enabled ? "1" : "0");
+            doc->writeAttribute(KXMLFixturePanMin, QString::number(range.panMin));
+            doc->writeAttribute(KXMLFixturePanMax, QString::number(range.panMax));
+            doc->writeAttribute(KXMLFixtureTiltMin, QString::number(range.tiltMin));
+            doc->writeAttribute(KXMLFixtureTiltMax, QString::number(range.tiltMax));
+            doc->writeEndElement();
         }
     }
 
