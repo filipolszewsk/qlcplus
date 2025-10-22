@@ -546,23 +546,36 @@ void Universe::updatePostGMValue(int channel)
     if (m_panTiltLSBChannels.contains(channel))
         return;
     
-    uchar value = preGMValue(channel);
-
-    if (value != 0)
-        value = applyGM(channel, value);
-
-    value = applyModifiers(channel, value);
-    
-    // ⭐ Apply Pan/Tilt scaling AFTER modifiers (like channel modifier)
-    // This converts 8-bit MSB → 16-bit (MSB+LSB) and writes to postGM
+    // ⭐ Pan/Tilt MSB: operate on full 16-bit (MSB+LSB as pair)
     if (isPanTiltChannel(channel))
     {
-        value = applyPassthrough(channel, value);
-        applyPanTiltScaling(channel, value);
+        const PanTiltChannelPair &pair = m_panTiltPairs[channel];
+        
+        // Read FULL 16-bit from preGM
+        uchar msb = preGMValue(pair.msbChannel);
+        uchar lsb = 0;
+        if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel < UNIVERSE_SIZE)
+            lsb = preGMValue(pair.lsbChannel);
+        
+        // Apply GM and modifiers to MSB only (LSB stays as-is for precision)
+        msb = applyGM(pair.msbChannel, msb);
+        msb = applyModifiers(pair.msbChannel, msb);
+        msb = applyPassthrough(pair.msbChannel, msb);
+        
+        // Reconstruct 16-bit with modified MSB
+        quint16 value16bit = (msb << 8) | lsb;
+        
+        // ⭐ FIXTURE RANGE: Scale full 16-bit → custom range → physical 16-bit
+        applyPanTiltScaling(pair.msbChannel, value16bit);
         // LSB postGM is already updated by applyPanTiltScaling()
         return;
     }
     
+    // Normal channels (8-bit)
+    uchar value = preGMValue(channel);
+    if (value != 0)
+        value = applyGM(channel, value);
+    value = applyModifiers(channel, value);
     value = applyPassthrough(channel, value);
     (*m_postGMValues)[channel] = static_cast<char>(value);
 }
@@ -934,19 +947,19 @@ bool Universe::isPanTiltChannel(ushort channel) const
     return m_panTiltPairs.contains(channel);
 }
 
-void Universe::applyPanTiltScaling(ushort msbChannel, uchar msbValue)
+void Universe::applyPanTiltScaling(ushort msbChannel, quint16 value16bit)
 {
     if (!m_panTiltPairs.contains(msbChannel))
         return;
     
     const PanTiltChannelPair &pair = m_panTiltPairs[msbChannel];
     
-    // Input: 8-bit MSB value (AFTER GM and modifiers, like channel modifier)
-    // We treat this as the full range input (0-255 → full custom range)
+    // Input: 16-bit value (AFTER GM and modifiers applied to MSB)
+    // Scale: 16-bit input → custom range degrees → physical 16-bit output
     
-    // STEP 1: Map 8-bit input (0-255) → custom range degrees (absolute 0-540)
+    // STEP 1: Map 16-bit input (0-65535) → custom range degrees (absolute 0-540)
     qreal customSpan = pair.rangeMax - pair.rangeMin;
-    qreal degrees = pair.rangeMin + (msbValue / 255.0) * customSpan;
+    qreal degrees = pair.rangeMin + (value16bit / 65535.0) * customSpan;
     
     // STEP 2: Map degrees (absolute) → physical DMX output (16-bit)
     qreal normalized = degrees / pair.physicalMax;  // 0.0 to 1.0
@@ -959,7 +972,7 @@ void Universe::applyPanTiltScaling(ushort msbChannel, uchar msbValue)
     
     qDebug() << "[PanTilt Scale]" << (pair.isPan ? "Pan" : "Tilt")
              << "Head:" << pair.headIndex
-             << "8-bit In:" << (int)msbValue << "→ Degrees:" << degrees 
+             << "16-bit In:" << value16bit << "→ Degrees:" << degrees 
              << "→ 16-bit Out:" << dmxOutput << "(" << (dmxOutput >> 8) << "," << (dmxOutput & 0xFF) << ")";
 }
 

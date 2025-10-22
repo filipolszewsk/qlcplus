@@ -357,7 +357,7 @@ protected:
     QSet<ushort> m_panTiltLSBChannels;
 
     /** Apply Pan/Tilt scaling to a 16-bit channel pair (post-modifier, like channel modifier) */
-    void applyPanTiltScaling(ushort msbChannel, uchar msbValue);
+    void applyPanTiltScaling(ushort msbChannel, quint16 value16bit);
 
     /************************************************************************
      * Faders
