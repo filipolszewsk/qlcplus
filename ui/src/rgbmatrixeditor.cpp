@@ -217,22 +217,20 @@ void RGBMatrixEditor::init()
     updateSpeedDials();
 
     // Create per-definition channel mapping UI
-    m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"), this);
+    m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
     m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
     m_channelMappingGroup->setLayout(m_channelMappingLayout);
     m_channelMappingGroup->setVisible(false);
     
-    // Find the main layout and add the group after control mode combo
-    // We'll add it to the parent widget's layout
-    QWidget *controlsWidget = m_controlModeCombo->parentWidget();
-    if (controlsWidget != NULL)
+    // Find scrollArea's widget and add the group to its layout
+    QWidget *scrollWidget = scrollArea->widget();
+    if (scrollWidget != NULL)
     {
-        QLayout *parentLayout = controlsWidget->layout();
-        if (parentLayout != NULL && parentLayout->inherits("QVBoxLayout"))
+        QLayout *scrollLayout = scrollWidget->layout();
+        if (scrollLayout != NULL)
         {
-            QVBoxLayout *vboxLayout = qobject_cast<QVBoxLayout*>(parentLayout);
-            if (vboxLayout != NULL)
-                vboxLayout->addWidget(m_channelMappingGroup);
+            // Add the channel mapping group after other controls
+            scrollLayout->addWidget(m_channelMappingGroup);
         }
     }
     
