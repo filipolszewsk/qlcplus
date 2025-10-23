@@ -1561,43 +1561,50 @@ QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
 
 void RGBMatrixEditor::clearChannelMappingUI()
 {
-    // Usuń widgety bezpośrednio - są w m_mappingWidgets
-    foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
-    {
-        if (widget.label != NULL)
-            delete widget.label;
-        if (widget.channelLabel != NULL)
-            delete widget.channelLabel;
-        if (widget.channelCombo != NULL)
-            delete widget.channelCombo;
-        if (widget.paramLabel != NULL)
-            delete widget.paramLabel;
-        if (widget.valueIndexCombo != NULL)
-            delete widget.valueIndexCombo;
-    }
-    m_mappingWidgets.clear();
+    qDebug() << "clearChannelMappingUI: Clearing" << m_mappingWidgets.count() << "widget groups";
     
-    // Teraz wyczyść layout (powinien być już pusty po delete widgetów)
+    // NAJPIERW usuń sublayouty z głównego layoutu i ich zawartość
     if (m_channelMappingLayout != NULL)
     {
         QLayoutItem *item;
         while ((item = m_channelMappingLayout->takeAt(0)) != NULL)
         {
+            // Jeśli to sublayout (QHBoxLayout), usuń wszystkie jego widgety
             if (item->layout())
             {
                 QLayout *sublayout = item->layout();
-                // Sublayout powinien być już pusty
-                while (sublayout->takeAt(0) != NULL) {}
+                QLayoutItem *subitem;
+                
+                // Usuń wszystkie widgety z sublayoutu
+                while ((subitem = sublayout->takeAt(0)) != NULL)
+                {
+                    if (subitem->widget())
+                    {
+                        delete subitem->widget();  // Teraz można bezpiecznie usunąć
+                    }
+                    delete subitem;
+                }
                 delete sublayout;
+            }
+            // Jeśli widget bezpośrednio w main layout
+            else if (item->widget())
+            {
+                delete item->widget();
             }
             delete item;
         }
     }
+    
+    // Wyczyść listę tracking
+    m_mappingWidgets.clear();
 }
 
 void RGBMatrixEditor::updateChannelMappingUI()
 {
     clearChannelMappingUI();
+    
+    // Wymuś przetworzenie eventów Qt przed dodaniem nowych widgetów
+    QCoreApplication::processEvents();
 
     if (m_channelMappingGroup == NULL || m_channelMappingLayout == NULL)
         return;
