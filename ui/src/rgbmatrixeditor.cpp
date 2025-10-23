@@ -1561,58 +1561,50 @@ QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
 
 void RGBMatrixEditor::clearChannelMappingUI()
 {
-    qDebug() << "clearChannelMappingUI: Clearing" << m_mappingWidgets.count() << "widget groups";
-    
-    // NAJPIERW usuń wszystkie dzieci z m_channelMappingGroup bezpośrednio
+    // NAJPROSTSZE ROZWIĄZANIE: Usuń CAŁY groupbox i utwórz nowy!
     if (m_channelMappingGroup != NULL)
     {
-        QList<QWidget*> children = m_channelMappingGroup->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
-        qDebug() << "Found" << children.count() << "direct children to delete";
-        foreach (QWidget *child, children)
-        {
-            delete child;
-        }
+        // Znajdź parent layout gdzie jest m_channelMappingGroup
+        QWidget *parent = m_channelMappingGroup->parentWidget();
+        QLayout *parentLayout = NULL;
+        
+        if (parent != NULL)
+            parentLayout = parent->layout();
+        
+        // Usuń groupbox z parent layoutu
+        if (parentLayout != NULL)
+            parentLayout->removeWidget(m_channelMappingGroup);
+        
+        // Usuń cały groupbox wraz ze wszystkimi dziećmi
+        m_channelMappingGroup->deleteLater();
+        m_channelMappingGroup = NULL;
+        m_channelMappingLayout = NULL;
     }
     
-    // Teraz wyczyść layout (powinien być już pusty)
-    if (m_channelMappingLayout != NULL)
-    {
-        QLayoutItem *item;
-        while ((item = m_channelMappingLayout->takeAt(0)) != NULL)
-        {
-            if (item->layout())
-            {
-                QLayout *sublayout = item->layout();
-                // Sublayout powinien być już pusty po delete children
-                while (sublayout->count() > 0)
-                {
-                    sublayout->takeAt(0);
-                }
-                delete sublayout;
-            }
-            delete item;
-        }
-    }
-    
-    // Wyczyść listę tracking
+    // Wyczyść tracking list
     m_mappingWidgets.clear();
 }
 
 void RGBMatrixEditor::updateChannelMappingUI()
 {
-    qDebug() << "=== updateChannelMappingUI CALLED ===";
-    qDebug() << "Before clear: layout item count =" << (m_channelMappingLayout ? m_channelMappingLayout->count() : -1);
-    
+    // ZAWSZE NAJPIERW WYCZYŚĆ (to usuwa groupbox!)
     clearChannelMappingUI();
     
-    // Wymuś przetworzenie eventów Qt przed dodaniem nowych widgetów
-    QCoreApplication::processEvents();
+    // ODTWÓRZ groupbox i layout
+    if (m_channelMappingGroup == NULL)
+    {
+        m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
+        m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
+        m_channelMappingGroup->setLayout(m_channelMappingLayout);
+        
+        // Dodaj do głównego layoutu
+        QLayout *mainLayout = this->layout();
+        if (mainLayout != NULL)
+        {
+            mainLayout->addWidget(m_channelMappingGroup);
+        }
+    }
     
-    qDebug() << "After clear: layout item count =" << (m_channelMappingLayout ? m_channelMappingLayout->count() : -1);
-
-    if (m_channelMappingGroup == NULL || m_channelMappingLayout == NULL)
-        return;
-
     FixtureGroup *grp = m_doc->fixtureGroup(m_matrix->fixtureGroup());
     if (grp == NULL)
     {
@@ -1738,9 +1730,6 @@ void RGBMatrixEditor::updateChannelMappingUI()
 
         m_mappingWidgets.append(widget);
     }
-    
-    qDebug() << "After building: layout item count =" << m_channelMappingLayout->count();
-    qDebug() << "Widget groups created:" << m_mappingWidgets.count();
 
     m_channelMappingGroup->setVisible(true);
 }
