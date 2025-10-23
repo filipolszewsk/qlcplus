@@ -39,6 +39,10 @@
 #include "speeddialwidget.h"
 #include "rgbmatrixeditor.h"
 #include "qlcfixturehead.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "fixturegroup.h"
+#include "fixture.h"
 #include "qlcmacros.h"
 #include "rgbimage.h"
 #include "sequence.h"
@@ -65,6 +69,8 @@ RGBMatrixEditor::RGBMatrixEditor(QWidget* parent, RGBMatrix* mtx, Doc* doc)
     , m_scene(new QGraphicsScene(this))
     , m_previewTimer(new QTimer(this))
     , m_previewIterator(0)
+    , m_channelMappingGroup(NULL)
+    , m_channelMappingLayout(NULL)
 {
     Q_ASSERT(doc != NULL);
     Q_ASSERT(mtx != NULL);
@@ -209,6 +215,28 @@ void RGBMatrixEditor::init()
 
     updateExtraOptions();
     updateSpeedDials();
+
+    // Create per-definition channel mapping UI
+    m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"), this);
+    m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
+    m_channelMappingGroup->setLayout(m_channelMappingLayout);
+    m_channelMappingGroup->setVisible(false);
+    
+    // Find the main layout and add the group after control mode combo
+    // We'll add it to the parent widget's layout
+    QWidget *controlsWidget = m_controlModeCombo->parentWidget();
+    if (controlsWidget != NULL)
+    {
+        QLayout *parentLayout = controlsWidget->layout();
+        if (parentLayout != NULL && parentLayout->inherits("QVBoxLayout"))
+        {
+            QVBoxLayout *vboxLayout = qobject_cast<QVBoxLayout*>(parentLayout);
+            if (vboxLayout != NULL)
+                vboxLayout->addWidget(m_channelMappingGroup);
+        }
+    }
+    
+    updateChannelMappingUI();
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
             this, SLOT(slotNameEdited(const QString&)));
@@ -869,6 +897,9 @@ void RGBMatrixEditor::slotFixtureGroupActivated(int index)
         m_previewTimer->stop();
         m_scene->clear();
     }
+    
+    // Update per-definition channel mapping UI
+    updateChannelMappingUI();
 }
 
 void RGBMatrixEditor::slotBlendModeChanged(int index)
@@ -1520,6 +1551,144 @@ void RGBMatrixEditor::slotPropertyEditChanged(QString text)
         QString pName = edit->property("pName").toString();
         m_matrix->setProperty(pName, text);
     }
+}
+
+/****************************************************************************
+ * Per-Definition Channel Mapping
+ ****************************************************************************/
+
+QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
+{
+    if (def == NULL)
+        return QString();
+
+    return QString("%1|%2").arg(def->manufacturer()).arg(def->model());
+}
+
+void RGBMatrixEditor::clearChannelMappingUI()
+{
+    // Delete all dynamically created widgets
+    foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
+    {
+        if (widget.label != NULL)
+            delete widget.label;
+        if (widget.channelCombo != NULL)
+            delete widget.channelCombo;
+    }
+    m_mappingWidgets.clear();
+}
+
+void RGBMatrixEditor::updateChannelMappingUI()
+{
+    clearChannelMappingUI();
+
+    if (m_channelMappingGroup == NULL || m_channelMappingLayout == NULL)
+        return;
+
+    FixtureGroup *grp = m_doc->fixtureGroup(m_matrix->fixtureGroup());
+    if (grp == NULL)
+    {
+        m_channelMappingGroup->setVisible(false);
+        return;
+    }
+
+    // Collect unique fixture definitions
+    QMap<QString, QPair<QLCFixtureDef*, QLCFixtureMode*>> uniqueDefs;
+    foreach (quint32 fxiId, grp->fixtureList())
+    {
+        Fixture *fxi = m_doc->fixture(fxiId);
+        if (fxi == NULL || fxi->fixtureDef() == NULL)
+            continue;
+
+        QString key = getFixtureDefKey(fxi->fixtureDef());
+        if (!uniqueDefs.contains(key))
+        {
+            uniqueDefs[key] = qMakePair(fxi->fixtureDef(), fxi->fixtureMode());
+        }
+    }
+
+    // Only show if there are multiple fixture types
+    if (uniqueDefs.size() <= 1)
+    {
+        m_channelMappingGroup->setVisible(false);
+        return;
+    }
+
+    // Create UI row for each unique definition
+    QMapIterator<QString, QPair<QLCFixtureDef*, QLCFixtureMode*>> it(uniqueDefs);
+    while (it.hasNext())
+    {
+        it.next();
+        QString key = it.key();
+        QLCFixtureDef *def = it.value().first;
+        QLCFixtureMode *mode = it.value().second;
+
+        if (def == NULL || mode == NULL)
+            continue;
+
+        FixtureDefMappingWidget widget;
+        widget.fixtureDefKey = key;
+
+        // Create label with fixture name
+        widget.label = new QLabel(def->name(), m_channelMappingGroup);
+
+        // Create combo box with channel names
+        widget.channelCombo = new QComboBox(m_channelMappingGroup);
+        widget.channelCombo->setProperty("fixtureDefKey", key);
+
+        // Add "Auto (use control mode)" option
+        widget.channelCombo->addItem(tr("Auto (use control mode)"), QString());
+
+        // Populate combo with channels from fixture mode
+        for (int i = 0; i < mode->channels().size(); i++)
+        {
+            QLCChannel *ch = mode->channel(i);
+            if (ch != NULL)
+                widget.channelCombo->addItem(ch->name(), ch->name());
+        }
+
+        // Set current selection from m_matrix->fixtureDefChannelMap()
+        QString currentMapping = m_matrix->fixtureDefChannelMapping(key);
+        if (!currentMapping.isEmpty())
+        {
+            int idx = widget.channelCombo->findData(currentMapping);
+            if (idx >= 0)
+                widget.channelCombo->setCurrentIndex(idx);
+        }
+
+        // Connect combo signal to slot
+        connect(widget.channelCombo, SIGNAL(activated(int)),
+                this, SLOT(slotChannelMappingChanged(int)));
+
+        // Add widgets to layout
+        QHBoxLayout *rowLayout = new QHBoxLayout();
+        rowLayout->addWidget(widget.label);
+        rowLayout->addWidget(widget.channelCombo, 1);
+        m_channelMappingLayout->addLayout(rowLayout);
+
+        m_mappingWidgets.append(widget);
+    }
+
+    m_channelMappingGroup->setVisible(true);
+}
+
+void RGBMatrixEditor::slotChannelMappingChanged(int index)
+{
+    Q_UNUSED(index);
+
+    QComboBox *combo = qobject_cast<QComboBox*>(sender());
+    if (combo == NULL)
+        return;
+
+    QString key = combo->property("fixtureDefKey").toString();
+    if (key.isEmpty())
+        return;
+
+    QString channelName = combo->currentData().toString();
+    m_matrix->setFixtureDefChannelMapping(key, channelName);
+
+    // Restart preview if running
+    slotRestartTest();
 }
 
 FunctionParent RGBMatrixEditor::functionParent() const

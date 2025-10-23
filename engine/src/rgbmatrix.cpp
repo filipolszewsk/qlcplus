@@ -28,11 +28,14 @@
 
 #include "rgbscriptscache.h"
 #include "qlcfixturehead.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
 #include "fixturegroup.h"
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "rgbmatrix.h"
 #include "rgbimage.h"
+#include "fixture.h"
 #include "doc.h"
 
 #define KXMLQLCRGBMatrixStartColor      QStringLiteral("MonoColor")
@@ -54,6 +57,10 @@
 #define KXMLQLCRGBMatrixControlModeUV       QStringLiteral("UV")
 #define KXMLQLCRGBMatrixControlModeDimmer   QStringLiteral("Dimmer")
 #define KXMLQLCRGBMatrixControlModeShutter  QStringLiteral("Shutter")
+
+#define KXMLQLCRGBMatrixFixtureDefChannelMap        QStringLiteral("FixtureDefChannelMap")
+#define KXMLQLCRGBMatrixFixtureDefChannelMapKey     QStringLiteral("FixtureDefKey")
+#define KXMLQLCRGBMatrixFixtureDefChannelMapName    QStringLiteral("ChannelName")
 
 /****************************************************************************
  * Initialization
@@ -186,6 +193,9 @@ bool RGBMatrix::copyFrom(const Function* function)
         it.next();
         setProperty(it.key(), it.value());
     }
+
+    // Copy fixture definition channel mappings
+    m_fixtureDefChannelMap = mtx->m_fixtureDefChannelMap;
 
     return Function::copyFrom(function);
 }
@@ -505,6 +515,14 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             setDimmerControl(root.readElementText().toInt());
         }
+        else if (root.name() == KXMLQLCRGBMatrixFixtureDefChannelMap)
+        {
+            QString key = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapKey).toString();
+            QString channelName = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapName).toString();
+            if (!key.isEmpty() && !channelName.isEmpty())
+                setFixtureDefChannelMapping(key, channelName);
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown RGB matrix tag:" << root.name();
@@ -568,6 +586,17 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
         doc->writeStartElement(KXMLQLCRGBMatrixProperty);
         doc->writeAttribute(KXMLQLCRGBMatrixPropertyName, it.key());
         doc->writeAttribute(KXMLQLCRGBMatrixPropertyValue, it.value());
+        doc->writeEndElement();
+    }
+
+    /* Fixture Definition Channel Mappings */
+    QMapIterator<QString, QString> channelMapIt(m_fixtureDefChannelMap);
+    while (channelMapIt.hasNext())
+    {
+        channelMapIt.next();
+        doc->writeStartElement(KXMLQLCRGBMatrixFixtureDefChannelMap);
+        doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapKey, channelMapIt.key());
+        doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapName, channelMapIt.value());
         doc->writeEndElement();
     }
 
@@ -835,7 +864,27 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         QVector<quint32> channelList;
         QVector<uchar> valueList;
 
-        if (m_controlMode == ControlModeRgb)
+        // Check if there's a per-definition channel mapping for this fixture
+        bool usePerDefinitionMapping = false;
+        if (fxi->fixtureDef() != NULL)
+        {
+            QString defKey = getFixtureDefKey(fxi->fixtureDef());
+            QString mappedChannelName = m_fixtureDefChannelMap.value(defKey, QString());
+            
+            if (!mappedChannelName.isEmpty())
+            {
+                // Find the channel index by name
+                quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mappedChannelName);
+                if (channelIdx != QLCChannel::invalid())
+                {
+                    channelList.append(channelIdx);
+                    valueList.append(rgbToGrey(col));
+                    usePerDefinitionMapping = true;
+                }
+            }
+        }
+
+        if (!usePerDefinitionMapping && m_controlMode == ControlModeRgb)
         {
             channelList = head.rgbChannels();
 
@@ -859,7 +908,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
             }
         }
-        else if (m_controlMode == ControlModeShutter)
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeShutter)
         {
             channelList = head.shutterChannels();
 
@@ -870,7 +919,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 valueList.append(rgbToGrey(col));
             }
         }
-        else if (m_controlMode == ControlModeDimmer || m_dimmerControl)
+        else if (!usePerDefinitionMapping && (m_controlMode == ControlModeDimmer || m_dimmerControl))
         {
             // Collect all dimmers that affect current head:
             // They are the master dimmer (affects whole fixture)
@@ -904,7 +953,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 valueList.append(rgbToGrey(col) == 0 ? 0 : 255);
             }
         }
-        else
+        else if (!usePerDefinitionMapping)
         {
             if (m_controlMode == ControlModeWhite)
                 channelList.append(head.channelNumber(QLCChannel::White, QLCChannel::MSB));
@@ -1034,6 +1083,62 @@ QString RGBMatrix::controlModeToString(RGBMatrix::ControlMode mode)
             return QString(KXMLQLCRGBMatrixControlModeShutter);
         break;
     }
+}
+
+/*************************************************************************
+ * Per-Definition Channel Mapping
+ *************************************************************************/
+
+QString RGBMatrix::getFixtureDefKey(const QLCFixtureDef *def)
+{
+    if (def == NULL)
+        return QString();
+
+    return QString("%1|%2").arg(def->manufacturer()).arg(def->model());
+}
+
+quint32 RGBMatrix::findChannelByName(const QLCFixtureMode *mode, const QString &channelName)
+{
+    if (mode == NULL || channelName.isEmpty())
+        return QLCChannel::invalid();
+
+    for (int i = 0; i < mode->channels().size(); i++)
+    {
+        QLCChannel *ch = mode->channel(i);
+        if (ch != NULL && ch->name() == channelName)
+            return i;  // Return relative channel index
+    }
+
+    return QLCChannel::invalid();
+}
+
+void RGBMatrix::setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName)
+{
+    if (fixtureDefKey.isEmpty())
+        return;
+
+    if (channelName.isEmpty())
+        m_fixtureDefChannelMap.remove(fixtureDefKey);
+    else
+        m_fixtureDefChannelMap[fixtureDefKey] = channelName;
+
+    emit changed(id());
+}
+
+QString RGBMatrix::fixtureDefChannelMapping(const QString &fixtureDefKey) const
+{
+    return m_fixtureDefChannelMap.value(fixtureDefKey, QString());
+}
+
+QMap<QString, QString> RGBMatrix::fixtureDefChannelMap() const
+{
+    return m_fixtureDefChannelMap;
+}
+
+void RGBMatrix::clearFixtureDefChannelMap()
+{
+    m_fixtureDefChannelMap.clear();
+    emit changed(id());
 }
 
 

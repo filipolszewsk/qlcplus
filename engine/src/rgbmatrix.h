@@ -316,6 +316,32 @@ public:
 
 private:
     ControlMode m_controlMode;
+
+    /*************************************************************************
+     * Per-Definition Channel Mapping
+     *************************************************************************/
+public:
+    /** Set channel mapping for a specific fixture definition */
+    void setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName);
+
+    /** Get channel mapping for a specific fixture definition */
+    QString fixtureDefChannelMapping(const QString &fixtureDefKey) const;
+
+    /** Get the entire fixture definition channel map */
+    QMap<QString, QString> fixtureDefChannelMap() const;
+
+    /** Clear all fixture definition channel mappings */
+    void clearFixtureDefChannelMap();
+
+    /** Generate fixture definition key from definition */
+    static QString getFixtureDefKey(const QLCFixtureDef *def);
+
+    /** Find channel index by name in a fixture mode */
+    static quint32 findChannelByName(const QLCFixtureMode *mode, const QString &channelName);
+
+private:
+    /** Map of fixture definition key (manufacturer|model) to channel name */
+    QMap<QString, QString> m_fixtureDefChannelMap;
 };
 
 /** @} */

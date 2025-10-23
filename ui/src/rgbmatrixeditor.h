@@ -127,10 +127,21 @@ private slots:
     void slotPropertyDoubleSpinChanged(double value);
     void slotPropertyEditChanged(QString text);
 
-private:
-    FunctionParent functionParent() const;
+    void slotChannelMappingChanged(int index);
 
 private:
+    FunctionParent functionParent() const;
+    void updateChannelMappingUI();
+    void clearChannelMappingUI();
+    QString getFixtureDefKey(const QLCFixtureDef *def);
+
+private:
+    struct FixtureDefMappingWidget {
+        QString fixtureDefKey;
+        QLabel *label;
+        QComboBox *channelCombo;
+    };
+
     Doc* m_doc;
     RGBMatrix* m_matrix; // The RGBMatrix being edited
     RGBMatrixStep *m_previewHandler;
@@ -144,6 +155,11 @@ private:
     uint m_previewIterator;
 
     QHash<QLCPoint, RGBItem*> m_previewHash;
+
+    // Per-definition channel mapping UI
+    QGroupBox *m_channelMappingGroup;
+    QVBoxLayout *m_channelMappingLayout;
+    QList<FixtureDefMappingWidget> m_mappingWidgets;
 };
 
 /** @} */
