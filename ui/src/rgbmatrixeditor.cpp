@@ -1601,10 +1601,15 @@ void RGBMatrixEditor::clearChannelMappingUI()
 
 void RGBMatrixEditor::updateChannelMappingUI()
 {
+    qDebug() << "=== updateChannelMappingUI CALLED ===";
+    qDebug() << "Before clear: layout item count =" << (m_channelMappingLayout ? m_channelMappingLayout->count() : -1);
+    
     clearChannelMappingUI();
     
     // Wymuś przetworzenie eventów Qt przed dodaniem nowych widgetów
     QCoreApplication::processEvents();
+    
+    qDebug() << "After clear: layout item count =" << (m_channelMappingLayout ? m_channelMappingLayout->count() : -1);
 
     if (m_channelMappingGroup == NULL || m_channelMappingLayout == NULL)
         return;
@@ -1663,11 +1668,11 @@ void RGBMatrixEditor::updateChannelMappingUI()
         FixtureDefMappingWidget widget;
         widget.fixtureDefKey = key;
 
-        // Create label with fixture name
-        widget.label = new QLabel(def->name(), m_channelMappingGroup);
+        // Create label with fixture name - NO parent, layout manages it
+        widget.label = new QLabel(def->name());
 
-        // Create combo box with channel names
-        widget.channelCombo = new QComboBox(m_channelMappingGroup);
+        // Create combo box with channel names - NO parent, layout manages it
+        widget.channelCombo = new QComboBox();
         widget.channelCombo->setProperty("fixtureDefKey", key);
 
         // Add "Auto (use control mode)" option
@@ -1681,8 +1686,8 @@ void RGBMatrixEditor::updateChannelMappingUI()
                 widget.channelCombo->addItem(ch->name(), ch->name());
         }
 
-        // Create value index combo box
-        widget.valueIndexCombo = new QComboBox(m_channelMappingGroup);
+        // Create value index combo box - NO parent, layout manages it
+        widget.valueIndexCombo = new QComboBox();
         widget.valueIndexCombo->setProperty("fixtureDefKey", key);
         widget.valueIndexCombo->setToolTip(tr("Which row/value index to use from the script output"));
         
@@ -1719,9 +1724,9 @@ void RGBMatrixEditor::updateChannelMappingUI()
         connect(widget.valueIndexCombo, SIGNAL(activated(int)),
                 this, SLOT(slotChannelMappingChanged(int)));
 
-        // Create and add label widgets
-        widget.channelLabel = new QLabel(tr("Channel:"), m_channelMappingGroup);
-        widget.paramLabel = new QLabel(tr("Param:"), m_channelMappingGroup);
+        // Create label widgets WITHOUT parent - layout will manage them
+        widget.channelLabel = new QLabel(tr("Channel:"));
+        widget.paramLabel = new QLabel(tr("Param:"));
         
         // Add widgets to layout
         QHBoxLayout *rowLayout = new QHBoxLayout();
@@ -1734,6 +1739,9 @@ void RGBMatrixEditor::updateChannelMappingUI()
 
         m_mappingWidgets.append(widget);
     }
+    
+    qDebug() << "After building: layout item count =" << m_channelMappingLayout->count();
+    qDebug() << "Widget groups created:" << m_mappingWidgets.count();
 
     m_channelMappingGroup->setVisible(true);
 }
