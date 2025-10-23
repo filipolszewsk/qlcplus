@@ -1561,7 +1561,21 @@ QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
 
 void RGBMatrixEditor::clearChannelMappingUI()
 {
-    // Delete all dynamically created widgets
+    // Usuń wszystkie widgety z layoutu
+    if (m_channelMappingLayout != NULL)
+    {
+        QLayoutItem *item;
+        while ((item = m_channelMappingLayout->takeAt(0)) != NULL)
+        {
+            if (item->widget())
+                delete item->widget();
+            if (item->layout())
+                delete item->layout();
+            delete item;
+        }
+    }
+    
+    // Usuń widgety z listy
     foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
     {
         if (widget.label != NULL)
