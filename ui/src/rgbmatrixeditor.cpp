@@ -872,6 +872,7 @@ void RGBMatrixEditor::slotPatternActivated(int patternIndex)
                                               m_matrix->algorithm());
     }
     updateExtraOptions();
+    updateChannelMappingUI();  // Refresh channel mapping UI to reflect new script's scriptHeight()
 
     slotRestartTest();
 }
@@ -1675,6 +1676,13 @@ void RGBMatrixEditor::updateChannelMappingUI()
             int valIdx = widget.valueIndexCombo->findData(currentMapping.valueIndex);
             if (valIdx >= 0)
                 widget.valueIndexCombo->setCurrentIndex(valIdx);
+            else
+                widget.valueIndexCombo->setCurrentIndex(0);  // Default to Row 0
+        }
+        else
+        {
+            // Default to Row 0 when no mapping exists
+            widget.valueIndexCombo->setCurrentIndex(0);
         }
 
         // Connect combo signals to slots
