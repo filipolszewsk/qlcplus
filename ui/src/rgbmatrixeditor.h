@@ -140,6 +140,7 @@ private:
         QString fixtureDefKey;
         QLabel *label;
         QComboBox *channelCombo;
+        QComboBox *valueIndexCombo;
     };
 
     Doc* m_doc;

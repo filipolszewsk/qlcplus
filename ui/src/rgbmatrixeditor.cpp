@@ -1567,6 +1567,8 @@ void RGBMatrixEditor::clearChannelMappingUI()
             delete widget.label;
         if (widget.channelCombo != NULL)
             delete widget.channelCombo;
+        if (widget.valueIndexCombo != NULL)
+            delete widget.valueIndexCombo;
     }
     m_mappingWidgets.clear();
 }
@@ -1607,6 +1609,9 @@ void RGBMatrixEditor::updateChannelMappingUI()
         return;
     }
 
+    // Get matrix height to know how many value indices are available
+    int matrixHeight = grp->size().height();
+    
     // Create UI row for each unique definition
     QMapIterator<QString, QPair<QLCFixtureDef*, QLCFixtureMode*>> it(uniqueDefs);
     while (it.hasNext())
@@ -1640,23 +1645,43 @@ void RGBMatrixEditor::updateChannelMappingUI()
                 widget.channelCombo->addItem(ch->name(), ch->name());
         }
 
-        // Set current selection from m_matrix->fixtureDefChannelMap()
-        QString currentMapping = m_matrix->fixtureDefChannelMapping(key);
-        if (!currentMapping.isEmpty())
+        // Create value index combo box
+        widget.valueIndexCombo = new QComboBox(m_channelMappingGroup);
+        widget.valueIndexCombo->setProperty("fixtureDefKey", key);
+        widget.valueIndexCombo->setToolTip(tr("Which row/value index to use from the script output"));
+        
+        // Populate with available indices (rows)
+        for (int i = 0; i < matrixHeight; i++)
         {
-            int idx = widget.channelCombo->findData(currentMapping);
-            if (idx >= 0)
-                widget.channelCombo->setCurrentIndex(idx);
+            widget.valueIndexCombo->addItem(QString("Row %1").arg(i), i);
         }
 
-        // Connect combo signal to slot
+        // Set current selection from m_matrix->fixtureDefChannelMapping()
+        RGBMatrix::FixtureDefMapping currentMapping = m_matrix->fixtureDefChannelMapping(key);
+        if (!currentMapping.channelName.isEmpty())
+        {
+            int chIdx = widget.channelCombo->findData(currentMapping.channelName);
+            if (chIdx >= 0)
+                widget.channelCombo->setCurrentIndex(chIdx);
+            
+            int valIdx = widget.valueIndexCombo->findData(currentMapping.valueIndex);
+            if (valIdx >= 0)
+                widget.valueIndexCombo->setCurrentIndex(valIdx);
+        }
+
+        // Connect combo signals to slots
         connect(widget.channelCombo, SIGNAL(activated(int)),
+                this, SLOT(slotChannelMappingChanged(int)));
+        connect(widget.valueIndexCombo, SIGNAL(activated(int)),
                 this, SLOT(slotChannelMappingChanged(int)));
 
         // Add widgets to layout
         QHBoxLayout *rowLayout = new QHBoxLayout();
         rowLayout->addWidget(widget.label);
+        rowLayout->addWidget(new QLabel(tr("Channel:"), m_channelMappingGroup));
         rowLayout->addWidget(widget.channelCombo, 1);
+        rowLayout->addWidget(new QLabel(tr("Row:"), m_channelMappingGroup));
+        rowLayout->addWidget(widget.valueIndexCombo);
         m_channelMappingLayout->addLayout(rowLayout);
 
         m_mappingWidgets.append(widget);
@@ -1677,11 +1702,21 @@ void RGBMatrixEditor::slotChannelMappingChanged(int index)
     if (key.isEmpty())
         return;
 
-    QString channelName = combo->currentData().toString();
-    m_matrix->setFixtureDefChannelMapping(key, channelName);
-
-    // Restart preview if running
-    slotRestartTest();
+    // Find the corresponding widget to get both values
+    foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
+    {
+        if (widget.fixtureDefKey == key)
+        {
+            QString channelName = widget.channelCombo->currentData().toString();
+            int valueIndex = widget.valueIndexCombo->currentData().toInt();
+            
+            m_matrix->setFixtureDefChannelMapping(key, channelName, valueIndex);
+            
+            // Restart preview if running
+            slotRestartTest();
+            break;
+        }
+    }
 }
 
 FunctionParent RGBMatrixEditor::functionParent() const

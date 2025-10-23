@@ -323,14 +323,24 @@ private:
      * Per-Definition Channel Mapping
      *************************************************************************/
 public:
+    /** Structure for fixture definition mapping */
+    struct FixtureDefMapping {
+        QString channelName;  // Which channel to use
+        int valueIndex;       // Which index from multi-value array to use
+        
+        FixtureDefMapping() : valueIndex(0) {}
+        FixtureDefMapping(const QString &ch, int idx) 
+            : channelName(ch), valueIndex(idx) {}
+    };
+
     /** Set channel mapping for a specific fixture definition */
-    void setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName);
+    void setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName, int valueIndex);
 
     /** Get channel mapping for a specific fixture definition */
-    QString fixtureDefChannelMapping(const QString &fixtureDefKey) const;
+    FixtureDefMapping fixtureDefChannelMapping(const QString &fixtureDefKey) const;
 
     /** Get the entire fixture definition channel map */
-    QMap<QString, QString> fixtureDefChannelMap() const;
+    QMap<QString, FixtureDefMapping> fixtureDefChannelMappings() const;
 
     /** Clear all fixture definition channel mappings */
     void clearFixtureDefChannelMap();
@@ -342,8 +352,8 @@ public:
     static quint32 findChannelByName(const QLCFixtureMode *mode, const QString &channelName);
 
 private:
-    /** Map of fixture definition key (manufacturer|model) to channel name */
-    QMap<QString, QString> m_fixtureDefChannelMap;
+    /** Map of fixture definition key (manufacturer|model) to mapping info */
+    QMap<QString, FixtureDefMapping> m_fixtureDefChannelMap;
 };
 
 /** @} */

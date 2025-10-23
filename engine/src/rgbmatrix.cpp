@@ -61,6 +61,7 @@
 #define KXMLQLCRGBMatrixFixtureDefChannelMap        QStringLiteral("FixtureDefChannelMap")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapKey     QStringLiteral("FixtureDefKey")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapName    QStringLiteral("ChannelName")
+#define KXMLQLCRGBMatrixFixtureDefChannelMapIndex   QStringLiteral("ValueIndex")
 
 /****************************************************************************
  * Initialization
@@ -194,7 +195,7 @@ bool RGBMatrix::copyFrom(const Function* function)
         setProperty(it.key(), it.value());
     }
 
-    // Copy fixture definition channel mappings
+    // Copy fixture definition channel mappings (now includes valueIndex)
     m_fixtureDefChannelMap = mtx->m_fixtureDefChannelMap;
 
     return Function::copyFrom(function);
@@ -519,8 +520,9 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             QString key = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapKey).toString();
             QString channelName = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapName).toString();
+            int valueIndex = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapIndex).toInt();
             if (!key.isEmpty() && !channelName.isEmpty())
-                setFixtureDefChannelMapping(key, channelName);
+                setFixtureDefChannelMapping(key, channelName, valueIndex);
             root.skipCurrentElement();
         }
         else
@@ -590,13 +592,14 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
     }
 
     /* Fixture Definition Channel Mappings */
-    QMapIterator<QString, QString> channelMapIt(m_fixtureDefChannelMap);
+    QMapIterator<QString, FixtureDefMapping> channelMapIt(m_fixtureDefChannelMap);
     while (channelMapIt.hasNext())
     {
         channelMapIt.next();
         doc->writeStartElement(KXMLQLCRGBMatrixFixtureDefChannelMap);
         doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapKey, channelMapIt.key());
-        doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapName, channelMapIt.value());
+        doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapName, channelMapIt.value().channelName);
+        doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapIndex, QString::number(channelMapIt.value().valueIndex));
         doc->writeEndElement();
     }
 
@@ -869,16 +872,28 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         if (fxi->fixtureDef() != NULL)
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
-            QString mappedChannelName = m_fixtureDefChannelMap.value(defKey, QString());
+            FixtureDefMapping mapping = m_fixtureDefChannelMap.value(defKey, FixtureDefMapping());
             
-            if (!mappedChannelName.isEmpty())
+            if (!mapping.channelName.isEmpty())
             {
                 // Find the channel index by name
-                quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mappedChannelName);
+                quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx != QLCChannel::invalid())
                 {
+                    // Use valueIndex as Y offset in the map
+                    // This allows scripts to put different values in different rows
+                    int sourceY = mapping.valueIndex;
+                    uint sourceCol = col; // Default to current position's color
+                    
+                    // If valueIndex points to a different row, use that row's value
+                    if (sourceY >= 0 && sourceY < map.count() && sourceY != pt.y())
+                    {
+                        if (pt.x() < map[sourceY].count())
+                            sourceCol = map[sourceY][pt.x()];
+                    }
+                    
                     channelList.append(channelIdx);
-                    valueList.append(rgbToGrey(col));
+                    valueList.append(rgbToGrey(sourceCol));
                     usePerDefinitionMapping = true;
                 }
             }
@@ -1112,7 +1127,7 @@ quint32 RGBMatrix::findChannelByName(const QLCFixtureMode *mode, const QString &
     return QLCChannel::invalid();
 }
 
-void RGBMatrix::setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName)
+void RGBMatrix::setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName, int valueIndex)
 {
     if (fixtureDefKey.isEmpty())
         return;
@@ -1120,17 +1135,17 @@ void RGBMatrix::setFixtureDefChannelMapping(const QString &fixtureDefKey, const 
     if (channelName.isEmpty())
         m_fixtureDefChannelMap.remove(fixtureDefKey);
     else
-        m_fixtureDefChannelMap[fixtureDefKey] = channelName;
+        m_fixtureDefChannelMap[fixtureDefKey] = FixtureDefMapping(channelName, valueIndex);
 
     emit changed(id());
 }
 
-QString RGBMatrix::fixtureDefChannelMapping(const QString &fixtureDefKey) const
+RGBMatrix::FixtureDefMapping RGBMatrix::fixtureDefChannelMapping(const QString &fixtureDefKey) const
 {
-    return m_fixtureDefChannelMap.value(fixtureDefKey, QString());
+    return m_fixtureDefChannelMap.value(fixtureDefKey, FixtureDefMapping());
 }
 
-QMap<QString, QString> RGBMatrix::fixtureDefChannelMap() const
+QMap<QString, RGBMatrix::FixtureDefMapping> RGBMatrix::fixtureDefChannelMappings() const
 {
     return m_fixtureDefChannelMap;
 }
