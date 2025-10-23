@@ -1561,29 +1561,28 @@ QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
 
 void RGBMatrixEditor::clearChannelMappingUI()
 {
-    // Usuń widgety z listy - bezpośrednio przez deleteLater()
+    // Usuń widgety bezpośrednio - są w m_mappingWidgets
     foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
     {
         if (widget.label != NULL)
-            widget.label->deleteLater();
+            delete widget.label;
         if (widget.channelCombo != NULL)
-            widget.channelCombo->deleteLater();
+            delete widget.channelCombo;
         if (widget.valueIndexCombo != NULL)
-            widget.valueIndexCombo->deleteLater();
+            delete widget.valueIndexCombo;
     }
     m_mappingWidgets.clear();
     
-    // Usuń wszystkie sublayouty z głównego layoutu
+    // Teraz wyczyść layout (powinien być już pusty po delete widgetów)
     if (m_channelMappingLayout != NULL)
     {
         QLayoutItem *item;
         while ((item = m_channelMappingLayout->takeAt(0)) != NULL)
         {
-            // Jeśli to sublayout, wyczyść go i usuń
             if (item->layout())
             {
                 QLayout *sublayout = item->layout();
-                // Usuń wszystkie itemy z sublayoutu (ale nie same widgety - są już w deleteLater)
+                // Sublayout powinien być już pusty
                 while (sublayout->takeAt(0) != NULL) {}
                 delete sublayout;
             }
