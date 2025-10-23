@@ -880,20 +880,20 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx != QLCChannel::invalid())
                 {
-                    // Use valueIndex as Y offset in the map
-                    // This allows scripts to put different values in different rows
-                    int sourceY = mapping.valueIndex;
-                    uint sourceCol = col; // Default to current position's color
-                    
-                    // If valueIndex points to a different row, use that row's value
-                    if (sourceY >= 0 && sourceY < map.count() && sourceY != pt.y())
-                    {
-                        if (pt.x() < map[sourceY].count())
-                            sourceCol = map[sourceY][pt.x()];
-                    }
-                    
-                    channelList.append(channelIdx);
-                    valueList.append(rgbToGrey(sourceCol));
+                // Use valueIndex as Y offset in the map
+                // This allows scripts to put different values in different rows
+                int sourceY = mapping.valueIndex;
+                uint sourceCol = col; // Default to current position's color
+                
+                // Always use valueIndex as source row if specified and valid
+                if (sourceY >= 0 && sourceY < map.count())
+                {
+                    if (pt.x() < map[sourceY].count())
+                        sourceCol = map[sourceY][pt.x()];
+                }
+                
+                channelList.append(channelIdx);
+                valueList.append(rgbToGrey(sourceCol));
                     usePerDefinitionMapping = true;
                 }
             }
