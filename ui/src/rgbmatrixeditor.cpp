@@ -1662,7 +1662,7 @@ void RGBMatrixEditor::updateChannelMappingUI()
         // This is dynamically determined from the script's scriptHeight property
         for (int i = 0; i < maxValueIndices; i++)
         {
-            widget.valueIndexCombo->addItem(QString("Row %1").arg(i), i);
+            widget.valueIndexCombo->addItem(QString::number(i), i);  // Show only number
         }
 
         // Set current selection from m_matrix->fixtureDefChannelMapping()
@@ -1696,7 +1696,7 @@ void RGBMatrixEditor::updateChannelMappingUI()
         rowLayout->addWidget(widget.label);
         rowLayout->addWidget(new QLabel(tr("Channel:"), m_channelMappingGroup));
         rowLayout->addWidget(widget.channelCombo, 1);
-        rowLayout->addWidget(new QLabel(tr("Row:"), m_channelMappingGroup));
+        rowLayout->addWidget(new QLabel(tr("Param:"), m_channelMappingGroup));
         rowLayout->addWidget(widget.valueIndexCombo);
         m_channelMappingLayout->addLayout(rowLayout);
 
