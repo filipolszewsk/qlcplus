@@ -220,18 +220,13 @@ void RGBMatrixEditor::init()
     m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
     m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
     m_channelMappingGroup->setLayout(m_channelMappingLayout);
-    m_channelMappingGroup->setVisible(false);
+    m_channelMappingGroup->setVisible(false); // Will be shown by updateChannelMappingUI()
     
-    // Find scrollArea's widget and add the group to its layout
-    QWidget *scrollWidget = scrollArea->widget();
-    if (scrollWidget != NULL)
+    // Add to main widget layout
+    QLayout *mainLayout = this->layout();
+    if (mainLayout != NULL)
     {
-        QLayout *scrollLayout = scrollWidget->layout();
-        if (scrollLayout != NULL)
-        {
-            // Add the channel mapping group after other controls
-            scrollLayout->addWidget(m_channelMappingGroup);
-        }
+        mainLayout->addWidget(m_channelMappingGroup);
     }
     
     updateChannelMappingUI();
