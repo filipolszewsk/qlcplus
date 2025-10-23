@@ -1563,33 +1563,32 @@ void RGBMatrixEditor::clearChannelMappingUI()
 {
     qDebug() << "clearChannelMappingUI: Clearing" << m_mappingWidgets.count() << "widget groups";
     
-    // NAJPIERW usuń sublayouty z głównego layoutu i ich zawartość
+    // NAJPIERW usuń wszystkie dzieci z m_channelMappingGroup bezpośrednio
+    if (m_channelMappingGroup != NULL)
+    {
+        QList<QWidget*> children = m_channelMappingGroup->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly);
+        qDebug() << "Found" << children.count() << "direct children to delete";
+        foreach (QWidget *child, children)
+        {
+            delete child;
+        }
+    }
+    
+    // Teraz wyczyść layout (powinien być już pusty)
     if (m_channelMappingLayout != NULL)
     {
         QLayoutItem *item;
         while ((item = m_channelMappingLayout->takeAt(0)) != NULL)
         {
-            // Jeśli to sublayout (QHBoxLayout), usuń wszystkie jego widgety
             if (item->layout())
             {
                 QLayout *sublayout = item->layout();
-                QLayoutItem *subitem;
-                
-                // Usuń wszystkie widgety z sublayoutu
-                while ((subitem = sublayout->takeAt(0)) != NULL)
+                // Sublayout powinien być już pusty po delete children
+                while (sublayout->count() > 0)
                 {
-                    if (subitem->widget())
-                    {
-                        delete subitem->widget();  // Teraz można bezpiecznie usunąć
-                    }
-                    delete subitem;
+                    sublayout->takeAt(0);
                 }
                 delete sublayout;
-            }
-            // Jeśli widget bezpośrednio w main layout
-            else if (item->widget())
-            {
-                delete item->widget();
             }
             delete item;
         }
