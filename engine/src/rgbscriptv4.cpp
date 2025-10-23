@@ -430,6 +430,22 @@ int RGBScript::acceptColors() const
     return 2;
 }
 
+int RGBScript::scriptHeight() const
+{
+    if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
+    {
+        int retVal;
+        QMetaObject::invokeMethod(s_jsThread->engine, [this]{ return scriptHeight();}, Qt::BlockingQueuedConnection, &retVal);
+        return retVal;
+    }
+
+    QJSValue height = m_script.property(QStringLiteral("scriptHeight"));
+    if (!height.isUndefined() && height.isNumber())
+        return height.toInt();
+    
+    return 0; // 0 = use group height
+}
+
 bool RGBScript::loadXML(QXmlStreamReader &root)
 {
     Q_UNUSED(root)

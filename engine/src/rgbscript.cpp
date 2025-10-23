@@ -388,6 +388,17 @@ int RGBScript::acceptColors() const
     return 2;
 }
 
+int RGBScript::scriptHeight() const
+{
+    QMutexLocker engineLocker(s_engineMutex);
+
+    QScriptValue height = m_script.property("scriptHeight");
+    if (height.isValid() && height.isNumber())
+        return height.toInt32();
+    
+    return 0; // 0 = use group height
+}
+
 bool RGBScript::loadXML(QXmlStreamReader &root)
 {
     Q_UNUSED(root)

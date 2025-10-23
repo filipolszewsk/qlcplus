@@ -711,14 +711,12 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
                 //qDebug() << "RGBMatrix step" << m_stepHandler->currentStepIndex() << ", color:" << QString::number(m_stepHandler->stepColor().rgb(), 16);
                 
-                // Check if script defines custom height (for parameter-based scripts)
+                // Check if algorithm defines custom height (for parameter-based scripts)
                 QSize scriptSize = m_group->size();
-                QString customHeight = property("scriptHeight");
-                if (!customHeight.isEmpty())
+                int customHeight = m_runAlgorithm->scriptHeight();
+                if (customHeight > 0)
                 {
-                    int height = customHeight.toInt();
-                    if (height > 0)
-                        scriptSize.setHeight(height);
+                    scriptSize.setHeight(customHeight);
                 }
                 
                 m_runAlgorithm->rgbMap(scriptSize, m_stepHandler->stepColor().rgb(),

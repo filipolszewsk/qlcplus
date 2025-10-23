@@ -115,6 +115,9 @@ public:
     int acceptColors() const;
 
     /** @reimp */
+    int scriptHeight() const;
+
+    /** @reimp */
     bool loadXML(QXmlStreamReader &root);
 
     /** @reimp */
