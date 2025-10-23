@@ -339,12 +339,6 @@ public:
     /** Get channel mapping for a specific fixture definition */
     FixtureDefMapping fixtureDefChannelMapping(const QString &fixtureDefKey) const;
 
-    /** Get the entire fixture definition channel map */
-    QMap<QString, FixtureDefMapping> fixtureDefChannelMappings() const;
-
-    /** Clear all fixture definition channel mappings */
-    void clearFixtureDefChannelMap();
-
     /** Generate fixture definition key from definition */
     static QString getFixtureDefKey(const QLCFixtureDef *def);
 

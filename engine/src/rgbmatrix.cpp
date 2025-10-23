@@ -1156,18 +1156,6 @@ RGBMatrix::FixtureDefMapping RGBMatrix::fixtureDefChannelMapping(const QString &
     return m_fixtureDefChannelMap.value(fixtureDefKey, FixtureDefMapping());
 }
 
-QMap<QString, RGBMatrix::FixtureDefMapping> RGBMatrix::fixtureDefChannelMappings() const
-{
-    return m_fixtureDefChannelMap;
-}
-
-void RGBMatrix::clearFixtureDefChannelMap()
-{
-    m_fixtureDefChannelMap.clear();
-    emit changed(id());
-}
-
-
 /*************************************************************************
  *************************************************************************
  *                          RGBMatrixStep class
