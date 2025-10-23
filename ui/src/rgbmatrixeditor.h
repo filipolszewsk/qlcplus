@@ -139,7 +139,9 @@ private:
     struct FixtureDefMappingWidget {
         QString fixtureDefKey;
         QLabel *label;
+        QLabel *channelLabel;
         QComboBox *channelCombo;
+        QLabel *paramLabel;
         QComboBox *valueIndexCombo;
     };
 

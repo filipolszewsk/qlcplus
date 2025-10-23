@@ -1566,8 +1566,12 @@ void RGBMatrixEditor::clearChannelMappingUI()
     {
         if (widget.label != NULL)
             delete widget.label;
+        if (widget.channelLabel != NULL)
+            delete widget.channelLabel;
         if (widget.channelCombo != NULL)
             delete widget.channelCombo;
+        if (widget.paramLabel != NULL)
+            delete widget.paramLabel;
         if (widget.valueIndexCombo != NULL)
             delete widget.valueIndexCombo;
     }
@@ -1708,12 +1712,16 @@ void RGBMatrixEditor::updateChannelMappingUI()
         connect(widget.valueIndexCombo, SIGNAL(activated(int)),
                 this, SLOT(slotChannelMappingChanged(int)));
 
+        // Create and add label widgets
+        widget.channelLabel = new QLabel(tr("Channel:"), m_channelMappingGroup);
+        widget.paramLabel = new QLabel(tr("Param:"), m_channelMappingGroup);
+        
         // Add widgets to layout
         QHBoxLayout *rowLayout = new QHBoxLayout();
         rowLayout->addWidget(widget.label);
-        rowLayout->addWidget(new QLabel(tr("Channel:"), m_channelMappingGroup));
+        rowLayout->addWidget(widget.channelLabel);
         rowLayout->addWidget(widget.channelCombo, 1);
-        rowLayout->addWidget(new QLabel(tr("Param:"), m_channelMappingGroup));
+        rowLayout->addWidget(widget.paramLabel);
         rowLayout->addWidget(widget.valueIndexCombo);
         m_channelMappingLayout->addLayout(rowLayout);
 
