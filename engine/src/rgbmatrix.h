@@ -40,6 +40,8 @@
 class FixtureGroup;
 class GenericFader;
 class FadeChannel;
+class QLCFixtureDef;
+class QLCFixtureMode;
 class QDir;
 
 /** @addtogroup engine_functions Functions
