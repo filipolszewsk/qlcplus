@@ -860,10 +860,12 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
         QLCFixtureHead head = fxi->head(grpHead.head);
 
-        if (pt.y() >= map.count() || pt.x() >= map[pt.y()].count())
+        // Don't check pt.y() against map size - fixtures can read from any row via valueIndex
+        // Just verify X position is valid (assuming all rows have same width)
+        if (map.isEmpty() || pt.x() >= map[0].count())
             continue;
 
-        uint col = map[pt.y()][pt.x()];
+        uint col = map[pt.y() < map.count() ? pt.y() : 0][pt.x()];
         QVector<quint32> channelList;
         QVector<uchar> valueList;
 
