@@ -1609,8 +1609,10 @@ void RGBMatrixEditor::updateChannelMappingUI()
         return;
     }
 
-    // Get matrix height to know how many value indices are available
-    int matrixHeight = grp->size().height();
+    // Maximum number of value indices available
+    // This is independent of physical fixture group height
+    // Scripts can return data in multiple rows (e.g., ParameterMatrix has 24 params)
+    const int MAX_VALUE_INDICES = 32;
     
     // Create UI row for each unique definition
     QMapIterator<QString, QPair<QLCFixtureDef*, QLCFixtureMode*>> it(uniqueDefs);
@@ -1650,8 +1652,9 @@ void RGBMatrixEditor::updateChannelMappingUI()
         widget.valueIndexCombo->setProperty("fixtureDefKey", key);
         widget.valueIndexCombo->setToolTip(tr("Which row/value index to use from the script output"));
         
-        // Populate with available indices (rows)
-        for (int i = 0; i < matrixHeight; i++)
+        // Populate with available indices (0-31)
+        // This is independent of physical group height
+        for (int i = 0; i < MAX_VALUE_INDICES; i++)
         {
             widget.valueIndexCombo->addItem(QString("Row %1").arg(i), i);
         }
