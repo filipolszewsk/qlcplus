@@ -181,7 +181,7 @@ protected:
     void updateRowSelection();
 
     QGroupBox *m_rowSelectionGroup;
-    QVBoxLayout *m_rowSelectionLayout;
+    QHBoxLayout *m_rowSelectionLayout;  // Horizontal layout for checkboxes
     QList<QCheckBox*> m_rowCheckboxes;
 };
 

@@ -334,7 +334,7 @@
      </item>
     </layout>
    </item>
-   <item row="2" column="4">
+   <item row="2" column="4" rowspan="10">
     <layout class="QVBoxLayout" name="verticalLayout_5">
      <item>
       <widget class="QGroupBox" name="m_patternGroup">

@@ -216,42 +216,73 @@ void RGBMatrixEditor::init()
     updateExtraOptions();
     updateSpeedDials();
 
+    // Set column stretch for main grid layout (70% left, 30% right)
+    QGridLayout *mainGrid = qobject_cast<QGridLayout*>(this->layout());
+    if (mainGrid != NULL)
+    {
+        // Columns 0-3 (left side, preview + controls) get 70% total
+        mainGrid->setColumnStretch(0, 18);  // 18/25 ≈ 70%
+        mainGrid->setColumnStretch(1, 18);
+        mainGrid->setColumnStretch(2, 17);
+        mainGrid->setColumnStretch(3, 17);
+        // Column 4 (right side, pattern + properties) gets 30%
+        mainGrid->setColumnStretch(4, 30);  // 30/100 = 30%
+    }
+    
+    // Find the bottom grid layout (gridLayout_6 from .ui file)
+    QGridLayout *bottomGrid = this->findChild<QGridLayout*>("gridLayout_6");
+    
+    // Create row filtering UI (horizontal for space efficiency, scrollable)
+    m_rowSelectionGroup = new QGroupBox(tr("Row Filter"));
+    
+    // Create scroll area for checkboxes (in case of many rows)
+    QScrollArea *rowScrollArea = new QScrollArea(m_rowSelectionGroup);
+    rowScrollArea->setWidgetResizable(true);
+    rowScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    rowScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    rowScrollArea->setMaximumHeight(60);  // Limit height for scrolling
+    
+    QWidget *rowScrollWidget = new QWidget();
+    m_rowSelectionLayout = new QHBoxLayout(rowScrollWidget);  // HORIZONTAL!
+    m_rowSelectionLayout->setContentsMargins(0, 0, 0, 0);
+    rowScrollWidget->setLayout(m_rowSelectionLayout);
+    rowScrollArea->setWidget(rowScrollWidget);
+    
+    QVBoxLayout *groupLayout = new QVBoxLayout(m_rowSelectionGroup);
+    groupLayout->addWidget(rowScrollArea);
+    m_rowSelectionGroup->setLayout(groupLayout);
+    m_rowSelectionGroup->setVisible(false);
+    m_rowSelectionGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    
     // Create multi-value mapping enable checkbox
     m_enablePerFixtureMappingCheck = new QCheckBox(tr("Enable Multi-Value Mapping"));
     m_enablePerFixtureMappingCheck->setChecked(m_matrix->enablePerFixtureMapping());
     m_enablePerFixtureMappingCheck->setToolTip(tr("Enable per-fixture-type parameter mapping (for scripts with multiple rows/parameters)"));
     
-    connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
-            this, SLOT(slotEnablePerFixtureMappingToggled(bool)));
-
     // Create per-definition channel mapping UI
     m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
     m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
     m_channelMappingGroup->setLayout(m_channelMappingLayout);
-    m_channelMappingGroup->setVisible(false); // Will be shown by updateChannelMappingUI()
+    m_channelMappingGroup->setVisible(false);
+    m_channelMappingGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     
-    // Add both to main widget layout
-    QLayout *mainLayout = this->layout();
-    if (mainLayout != NULL)
+    // Add to bottom grid layout (under Run Order & Direction)
+    if (bottomGrid != NULL)
     {
-        mainLayout->addWidget(m_enablePerFixtureMappingCheck);
-        mainLayout->addWidget(m_channelMappingGroup);
+        // gridLayout_6 structure:
+        // Row 0: Run Order (col 0) + Direction (col 1)
+        // Row 1: Row Filter (col 0-1, span 2)
+        // Row 2: Enable Multi-Value checkbox (col 0-1, span 2)
+        // Row 3: Per-Fixture Channel Mapping (col 0-1, span 2)
+        bottomGrid->addWidget(m_rowSelectionGroup, 1, 0, 1, 2);
+        bottomGrid->addWidget(m_enablePerFixtureMappingCheck, 2, 0, 1, 2);
+        bottomGrid->addWidget(m_channelMappingGroup, 3, 0, 1, 2);
     }
+    
+    connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotEnablePerFixtureMappingToggled(bool)));
     
     updateChannelMappingUI();
-
-    // Create row filtering UI
-    m_rowSelectionGroup = new QGroupBox(tr("Row Filter"));
-    m_rowSelectionLayout = new QVBoxLayout(m_rowSelectionGroup);
-    m_rowSelectionGroup->setLayout(m_rowSelectionLayout);
-    m_rowSelectionGroup->setVisible(false); // Will be shown by updateRowSelection()
-    
-    // Add to main widget layout
-    if (mainLayout != NULL)
-    {
-        mainLayout->addWidget(m_rowSelectionGroup);
-    }
-    
     updateRowSelection();
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
@@ -1622,12 +1653,13 @@ void RGBMatrixEditor::updateChannelMappingUI()
         m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
         m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
         m_channelMappingGroup->setLayout(m_channelMappingLayout);
+        m_channelMappingGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
         
-        // Dodaj do głównego layoutu
-        QLayout *mainLayout = this->layout();
-        if (mainLayout != NULL)
+        // Dodaj do bottom grid layout (ta sama pozycja co w init())
+        QGridLayout *bottomGrid = this->findChild<QGridLayout*>("gridLayout_6");
+        if (bottomGrid != NULL)
         {
-            mainLayout->addWidget(m_channelMappingGroup);
+            bottomGrid->addWidget(m_channelMappingGroup, 3, 0, 1, 2);  // Row 3, col 0-1, span 2 cols
         }
     }
     
