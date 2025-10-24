@@ -63,6 +63,9 @@
 #define KXMLQLCRGBMatrixFixtureDefChannelMapName    QStringLiteral("ChannelName")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapIndex   QStringLiteral("ValueIndex")
 
+#define KXMLQLCRGBMatrixEnablePerFixtureMapping     QStringLiteral("EnablePerFixtureMapping")
+#define KXMLQLCRGBMatrixSelectedRows                QStringLiteral("SelectedRows")
+
 /****************************************************************************
  * Initialization
  ****************************************************************************/
@@ -82,6 +85,7 @@ RGBMatrix::RGBMatrix(Doc *doc)
      , m_stepsCount(0)
      , m_stepBeatDuration(0)
      , m_controlMode(RGBMatrix::ControlModeRgb)
+     , m_enablePerFixtureMapping(false)
  {
      setName(tr("New RGB Matrix"));
     setDuration(500);
@@ -197,6 +201,12 @@ bool RGBMatrix::copyFrom(const Function* function)
 
     // Copy fixture definition channel mappings (now includes valueIndex)
     m_fixtureDefChannelMap = mtx->m_fixtureDefChannelMap;
+
+    // Copy multi-value mapping mode flag
+    m_enablePerFixtureMapping = mtx->m_enablePerFixtureMapping;
+
+    // Copy selected rows
+    m_selectedRows = mtx->m_selectedRows;
 
     return Function::copyFrom(function);
 }
@@ -516,6 +526,10 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             setDimmerControl(root.readElementText().toInt());
         }
+        else if (root.name() == KXMLQLCRGBMatrixEnablePerFixtureMapping)
+        {
+            setEnablePerFixtureMapping(root.readElementText().toInt() != 0);
+        }
         else if (root.name() == KXMLQLCRGBMatrixFixtureDefChannelMap)
         {
             QString key = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapKey).toString();
@@ -524,6 +538,21 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
             if (!key.isEmpty() && !channelName.isEmpty())
                 setFixtureDefChannelMapping(key, channelName, valueIndex);
             root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCRGBMatrixSelectedRows)
+        {
+            /* Selected Rows */
+            QString rowsStr = root.readElementText();
+            QStringList rowsList = rowsStr.split(",", Qt::SkipEmptyParts);
+            QList<int> rows;
+            foreach (QString rowStr, rowsList)
+            {
+                bool ok;
+                int row = rowStr.toInt(&ok);
+                if (ok)
+                    rows.append(row);
+            }
+            setSelectedRows(rows);
         }
         else
         {
@@ -591,6 +620,12 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
         doc->writeEndElement();
     }
 
+    /* Enable Per-Fixture Mapping flag */
+    if (m_enablePerFixtureMapping)
+    {
+        doc->writeTextElement(KXMLQLCRGBMatrixEnablePerFixtureMapping, QString::number(1));
+    }
+
     /* Fixture Definition Channel Mappings */
     QMapIterator<QString, FixtureDefMapping> channelMapIt(m_fixtureDefChannelMap);
     while (channelMapIt.hasNext())
@@ -601,6 +636,15 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
         doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapName, channelMapIt.value().channelName);
         doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapIndex, QString::number(channelMapIt.value().valueIndex));
         doc->writeEndElement();
+    }
+
+    // Save selected rows (if not all rows)
+    if (!m_selectedRows.isEmpty())
+    {
+        QStringList rowStrings;
+        foreach (int row, m_selectedRows)
+            rowStrings << QString::number(row);
+        doc->writeTextElement(KXMLQLCRGBMatrixSelectedRows, rowStrings.join(","));
     }
 
     /* End the <Function> tag */
@@ -711,12 +755,23 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
                 //qDebug() << "RGBMatrix step" << m_stepHandler->currentStepIndex() << ", color:" << QString::number(m_stepHandler->stepColor().rgb(), 16);
                 
-                // Check if algorithm defines custom height (for parameter-based scripts)
+                // Determine script size based on row filtering and custom scriptHeight
                 QSize scriptSize = m_group->size();
-                int customHeight = m_runAlgorithm->scriptHeight();
-                if (customHeight > 0)
+                
+                // Apply row filtering FIRST (if any rows are filtered)
+                if (!m_selectedRows.isEmpty())
                 {
-                    scriptSize.setHeight(customHeight);
+                    // Script gets only the height of filtered rows
+                    scriptSize.setHeight(m_selectedRows.count());
+                }
+                // Then apply custom scriptHeight (for parameter-based scripts like ParameterMatrix)
+                else
+                {
+                    int customHeight = m_runAlgorithm->scriptHeight();
+                    if (customHeight > 0)
+                    {
+                        scriptSize.setHeight(customHeight);
+                    }
                 }
                 
                 m_runAlgorithm->rgbMap(scriptSize, m_stepHandler->stepColor().rgb(),
@@ -869,18 +924,34 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
         QLCFixtureHead head = fxi->head(grpHead.head);
 
-        // Don't check pt.y() against map size - fixtures can read from any row via valueIndex
+        // Skip this fixture if its row is not selected
+        if (!isRowSelected(pt.y()))
+            continue;
+
+        // Map logical script row to physical fixture row
+        int scriptRow = pt.y();
+        if (!m_selectedRows.isEmpty())
+        {
+            // If row filtering is active, map logical script row to selected physical row
+            int logicalRow = m_selectedRows.indexOf(pt.y());
+            if (logicalRow >= 0)
+                scriptRow = logicalRow;
+            else
+                continue; // Skip if not in selected rows
+        }
+
+        // Don't check scriptRow against map size - fixtures can read from any row via valueIndex
         // Just verify X position is valid (assuming all rows have same width)
         if (map.isEmpty() || pt.x() >= map[0].count())
             continue;
 
-        uint col = map[pt.y() < map.count() ? pt.y() : 0][pt.x()];
+        uint col = map[scriptRow < map.count() ? scriptRow : 0][pt.x()];
         QVector<quint32> channelList;
         QVector<uchar> valueList;
 
-        // Check if there's a per-definition channel mapping for this fixture
+        // Check if per-fixture mapping mode is ENABLED and there's a mapping for this fixture
         bool usePerDefinitionMapping = false;
-        if (fxi->fixtureDef() != NULL)
+        if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL)
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
             FixtureDefMapping mapping = m_fixtureDefChannelMap.value(defKey, FixtureDefMapping());
@@ -1154,6 +1225,45 @@ void RGBMatrix::setFixtureDefChannelMapping(const QString &fixtureDefKey, const 
 RGBMatrix::FixtureDefMapping RGBMatrix::fixtureDefChannelMapping(const QString &fixtureDefKey) const
 {
     return m_fixtureDefChannelMap.value(fixtureDefKey, FixtureDefMapping());
+}
+
+/*********************************************************************
+ * Multi-Value Mapping Mode
+ *********************************************************************/
+
+void RGBMatrix::setEnablePerFixtureMapping(bool enable)
+{
+    m_enablePerFixtureMapping = enable;
+    emit changed(id());
+}
+
+bool RGBMatrix::enablePerFixtureMapping() const
+{
+    return m_enablePerFixtureMapping;
+}
+
+/*********************************************************************
+ * Row filtering
+ *********************************************************************/
+
+void RGBMatrix::setSelectedRows(const QList<int>& rows)
+{
+    m_selectedRows = rows;
+    emit changed(id());
+}
+
+QList<int> RGBMatrix::selectedRows() const
+{
+    return m_selectedRows;
+}
+
+bool RGBMatrix::isRowSelected(int row) const
+{
+    // If list is empty, all rows are selected (default behavior)
+    if (m_selectedRows.isEmpty())
+        return true;
+    
+    return m_selectedRows.contains(row);
 }
 
 /*************************************************************************

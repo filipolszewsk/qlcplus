@@ -160,9 +160,29 @@ private:
     QHash<QLCPoint, RGBItem*> m_previewHash;
 
     // Per-definition channel mapping UI
+    QCheckBox *m_enablePerFixtureMappingCheck;
     QGroupBox *m_channelMappingGroup;
     QVBoxLayout *m_channelMappingLayout;
     QList<FixtureDefMappingWidget> m_mappingWidgets;
+
+    /************************************************************************
+     * Multi-Value Mapping
+     ************************************************************************/
+protected slots:
+    void slotEnablePerFixtureMappingToggled(bool checked);
+
+    /************************************************************************
+     * Row filtering
+     ************************************************************************/
+protected slots:
+    void slotRowSelectionChanged();
+
+protected:
+    void updateRowSelection();
+
+    QGroupBox *m_rowSelectionGroup;
+    QVBoxLayout *m_rowSelectionLayout;
+    QList<QCheckBox*> m_rowCheckboxes;
 };
 
 /** @} */

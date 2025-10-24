@@ -216,20 +216,43 @@ void RGBMatrixEditor::init()
     updateExtraOptions();
     updateSpeedDials();
 
+    // Create multi-value mapping enable checkbox
+    m_enablePerFixtureMappingCheck = new QCheckBox(tr("Enable Multi-Value Mapping"));
+    m_enablePerFixtureMappingCheck->setChecked(m_matrix->enablePerFixtureMapping());
+    m_enablePerFixtureMappingCheck->setToolTip(tr("Enable per-fixture-type parameter mapping (for scripts with multiple rows/parameters)"));
+    
+    connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotEnablePerFixtureMappingToggled(bool)));
+
     // Create per-definition channel mapping UI
     m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
     m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
     m_channelMappingGroup->setLayout(m_channelMappingLayout);
     m_channelMappingGroup->setVisible(false); // Will be shown by updateChannelMappingUI()
     
-    // Add to main widget layout
+    // Add both to main widget layout
     QLayout *mainLayout = this->layout();
     if (mainLayout != NULL)
     {
+        mainLayout->addWidget(m_enablePerFixtureMappingCheck);
         mainLayout->addWidget(m_channelMappingGroup);
     }
     
     updateChannelMappingUI();
+
+    // Create row filtering UI
+    m_rowSelectionGroup = new QGroupBox(tr("Row Filter"));
+    m_rowSelectionLayout = new QVBoxLayout(m_rowSelectionGroup);
+    m_rowSelectionGroup->setLayout(m_rowSelectionLayout);
+    m_rowSelectionGroup->setVisible(false); // Will be shown by updateRowSelection()
+    
+    // Add to main widget layout
+    if (mainLayout != NULL)
+    {
+        mainLayout->addWidget(m_rowSelectionGroup);
+    }
+    
+    updateRowSelection();
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
             this, SLOT(slotNameEdited(const QString&)));
@@ -894,6 +917,9 @@ void RGBMatrixEditor::slotFixtureGroupActivated(int index)
     
     // Update per-definition channel mapping UI
     updateChannelMappingUI();
+    
+    // Update row filtering UI
+    updateRowSelection();
 }
 
 void RGBMatrixEditor::slotBlendModeChanged(int index)
@@ -1605,6 +1631,13 @@ void RGBMatrixEditor::updateChannelMappingUI()
         }
     }
     
+    // Check if multi-value mapping is enabled
+    if (!m_enablePerFixtureMappingCheck->isChecked())
+    {
+        m_channelMappingGroup->setVisible(false);
+        return;
+    }
+
     FixtureGroup *grp = m_doc->fixtureGroup(m_matrix->fixtureGroup());
     if (grp == NULL)
     {
@@ -1766,4 +1799,104 @@ void RGBMatrixEditor::slotChannelMappingChanged(int index)
 FunctionParent RGBMatrixEditor::functionParent() const
 {
     return FunctionParent::master();
+}
+
+/*****************************************************************************
+ * Row filtering
+ *****************************************************************************/
+
+void RGBMatrixEditor::updateRowSelection()
+{
+    // Clear existing checkboxes
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+    {
+        m_rowSelectionLayout->removeWidget(cb);
+        delete cb;
+    }
+    m_rowCheckboxes.clear();
+    
+    // Clear any remaining layout items
+    QLayoutItem *child;
+    while ((child = m_rowSelectionLayout->takeAt(0)) != nullptr)
+    {
+        if (child->widget())
+            delete child->widget();
+        delete child;
+    }
+    
+    // Check if we have a fixture group
+    FixtureGroup *grp = m_doc->fixtureGroup(m_matrix->fixtureGroup());
+    if (grp == nullptr)
+    {
+        m_rowSelectionGroup->setVisible(false);
+        return;
+    }
+    
+    int gridHeight = grp->size().height();
+    if (gridHeight <= 0)
+    {
+        m_rowSelectionGroup->setVisible(false);
+        return;
+    }
+    
+    m_rowSelectionGroup->setVisible(true);
+    
+    // Create checkbox for each row
+    QList<int> currentSelection = m_matrix->selectedRows();
+    for (int row = 0; row < gridHeight; row++)
+    {
+        QCheckBox *cb = new QCheckBox(QString("Row %1").arg(row + 1));
+        // If no selection saved, select all by default
+        cb->setChecked(currentSelection.isEmpty() || currentSelection.contains(row));
+        cb->setProperty("row_index", row);
+        
+        m_rowSelectionLayout->addWidget(cb);
+        m_rowCheckboxes.append(cb);
+        
+        connect(cb, SIGNAL(toggled(bool)), this, SLOT(slotRowSelectionChanged()));
+    }
+}
+
+void RGBMatrixEditor::slotRowSelectionChanged()
+{
+    // Collect selected rows from checkboxes
+    QList<int> selectedRows;
+    foreach (QCheckBox *cb, m_rowCheckboxes)
+    {
+        if (cb->isChecked())
+        {
+            int rowIndex = cb->property("row_index").toInt();
+            selectedRows.append(rowIndex);
+        }
+    }
+    
+    // Ensure at least one row is selected
+    if (selectedRows.isEmpty() && !m_rowCheckboxes.isEmpty())
+    {
+        // Re-check the first checkbox to prevent empty selection
+        m_rowCheckboxes.first()->blockSignals(true);
+        m_rowCheckboxes.first()->setChecked(true);
+        m_rowCheckboxes.first()->blockSignals(false);
+        selectedRows.append(0);
+    }
+    
+    m_matrix->setSelectedRows(selectedRows);
+    
+    // Restart preview
+    slotRestartTest();
+}
+
+/*****************************************************************************
+ * Multi-Value Mapping
+ *****************************************************************************/
+
+void RGBMatrixEditor::slotEnablePerFixtureMappingToggled(bool checked)
+{
+    m_matrix->setEnablePerFixtureMapping(checked);
+    
+    // Update UI to show/hide per-fixture mapping section
+    updateChannelMappingUI();
+    
+    // Restart preview
+    slotRestartTest();
 }

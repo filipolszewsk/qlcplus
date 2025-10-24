@@ -345,9 +345,38 @@ public:
     /** Find channel index by name in a fixture mode */
     static quint32 findChannelByName(const QLCFixtureMode *mode, const QString &channelName);
 
+    /*********************************************************************
+     * Multi-Value Mapping Mode
+     *********************************************************************/
+public:
+    /** Enable/disable per-fixture mapping mode */
+    void setEnablePerFixtureMapping(bool enable);
+    
+    /** Check if per-fixture mapping mode is enabled */
+    bool enablePerFixtureMapping() const;
+
+    /*********************************************************************
+     * Row filtering
+     *********************************************************************/
+public:
+    /** Set selected rows (which rows from fixture group are affected) */
+    void setSelectedRows(const QList<int>& rows);
+    
+    /** Get selected rows */
+    QList<int> selectedRows() const;
+    
+    /** Check if a specific row is selected */
+    bool isRowSelected(int row) const;
+
 private:
     /** Map of fixture definition key (manufacturer|model) to mapping info */
     QMap<QString, FixtureDefMapping> m_fixtureDefChannelMap;
+    
+    /** Enable per-fixture mapping mode (false = AUTO/normal RGB) */
+    bool m_enablePerFixtureMapping;
+    
+    /** List of selected row indices (empty = all rows selected) */
+    QList<int> m_selectedRows;
 };
 
 /** @} */
