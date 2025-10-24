@@ -1692,12 +1692,8 @@ void RGBMatrixEditor::updateChannelMappingUI()
         }
     }
 
-    // Only show if there are multiple fixture types
-    if (uniqueDefs.size() <= 1)
-    {
-        m_channelMappingGroup->setVisible(false);
-        return;
-    }
+    // Show mapping even for single fixture type (allows mapping to any channel)
+    // When all fixtures have offset=0 and paramCount=1, works like normal matrix
 
     // Get parameter count from script (for offset dropdown)
     // Scripts can define paramCount (e.g., ParameterMatrix has 4 params)
