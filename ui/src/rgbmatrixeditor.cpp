@@ -1667,14 +1667,14 @@ void RGBMatrixEditor::updateChannelMappingUI()
         return;
     }
 
-    // Get maximum number of value indices from script or use default
-    // Scripts can define scriptHeight (e.g., ParameterMatrix has 24 params)
+    // Get parameter count from script (for offset dropdown)
+    // Scripts can define paramCount (e.g., ParameterMatrix has 4 params)
     int maxValueIndices = 32; // default fallback
     if (m_matrix->algorithm() != NULL)
     {
-        int scriptHeight = m_matrix->algorithm()->scriptHeight();
-        if (scriptHeight > 0)
-            maxValueIndices = scriptHeight;
+        int paramCount = m_matrix->algorithm()->paramCount();
+        if (paramCount > 1)
+            maxValueIndices = paramCount;
     }
     
     // Create UI row for each unique definition
@@ -1713,10 +1713,10 @@ void RGBMatrixEditor::updateChannelMappingUI()
         // Create value index combo box - NO parent, layout manages it
         widget.valueIndexCombo = new QComboBox();
         widget.valueIndexCombo->setProperty("fixtureDefKey", key);
-        widget.valueIndexCombo->setToolTip(tr("Which row/value index to use from the script output"));
+        widget.valueIndexCombo->setToolTip(tr("Parameter offset for this fixture type (0, 1, 2...)"));
         
-        // Populate with available indices based on scriptHeight()
-        // This is dynamically determined from the script's scriptHeight property
+        // Populate with available offsets based on paramCount()
+        // This is dynamically determined from the script's paramCount property
         for (int i = 0; i < maxValueIndices; i++)
         {
             widget.valueIndexCombo->addItem(QString::number(i), i);  // Show only number
@@ -1750,7 +1750,7 @@ void RGBMatrixEditor::updateChannelMappingUI()
 
         // Create label widgets WITHOUT parent - layout will manage them
         widget.channelLabel = new QLabel(tr("Channel:"));
-        widget.paramLabel = new QLabel(tr("Param:"));
+        widget.paramLabel = new QLabel(tr("Offset:"));
         
         // Add widgets to layout
         QHBoxLayout *rowLayout = new QHBoxLayout();

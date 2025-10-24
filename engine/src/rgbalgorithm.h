@@ -106,7 +106,8 @@ public:
     virtual int acceptColors() const = 0;
 
     /** Return script height override (0 = use group height) */
-    virtual int scriptHeight() const { return 0; }
+    /** Get parameter count for multi-value scripts (default = 1 for backward compatibility) */
+    virtual int paramCount() const { return 1; }
 
     /************************************************************************
      * RGB Colors

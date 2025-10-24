@@ -112,7 +112,7 @@ public:
     int acceptColors() const;
 
     /** @reimp */
-    int scriptHeight() const;
+    int paramCount() const;
 
     /** @reimp */
     bool loadXML(QXmlStreamReader &root);

@@ -755,7 +755,7 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
                 //qDebug() << "RGBMatrix step" << m_stepHandler->currentStepIndex() << ", color:" << QString::number(m_stepHandler->stepColor().rgb(), 16);
                 
-                // Determine script size based on row filtering and custom scriptHeight
+                // Determine script size based on row filtering and paramCount
                 QSize scriptSize = m_group->size();
                 
                 // Apply row filtering FIRST (if any rows are filtered)
@@ -764,13 +764,14 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
                     // Script gets only the height of filtered rows
                     scriptSize.setHeight(m_selectedRows.count());
                 }
-                // Then apply custom scriptHeight (for parameter-based scripts like ParameterMatrix)
-                else
+                
+                // Multiply height by paramCount if Multi-Value mode enabled
+                if (m_enablePerFixtureMapping && m_runAlgorithm != NULL)
                 {
-                    int customHeight = m_runAlgorithm->scriptHeight();
-                    if (customHeight > 0)
+                    int paramCount = m_runAlgorithm->paramCount();
+                    if (paramCount > 1)
                     {
-                        scriptSize.setHeight(customHeight);
+                        scriptSize.setHeight(scriptSize.height() * paramCount);
                     }
                 }
                 
@@ -951,7 +952,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
         // Check if per-fixture mapping mode is ENABLED and there's a mapping for this fixture
         bool usePerDefinitionMapping = false;
-        if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL)
+        if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL && m_runAlgorithm != NULL)
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
             FixtureDefMapping mapping = m_fixtureDefChannelMap.value(defKey, FixtureDefMapping());
@@ -962,20 +963,21 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx != QLCChannel::invalid())
                 {
-                // Use valueIndex as Y offset in the map
-                // This allows scripts to put different values in different rows
-                int sourceY = mapping.valueIndex;
-                uint sourceCol = col; // Default to current position's color
-                
-                // Always use valueIndex as source row if specified and valid
-                if (sourceY >= 0 && sourceY < map.count())
-                {
-                    if (pt.x() < map[sourceY].count())
-                        sourceCol = map[sourceY][pt.x()];
-                }
-                
-                channelList.append(channelIdx);
-                valueList.append(rgbToGrey(sourceCol));
+                    // MULTIPLY APPROACH: scriptRow = physicalRow × paramCount + offset
+                    int paramCount = m_runAlgorithm->paramCount();
+                    int offset = mapping.valueIndex; // Now this is parameter offset (0,1,2...)
+                    int sourceRow = scriptRow * paramCount + offset;
+                    
+                    uint sourceCol = col; // Default to current position's color
+                    
+                    // Read from calculated row
+                    if (sourceRow >= 0 && sourceRow < map.count() && pt.x() < map[sourceRow].count())
+                    {
+                        sourceCol = map[sourceRow][pt.x()];
+                    }
+                    
+                    channelList.append(channelIdx);
+                    valueList.append(rgbToGrey(sourceCol));
                     usePerDefinitionMapping = true;
                 }
             }
