@@ -130,20 +130,33 @@ private slots:
     void slotChannelMappingChanged(int index);
 
 private:
+    // Forward declare structs before methods
+    struct ChannelMappingRow {
+        QHBoxLayout *layout;
+        QComboBox *channelCombo;
+        QComboBox *valueIndexCombo;
+        QPushButton *removeButton;  // NULL for first row (cannot remove last row)
+    };
+    
+    struct FixtureDefMappingWidget {
+        QString fixtureDefKey;
+        QLabel *label;                      // Fixture name label
+        QList<ChannelMappingRow> rows;      // List of channel mapping rows
+        QPushButton *addButton;             // [➕] button
+        QVBoxLayout *containerLayout;       // Container for multi-row layout
+        QWidget *containerWidget;           // Widget for indented rows
+    };
+
+    // Private methods
     FunctionParent functionParent() const;
     void updateChannelMappingUI();
     void clearChannelMappingUI();
+    void addChannelMappingRow(FixtureDefMappingWidget &widget, QLCFixtureMode *mode, 
+                               const RGBMatrix::ChannelMapping &mapping, bool isFirstRow);
+    void saveAllChannelMappings(const QString &fixtureDefKey);
     QString getFixtureDefKey(const QLCFixtureDef *def);
 
 private:
-    struct FixtureDefMappingWidget {
-        QString fixtureDefKey;
-        QLabel *label;
-        QLabel *channelLabel;
-        QComboBox *channelCombo;
-        QLabel *paramLabel;
-        QComboBox *valueIndexCombo;
-    };
 
     Doc* m_doc;
     RGBMatrix* m_matrix; // The RGBMatrix being edited
@@ -166,10 +179,12 @@ private:
     QList<FixtureDefMappingWidget> m_mappingWidgets;
 
     /************************************************************************
-     * Multi-Value Mapping
+     * Multi-Value Mapping (Multi-Channel Support)
      ************************************************************************/
 protected slots:
     void slotEnablePerFixtureMappingToggled(bool checked);
+    void slotAddChannelMapping();
+    void slotRemoveChannelMapping();
 
     /************************************************************************
      * Row filtering

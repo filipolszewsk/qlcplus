@@ -1642,6 +1642,98 @@ void RGBMatrixEditor::clearChannelMappingUI()
     m_mappingWidgets.clear();
 }
 
+void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCFixtureMode *mode,
+                                            const RGBMatrix::ChannelMapping &mapping, bool isFirstRow)
+{
+    ChannelMappingRow row;
+    
+    // Create horizontal layout for this row
+    row.layout = new QHBoxLayout();
+    row.layout->setSpacing(8);
+    
+    // Channel combo
+    row.channelCombo = new QComboBox();
+    row.channelCombo->setProperty("fixtureDefKey", widget.fixtureDefKey);
+    row.channelCombo->setProperty("rowIndex", widget.rows.size());
+    row.channelCombo->addItem(tr("Auto (use control mode)"), QString());
+    
+    // Populate with channels from fixture mode
+    for (int i = 0; i < mode->channels().size(); i++)
+    {
+        QLCChannel *ch = mode->channel(i);
+        if (ch != NULL)
+            row.channelCombo->addItem(ch->name(), ch->name());
+    }
+    
+    // Set current value
+    if (!mapping.channelName.isEmpty())
+    {
+        int idx = row.channelCombo->findData(mapping.channelName);
+        if (idx >= 0)
+            row.channelCombo->setCurrentIndex(idx);
+    }
+    
+    // Offset combo
+    row.valueIndexCombo = new QComboBox();
+    row.valueIndexCombo->setProperty("fixtureDefKey", widget.fixtureDefKey);
+    row.valueIndexCombo->setProperty("rowIndex", widget.rows.size());
+    
+    // Get max offset from script's paramCount
+    int maxOffset = 32;  // default fallback
+    if (m_matrix->algorithm() != NULL)
+    {
+        int paramCount = m_matrix->algorithm()->paramCount();
+        if (paramCount > 1)
+            maxOffset = paramCount;
+    }
+    
+    for (int i = 0; i < maxOffset; i++)
+    {
+        row.valueIndexCombo->addItem(QString::number(i), i);
+    }
+    row.valueIndexCombo->setCurrentIndex(mapping.valueIndex);
+    
+    // Remove button (ONLY for non-first rows)
+    if (!isFirstRow)
+    {
+        row.removeButton = new QPushButton("🗑");
+        row.removeButton->setMaximumWidth(30);
+        row.removeButton->setToolTip(tr("Remove channel mapping"));
+        row.removeButton->setProperty("fixtureDefKey", widget.fixtureDefKey);
+        row.removeButton->setProperty("rowIndex", widget.rows.size());
+        connect(row.removeButton, &QPushButton::clicked, this, &RGBMatrixEditor::slotRemoveChannelMapping);
+    }
+    else
+    {
+        row.removeButton = NULL;  // Cannot remove first row
+    }
+    
+    // Connect combo signals
+    connect(row.channelCombo, SIGNAL(activated(int)), this, SLOT(slotChannelMappingChanged(int)));
+    connect(row.valueIndexCombo, SIGNAL(activated(int)), this, SLOT(slotChannelMappingChanged(int)));
+    
+    // Build layout
+    // In multi-row mode, add "Channel:" and "Offset:" labels
+    if (!isFirstRow)
+    {
+        row.layout->addWidget(new QLabel(tr("Channel:")));
+    }
+    row.layout->addWidget(row.channelCombo, 1);
+    
+    if (!isFirstRow)
+    {
+        row.layout->addWidget(new QLabel(tr("Offset:")));
+    }
+    row.layout->addWidget(row.valueIndexCombo);
+    
+    if (row.removeButton)
+    {
+        row.layout->addWidget(row.removeButton);
+    }
+    
+    widget.rows.append(row);
+}
+
 void RGBMatrixEditor::updateChannelMappingUI()
 {
     // ZAWSZE NAJPIERW WYCZYŚĆ (to usuwa groupbox!)
@@ -1692,20 +1784,7 @@ void RGBMatrixEditor::updateChannelMappingUI()
         }
     }
 
-    // Show mapping even for single fixture type (allows mapping to any channel)
-    // When all fixtures have offset=0 and paramCount=1, works like normal matrix
-
-    // Get parameter count from script (for offset dropdown)
-    // Scripts can define paramCount (e.g., ParameterMatrix has 4 params)
-    int maxValueIndices = 32; // default fallback
-    if (m_matrix->algorithm() != NULL)
-    {
-        int paramCount = m_matrix->algorithm()->paramCount();
-        if (paramCount > 1)
-            maxValueIndices = paramCount;
-    }
-    
-    // Create UI row for each unique definition
+    // Create UI for each unique fixture definition
     QMapIterator<QString, QPair<QLCFixtureDef*, QLCFixtureMode*>> it(uniqueDefs);
     while (it.hasNext())
     {
@@ -1720,74 +1799,75 @@ void RGBMatrixEditor::updateChannelMappingUI()
         FixtureDefMappingWidget widget;
         widget.fixtureDefKey = key;
 
-        // Create label with fixture name - NO parent, layout manages it
-        widget.label = new QLabel(def->name());
+        // Create fixture name label
+        widget.label = new QLabel(QString("<b>%1:</b>").arg(def->name()));
 
-        // Create combo box with channel names - NO parent, layout manages it
-        widget.channelCombo = new QComboBox();
-        widget.channelCombo->setProperty("fixtureDefKey", key);
-
-        // Add "Auto (use control mode)" option
-        widget.channelCombo->addItem(tr("Auto (use control mode)"), QString());
-
-        // Populate combo with channels from fixture mode
-        for (int i = 0; i < mode->channels().size(); i++)
-        {
-            QLCChannel *ch = mode->channel(i);
-            if (ch != NULL)
-                widget.channelCombo->addItem(ch->name(), ch->name());
-        }
-
-        // Create value index combo box - NO parent, layout manages it
-        widget.valueIndexCombo = new QComboBox();
-        widget.valueIndexCombo->setProperty("fixtureDefKey", key);
-        widget.valueIndexCombo->setToolTip(tr("Parameter offset for this fixture type (0, 1, 2...)"));
+        // Get existing mappings from backend
+        QList<RGBMatrix::ChannelMapping> existingMappings = m_matrix->fixtureDefChannelMappings(key);
         
-        // Populate with available offsets based on paramCount()
-        // This is dynamically determined from the script's paramCount property
-        for (int i = 0; i < maxValueIndices; i++)
+        // If no mappings, create one default (Auto, offset 0)
+        if (existingMappings.isEmpty())
         {
-            widget.valueIndexCombo->addItem(QString::number(i), i);  // Show only number
+            existingMappings.append(RGBMatrix::ChannelMapping());
         }
 
-        // Set current selection from m_matrix->fixtureDefChannelMapping()
-        RGBMatrix::FixtureDefMapping currentMapping = m_matrix->fixtureDefChannelMapping(key);
-        if (!currentMapping.channelName.isEmpty())
+        // Create container for multi-row layout (with indentation)
+        widget.containerWidget = new QWidget();
+        widget.containerLayout = new QVBoxLayout(widget.containerWidget);
+        widget.containerLayout->setContentsMargins(20, 0, 0, 0);  // Indent rows
+        widget.containerLayout->setSpacing(4);
+
+        // Create UI rows
+        bool isFirstRow = true;
+        foreach (const RGBMatrix::ChannelMapping &mapping, existingMappings)
         {
-            int chIdx = widget.channelCombo->findData(currentMapping.channelName);
-            if (chIdx >= 0)
-                widget.channelCombo->setCurrentIndex(chIdx);
+            addChannelMappingRow(widget, mode, mapping, isFirstRow);
+            isFirstRow = false;
+        }
+
+        // Create [➕] button
+        widget.addButton = new QPushButton("➕");
+        widget.addButton->setMaximumWidth(30);
+        widget.addButton->setToolTip(tr("Add channel mapping"));
+        widget.addButton->setProperty("fixtureDefKey", key);
+        connect(widget.addButton, &QPushButton::clicked, this, &RGBMatrixEditor::slotAddChannelMapping);
+
+        // LAYOUT LOGIC:
+        // - Single row (default): [Label:] [Channel ▼] [Offset ▼] [➕] (all in one line)
+        // - Multi row: Label on top, then indented rows below with ➕ at end
+        
+        if (widget.rows.size() == 1)
+        {
+            // SINGLE ROW MODE: everything in one horizontal line
+            QHBoxLayout *singleRowLayout = new QHBoxLayout();
+            singleRowLayout->addWidget(widget.label);
+            singleRowLayout->addWidget(widget.rows[0].channelCombo, 1);
+            singleRowLayout->addWidget(widget.rows[0].valueIndexCombo);
+            singleRowLayout->addWidget(widget.addButton);
+            singleRowLayout->addStretch();
             
-            int valIdx = widget.valueIndexCombo->findData(currentMapping.valueIndex);
-            if (valIdx >= 0)
-                widget.valueIndexCombo->setCurrentIndex(valIdx);
-            else
-                widget.valueIndexCombo->setCurrentIndex(0);  // Default to Row 0
+            m_channelMappingLayout->addLayout(singleRowLayout);
         }
         else
         {
-            // Default to Row 0 when no mapping exists
-            widget.valueIndexCombo->setCurrentIndex(0);
+            // MULTI ROW MODE: label on top, rows indented below
+            m_channelMappingLayout->addWidget(widget.label);
+            
+            // Add all rows to container
+            for (int i = 0; i < widget.rows.size(); i++)
+            {
+                widget.containerLayout->addLayout(widget.rows[i].layout);
+            }
+            
+            // Add ➕ button at end of last row
+            QHBoxLayout *lastRowLayout = qobject_cast<QHBoxLayout*>(widget.rows.last().layout);
+            if (lastRowLayout)
+            {
+                lastRowLayout->addWidget(widget.addButton);
+            }
+            
+            m_channelMappingLayout->addWidget(widget.containerWidget);
         }
-
-        // Connect combo signals to slots
-        connect(widget.channelCombo, SIGNAL(activated(int)),
-                this, SLOT(slotChannelMappingChanged(int)));
-        connect(widget.valueIndexCombo, SIGNAL(activated(int)),
-                this, SLOT(slotChannelMappingChanged(int)));
-
-        // Create label widgets WITHOUT parent - layout will manage them
-        widget.channelLabel = new QLabel(tr("Channel:"));
-        widget.paramLabel = new QLabel(tr("Offset:"));
-        
-        // Add widgets to layout
-        QHBoxLayout *rowLayout = new QHBoxLayout();
-        rowLayout->addWidget(widget.label);
-        rowLayout->addWidget(widget.channelLabel);
-        rowLayout->addWidget(widget.channelCombo, 1);
-        rowLayout->addWidget(widget.paramLabel);
-        rowLayout->addWidget(widget.valueIndexCombo);
-        m_channelMappingLayout->addLayout(rowLayout);
 
         m_mappingWidgets.append(widget);
     }
@@ -1807,21 +1887,79 @@ void RGBMatrixEditor::slotChannelMappingChanged(int index)
     if (key.isEmpty())
         return;
 
-    // Find the corresponding widget to get both values
-    foreach (const FixtureDefMappingWidget &widget, m_mappingWidgets)
+    // Save all channel mappings for this fixture type
+    saveAllChannelMappings(key);
+    
+    // Restart preview if running
+    slotRestartTest();
+}
+
+void RGBMatrixEditor::saveAllChannelMappings(const QString &fixtureDefKey)
+{
+    // Find the widget for this fixture type
+    const FixtureDefMappingWidget *widget = NULL;
+    for (int i = 0; i < m_mappingWidgets.size(); i++)
     {
-        if (widget.fixtureDefKey == key)
+        if (m_mappingWidgets[i].fixtureDefKey == fixtureDefKey)
         {
-            QString channelName = widget.channelCombo->currentData().toString();
-            int valueIndex = widget.valueIndexCombo->currentData().toInt();
-            
-            m_matrix->setFixtureDefChannelMapping(key, channelName, valueIndex);
-            
-            // Restart preview if running
-            slotRestartTest();
+            widget = &m_mappingWidgets[i];
             break;
         }
     }
+    
+    if (widget == NULL)
+        return;
+    
+    // Collect all mappings from UI rows
+    QList<RGBMatrix::ChannelMapping> mappings;
+    foreach (const ChannelMappingRow &row, widget->rows)
+    {
+        RGBMatrix::ChannelMapping m;
+        m.channelName = row.channelCombo->currentData().toString();
+        m.valueIndex = row.valueIndexCombo->currentData().toInt();
+        mappings.append(m);
+    }
+    
+    // Save to backend
+    m_matrix->setFixtureDefChannelMappings(fixtureDefKey, mappings);
+}
+
+void RGBMatrixEditor::slotAddChannelMapping()
+{
+    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    if (btn == NULL)
+        return;
+    
+    QString key = btn->property("fixtureDefKey").toString();
+    if (key.isEmpty())
+        return;
+    
+    // Add new empty mapping to backend (Auto, offset 0)
+    m_matrix->addChannelMapping(key, QString(), 0);
+    
+    // Refresh UI (will switch to multi-row mode if this is second mapping)
+    updateChannelMappingUI();
+    slotRestartTest();
+}
+
+void RGBMatrixEditor::slotRemoveChannelMapping()
+{
+    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    if (btn == NULL)
+        return;
+    
+    QString key = btn->property("fixtureDefKey").toString();
+    int rowIndex = btn->property("rowIndex").toInt();
+    
+    if (key.isEmpty())
+        return;
+    
+    // Remove from backend
+    m_matrix->removeChannelMapping(key, rowIndex);
+    
+    // Refresh UI
+    updateChannelMappingUI();
+    slotRestartTest();
 }
 
 FunctionParent RGBMatrixEditor::functionParent() const

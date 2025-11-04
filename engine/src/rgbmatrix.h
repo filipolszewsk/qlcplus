@@ -320,24 +320,33 @@ private:
     ControlMode m_controlMode;
 
     /*************************************************************************
-     * Per-Definition Channel Mapping
+     * Per-Definition Channel Mapping (Multi-Channel Support)
      *************************************************************************/
 public:
-    /** Structure for fixture definition mapping */
-    struct FixtureDefMapping {
-        QString channelName;  // Which channel to use
-        int valueIndex;       // Which index from multi-value array to use
+    /** Structure for a single channel mapping (channel + offset) */
+    struct ChannelMapping {
+        QString channelName;  // Which channel to use (empty = Auto)
+        int valueIndex;       // Which offset from multi-value array to use
         
-        FixtureDefMapping() : valueIndex(0) {}
-        FixtureDefMapping(const QString &ch, int idx) 
+        ChannelMapping() : valueIndex(0) {}
+        ChannelMapping(const QString &ch, int idx) 
             : channelName(ch), valueIndex(idx) {}
     };
 
-    /** Set channel mapping for a specific fixture definition */
-    void setFixtureDefChannelMapping(const QString &fixtureDefKey, const QString &channelName, int valueIndex);
+    /** Set all channel mappings for a specific fixture definition */
+    void setFixtureDefChannelMappings(const QString &fixtureDefKey, const QList<ChannelMapping> &mappings);
 
-    /** Get channel mapping for a specific fixture definition */
-    FixtureDefMapping fixtureDefChannelMapping(const QString &fixtureDefKey) const;
+    /** Get all channel mappings for a specific fixture definition */
+    QList<ChannelMapping> fixtureDefChannelMappings(const QString &fixtureDefKey) const;
+    
+    /** Add a new channel mapping to a fixture definition */
+    void addChannelMapping(const QString &fixtureDefKey, const QString &channelName, int valueIndex);
+    
+    /** Remove a channel mapping at specific index */
+    void removeChannelMapping(const QString &fixtureDefKey, int index);
+    
+    /** Clear all channel mappings for a fixture definition */
+    void clearChannelMappings(const QString &fixtureDefKey);
 
     /** Generate fixture definition key from definition */
     static QString getFixtureDefKey(const QLCFixtureDef *def);
@@ -369,8 +378,8 @@ public:
     bool isRowSelected(int row) const;
 
 private:
-    /** Map of fixture definition key (manufacturer|model) to mapping info */
-    QMap<QString, FixtureDefMapping> m_fixtureDefChannelMap;
+    /** Map of fixture definition key (manufacturer|model) to list of channel mappings */
+    QMap<QString, QList<ChannelMapping>> m_fixtureDefChannelMap;
     
     /** Enable per-fixture mapping mode (false = AUTO/normal RGB) */
     bool m_enablePerFixtureMapping;
