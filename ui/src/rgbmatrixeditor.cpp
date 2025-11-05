@@ -1739,12 +1739,31 @@ void RGBMatrixEditor::updateChannelMappingUI()
     // ZAWSZE NAJPIERW WYCZYŚĆ (to usuwa groupbox!)
     clearChannelMappingUI();
     
-    // ODTWÓRZ groupbox i layout
+    // ODTWÓRZ groupbox i layout z SCROLLABLE AREA
     if (m_channelMappingGroup == NULL)
     {
         m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
-        m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
-        m_channelMappingGroup->setLayout(m_channelMappingLayout);
+        
+        // Create scrollable area for content (hybrid solution)
+        QScrollArea *scrollArea = new QScrollArea();
+        scrollArea->setWidgetResizable(true);
+        scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scrollArea->setFrameShape(QFrame::NoFrame);
+        scrollArea->setMaximumHeight(400);  // Max 400px height - scrolls if more fixture types
+        
+        // Inner widget for scrollable content
+        QWidget *scrollWidget = new QWidget();
+        m_channelMappingLayout = new QVBoxLayout(scrollWidget);
+        m_channelMappingLayout->setContentsMargins(4, 4, 4, 4);
+        m_channelMappingLayout->setSpacing(8);
+        scrollArea->setWidget(scrollWidget);
+        
+        // GroupBox layout
+        QVBoxLayout *groupLayout = new QVBoxLayout(m_channelMappingGroup);
+        groupLayout->setContentsMargins(4, 4, 4, 4);
+        groupLayout->addWidget(scrollArea);
+        m_channelMappingGroup->setLayout(groupLayout);
         m_channelMappingGroup->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
         
         // Dodaj do bottom grid layout (ta sama pozycja co w init())
@@ -1798,9 +1817,19 @@ void RGBMatrixEditor::updateChannelMappingUI()
 
         FixtureDefMappingWidget widget;
         widget.fixtureDefKey = key;
+        widget.isCollapsed = false;  // Default: expanded
 
         // Create fixture name label
         widget.label = new QLabel(QString("<b>%1:</b>").arg(def->name()));
+        
+        // Create collapse/expand button
+        widget.collapseButton = new QPushButton("▼");
+        widget.collapseButton->setMaximumWidth(30);
+        widget.collapseButton->setToolTip(tr("Collapse/Expand channel mappings"));
+        widget.collapseButton->setProperty("fixtureDefKey", key);
+        widget.collapseButton->setCheckable(true);
+        widget.collapseButton->setChecked(false);  // Not collapsed initially
+        connect(widget.collapseButton, &QPushButton::toggled, this, &RGBMatrixEditor::slotToggleCollapse);
 
         // Get existing mappings from backend
         QList<RGBMatrix::ChannelMapping> existingMappings = m_matrix->fixtureDefChannelMappings(key);
@@ -1833,13 +1862,15 @@ void RGBMatrixEditor::updateChannelMappingUI()
         connect(widget.addButton, &QPushButton::clicked, this, &RGBMatrixEditor::slotAddChannelMapping);
 
         // LAYOUT LOGIC:
-        // - Single row (default): [Label:] [Channel ▼] [Offset ▼] [➕] (all in one line)
-        // - Multi row: Label on top, then indented rows below with ➕ at end
+        // - Single row (default): [▼] [Label:] [Channel ▼] [Offset ▼] [➕] (all in one line)
+        // - Multi row: [▼] [Label] on top, then indented rows below with ➕ at end
+        // - Collapsed: [▶] [Label] only (rows hidden)
         
         if (widget.rows.size() == 1)
         {
             // SINGLE ROW MODE: everything in one horizontal line
             QHBoxLayout *singleRowLayout = new QHBoxLayout();
+            singleRowLayout->addWidget(widget.collapseButton);
             singleRowLayout->addWidget(widget.label);
             singleRowLayout->addWidget(widget.rows[0].channelCombo, 1);
             singleRowLayout->addWidget(widget.rows[0].valueIndexCombo);
@@ -1850,8 +1881,12 @@ void RGBMatrixEditor::updateChannelMappingUI()
         }
         else
         {
-            // MULTI ROW MODE: label on top, rows indented below
-            m_channelMappingLayout->addWidget(widget.label);
+            // MULTI ROW MODE: collapse button + label on top, rows indented below
+            QHBoxLayout *headerLayout = new QHBoxLayout();
+            headerLayout->addWidget(widget.collapseButton);
+            headerLayout->addWidget(widget.label);
+            headerLayout->addStretch();
+            m_channelMappingLayout->addLayout(headerLayout);
             
             // Add all rows to container
             for (int i = 0; i < widget.rows.size(); i++)
@@ -1865,6 +1900,9 @@ void RGBMatrixEditor::updateChannelMappingUI()
             {
                 lastRowLayout->addWidget(widget.addButton);
             }
+            
+            // Container is visible/hidden based on collapse state
+            widget.containerWidget->setVisible(!widget.isCollapsed);
             
             m_channelMappingLayout->addWidget(widget.containerWidget);
         }
@@ -1960,6 +1998,46 @@ void RGBMatrixEditor::slotRemoveChannelMapping()
     // Refresh UI
     updateChannelMappingUI();
     slotRestartTest();
+}
+
+void RGBMatrixEditor::slotToggleCollapse(bool collapsed)
+{
+    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    if (btn == NULL)
+        return;
+    
+    QString key = btn->property("fixtureDefKey").toString();
+    if (key.isEmpty())
+        return;
+    
+    // Find the corresponding widget
+    for (int i = 0; i < m_mappingWidgets.size(); i++)
+    {
+        if (m_mappingWidgets[i].fixtureDefKey == key)
+        {
+            FixtureDefMappingWidget &widget = m_mappingWidgets[i];
+            widget.isCollapsed = collapsed;
+            
+            // Update button icon
+            btn->setText(collapsed ? "▶" : "▼");
+            
+            // Show/hide container widget (for multi-row mode)
+            if (widget.containerWidget != NULL)
+            {
+                widget.containerWidget->setVisible(!collapsed);
+            }
+            
+            // For single-row mode, show/hide the combos and add button
+            if (widget.rows.size() == 1)
+            {
+                widget.rows[0].channelCombo->setVisible(!collapsed);
+                widget.rows[0].valueIndexCombo->setVisible(!collapsed);
+                widget.addButton->setVisible(!collapsed);
+            }
+            
+            break;
+        }
+    }
 }
 
 FunctionParent RGBMatrixEditor::functionParent() const

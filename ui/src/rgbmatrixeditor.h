@@ -143,8 +143,10 @@ private:
         QLabel *label;                      // Fixture name label
         QList<ChannelMappingRow> rows;      // List of channel mapping rows
         QPushButton *addButton;             // [➕] button
+        QPushButton *collapseButton;        // [▼/▶] collapse/expand button
         QVBoxLayout *containerLayout;       // Container for multi-row layout
         QWidget *containerWidget;           // Widget for indented rows
+        bool isCollapsed;                   // Collapse state
     };
 
     // Private methods
@@ -185,6 +187,7 @@ protected slots:
     void slotEnablePerFixtureMappingToggled(bool checked);
     void slotAddChannelMapping();
     void slotRemoveChannelMapping();
+    void slotToggleCollapse(bool collapsed);
 
     /************************************************************************
      * Row filtering
