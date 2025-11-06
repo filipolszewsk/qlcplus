@@ -488,6 +488,11 @@
             <string>Shutter</string>
            </property>
           </item>
+          <item>
+           <property name="text">
+            <string>Dimmer (Full Range)</string>
+           </property>
+          </item>
          </widget>
         </item>
         <item row="0" column="0" colspan="6">

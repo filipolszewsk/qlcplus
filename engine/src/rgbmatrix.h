@@ -303,7 +303,8 @@ public:
         ControlModeAmber,
         ControlModeUV,
         ControlModeDimmer,
-        ControlModeShutter
+        ControlModeShutter,
+        ControlModeDimmerFullRange
     };
 
     /** Get/Set the control mode associated to this RGBMatrix */

@@ -57,6 +57,7 @@
 #define KXMLQLCRGBMatrixControlModeUV       QStringLiteral("UV")
 #define KXMLQLCRGBMatrixControlModeDimmer   QStringLiteral("Dimmer")
 #define KXMLQLCRGBMatrixControlModeShutter  QStringLiteral("Shutter")
+#define KXMLQLCRGBMatrixControlModeDimmerFullRange  QStringLiteral("DimmerFullRange")
 
 #define KXMLQLCRGBMatrixFixtureDefChannelMap        QStringLiteral("FixtureDefChannelMap")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapKey     QStringLiteral("FixtureDefKey")
@@ -1103,6 +1104,25 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 valueList.append(rgbToGrey(col) == 0 ? 0 : 255);
             }
         }
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeDimmerFullRange)
+        {
+            // Full range dimmer control mode - all dimmers use full 0-255 range
+            // This is similar to ControlModeDimmer but without binary per-head dimmer
+            quint32 masterDim = fxi->masterIntensityChannel();
+            quint32 headDim = head.channelNumber(QLCChannel::Intensity, QLCChannel::MSB);
+
+            if (masterDim != QLCChannel::invalid())
+            {
+                channelList.append(masterDim);
+                valueList.append(rgbToGrey(col));
+            }
+
+            if (headDim != QLCChannel::invalid() && headDim != masterDim)
+            {
+                channelList.append(headDim);
+                valueList.append(rgbToGrey(col)); // Full range 0-255, not binary!
+            }
+        }
         else if (!usePerDefinitionMapping)
         {
             if (m_controlMode == ControlModeWhite)
@@ -1205,6 +1225,8 @@ RGBMatrix::ControlMode RGBMatrix::stringToControlMode(QString mode)
         return ControlModeDimmer;
     else if (mode == KXMLQLCRGBMatrixControlModeShutter)
         return ControlModeShutter;
+    else if (mode == KXMLQLCRGBMatrixControlModeDimmerFullRange)
+        return ControlModeDimmerFullRange;
 
     return ControlModeRgb;
 }
@@ -1231,6 +1253,9 @@ QString RGBMatrix::controlModeToString(RGBMatrix::ControlMode mode)
         break;
         case ControlModeShutter:
             return QString(KXMLQLCRGBMatrixControlModeShutter);
+        break;
+        case ControlModeDimmerFullRange:
+            return QString(KXMLQLCRGBMatrixControlModeDimmerFullRange);
         break;
     }
 }

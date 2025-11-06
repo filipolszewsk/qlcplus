@@ -273,6 +273,7 @@ Rectangle
                         ListElement { mLabel: qsTr("UV"); }
                         ListElement { mLabel: qsTr("Dimmer"); }
                         ListElement { mLabel: qsTr("Shutter"); }
+                        ListElement { mLabel: qsTr("Dimmer (Full Range)"); }
                     }
                     model: controlModel
 
