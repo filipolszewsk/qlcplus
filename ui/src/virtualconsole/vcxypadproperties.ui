@@ -379,6 +379,11 @@
              <string>Name</string>
             </property>
            </column>
+           <column>
+            <property name="text">
+             <string>Soft Patch</string>
+            </property>
+           </column>
           </widget>
          </item>
          <item>

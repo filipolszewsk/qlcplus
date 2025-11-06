@@ -224,6 +224,10 @@ VCXYPadProperties::VCXYPadProperties(VCXYPad* xypad, Doc* doc)
             this, SLOT(slotPresetNameEdited(QString const&)));
     connect(m_presetsTree, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
             this, SLOT(slotPresetSelectionChanged()));
+    connect(m_presetsTree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotPresetsTreeItemDoubleClicked(QTreeWidgetItem*,int)));
+    connect(m_presetsTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+            this, SLOT(slotPresetsTreeItemChanged(QTreeWidgetItem*,int)));
 
     m_xyArea = new VCXYPadArea(this);
     //m_xyArea->setFixedSize(140, 140);
@@ -835,18 +839,30 @@ void VCXYPadProperties::updatePresetsTree()
     {
         VCXYPadPreset *preset = m_presetList.at(i);
         QTreeWidgetItem *item = new QTreeWidgetItem(m_presetsTree);
-        item->setData(0, Qt::UserRole, preset->m_id);
-        item->setText(0, preset->m_name);
+        item->setData(KPresetColumnName, Qt::UserRole, preset->m_id);
+        item->setText(KPresetColumnName, preset->m_name);
+        
         if (preset->m_type == VCXYPadPreset::EFX)
-            item->setIcon(0, QIcon(":/efx.png"));
+            item->setIcon(KPresetColumnName, QIcon(":/efx.png"));
         else if (preset->m_type == VCXYPadPreset::Scene)
-            item->setIcon(0, QIcon(":/scene.png"));
+            item->setIcon(KPresetColumnName, QIcon(":/scene.png"));
         else if (preset->m_type == VCXYPadPreset::Position)
-            item->setIcon(0, QIcon(":/xypad.png"));
+            item->setIcon(KPresetColumnName, QIcon(":/xypad.png"));
         else if (preset->m_type == VCXYPadPreset::FixtureGroup)
-            item->setIcon(0, QIcon(":/group.png"));
+            item->setIcon(KPresetColumnName, QIcon(":/group.png"));
+        
+        // Add soft patch column
+        if (!preset->m_inputSource.isNull())
+        {
+            QString patch = QString("%1.%2")
+                .arg(preset->m_inputSource->universe() + 1)
+                .arg(preset->m_inputSource->channel() + 1);
+            item->setText(KPresetColumnSoftPatch, patch);
+        }
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
-    m_presetsTree->resizeColumnToContents(0);
+    m_presetsTree->resizeColumnToContents(KPresetColumnName);
+    m_presetsTree->resizeColumnToContents(KPresetColumnSoftPatch);
     m_presetsTree->blockSignals(false);
 }
 
@@ -1270,6 +1286,80 @@ void VCXYPadProperties::slotKeySequenceChanged(QKeySequence key)
 
     if (preset != NULL)
         preset->m_keySequence = key;
+}
+
+void VCXYPadProperties::slotPresetsTreeItemDoubleClicked(QTreeWidgetItem *item, int column)
+{
+    if (column == KPresetColumnSoftPatch)
+        m_presetsTree->editItem(item, column);
+}
+
+void VCXYPadProperties::slotPresetsTreeItemChanged(QTreeWidgetItem *item, int column)
+{
+    if (item == NULL || column != KPresetColumnSoftPatch)
+        return;
+
+    QString patch = item->text(KPresetColumnSoftPatch);
+    QStringList list = patch.split(".");
+
+    if (list.length() != 2)
+        return;
+
+    quint32 universe = list.at(0).toUInt();
+    quint32 channel = list.at(1).toUInt();
+
+    QList<QTreeWidgetItem*> selection = m_presetsTree->selectedItems();
+    
+    // Support multi-selection with auto-increment
+    if (selection.count() > 1)
+    {
+        m_presetsTree->blockSignals(true);
+        for (int i = 0; i < selection.count(); ++i)
+        {
+            QTreeWidgetItem *selItem = selection.at(i);
+            quint8 presetID = selItem->data(KPresetColumnName, Qt::UserRole).toUInt();
+            
+            foreach (VCXYPadPreset *preset, m_presetList)
+            {
+                if (preset->m_id == presetID)
+                {
+                    if (universe > 0 && channel > 0)
+                    {
+                        preset->m_inputSource = QSharedPointer<QLCInputSource>(
+                            new QLCInputSource(universe - 1, (channel + i) - 1));
+                        selItem->setText(KPresetColumnSoftPatch, 
+                            QString("%1.%2").arg(universe).arg(channel + i));
+                    }
+                    else
+                    {
+                        preset->m_inputSource.clear();
+                        selItem->setText(KPresetColumnSoftPatch, "");
+                    }
+                    break;
+                }
+            }
+        }
+        m_presetsTree->blockSignals(false);
+    }
+    else
+    {
+        VCXYPadPreset *preset = getSelectedPreset();
+        if (preset == NULL)
+            return;
+
+        if (patch.isEmpty())
+        {
+            preset->m_inputSource.clear();
+        }
+        else
+        {
+            if (universe > 0 && channel > 0)
+                preset->m_inputSource = QSharedPointer<QLCInputSource>(
+                    new QLCInputSource(universe - 1, channel - 1));
+            else
+                preset->m_inputSource.clear();
+        }
+    }
 }
 
 /****************************************************************************

@@ -33,6 +33,12 @@ class MasterTimer;
 class VCXYPad;
 class Doc;
 
+enum
+{
+    KPresetColumnName = 0,
+    KPresetColumnSoftPatch
+};
+
 /** @addtogroup ui_vc_props
  * @{
  */
@@ -140,6 +146,8 @@ protected slots:
     void slotXYPadPositionChanged(const QPointF& pt);
     void slotInputValueChanged(quint32 universe, quint32 channel);
     void slotKeySequenceChanged(QKeySequence key);
+    void slotPresetsTreeItemDoubleClicked(QTreeWidgetItem *item, int column);
+    void slotPresetsTreeItemChanged(QTreeWidgetItem *item, int column);
 
 private:
     VCXYPadArea *m_xyArea;
