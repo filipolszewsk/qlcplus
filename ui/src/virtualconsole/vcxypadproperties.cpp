@@ -990,7 +990,7 @@ void VCXYPadProperties::slotAddPositionClicked()
 void VCXYPadProperties::slotAddEFXClicked()
 {
     FunctionSelection fs(this, m_doc);
-    fs.setMultiSelection(false);
+    fs.setMultiSelection(true);
     fs.setFilter(Function::EFXType, true);
     QList <quint32> ids;
     foreach (VCXYPadPreset *preset, m_presetList)
@@ -1001,24 +1001,33 @@ void VCXYPadProperties::slotAddEFXClicked()
 
     if (fs.exec() == QDialog::Accepted && fs.selection().size() > 0)
     {
-        quint32 fID = fs.selection().first();
-        Function *f = m_doc->function(fID);
-        if (f == NULL || f->type() != Function::EFXType)
-            return;
-        VCXYPadPreset *newPreset = new VCXYPadPreset(++m_lastAssignedID);
-        newPreset->m_type = VCXYPadPreset::EFX;
-        newPreset->m_funcID = fID;
-        newPreset->m_name = f->name();
-        m_presetList.append(newPreset);
+        quint8 lastAddedID = 0;
+        
+        // Add all selected EFX presets
+        foreach (quint32 fID, fs.selection())
+        {
+            Function *f = m_doc->function(fID);
+            if (f == NULL || f->type() != Function::EFXType)
+                continue;
+            
+            VCXYPadPreset *newPreset = new VCXYPadPreset(++m_lastAssignedID);
+            newPreset->m_type = VCXYPadPreset::EFX;
+            newPreset->m_funcID = fID;
+            newPreset->m_name = f->name();
+            m_presetList.append(newPreset);
+            lastAddedID = newPreset->m_id;
+        }
+        
         updatePresetsTree();
-        selectItemOnPresetsTree(newPreset->m_id);
+        if (lastAddedID > 0)
+            selectItemOnPresetsTree(lastAddedID);
     }
 }
 
 void VCXYPadProperties::slotAddSceneClicked()
 {
     FunctionSelection fs(this, m_doc);
-    fs.setMultiSelection(false);
+    fs.setMultiSelection(true);
     fs.setFilter(Function::SceneType, true);
     QList <quint32> ids;
     foreach (VCXYPadPreset *preset, m_presetList)
@@ -1029,41 +1038,59 @@ void VCXYPadProperties::slotAddSceneClicked()
 
     if (fs.exec() == QDialog::Accepted && fs.selection().size() > 0)
     {
-        quint32 fID = fs.selection().first();
-        Function *f = m_doc->function(fID);
-        if (f == NULL || f->type() != Function::SceneType)
-            return;
-        Scene *scene = qobject_cast<Scene*>(f);
-        bool panTiltFound = false;
-        foreach (SceneValue scv, scene->values())
+        quint8 lastAddedID = 0;
+        QStringList skippedScenes;
+        
+        // Add all selected Scene presets
+        foreach (quint32 fID, fs.selection())
         {
-            Fixture *fixture = m_doc->fixture(scv.fxi);
-            if (fixture == NULL)
+            Function *f = m_doc->function(fID);
+            if (f == NULL || f->type() != Function::SceneType)
                 continue;
-            const QLCChannel *ch = fixture->channel(scv.channel);
-            if (ch == NULL)
-                continue;
-            if (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt)
+                
+            Scene *scene = qobject_cast<Scene*>(f);
+            bool panTiltFound = false;
+            foreach (SceneValue scv, scene->values())
             {
-                panTiltFound = true;
-                break;
+                Fixture *fixture = m_doc->fixture(scv.fxi);
+                if (fixture == NULL)
+                    continue;
+                const QLCChannel *ch = fixture->channel(scv.channel);
+                if (ch == NULL)
+                    continue;
+                if (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt)
+                {
+                    panTiltFound = true;
+                    break;
+                }
             }
+            
+            if (panTiltFound == false)
+            {
+                skippedScenes.append(f->name());
+                continue;
+            }
+            
+            VCXYPadPreset *newPreset = new VCXYPadPreset(++m_lastAssignedID);
+            newPreset->m_type = VCXYPadPreset::Scene;
+            newPreset->m_funcID = fID;
+            newPreset->m_name = f->name();
+            m_presetList.append(newPreset);
+            lastAddedID = newPreset->m_id;
         }
-        if (panTiltFound == false)
-        {
-            QMessageBox::critical(this, tr("Error"),
-                                  tr("The selected Scene does not include any Pan or Tilt channel.\n"
-                                     "Please select one with such channels."),
-                                  QMessageBox::Close);
-            return;
-        }
-        VCXYPadPreset *newPreset = new VCXYPadPreset(++m_lastAssignedID);
-        newPreset->m_type = VCXYPadPreset::Scene;
-        newPreset->m_funcID = fID;
-        newPreset->m_name = f->name();
-        m_presetList.append(newPreset);
+        
         updatePresetsTree();
-        selectItemOnPresetsTree(newPreset->m_id);
+        if (lastAddedID > 0)
+            selectItemOnPresetsTree(lastAddedID);
+        
+        // Show warning for skipped scenes
+        if (!skippedScenes.isEmpty())
+        {
+            QMessageBox::warning(this, tr("Scenes skipped"),
+                                tr("The following Scene(s) do not include any Pan or Tilt channel "
+                                   "and were not added:\n\n%1").arg(skippedScenes.join("\n")),
+                                QMessageBox::Close);
+        }
     }
 }
 
