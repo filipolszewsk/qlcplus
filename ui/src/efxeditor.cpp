@@ -535,17 +535,11 @@ void EFXEditor::updateFixtureTree()
                     // Mode combo
                     QComboBox* combo = new QComboBox(m_tree);
                     combo->setAutoFillBackground(true);
-                    // Use mode list from any fixture, or default list
-                    if (!m_efx->fixtures().isEmpty())
-                    {
-                        combo->addItems(m_efx->fixtures().first()->modeList());
-                    }
-                    else
-                    {
-                        // If no fixtures at all, add basic modes
-                        combo->addItem("PanTilt");
-                        combo->addItem("Dimmer");
-                    }
+                    // For empty columns, always show all available modes
+                    // This allows user to select any mode regardless of fixture capabilities
+                    combo->addItem("PanTilt");
+                    combo->addItem("Dimmer");
+                    combo->addItem("RGB");
                     combo->setProperty(PROPERTY_FIXTURE, col);
                     // Note: widgets are enabled so user can set template values
                     // but they won't affect anything until fixtures are added to this column
