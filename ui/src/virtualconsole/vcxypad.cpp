@@ -805,7 +805,7 @@ void VCXYPad::addPreset(const VCXYPadPreset &preset)
     m_presets[presetWidget] = new VCXYPadPreset(preset);
     m_presetsLayout->addWidget(presetWidget);
 
-    if (m_presets[presetWidget]->m_inputSource != NULL)
+    if (!m_presets[presetWidget]->m_inputSource.isNull())
     {
         setInputSource(m_presets[presetWidget]->m_inputSource, m_presets[presetWidget]->m_id);
     }
@@ -1208,7 +1208,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
                 it != m_presets.end(); ++it)
         {
             VCXYPadPreset *preset = it.value();
-            if (preset->m_inputSource != NULL &&
+            if (!preset->m_inputSource.isNull() &&
                     preset->m_inputSource->universe() == universe &&
                     preset->m_inputSource->channel() == pagedCh)
             {
