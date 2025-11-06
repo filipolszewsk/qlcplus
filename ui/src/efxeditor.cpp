@@ -694,7 +694,10 @@ void EFXEditor::updateModeColumn(QTreeWidgetItem* item, EFXFixture* ef)
     {
         QComboBox* combo = new QComboBox(m_tree);
         combo->setAutoFillBackground(true);
-        combo->addItems(ef->modeList());
+        // Always show all modes, regardless of fixture capabilities
+        combo->addItem("PanTilt");
+        combo->addItem("Dimmer");
+        combo->addItem("RGB");
         
         if (m_efx->isFixtureGroupMode())
         {
