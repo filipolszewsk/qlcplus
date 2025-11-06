@@ -99,7 +99,7 @@ VCXYPadPreset &VCXYPadPreset::operator=(const VCXYPadPreset &vcpp)
         m_fxGroup = vcpp.m_fxGroup;
         m_keySequence = vcpp.m_keySequence;
 
-        if (vcpp.m_inputSource != NULL)
+        if (!vcpp.m_inputSource.isNull())
         {
             m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(vcpp.m_inputSource->universe(),
                                                    vcpp.m_inputSource->channel()));
