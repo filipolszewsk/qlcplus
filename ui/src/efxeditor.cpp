@@ -537,7 +537,7 @@ void EFXEditor::updateFixtureTree()
                     combo->setAutoFillBackground(true);
                     // For empty columns, always show all available modes
                     // This allows user to select any mode regardless of fixture capabilities
-                    combo->addItem("PanTilt");
+                    combo->addItem("Position");
                     combo->addItem("Dimmer");
                     combo->addItem("RGB");
                     combo->setProperty(PROPERTY_FIXTURE, col);
@@ -695,7 +695,7 @@ void EFXEditor::updateModeColumn(QTreeWidgetItem* item, EFXFixture* ef)
         QComboBox* combo = new QComboBox(m_tree);
         combo->setAutoFillBackground(true);
         // Always show all modes, regardless of fixture capabilities
-        combo->addItem("PanTilt");
+        combo->addItem("Position");
         combo->addItem("Dimmer");
         combo->addItem("RGB");
         
