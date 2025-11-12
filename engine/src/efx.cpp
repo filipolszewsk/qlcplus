@@ -146,6 +146,7 @@ bool EFX::copyFrom(const Function* function)
     m_wings = efx->m_wings;
     m_selectedRows = efx->m_selectedRows;
     m_columnModes = efx->m_columnModes;
+    m_columnDirections = efx->m_columnDirections;
 
     return Function::copyFrom(function);
 }
@@ -1083,6 +1084,34 @@ QMap<int, int> EFX::columnModes() const
     return m_columnModes;
 }
 
+void EFX::setColumnDirection(int column, Function::Direction direction)
+{
+    Function::Direction current = columnDirection(column);
+    
+    if (direction == current)
+        return;
+    
+    if (direction == Function::Forward)
+        m_columnDirections.remove(column);
+    else
+        m_columnDirections[column] = direction;
+    
+    emit changed(this->id());
+}
+
+Function::Direction EFX::columnDirection(int column) const
+{
+    if (m_columnDirections.contains(column))
+        return m_columnDirections.value(column);
+    
+    return Function::Forward;
+}
+
+QMap<int, Function::Direction> EFX::columnDirections() const
+{
+    return m_columnDirections;
+}
+
 /*****************************************************************************
  * Fixture propagation mode
  *****************************************************************************/
@@ -1168,6 +1197,21 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
                 doc->writeStartElement(KXMLQLCEFXColumnMode);
                 doc->writeAttribute(KXMLQLCEFXColumnIndex, QString::number(it.key()));
                 doc->writeAttribute(KXMLQLCEFXColumnModeValue, QString::number(it.value()));
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
+        }
+
+        if (!m_columnDirections.isEmpty())
+        {
+            doc->writeStartElement(KXMLQLCEFXColumnDirections);
+            QMapIterator<int, Function::Direction> it(m_columnDirections);
+            while (it.hasNext())
+            {
+                it.next();
+                doc->writeStartElement(KXMLQLCEFXColumnDirection);
+                doc->writeAttribute(KXMLQLCEFXColumnIndex, QString::number(it.key()));
+                doc->writeAttribute(KXMLQLCEFXColumnDirectionValue, Function::directionToString(it.value()));
                 doc->writeEndElement();
             }
             doc->writeEndElement();
@@ -1332,6 +1376,30 @@ bool EFX::loadXML(QXmlStreamReader &root)
                     int col = root.attributes().value(KXMLQLCEFXColumnIndex).toInt();
                     int mode = root.attributes().value(KXMLQLCEFXColumnModeValue).toInt();
                     m_columnModes[col] = mode;
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
+        }
+        else if (root.name() == KXMLQLCEFXColumnDirections)
+        {
+            /* Column Directions */
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLQLCEFXColumnDirection)
+                {
+                    int col = root.attributes().value(KXMLQLCEFXColumnIndex).toInt();
+                    QString dirStr = root.attributes().value(KXMLQLCEFXColumnDirectionValue).toString();
+                    Function::Direction dir = Function::stringToDirection(dirStr);
+                    
+                    if (dir == Function::Forward)
+                        m_columnDirections.remove(col);
+                    else
+                        m_columnDirections[col] = dir;
+                    
                     root.skipCurrentElement();
                 }
                 else

@@ -21,6 +21,7 @@
 #ifndef EFX_H
 #define EFX_H
 
+#include <QMap>
 #include <QVector>
 #include <QPoint>
 #include <QList>
@@ -65,6 +66,9 @@ class Fixture;
 #define KXMLQLCEFXColumnMode                QStringLiteral("ColumnMode")
 #define KXMLQLCEFXColumnIndex               QStringLiteral("Index")
 #define KXMLQLCEFXColumnModeValue           QStringLiteral("Mode")
+#define KXMLQLCEFXColumnDirections          QStringLiteral("ColumnDirections")
+#define KXMLQLCEFXColumnDirection           QStringLiteral("ColumnDirection")
+#define KXMLQLCEFXColumnDirectionValue      QStringLiteral("Direction")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -684,6 +688,15 @@ public:
     /** Get all column modes */
     QMap<int, int> columnModes() const;
 
+    /** Set direction for a specific column in fixture group mode */
+    void setColumnDirection(int column, Function::Direction direction);
+    
+    /** Get direction for a specific column (defaults to Forward) */
+    Function::Direction columnDirection(int column) const;
+    
+    /** Get all column directions */
+    QMap<int, Function::Direction> columnDirections() const;
+
 private:
     quint32 m_fixtureGroupID;
     OffsetDirection m_offsetDirection;
@@ -691,6 +704,7 @@ private:
     int m_wings;
     QList<int> m_selectedRows;
     QMap<int, int> m_columnModes;  // Column index -> EFXFixture::Mode (as int)
+    QMap<int, Function::Direction> m_columnDirections; // Column index -> direction
 
     /*********************************************************************
      * Fixture propagation mode

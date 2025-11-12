@@ -523,13 +523,18 @@ void EFXEditor::updateFixtureTree()
                     else
                         item->setCheckState(KColumnReverse, Qt::Unchecked);
                     
+                    if (m_efx->columnDirection(col) != firstFixture->direction())
+                        m_efx->setColumnDirection(col, firstFixture->direction());
+                    
                     updateModeColumn(item, firstFixture);
                     updateStartOffsetColumn(item, firstFixture);
                 }
                 else
                 {
                     // Empty column - show with default values (can be used as template)
-                    item->setCheckState(KColumnReverse, Qt::Unchecked);
+                    Function::Direction storedDir = m_efx->columnDirection(col);
+                    item->setCheckState(KColumnReverse,
+                                        storedDir == Function::Backward ? Qt::Checked : Qt::Unchecked);
                     
                     // Create widgets with defaults for empty columns (enabled for template use)
                     // Mode combo
@@ -849,6 +854,8 @@ void EFXEditor::slotFixtureItemChanged(QTreeWidgetItem* item, int column)
             
             Function::Direction dir = (item->checkState(column) == Qt::Checked) ? Function::Backward : Function::Forward;
             int gridHeight = group->size().height();
+
+            m_efx->setColumnDirection(columnIndex, dir);
             
             foreach (EFXFixture *ef, m_efx->fixtures())
             {
@@ -1412,10 +1419,12 @@ void EFXEditor::slotRowSelectionChanged()
                         
                         // Restore direction from saved settings if available
                         QPair<quint32, int> key(head.fxi, head.head);
+                        Function::Direction desiredDirection = m_efx->columnDirection(col);
                         if (fixtureSettings.contains(key))
-                        {
-                            ef->setDirection(fixtureSettings[key].second);
-                        }
+                            desiredDirection = fixtureSettings[key].second;
+
+                        m_efx->setColumnDirection(col, desiredDirection);
+                        ef->setDirection(desiredDirection);
                         
                         if (!m_efx->addFixture(ef))
                             delete ef;
@@ -1490,6 +1499,9 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
                         // Restore mode from backend (column-specific, persistent)
                         EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
                         ef->setMode(columnMode);
+                        
+                        Function::Direction columnDir = m_efx->columnDirection(col);
+                        ef->setDirection(columnDir);
                         
                         if (!m_efx->addFixture(ef))
                             delete ef;
@@ -1569,6 +1581,9 @@ void EFXEditor::slotFixtureGroupChanged(int index)
                     // Restore mode from backend (column-specific, persistent)
                     EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
                     ef->setMode(columnMode);
+                    
+                    Function::Direction columnDir = m_efx->columnDirection(col);
+                    ef->setDirection(columnDir);
                     
                     if (!m_efx->addFixture(ef))
                         delete ef;
