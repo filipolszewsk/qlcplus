@@ -31,6 +31,7 @@
 #include <QLabel>
 #include <QDebug>
 #include <QPen>
+#include <QSignalBlocker>
 
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
@@ -556,11 +557,10 @@ void EFXEditor::updateFixtureTree()
                     m_tree->setItemWidget(item, KColumnMode, combo);
                     
                     // Restore mode for this column (backend first, then UI cache)
-                    int backendMode = m_efx->columnMode(col);
-                    if (backendMode != 0)  // 0 = PanTilt (default), any other value means it was explicitly set
+                    const QMap<int, int> backendModes = m_efx->columnModes();
+                    if (backendModes.contains(col))
                     {
-                        // Use mode from backend (persistent, from XML)
-                        QString modeStr = EFXFixture::modeToString((EFXFixture::Mode)backendMode);
+                        QString modeStr = EFXFixture::modeToString((EFXFixture::Mode)backendModes.value(col));
                         int idx = combo->findText(modeStr);
                         if (idx >= 0)
                             combo->setCurrentIndex(idx);
@@ -718,8 +718,24 @@ void EFXEditor::updateModeColumn(QTreeWidgetItem* item, EFXFixture* ef)
         
         m_tree->setItemWidget(item, KColumnMode, combo);
 
-        const int index = combo->findText(ef->modeToString(ef->mode()));
+    QString desiredMode = ef->modeToString(ef->mode());
+
+    if (m_efx->isFixtureGroupMode())
+    {
+        int columnIndex = item->data(0, Qt::UserRole).toInt();
+        const QMap<int, int> storedModes = m_efx->columnModes();
+        if (storedModes.contains(columnIndex))
+        {
+            desiredMode = EFXFixture::modeToString(static_cast<EFXFixture::Mode>(storedModes.value(columnIndex)));
+        }
+    }
+
+    const int index = combo->findText(desiredMode);
+    if (index >= 0)
+    {
+        QSignalBlocker blocker(combo);
         combo->setCurrentIndex(index);
+    }
 
         connect(combo, SIGNAL(currentIndexChanged(int)),
                 this, SLOT(slotFixtureModeChanged(int)));
