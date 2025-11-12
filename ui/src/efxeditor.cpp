@@ -502,6 +502,23 @@ void EFXEditor::updateFixtureTree()
                 }
             }
             
+            // Apply stored column modes to the corresponding fixtures before creating UI items
+            const QMap<int, int> storedModes = m_efx->columnModes();
+            for (auto it = storedModes.constBegin(); it != storedModes.constEnd(); ++it)
+            {
+                int col = it.key();
+                if (columnFixtures.contains(col) == false)
+                    continue;
+
+                int modeValue = it.value();
+                if (modeValue < EFXFixture::PanTilt || modeValue > EFXFixture::RGB)
+                    continue;
+
+                EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(modeValue);
+                foreach (EFXFixture *ef, columnFixtures.value(col))
+                    ef->setMode(mode);
+            }
+
             // Create tree items for each column (including empty ones)
             for (int col = 0; col < gridWidth; col++)
             {
