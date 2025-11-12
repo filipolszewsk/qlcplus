@@ -1612,23 +1612,35 @@ int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHe
                 break;
             case EFX::CenterToSides:
                 {
-                    int center = blockSize / 2;
-                    index = abs(posInBlock - center);
+                    if (blockSize % 2 == 0)
+                    {
+                        int centerRight = blockSize / 2;
+                        int centerLeft = centerRight - 1;
+                        int distLeft = abs(posInBlock - centerLeft);
+                        int distRight = abs(posInBlock - centerRight);
+                        index = (distLeft < distRight) ? distLeft : distRight;
+                    }
+                    else
+                    {
+                        int center = blockSize / 2;
+                        index = abs(posInBlock - center);
+                    }
                 }
                 break;
             case EFX::SidesToCenter:
                 {
-                    int center = blockSize / 2;
-                    int distance = abs(posInBlock - center);
-                    int maxDistance = (blockSize + 1) / 2;
-                    index = maxDistance - distance - 1;
+                    int distanceFromEdge = qMin(posInBlock, (blockSize - 1) - posInBlock);
+                    index = distanceFromEdge;
                 }
                 break;
             case EFX::Alternate:
-                if (posInBlock % 2 == 0)
-                    index = posInBlock / 2;
-                else
-                    index = (blockSize / 2) + ((posInBlock + 1) / 2);
+                {
+                    int half = (blockSize + 1) / 2;
+                    if (posInBlock % 2 == 0)
+                        index = posInBlock / 2;
+                    else
+                        index = half + (posInBlock / 2);
+                }
                 break;
             case EFX::Symmetric:
                 {
@@ -1662,28 +1674,39 @@ int EFXEditor::calculateColumnOffset(int col, int row, int gridWidth, int gridHe
         case EFX::CenterToSides:
             // Center goes first, then alternating left/right
             {
-                int center = gridWidth / 2;
-                int distance = abs(col - center);
-                index = distance;
+                if (gridWidth % 2 == 0)
+                {
+                    int centerRight = gridWidth / 2;
+                    int centerLeft = centerRight - 1;
+                    int distLeft = abs(col - centerLeft);
+                    int distRight = abs(col - centerRight);
+                    index = (distLeft < distRight) ? distLeft : distRight;
+                }
+                else
+                {
+                    int center = gridWidth / 2;
+                    index = abs(col - center);
+                }
             }
             break;
             
         case EFX::SidesToCenter:
             // Sides first, center last
             {
-                int center = gridWidth / 2;
-                int distance = abs(col - center);
-                int maxDistance = (gridWidth + 1) / 2;
-                index = maxDistance - distance - 1;
+                int distanceFromEdge = qMin(col, (gridWidth - 1) - col);
+                index = distanceFromEdge;
             }
             break;
             
         case EFX::Alternate:
             // Odd columns first (0,2,4...), then even (1,3,5...)
-            if (col % 2 == 0)
-                index = col / 2;
-            else
-                index = (gridWidth / 2) + ((col + 1) / 2);
+            {
+                int half = (gridWidth + 1) / 2;
+                if (col % 2 == 0)
+                    index = col / 2;
+                else
+                    index = half + (col / 2);
+            }
             break;
             
         case EFX::Symmetric:
