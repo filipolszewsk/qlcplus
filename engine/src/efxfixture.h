@@ -103,6 +103,12 @@ public:
     /** Set the parameter(s) that this efx will animate (ie. dimmer, RGB, ...) */
     void setMode(Mode mode);
 
+    /** Force the fixture to stay in the provided mode regardless of capabilities */
+    void forceMode(Mode mode);
+
+    /** Check whether the mode has been forced */
+    bool isModeLocked() const;
+
     /** Get the parameter(s) that this efx will animate (ie. dimmer, RGB, ...) */
     Mode mode() const;
 
@@ -133,6 +139,7 @@ private:
     Function::Direction m_direction;
     int m_startOffset;
     Mode m_mode;
+    bool m_modeLocked;
 
     /*************************************************************************
      * Load & Save

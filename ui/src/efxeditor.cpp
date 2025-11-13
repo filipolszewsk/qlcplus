@@ -503,20 +503,18 @@ void EFXEditor::updateFixtureTree()
             }
             
             // Apply stored column modes to the corresponding fixtures before creating UI items
-            const QMap<int, int> storedModes = m_efx->columnModes();
-            for (auto it = storedModes.constBegin(); it != storedModes.constEnd(); ++it)
+            for (int col = 0; col < gridWidth; col++)
             {
-                int col = it.key();
                 if (columnFixtures.contains(col) == false)
                     continue;
 
-                int modeValue = it.value();
+                int modeValue = m_efx->columnMode(col);
                 if (modeValue < EFXFixture::PanTilt || modeValue > EFXFixture::RGB)
-                    continue;
+                    modeValue = EFXFixture::PanTilt;
 
                 EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(modeValue);
                 foreach (EFXFixture *ef, columnFixtures.value(col))
-                    ef->setMode(mode);
+                    ef->forceMode(mode);
             }
 
             // Create tree items for each column (including empty ones)
@@ -574,13 +572,15 @@ void EFXEditor::updateFixtureTree()
                     m_tree->setItemWidget(item, KColumnMode, combo);
                     
                     // Restore mode for this column (backend first, then UI cache)
-                    const QMap<int, int> backendModes = m_efx->columnModes();
-                    if (backendModes.contains(col))
+                    int backendMode = m_efx->columnMode(col);
+                    if (backendMode < EFXFixture::PanTilt || backendMode > EFXFixture::RGB)
+                        backendMode = EFXFixture::PanTilt;
+
+                    QString backendModeStr = EFXFixture::modeToString(static_cast<EFXFixture::Mode>(backendMode));
+                    int backendIdx = combo->findText(backendModeStr);
+                    if (backendIdx >= 0)
                     {
-                        QString modeStr = EFXFixture::modeToString((EFXFixture::Mode)backendModes.value(col));
-                        int idx = combo->findText(modeStr);
-                        if (idx >= 0)
-                            combo->setCurrentIndex(idx);
+                        combo->setCurrentIndex(backendIdx);
                     }
                     else if (savedColumnModes.contains(col))
                     {
@@ -954,7 +954,7 @@ void EFXEditor::slotFixtureModeChanged(int index)
                 GroupHead head = group->head(QLCPoint(columnIndex, row));
                 if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                 {
-                    ef->setMode(mode);
+                    ef->forceMode(mode);
                     break;
                 }
             }
@@ -1448,7 +1448,7 @@ void EFXEditor::slotRowSelectionChanged()
                         
                         // Restore mode from backend (column-specific, persistent)
                         EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
-                        ef->setMode(columnMode);
+                        ef->forceMode(columnMode);
                         
                         // Restore direction from saved settings if available
                         QPair<quint32, int> key(head.fxi, head.head);
@@ -1531,7 +1531,7 @@ void EFXEditor::slotUseFixtureGroupToggled(bool checked)
                         
                         // Restore mode from backend (column-specific, persistent)
                         EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
-                        ef->setMode(columnMode);
+                        ef->forceMode(columnMode);
                         
                         Function::Direction columnDir = m_efx->columnDirection(col);
                         ef->setDirection(columnDir);
@@ -1613,7 +1613,7 @@ void EFXEditor::slotFixtureGroupChanged(int index)
                     
                     // Restore mode from backend (column-specific, persistent)
                     EFXFixture::Mode columnMode = (EFXFixture::Mode)m_efx->columnMode(col);
-                    ef->setMode(columnMode);
+                    ef->forceMode(columnMode);
                     
                     Function::Direction columnDir = m_efx->columnDirection(col);
                     ef->setDirection(columnDir);

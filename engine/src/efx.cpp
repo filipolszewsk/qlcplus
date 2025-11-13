@@ -148,6 +148,8 @@ bool EFX::copyFrom(const Function* function)
     m_columnModes = efx->m_columnModes;
     m_columnDirections = efx->m_columnDirections;
 
+    applyColumnTemplates();
+
     return Function::copyFrom(function);
 }
 
@@ -963,6 +965,7 @@ void EFX::slotFixtureGroupRemoved(quint32 grp_id)
 void EFX::setFixtureGroupID(quint32 id)
 {
     m_fixtureGroupID = id;
+    applyColumnTemplates();
     emit changed(this->id());
 }
 
@@ -1067,7 +1070,15 @@ EFX::OffsetDirection EFX::stringToOffsetDirection(const QString& str)
 
 void EFX::setColumnMode(int column, int mode)
 {
-    m_columnModes[column] = mode;
+    if (mode < EFXFixture::PanTilt || mode > EFXFixture::RGB)
+        mode = EFXFixture::PanTilt;
+
+    if (mode == EFXFixture::PanTilt)
+        m_columnModes.remove(column);
+    else
+        m_columnModes[column] = mode;
+
+    applyColumnTemplates();
     emit changed(this->id());
 }
 
@@ -1096,6 +1107,7 @@ void EFX::setColumnDirection(int column, Function::Direction direction)
     else
         m_columnDirections[column] = direction;
     
+    applyColumnTemplates();
     emit changed(this->id());
 }
 
@@ -1110,6 +1122,55 @@ Function::Direction EFX::columnDirection(int column) const
 QMap<int, Function::Direction> EFX::columnDirections() const
 {
     return m_columnDirections;
+}
+
+void EFX::applyColumnTemplates()
+{
+    if (!isFixtureGroupMode())
+        return;
+
+    Doc *d = doc();
+    if (d == NULL)
+        return;
+
+    FixtureGroup *group = d->fixtureGroup(m_fixtureGroupID);
+    if (group == NULL)
+        return;
+
+    int gridWidth = group->size().width();
+    int gridHeight = group->size().height();
+    if (gridWidth <= 0 || gridHeight <= 0)
+        return;
+
+    for (int col = 0; col < gridWidth; col++)
+    {
+        int storedModeValue = m_columnModes.value(col, static_cast<int>(EFXFixture::PanTilt));
+        if (storedModeValue < EFXFixture::PanTilt || storedModeValue > EFXFixture::RGB)
+            storedModeValue = static_cast<int>(EFXFixture::PanTilt);
+
+        EFXFixture::Mode desiredMode = static_cast<EFXFixture::Mode>(storedModeValue);
+        Function::Direction desiredDirection = columnDirection(col);
+
+        for (int row = 0; row < gridHeight; row++)
+        {
+            if (!isRowSelected(row))
+                continue;
+
+            GroupHead head = group->head(QLCPoint(col, row));
+            if (!head.isValid())
+                continue;
+
+            foreach (EFXFixture *ef, m_fixtures)
+            {
+                if (ef->head().fxi == head.fxi && ef->head().head == head.head)
+                {
+                    ef->forceMode(desiredMode);
+                    ef->setDirection(desiredDirection);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 /*****************************************************************************
@@ -1375,7 +1436,13 @@ bool EFX::loadXML(QXmlStreamReader &root)
                 {
                     int col = root.attributes().value(KXMLQLCEFXColumnIndex).toInt();
                     int mode = root.attributes().value(KXMLQLCEFXColumnModeValue).toInt();
-                    m_columnModes[col] = mode;
+                    if (mode < EFXFixture::PanTilt || mode > EFXFixture::RGB)
+                        mode = EFXFixture::PanTilt;
+
+                    if (mode == EFXFixture::PanTilt)
+                        m_columnModes.remove(col);
+                    else
+                        m_columnModes[col] = mode;
                     root.skipCurrentElement();
                 }
                 else
@@ -1483,6 +1550,7 @@ bool EFX::loadXML(QXmlStreamReader &root)
         }
     }
 
+    applyColumnTemplates();
     return true;
 }
 

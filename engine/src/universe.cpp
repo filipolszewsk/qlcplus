@@ -952,6 +952,13 @@ void Universe::applyPanTiltScaling(ushort msbChannel, quint16 value16bit)
     if (!m_panTiltPairs.contains(msbChannel))
         return;
     
+    if (msbChannel >= UNIVERSE_SIZE)
+    {
+        qWarning() << "[PanTilt Scale] Invalid MSB channel index:" << msbChannel
+                   << "- skipping pan/tilt scaling";
+        return;
+    }
+
     const PanTiltChannelPair &pair = m_panTiltPairs[msbChannel];
     
     // Input: 16-bit value (AFTER GM and modifiers applied to MSB)
@@ -969,6 +976,11 @@ void Universe::applyPanTiltScaling(ushort msbChannel, quint16 value16bit)
     (*m_postGMValues)[pair.msbChannel] = static_cast<char>(dmxOutput >> 8);
     if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel < UNIVERSE_SIZE)
         (*m_postGMValues)[pair.lsbChannel] = static_cast<char>(dmxOutput & 0xFF);
+    else if (pair.lsbChannel != QLCChannel::invalid() && pair.lsbChannel >= UNIVERSE_SIZE)
+    {
+        qWarning() << "[PanTilt Scale] Invalid LSB channel index:" << pair.lsbChannel
+                   << "- skipping LSB write";
+    }
     
     qDebug() << "[PanTilt Scale]" << (pair.isPan ? "Pan" : "Tilt")
              << "Head:" << pair.headIndex

@@ -46,14 +46,13 @@ EFXFixture::EFXFixture(const EFX* parent)
     , m_direction(Function::Forward)
     , m_startOffset(0)
     , m_mode(EFXFixture::PanTilt)
-
+    , m_modeLocked(false)
     , m_serialNumber(0)
     , m_runTimeDirection(Function::Forward)
     , m_done(false)
     , m_started(false)
     , m_elapsed(0)
     , m_currentAngle(0)
-
     , m_firstMsbChannel(QLCChannel::invalid())
     , m_firstLsbChannel(QLCChannel::invalid())
     , m_secondMsbChannel(QLCChannel::invalid())
@@ -74,6 +73,7 @@ void EFXFixture::copyFrom(const EFXFixture* ef)
     m_direction = ef->m_direction;
     m_startOffset = ef->m_startOffset;
     m_mode = ef->m_mode;
+    m_modeLocked = ef->m_modeLocked;
 
     m_serialNumber = ef->m_serialNumber;
     m_runTimeDirection = ef->m_runTimeDirection;
@@ -114,7 +114,7 @@ void EFXFixture::setHead(GroupHead const & head)
     if (fxi->rgbChannels(head.head).size() >= 3)
         modes << RGB;
 
-    if (!modes.contains(m_mode))
+    if (!m_modeLocked && !modes.contains(m_mode))
     {
         if (modes.size() > 0)
             m_mode = modes[0];
@@ -150,11 +150,23 @@ int EFXFixture::startOffset() const
 void EFXFixture::setMode(Mode mode)
 {
     m_mode = mode;
+    m_modeLocked = false;
 }
 
 EFXFixture::Mode EFXFixture::mode() const
 {
     return m_mode;
+}
+
+void EFXFixture::forceMode(Mode mode)
+{
+    m_mode = mode;
+    m_modeLocked = true;
+}
+
+bool EFXFixture::isModeLocked() const
+{
+    return m_modeLocked;
 }
 
 quint32 EFXFixture::universe()

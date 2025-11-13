@@ -705,6 +705,7 @@ private:
     QList<int> m_selectedRows;
     QMap<int, int> m_columnModes;  // Column index -> EFXFixture::Mode (as int)
     QMap<int, Function::Direction> m_columnDirections; // Column index -> direction
+    void applyColumnTemplates();
 
     /*********************************************************************
      * Fixture propagation mode
