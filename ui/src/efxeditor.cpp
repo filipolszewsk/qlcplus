@@ -137,6 +137,7 @@ void EFXEditor::initGeneralPage()
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)), this, SLOT(slotFixtureRemoved()));
     connect(m_doc, SIGNAL(fixtureChanged(quint32)), this, SLOT(slotFixtureChanged()));
     connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)), this, SLOT(slotFixtureGroupRemoved(quint32)));
+    connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)), this, SLOT(slotFixtureGroupUpdated(quint32)));
 
     /* Set the EFX's name to the name field */
     m_nameEdit->setText(m_efx->name());
@@ -1303,6 +1304,25 @@ void EFXEditor::slotFixtureGroupRemoved(quint32 id)
     
     // Refresh combo list
     updateFixtureGroupCombo();
+    updateOffsetTemplateControls();
+}
+
+void EFXEditor::slotFixtureGroupUpdated(quint32 id)
+{
+    updateFixtureGroupCombo();
+
+    if (!m_useFixtureGroupCheck->isChecked() || !m_efx->isFixtureGroupMode())
+        return;
+
+    if (m_efx->fixtureGroupID() != id)
+        return;
+
+    bool running = interruptRunning();
+    rebuildFixturesForGroup(id, !m_efx->autoApplyOffsetTemplate());
+    updateFixtureTree();
+    updateRowSelection();
+    redrawPreview();
+    continueRunning(running);
     updateOffsetTemplateControls();
 }
 

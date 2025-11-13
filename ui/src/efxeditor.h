@@ -134,6 +134,7 @@ private slots:
     void slotRowSelectionChanged();
     void slotApplyOffsetsClicked();
     void slotAutoApplyOffsetsToggled(bool checked);
+    void slotFixtureGroupUpdated(quint32 id);
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);
