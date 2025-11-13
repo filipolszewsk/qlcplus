@@ -106,7 +106,10 @@ private:
     void updateSpeedDials();
     void updateFixtureGroupCombo();
     void updateRowSelection();
+    void updateOffsetTemplateControls();
     int calculateColumnOffset(int col, int row, int gridWidth, int gridHeight);
+    void rebuildFixturesForGroup(quint32 groupId, bool preserveOffsets);
+    void restoreColumnProperties(EFXFixture *ef, int columnIndex);
 
 private slots:
     void slotNameEdited(const QString &text);
@@ -129,6 +132,8 @@ private slots:
     void slotOffsetStepChanged(int value);
     void slotWingsChanged(int value);
     void slotRowSelectionChanged();
+    void slotApplyOffsetsClicked();
+    void slotAutoApplyOffsetsToggled(bool checked);
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);

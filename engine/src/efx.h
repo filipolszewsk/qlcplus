@@ -61,6 +61,7 @@ class Fixture;
 #define KXMLQLCEFXOffsetDirection           QStringLiteral("OffsetDirection")
 #define KXMLQLCEFXOffsetStep                QStringLiteral("OffsetStep")
 #define KXMLQLCEFXWings                     QStringLiteral("Wings")
+#define KXMLQLCEFXOffsetAutoApply           QStringLiteral("OffsetAutoApply")
 #define KXMLQLCEFXSelectedRows              QStringLiteral("SelectedRows")
 #define KXMLQLCEFXColumnModes               QStringLiteral("ColumnModes")
 #define KXMLQLCEFXColumnMode                QStringLiteral("ColumnMode")
@@ -69,6 +70,9 @@ class Fixture;
 #define KXMLQLCEFXColumnDirections          QStringLiteral("ColumnDirections")
 #define KXMLQLCEFXColumnDirection           QStringLiteral("ColumnDirection")
 #define KXMLQLCEFXColumnDirectionValue      QStringLiteral("Direction")
+#define KXMLQLCEFXColumnOffsets             QStringLiteral("ColumnOffsets")
+#define KXMLQLCEFXColumnOffset              QStringLiteral("ColumnOffset")
+#define KXMLQLCEFXColumnOffsetValue         QStringLiteral("Value")
 
 #define KXMLQLCEFXCircleAlgorithmName       QStringLiteral("Circle")
 #define KXMLQLCEFXEightAlgorithmName        QStringLiteral("Eight")
@@ -663,6 +667,24 @@ public:
     
     /** Get the wings value */
     int wings() const;
+
+    /** Enable or disable automatic offset template application */
+    void setAutoApplyOffsetTemplate(bool enable);
+
+    /** Check if automatic offset template application is enabled */
+    bool autoApplyOffsetTemplate() const;
+
+    /** Apply the current offset template to all fixtures */
+    void applyOffsetTemplate();
+
+    /** Check if template changes are pending application */
+    bool isOffsetTemplateDirty() const;
+
+    /** Mark the offset template as needing application */
+    void markOffsetTemplateDirty();
+
+    /** Calculate the template offset for a specific cell */
+    int calculateTemplateOffset(int column, int row, int gridWidth, int gridHeight) const;
     
     /** Set selected rows (which rows from grid are affected) */
     void setSelectedRows(const QList<int>& rows);
@@ -697,15 +719,32 @@ public:
     /** Get all column directions */
     QMap<int, Function::Direction> columnDirections() const;
 
+    /** Set offset for a specific column in fixture group mode */
+    void setColumnOffset(int column, int degrees);
+
+    /** Get stored offset for a column (-1 if none) */
+    int columnOffset(int column) const;
+
+    /** Check if a column has a stored offset */
+    bool hasColumnOffset(int column) const;
+
+    /** Get all stored column offsets */
+    QMap<int, int> columnOffsets() const;
+
 private:
     quint32 m_fixtureGroupID;
+    bool m_autoApplyOffsetTemplate;
+    bool m_offsetTemplateDirty;
     OffsetDirection m_offsetDirection;
     int m_offsetStep;
     int m_wings;
     QList<int> m_selectedRows;
     QMap<int, int> m_columnModes;  // Column index -> EFXFixture::Mode (as int)
     QMap<int, Function::Direction> m_columnDirections; // Column index -> direction
+    QMap<int, int> m_columnOffsets; // Column index -> stored offset
     void applyColumnTemplates();
+    int calculateTemplateOffsetInternal(int column, int row, int gridWidth, int gridHeight) const;
+    bool setColumnOffsetInternal(int column, int degrees, bool emitSignal);
 
     /*********************************************************************
      * Fixture propagation mode

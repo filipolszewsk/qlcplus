@@ -24,6 +24,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include <QtGlobal>
 #include <math.h>
 
 #include "genericfader.h"
@@ -54,6 +55,8 @@ EFX::EFX(Doc* doc)
     , m_offsetDirection(LeftToRight)
     , m_offsetStep(90)
     , m_wings(1)
+    , m_autoApplyOffsetTemplate(false)
+    , m_offsetTemplateDirty(false)
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
@@ -147,6 +150,9 @@ bool EFX::copyFrom(const Function* function)
     m_selectedRows = efx->m_selectedRows;
     m_columnModes = efx->m_columnModes;
     m_columnDirections = efx->m_columnDirections;
+    m_columnOffsets = efx->m_columnOffsets;
+    m_autoApplyOffsetTemplate = efx->m_autoApplyOffsetTemplate;
+    m_offsetTemplateDirty = efx->m_offsetTemplateDirty;
 
     applyColumnTemplates();
 
@@ -981,8 +987,15 @@ bool EFX::isFixtureGroupMode() const
 
 void EFX::setOffsetDirection(OffsetDirection dir)
 {
+    if (m_offsetDirection == dir)
+        return;
+
     m_offsetDirection = dir;
-    emit changed(this->id());
+
+    if (m_autoApplyOffsetTemplate)
+        applyOffsetTemplate();
+    else
+        markOffsetTemplateDirty();
 }
 
 EFX::OffsetDirection EFX::offsetDirection() const
@@ -992,8 +1005,16 @@ EFX::OffsetDirection EFX::offsetDirection() const
 
 void EFX::setOffsetStep(int degrees)
 {
-    m_offsetStep = CLAMP(degrees, 0, 359);
-    emit changed(this->id());
+    int clamped = CLAMP(degrees, 0, 359);
+    if (m_offsetStep == clamped)
+        return;
+
+    m_offsetStep = clamped;
+
+    if (m_autoApplyOffsetTemplate)
+        applyOffsetTemplate();
+    else
+        markOffsetTemplateDirty();
 }
 
 int EFX::offsetStep() const
@@ -1003,13 +1024,283 @@ int EFX::offsetStep() const
 
 void EFX::setWings(int wings)
 {
-    m_wings = CLAMP(wings, 1, 20);
-    emit changed(this->id());
+    int clamped = CLAMP(wings, 1, 20);
+    if (m_wings == clamped)
+        return;
+
+    m_wings = clamped;
+
+    if (m_autoApplyOffsetTemplate)
+        applyOffsetTemplate();
+    else
+        markOffsetTemplateDirty();
 }
 
 int EFX::wings() const
 {
     return m_wings;
+}
+
+void EFX::setAutoApplyOffsetTemplate(bool enable)
+{
+    if (m_autoApplyOffsetTemplate == enable)
+        return;
+
+    m_autoApplyOffsetTemplate = enable;
+
+    if (m_autoApplyOffsetTemplate && m_offsetTemplateDirty)
+        applyOffsetTemplate();
+    else
+        emit changed(this->id());
+}
+
+bool EFX::autoApplyOffsetTemplate() const
+{
+    return m_autoApplyOffsetTemplate;
+}
+
+bool EFX::isOffsetTemplateDirty() const
+{
+    return m_offsetTemplateDirty;
+}
+
+void EFX::markOffsetTemplateDirty()
+{
+    if (m_offsetTemplateDirty)
+        return;
+
+    m_offsetTemplateDirty = true;
+    emit changed(this->id());
+}
+
+int EFX::calculateTemplateOffset(int column, int row, int gridWidth, int gridHeight) const
+{
+    return calculateTemplateOffsetInternal(column, row, gridWidth, gridHeight);
+}
+
+void EFX::applyOffsetTemplate()
+{
+    if (!isFixtureGroupMode())
+        return;
+
+    Doc *d = doc();
+    if (d == NULL)
+        return;
+
+    FixtureGroup *group = d->fixtureGroup(m_fixtureGroupID);
+    if (group == NULL)
+        return;
+
+    if (m_fixtures.isEmpty())
+    {
+        bool wasDirty = m_offsetTemplateDirty;
+        m_offsetTemplateDirty = false;
+        if (wasDirty)
+            emit changed(this->id());
+        return;
+    }
+
+    int gridWidth = group->size().width();
+    int gridHeight = group->size().height();
+    if (gridWidth <= 0 || gridHeight <= 0)
+        return;
+
+    bool processed = false;
+    bool anyUpdates = false;
+    bool offsetsUpdated = false;
+
+    for (int col = 0; col < gridWidth; col++)
+    {
+        bool columnChanged = false;
+        int appliedOffset = 0;
+
+        for (int row = 0; row < gridHeight; row++)
+        {
+            if (!isRowSelected(row))
+                continue;
+
+            GroupHead head = group->head(QLCPoint(col, row));
+            if (!head.isValid())
+                continue;
+
+            int offset = calculateTemplateOffsetInternal(col, row, gridWidth, gridHeight);
+
+            foreach (EFXFixture *ef, m_fixtures)
+            {
+                if (ef->head().fxi == head.fxi && ef->head().head == head.head)
+                {
+                    processed = true;
+                    if (ef->startOffset() != offset)
+                    {
+                        ef->setStartOffset(offset);
+                        anyUpdates = true;
+                    }
+                    appliedOffset = offset;
+                    columnChanged = true;
+                    break;
+                }
+            }
+        }
+
+        if (columnChanged)
+        {
+            if (!m_columnOffsets.contains(col) || m_columnOffsets.value(col) != appliedOffset)
+            {
+                m_columnOffsets[col] = appliedOffset;
+                offsetsUpdated = true;
+            }
+        }
+    }
+
+    if (processed)
+    {
+        bool wasDirty = m_offsetTemplateDirty;
+        m_offsetTemplateDirty = false;
+        if (offsetsUpdated || anyUpdates || wasDirty)
+            emit changed(this->id());
+    }
+    else if (offsetsUpdated)
+    {
+        emit changed(this->id());
+    }
+}
+
+int EFX::calculateTemplateOffsetInternal(int col, int row, int gridWidth, int gridHeight) const
+{
+    Q_UNUSED(row);
+    Q_UNUSED(gridHeight);
+
+    int wings = m_wings;
+    int step = m_offsetStep;
+
+    if (wings > 1 && gridWidth > 0)
+    {
+        int blockSize = gridWidth / wings;
+        if (blockSize < 1)
+            blockSize = 1;
+
+        int posInBlock = col % blockSize;
+        int index = 0;
+
+        switch (m_offsetDirection)
+        {
+            case EFX::LeftToRight:
+                index = posInBlock;
+                break;
+            case EFX::RightToLeft:
+                index = (blockSize - 1) - posInBlock;
+                break;
+            case EFX::CenterToSides:
+            {
+                if (blockSize % 2 == 0)
+                {
+                    int centerRight = blockSize / 2;
+                    int centerLeft = centerRight - 1;
+                    int distLeft = qAbs(posInBlock - centerLeft);
+                    int distRight = qAbs(posInBlock - centerRight);
+                    index = qMin(distLeft, distRight);
+                }
+                else
+                {
+                    int center = blockSize / 2;
+                    index = qAbs(posInBlock - center);
+                }
+            }
+            break;
+            case EFX::SidesToCenter:
+            {
+                int distanceFromEdge = qMin(posInBlock, (blockSize - 1) - posInBlock);
+                index = distanceFromEdge;
+            }
+            break;
+            case EFX::Alternate:
+            {
+                int half = (blockSize + 1) / 2;
+                if (posInBlock % 2 == 0)
+                    index = posInBlock / 2;
+                else
+                    index = half + (posInBlock / 2);
+            }
+            break;
+            case EFX::Symmetric:
+            {
+                int center = blockSize / 2;
+                if (posInBlock <= center)
+                    index = posInBlock;
+                else
+                    index = blockSize - 1 - posInBlock;
+            }
+            break;
+        }
+
+        return (step * index) % 360;
+    }
+
+    int index = 0;
+
+    switch (m_offsetDirection)
+    {
+        case EFX::LeftToRight:
+            index = col;
+            break;
+        case EFX::RightToLeft:
+            index = (gridWidth - 1) - col;
+            break;
+        case EFX::CenterToSides:
+        {
+            if (gridWidth % 2 == 0)
+            {
+                int centerRight = gridWidth / 2;
+                int centerLeft = centerRight - 1;
+                int distLeft = qAbs(col - centerLeft);
+                int distRight = qAbs(col - centerRight);
+                index = qMin(distLeft, distRight);
+            }
+            else
+            {
+                int center = gridWidth / 2;
+                index = qAbs(col - center);
+            }
+        }
+        break;
+        case EFX::SidesToCenter:
+        {
+            int distanceFromEdge = qMin(col, (gridWidth - 1) - col);
+            index = distanceFromEdge;
+        }
+        break;
+        case EFX::Alternate:
+        {
+            int half = (gridWidth + 1) / 2;
+            if (col % 2 == 0)
+                index = col / 2;
+            else
+                index = half + (col / 2);
+        }
+        break;
+        case EFX::Symmetric:
+        {
+            if (gridWidth % 2 == 0)
+            {
+                int centerLeft = (gridWidth / 2) - 1;
+                if (col <= centerLeft)
+                    index = col;
+                else
+                    index = gridWidth - 1 - col;
+            }
+            else
+            {
+                int center = gridWidth / 2;
+                if (col <= center)
+                    index = col;
+                else
+                    index = gridWidth - 1 - col;
+            }
+        }
+        break;
+    }
+
+    return (step * index) % 360;
 }
 
 void EFX::setSelectedRows(const QList<int>& rows)
@@ -1122,6 +1413,47 @@ Function::Direction EFX::columnDirection(int column) const
 QMap<int, Function::Direction> EFX::columnDirections() const
 {
     return m_columnDirections;
+}
+
+void EFX::setColumnOffset(int column, int degrees)
+{
+    setColumnOffsetInternal(column, degrees, true);
+}
+
+int EFX::columnOffset(int column) const
+{
+    if (m_columnOffsets.contains(column))
+        return m_columnOffsets.value(column);
+
+    return -1;
+}
+
+bool EFX::hasColumnOffset(int column) const
+{
+    return m_columnOffsets.contains(column);
+}
+
+QMap<int, int> EFX::columnOffsets() const
+{
+    return m_columnOffsets;
+}
+
+bool EFX::setColumnOffsetInternal(int column, int degrees, bool emitSignal)
+{
+    if (column < 0)
+        return false;
+
+    int clamped = CLAMP(degrees, 0, 359);
+
+    if (m_columnOffsets.contains(column) && m_columnOffsets.value(column) == clamped)
+        return false;
+
+    m_columnOffsets[column] = clamped;
+
+    if (emitSignal)
+        emit changed(this->id());
+
+    return true;
 }
 
 void EFX::applyColumnTemplates()
@@ -1237,6 +1569,7 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
         doc->writeTextElement(KXMLQLCEFXOffsetDirection, offsetDirectionToString(m_offsetDirection));
         doc->writeTextElement(KXMLQLCEFXOffsetStep, QString::number(m_offsetStep));
         doc->writeTextElement(KXMLQLCEFXWings, QString::number(m_wings));
+        doc->writeTextElement(KXMLQLCEFXOffsetAutoApply, QString::number(m_autoApplyOffsetTemplate ? 1 : 0));
         
         // Save selected rows (if not all rows)
         if (!m_selectedRows.isEmpty())
@@ -1273,6 +1606,21 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
                 doc->writeStartElement(KXMLQLCEFXColumnDirection);
                 doc->writeAttribute(KXMLQLCEFXColumnIndex, QString::number(it.key()));
                 doc->writeAttribute(KXMLQLCEFXColumnDirectionValue, Function::directionToString(it.value()));
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
+        }
+
+        if (!m_columnOffsets.isEmpty())
+        {
+            doc->writeStartElement(KXMLQLCEFXColumnOffsets);
+            QMapIterator<int, int> it(m_columnOffsets);
+            while (it.hasNext())
+            {
+                it.next();
+                doc->writeStartElement(KXMLQLCEFXColumnOffset);
+                doc->writeAttribute(KXMLQLCEFXColumnIndex, QString::number(it.key()));
+                doc->writeAttribute(KXMLQLCEFXColumnOffsetValue, QString::number(CLAMP(it.value(), 0, 359)));
                 doc->writeEndElement();
             }
             doc->writeEndElement();
@@ -1366,6 +1714,7 @@ bool EFX::loadXML(QXmlStreamReader &root)
     }
 
     /* Load EFX contents */
+    m_columnOffsets.clear();
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLQLCBus)
@@ -1411,6 +1760,11 @@ bool EFX::loadXML(QXmlStreamReader &root)
         {
             /* Wings */
             setWings(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXOffsetAutoApply)
+        {
+            /* Offset auto-apply flag */
+            setAutoApplyOffsetTemplate(root.readElementText().toInt() != 0);
         }
         else if (root.name() == KXMLQLCEFXSelectedRows)
         {
@@ -1467,6 +1821,24 @@ bool EFX::loadXML(QXmlStreamReader &root)
                     else
                         m_columnDirections[col] = dir;
                     
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
+        }
+        else if (root.name() == KXMLQLCEFXColumnOffsets)
+        {
+            /* Column Offsets */
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLQLCEFXColumnOffset)
+                {
+                    int col = root.attributes().value(KXMLQLCEFXColumnIndex).toInt();
+                    int value = root.attributes().value(KXMLQLCEFXColumnOffsetValue).toInt();
+                    setColumnOffsetInternal(col, value, false);
                     root.skipCurrentElement();
                 }
                 else
@@ -1551,6 +1923,7 @@ bool EFX::loadXML(QXmlStreamReader &root)
     }
 
     applyColumnTemplates();
+    m_offsetTemplateDirty = false;
     return true;
 }
 
