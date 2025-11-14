@@ -41,6 +41,7 @@
 #include "channelsgroup.h"
 #include "scriptwrapper.h"
 #include "collection.h"
+#include "efx.h"
 #include "function.h"
 #include "universe.h"
 #include "sequence.h"
@@ -1006,6 +1007,17 @@ quint32 Doc::createFixtureGroupId()
 void Doc::slotFixtureGroupChanged(quint32 id)
 {
     setModified();
+    QMapIterator<quint32, Function*> it(m_functions);
+    while (it.hasNext())
+    {
+        Function *func = it.next().value();
+        if (func == NULL)
+            continue;
+
+        EFX *efx = qobject_cast<EFX*>(func);
+        if (efx != NULL && efx->fixtureGroupID() == id)
+            efx->rebuildFixtureGroup(false);
+    }
     emit fixtureGroupChanged(id);
 }
 

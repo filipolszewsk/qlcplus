@@ -1318,7 +1318,6 @@ void EFXEditor::slotFixtureGroupUpdated(quint32 id)
         return;
 
     bool running = interruptRunning();
-    rebuildFixturesForGroup(id, !m_efx->autoApplyOffsetTemplate());
     updateFixtureTree();
     updateRowSelection();
     redrawPreview();
@@ -1439,76 +1438,8 @@ void EFXEditor::restoreColumnProperties(EFXFixture *ef, int columnIndex)
 
 void EFXEditor::rebuildFixturesForGroup(quint32 groupId, bool preserveOffsets)
 {
-    if (groupId == FixtureGroup::invalidId())
-        return;
-
-    FixtureGroup *group = m_doc->fixtureGroup(groupId);
-    if (group == nullptr)
-        return;
-
-    QMap<QPair<quint32, int>, int> savedOffsets;
-    bool missingOffset = false;
-    if (preserveOffsets)
-    {
-        foreach (EFXFixture *ef, m_efx->fixtures())
-        {
-            QPair<quint32, int> key(ef->head().fxi, ef->head().head);
-            savedOffsets.insert(key, ef->startOffset());
-        }
-    }
-
-    m_efx->removeAllFixtures();
-
-    int gridWidth = group->size().width();
-    int gridHeight = group->size().height();
-    if (gridWidth <= 0 || gridHeight <= 0)
-        return;
-
-    for (int col = 0; col < gridWidth; col++)
-    {
-        for (int row = 0; row < gridHeight; row++)
-        {
-            if (!m_efx->isRowSelected(row))
-                continue;
-
-            GroupHead head = group->head(QLCPoint(col, row));
-            if (!head.isValid())
-                continue;
-
-            EFXFixture *ef = new EFXFixture(m_efx);
-            ef->setHead(head);
-
-            if (preserveOffsets)
-            {
-                QPair<quint32, int> key(head.fxi, head.head);
-                if (savedOffsets.contains(key))
-                    ef->setStartOffset(savedOffsets.value(key));
-                else
-                    missingOffset = true;
-            }
-            else
-            {
-                if (m_efx->hasColumnOffset(col))
-                {
-                    ef->setStartOffset(m_efx->columnOffset(col));
-                }
-                else
-                {
-                    missingOffset = true;
-                }
-            }
-
-            restoreColumnProperties(ef, col);
-
-            if (!m_efx->addFixture(ef))
-                delete ef;
-        }
-    }
-
-    if (m_efx->autoApplyOffsetTemplate())
-        m_efx->applyOffsetTemplate();
-    else if (missingOffset)
-        m_efx->markOffsetTemplateDirty();
+    Q_UNUSED(groupId);
+    m_efx->rebuildFixtureGroup(preserveOffsets);
 }
 
 void EFXEditor::slotRowSelectionChanged()

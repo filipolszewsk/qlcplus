@@ -1438,6 +1438,95 @@ QMap<int, int> EFX::columnOffsets() const
     return m_columnOffsets;
 }
 
+bool EFX::rebuildFixtureGroup(bool preserveOffsets)
+{
+    if (!isFixtureGroupMode())
+        return false;
+
+    Doc *d = doc();
+    if (d == NULL)
+        return false;
+
+    FixtureGroup *group = d->fixtureGroup(m_fixtureGroupID);
+    if (group == NULL)
+        return false;
+
+    QMap<QPair<quint32, int>, int> savedOffsets;
+    if (preserveOffsets)
+    {
+        foreach (EFXFixture *ef, m_fixtures)
+        {
+            QPair<quint32, int> key(ef->head().fxi, ef->head().head);
+            savedOffsets.insert(key, ef->startOffset());
+        }
+    }
+
+    removeAllFixtures();
+
+    int gridWidth = group->size().width();
+    int gridHeight = group->size().height();
+    if (gridWidth <= 0 || gridHeight <= 0)
+    {
+        emit changed(id());
+        return false;
+    }
+
+    bool missingOffset = !preserveOffsets;
+
+    for (int col = 0; col < gridWidth; col++)
+    {
+        for (int row = 0; row < gridHeight; row++)
+        {
+            if (!isRowSelected(row))
+                continue;
+
+            GroupHead head = group->head(QLCPoint(col, row));
+            if (!head.isValid())
+                continue;
+
+            EFXFixture *ef = new EFXFixture(this);
+            ef->setHead(head);
+
+            bool offsetAssigned = false;
+            if (preserveOffsets)
+            {
+                QPair<quint32, int> key(head.fxi, head.head);
+                if (savedOffsets.contains(key))
+                {
+                    ef->setStartOffset(savedOffsets.value(key));
+                    offsetAssigned = true;
+                }
+            }
+
+            if (!offsetAssigned)
+            {
+                if (m_columnOffsets.contains(col))
+                    ef->setStartOffset(m_columnOffsets.value(col));
+                else
+                    ef->setStartOffset(calculateTemplateOffsetInternal(col, row, gridWidth, gridHeight));
+                missingOffset = true;
+            }
+
+            EFXFixture::Mode desiredMode = static_cast<EFXFixture::Mode>(columnMode(col));
+            ef->forceMode(desiredMode);
+
+            Function::Direction columnDir = columnDirection(col);
+            ef->setDirection(columnDir);
+
+            if (!addFixture(ef))
+                delete ef;
+        }
+    }
+
+    if (m_autoApplyOffsetTemplate)
+        applyOffsetTemplate();
+    else if (missingOffset)
+        markOffsetTemplateDirty();
+
+    emit changed(id());
+    return true;
+}
+
 bool EFX::setColumnOffsetInternal(int column, int degrees, bool emitSignal)
 {
     if (column < 0)

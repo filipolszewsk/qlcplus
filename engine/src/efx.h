@@ -731,6 +731,9 @@ public:
     /** Get all stored column offsets */
     QMap<int, int> columnOffsets() const;
 
+    /** Rebuild fixtures based on the current fixture group definition */
+    bool rebuildFixtureGroup(bool preserveOffsets);
+
 private:
     quint32 m_fixtureGroupID;
     bool m_autoApplyOffsetTemplate;
