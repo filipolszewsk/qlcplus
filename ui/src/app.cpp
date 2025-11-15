@@ -92,8 +92,6 @@ typedef BOOL (WINAPI *SetProcessInformationType)(
 
 #define KModeTextOperate QObject::tr("Operate")
 #define KModeTextDesign QObject::tr("Design")
-#define KUniverseCount 4
-
 /*****************************************************************************
  * Initialization
  *****************************************************************************/
@@ -279,7 +277,10 @@ void App::init()
     // Main tool bar
     initToolBar();
 
-    m_dumpProperties = new DmxDumpFactoryProperties(KUniverseCount);
+    quint32 universes = m_doc->inputOutputMap()->universesCount();
+    if (universes == 0)
+        universes = 1;
+    m_dumpProperties = new DmxDumpFactoryProperties(universes);
 
     // Create primary views.
     m_tab->setIconSize(QSize(24, 24));
@@ -1171,6 +1172,10 @@ void App::slotRunningFunctionsChanged()
 
 void App::slotDumpDmxIntoFunction()
 {
+    quint32 universes = m_doc->inputOutputMap()->universesCount();
+    if (universes == 0)
+        universes = 1;
+    m_dumpProperties->ensureUniversesCapacity(universes);
     DmxDumpFactory ddf(m_doc, m_dumpProperties, this);
     if (ddf.exec() != QDialog::Accepted)
         return;

@@ -59,6 +59,10 @@ public:
      *  a 1 means the channel is included for dump */
     void setChannelsMask(QByteArray mask);
 
+    /** Ensure the internal channel mask can hold at least
+     *  the amount of universes requested. */
+    void ensureUniversesCapacity(int universes);
+
 private:
     /** Array of bytes holding 0s and 1s where 0 is 'inactive channel' and
      *  1 is 'active channel'

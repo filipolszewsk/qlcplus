@@ -24,6 +24,7 @@
 #define private public
 #include "dmxdumpfactoryproperties_test.h"
 #include "dmxdumpfactoryproperties.h"
+#include "universe.h"
 #undef private
 #undef protected
 
@@ -56,6 +57,28 @@ void DmxDumpFactoryProperties_Test::maskAndChasers()
     QCOMPARE(props.isChaserSelected(5), true);
     QCOMPARE(props.isChaserSelected(10), false);
     QCOMPARE(props.selectedTarget(), DmxDumpFactoryProperties::VCSlider);
+}
+
+void DmxDumpFactoryProperties_Test::increaseUniverses()
+{
+    DmxDumpFactoryProperties props(1);
+    QCOMPARE(props.channelsMask().size(), UNIVERSE_SIZE);
+
+    QByteArray mask = props.channelsMask();
+    mask[0] = 1;
+    props.setChannelsMask(mask);
+
+    props.ensureUniversesCapacity(6);
+    QCOMPARE(props.channelsMask().size(), 6 * UNIVERSE_SIZE);
+    QCOMPARE(props.channelsMask().at(0), char(1));
+
+    // Requesting less universes must keep the current allocation.
+    props.ensureUniversesCapacity(2);
+    QCOMPARE(props.channelsMask().size(), 6 * UNIVERSE_SIZE);
+
+    props.ensureUniversesCapacity(8);
+    QCOMPARE(props.channelsMask().size(), 8 * UNIVERSE_SIZE);
+    QCOMPARE(props.channelsMask().at(0), char(1));
 }
 
 QTEST_APPLESS_MAIN(DmxDumpFactoryProperties_Test)

@@ -18,13 +18,14 @@
 */
 
 #include "dmxdumpfactoryproperties.h"
+#include "universe.h"
 
 DmxDumpFactoryProperties::DmxDumpFactoryProperties(int universes)
     : m_dumpAllChannels(true)
     , m_dumpNonZeroValues(false)
     , m_selectedTarget(Chaser)
 {
-    m_channelsMask = QByteArray(universes * 512, 0);
+    ensureUniversesCapacity(universes);
 }
 
 bool DmxDumpFactoryProperties::dumpChannelsMode()
@@ -56,6 +57,22 @@ void DmxDumpFactoryProperties::setChannelsMask(QByteArray mask)
 {
     if (mask.isEmpty() == false)
         m_channelsMask.replace(0, mask.length(), mask);
+}
+
+void DmxDumpFactoryProperties::ensureUniversesCapacity(int universes)
+{
+    if (universes <= 0)
+        universes = 1;
+
+    const int requiredSize = universes * UNIVERSE_SIZE;
+
+    if (m_channelsMask.size() >= requiredSize)
+        return;
+
+    if (m_channelsMask.isEmpty())
+        m_channelsMask = QByteArray(requiredSize, 0);
+    else
+        m_channelsMask.append(QByteArray(requiredSize - m_channelsMask.size(), 0));
 }
 
 /************************************************************************
