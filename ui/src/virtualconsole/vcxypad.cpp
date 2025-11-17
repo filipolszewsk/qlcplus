@@ -941,13 +941,12 @@ void VCXYPad::slotPresetClicked(bool checked)
         QRectF rect(QPointF(m_hRangeSlider->minimumPosition(), m_vRangeSlider->minimumPosition()),
                    QPointF(m_hRangeSlider->maximumPosition(), m_vRangeSlider->maximumPosition()));
         m_area->setRangeWindow(rect);
-        if (rect.isValid())
-        {
-            m_efxStartXOverrideId = m_efx->requestAttributeOverride(EFX::XOffset, rect.x() + rect.width() / 2);
-            m_efxStartYOverrideId = m_efx->requestAttributeOverride(EFX::YOffset, rect.y() + rect.height() / 2);
-            m_efxWidthOverrideId = m_efx->requestAttributeOverride(EFX::Width, rect.width() / 2);
-            m_efxHeightOverrideId = m_efx->requestAttributeOverride(EFX::Height, rect.height() / 2);
-        }
+        // Always set EFX parameters according to current range size
+        // (even when width=0 or height=0, so EFX has zero range)
+        m_efxStartXOverrideId = m_efx->requestAttributeOverride(EFX::XOffset, rect.x() + rect.width() / 2);
+        m_efxStartYOverrideId = m_efx->requestAttributeOverride(EFX::YOffset, rect.y() + rect.height() / 2);
+        m_efxWidthOverrideId = m_efx->requestAttributeOverride(EFX::Width, rect.width() / 2);
+        m_efxHeightOverrideId = m_efx->requestAttributeOverride(EFX::Height, rect.height() / 2);
 
         QPolygonF polygon;
         m_efx->preview(polygon);
