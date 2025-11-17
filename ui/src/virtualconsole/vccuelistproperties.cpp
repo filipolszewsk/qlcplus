@@ -18,12 +18,17 @@
 */
 
 #include <QAction>
+#include <QDebug>
 
 #include "vccuelistproperties.h"
 #include "inputselectionwidget.h"
 #include "functionselection.h"
+#include "channelsselection.h"
 #include "vccuelist.h"
 #include "doc.h"
+#include "fixture.h"
+#include "scenevalue.h"
+#include "qlcmacros.h"
 
 VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     : QDialog(cueList)
@@ -81,6 +86,15 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_stopInputWidget->show();
     m_stopLayout->addWidget(m_stopInputWidget);
 
+    m_recordInputWidget = new InputSelectionWidget(m_doc, this);
+    m_recordInputWidget->setTitle(tr("Record control"));
+    m_recordInputWidget->setCustomFeedbackVisibility(true);
+    m_recordInputWidget->setKeySequence(m_cueList->recordKeySequence());
+    m_recordInputWidget->setInputSource(m_cueList->inputSource(VCCueList::recordInputSourceId));
+    m_recordInputWidget->setWidgetPage(m_cueList->page());
+    m_recordInputWidget->show();
+    m_recordLayout->addWidget(m_recordInputWidget);
+
     /************************************************************************
      * Next Cue page
      ************************************************************************/
@@ -130,6 +144,35 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
         m_play_stop_pause->setChecked(true);
     else
         m_play_pause_stop->setChecked(true);
+
+    /************************************************************************
+     * Recording page
+     ************************************************************************/
+
+    /* Recording mode */
+    if (m_cueList->recordAllChannels())
+        m_recordAllChannelsRadio->setChecked(true);
+    else
+        m_recordSelectedChannelsRadio->setChecked(true);
+
+    m_selectChannelsButton->setEnabled(!m_cueList->recordAllChannels());
+
+    /* Non-zero values only */
+    m_recordNonZeroCheck->setChecked(m_cueList->recordNonZeroOnly());
+
+    /* Cue name prefix */
+    QString prefix = m_cueList->recordCuePrefix();
+    if (prefix.isEmpty())
+        prefix = "cue";
+    m_recordPrefixEdit->setText(prefix);
+
+    /* Connections */
+    connect(m_recordAllChannelsRadio, SIGNAL(toggled(bool)), 
+            m_selectChannelsButton, SLOT(setDisabled(bool)));
+    connect(m_recordSelectedChannelsRadio, SIGNAL(toggled(bool)), 
+            m_selectChannelsButton, SLOT(setEnabled(bool)));
+    connect(m_selectChannelsButton, SIGNAL(clicked()), 
+            this, SLOT(slotSelectChannelsClicked()));
 }
 
 VCCueListProperties::~VCCueListProperties()
@@ -158,12 +201,14 @@ void VCCueListProperties::accept()
     m_cueList->setPreviousKeySequence(m_prevInputWidget->keySequence());
     m_cueList->setPlaybackKeySequence(m_playInputWidget->keySequence());
     m_cueList->setStopKeySequence(m_stopInputWidget->keySequence());
+    m_cueList->setRecordKeySequence(m_recordInputWidget->keySequence());
 
     /* Input sources */
     m_cueList->setInputSource(m_nextInputWidget->inputSource(), VCCueList::nextInputSourceId);
     m_cueList->setInputSource(m_prevInputWidget->inputSource(), VCCueList::previousInputSourceId);
     m_cueList->setInputSource(m_playInputWidget->inputSource(), VCCueList::playbackInputSourceId);
     m_cueList->setInputSource(m_stopInputWidget->inputSource(), VCCueList::stopInputSourceId);
+    m_cueList->setInputSource(m_recordInputWidget->inputSource(), VCCueList::recordInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
 
     if (m_noneRadio->isChecked())
@@ -173,6 +218,11 @@ void VCCueListProperties::accept()
     else
         m_cueList->setSideFaderMode(VCCueList::Crossfade);
 
+    /* Recording settings */
+    m_cueList->setRecordAllChannels(m_recordAllChannelsRadio->isChecked());
+    m_cueList->setRecordNonZeroOnly(m_recordNonZeroCheck->isChecked());
+    m_cueList->setRecordCuePrefix(m_recordPrefixEdit->text());
+
     QDialog::accept();
 }
 
@@ -180,6 +230,7 @@ void VCCueListProperties::slotTabChanged()
 {
     m_playInputWidget->stopAutoDetection();
     m_stopInputWidget->stopAutoDetection();
+    m_recordInputWidget->stopAutoDetection();
     m_nextInputWidget->stopAutoDetection();
     m_prevInputWidget->stopAutoDetection();
 
@@ -229,4 +280,79 @@ void VCCueListProperties::updateChaserName()
         m_chaserEdit->setText(tr("No function"));
     else
         m_chaserEdit->setText(function->name());
+}
+
+void VCCueListProperties::slotSelectChannelsClicked()
+{
+    // Convert channel mask to list of SceneValues for ChannelsSelection
+    QByteArray mask = m_cueList->recordChannelsMask();
+    QList<SceneValue> selectedChannels;
+
+    if (!mask.isEmpty())
+    {
+        foreach (Fixture *fxi, m_doc->fixtures())
+        {
+            if (fxi == NULL)
+                continue;
+
+            quint32 baseAddress = fxi->universeAddress();
+            quint32 fxID = fxi->id();
+
+            for (quint32 channel = 0; channel < fxi->channels(); channel++)
+            {
+                quint32 absAddress = baseAddress + channel;
+                if (absAddress < (quint32)mask.length() && mask[absAddress] == 1)
+                {
+                    selectedChannels.append(SceneValue(fxID, channel, 0));
+                }
+            }
+        }
+    }
+
+    // Open channels selection dialog
+    ChannelsSelection cs(m_doc, this, ChannelsSelection::NormalMode);
+    cs.setChannelsList(selectedChannels);
+
+    if (cs.exec() == QDialog::Accepted)
+    {
+        // Convert selected channels back to mask
+        QList<SceneValue> newChannels = cs.channelsList();
+        QByteArray newMask;
+
+        // Calculate required mask size
+        int maxUniverse = 0;
+        foreach (SceneValue sv, newChannels)
+        {
+            Fixture *fxi = m_doc->fixture(sv.fxi);
+            if (fxi != NULL)
+            {
+                quint32 absAddress = fxi->universeAddress() + sv.channel;
+                int universe = absAddress / UNIVERSE_SIZE;
+                if (universe > maxUniverse)
+                    maxUniverse = universe;
+            }
+        }
+
+        int totalChannels = (maxUniverse + 1) * UNIVERSE_SIZE;
+        if (totalChannels == 0)
+            totalChannels = 4 * UNIVERSE_SIZE; // Default to 4 universes
+
+        newMask = QByteArray(totalChannels, 0);
+
+        foreach (SceneValue sv, newChannels)
+        {
+            Fixture *fxi = m_doc->fixture(sv.fxi);
+            if (fxi != NULL)
+            {
+                quint32 absAddress = fxi->universeAddress() + sv.channel;
+                if (absAddress < (quint32)newMask.length())
+                    newMask[absAddress] = 1;
+            }
+        }
+
+        m_cueList->setRecordChannelsMask(newMask);
+        m_recordSelectedChannelsRadio->setChecked(true);
+        m_recordAllChannelsRadio->setChecked(false);
+        m_selectChannelsButton->setEnabled(true);
+    }
 }

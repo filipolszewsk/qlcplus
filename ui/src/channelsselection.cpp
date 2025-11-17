@@ -142,6 +142,29 @@ void ChannelsSelection::updateFixturesTree()
         fItem->setText(KColumnName, fxi->name());
         fItem->setIcon(KColumnName, fxi->getIconFromType());
         fItem->setText(KColumnID, QString::number(fxi->id()));
+        
+        // Make fixture items checkable in NormalMode
+        if (m_mode == NormalMode)
+        {
+            fItem->setFlags(fItem->flags() | Qt::ItemIsUserCheckable);
+            // Check if all channels of this fixture are selected
+            bool allSelected = true;
+            bool anySelected = false;
+            for (quint32 c = 0; c < fxi->channels(); c++)
+            {
+                SceneValue scv(fxi->id(), c);
+                if (m_channelsList.contains(scv))
+                    anySelected = true;
+                else
+                    allSelected = false;
+            }
+            if (allSelected && fxi->channels() > 0)
+                fItem->setCheckState(KColumnSelection, Qt::Checked);
+            else if (anySelected)
+                fItem->setCheckState(KColumnSelection, Qt::PartiallyChecked);
+            else
+                fItem->setCheckState(KColumnSelection, Qt::Unchecked);
+        }
 
         QList<int> forcedHTP = fxi->forcedHTPChannels();
         QList<int> forcedLTP = fxi->forcedLTPChannels();
@@ -307,16 +330,65 @@ QList<QTreeWidgetItem *> ChannelsSelection::getSameChannels(QTreeWidgetItem *ite
 
 void ChannelsSelection::slotItemChecked(QTreeWidgetItem *item, int col)
 {
-    if (m_applyAllCheck->isChecked() == false || col != KColumnSelection ||
-        item->text(KColumnID).isEmpty())
+    if (col != KColumnSelection || item->text(KColumnID).isEmpty())
         return;
 
     m_channelsTree->blockSignals(true);
 
     Qt::CheckState enable = item->checkState(KColumnSelection);
 
-    foreach (QTreeWidgetItem *chItem, getSameChannels(item))
-        chItem->setCheckState(KColumnSelection, enable);
+    // If this is a fixture item (has children), select/deselect all its channels
+    if (item->childCount() > 0 && m_mode == NormalMode)
+    {
+        for (int i = 0; i < item->childCount(); i++)
+        {
+            QTreeWidgetItem *chItem = item->child(i);
+            if (chItem == NULL)
+                continue;
+            chItem->setCheckState(KColumnSelection, enable);
+        }
+    }
+    // If this is a channel item, update parent fixture checkbox state
+    else if (item->parent() != NULL && m_mode == NormalMode)
+    {
+        QTreeWidgetItem *parentItem = item->parent();
+        // Check if parent is a fixture (has this item as child and has ID)
+        if (parentItem->childCount() > 0 && !parentItem->text(KColumnID).isEmpty())
+        {
+            // Count checked channels
+            int checkedCount = 0;
+            int totalCount = parentItem->childCount();
+            for (int i = 0; i < totalCount; i++)
+            {
+                QTreeWidgetItem *childItem = parentItem->child(i);
+                if (childItem == NULL)
+                    continue;
+                if (childItem->checkState(KColumnSelection) == Qt::Checked)
+                    checkedCount++;
+            }
+            
+            // Update fixture checkbox state
+            if (checkedCount == 0)
+                parentItem->setCheckState(KColumnSelection, Qt::Unchecked);
+            else if (checkedCount == totalCount)
+                parentItem->setCheckState(KColumnSelection, Qt::Checked);
+            else
+                parentItem->setCheckState(KColumnSelection, Qt::PartiallyChecked);
+        }
+        
+        // If apply all is checked, apply to same channels
+        if (m_applyAllCheck->isChecked() == true)
+        {
+            foreach (QTreeWidgetItem *chItem, getSameChannels(item))
+                chItem->setCheckState(KColumnSelection, enable);
+        }
+    }
+    // If apply all is checked, apply to same channels
+    else if (m_applyAllCheck->isChecked() == true)
+    {
+        foreach (QTreeWidgetItem *chItem, getSameChannels(item))
+            chItem->setCheckState(KColumnSelection, enable);
+    }
 
     m_channelsTree->blockSignals(false);
 }

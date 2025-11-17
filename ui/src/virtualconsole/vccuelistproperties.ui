@@ -211,6 +211,9 @@
         <layout class="QHBoxLayout" name="m_stopLayout"/>
        </item>
        <item>
+        <layout class="QHBoxLayout" name="m_recordLayout"/>
+       </item>
+       <item>
         <spacer name="verticalSpacer_4">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -347,6 +350,95 @@
        </item>
        <item>
         <spacer name="verticalSpacer_5">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="Recording">
+      <attribute name="title">
+       <string>Recording</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <widget class="QGroupBox" name="groupBox_Recording">
+         <property name="title">
+          <string>Channel Selection</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_8">
+          <item>
+           <widget class="QRadioButton" name="m_recordAllChannelsRadio">
+            <property name="text">
+             <string>Record all channels</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QRadioButton" name="m_recordSelectedChannelsRadio">
+            <property name="text">
+             <string>Record only selected channels</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="m_selectChannelsButton">
+            <property name="text">
+             <string>Select Channels...</string>
+            </property>
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="m_recordNonZeroCheck">
+         <property name="text">
+          <string>Record only non-zero values</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_Prefix">
+         <property name="title">
+          <string>Cue Name Prefix</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_Prefix">
+          <item>
+           <widget class="QLabel" name="label_Prefix">
+            <property name="text">
+             <string>Prefix:</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="m_recordPrefixEdit">
+            <property name="toolTip">
+             <string>Prefix for automatically generated cue names (e.g., &quot;cue&quot; for cue_1, cue_2, etc.)</string>
+            </property>
+            <property name="text">
+             <string>cue</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_6">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>

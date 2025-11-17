@@ -29,6 +29,7 @@
 #include <QGridLayout>
 #include <QSettings>
 #include <QCheckBox>
+#include <QInputDialog>
 #include <QString>
 #include <QLabel>
 #include <QDebug>
@@ -48,6 +49,10 @@
 #include "chaser.h"
 #include "qmath.h"
 #include "doc.h"
+#include "scene.h"
+#include "universe.h"
+#include "fixture.h"
+#include "scenevalue.h"
 
 #define COL_NUM      0
 #define COL_NAME     1
@@ -67,6 +72,7 @@ const quint8 VCCueList::previousInputSourceId = 1;
 const quint8 VCCueList::playbackInputSourceId = 2;
 const quint8 VCCueList::sideFaderInputSourceId = 3;
 const quint8 VCCueList::stopInputSourceId = 4;
+const quint8 VCCueList::recordInputSourceId = 5;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -93,6 +99,9 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_secondaryIndex(0)
     , m_primaryTop(true)
     , m_slidersMode(None)
+    , m_recordAllChannels(true)
+    , m_recordNonZeroOnly(false)
+    , m_recordCuePrefix("cue")
 {
     /* Set the class name "VCCueList" as the object name as well */
     setObjectName(VCCueList::staticMetaObject.className());
@@ -240,6 +249,16 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_nextButton, SIGNAL(clicked()), this, SLOT(slotNextCue()));
     hbox->addWidget(m_nextButton);
 
+    m_recordButton = new QToolButton(this);
+    m_recordButton->setIcon(QIcon(":/record.png"));
+    m_recordButton->setIconSize(QSize(24, 24));
+    m_recordButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_recordButton->setFixedHeight(32);
+    m_recordButton->setToolTip(tr("Record current DMX values as new cue"));
+    m_recordButton->setEnabled(false);
+    connect(m_recordButton, SIGNAL(clicked()), this, SLOT(slotRecordButtonClicked()));
+    hbox->addWidget(m_recordButton);
+
     vbox->addItem(hbox);
     grid->addItem(vbox, 0, 1, 6);
 
@@ -268,6 +287,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_previousLatestValue = 0;
     m_playbackLatestValue = 0;
     m_stopLatestValue = 0;
+    m_recordLatestValue = 0;
 }
 
 VCCueList::~VCCueList()
@@ -281,6 +301,10 @@ void VCCueList::enableWidgetUI(bool enable)
     m_stopButton->setEnabled(enable);
     m_previousButton->setEnabled(enable);
     m_nextButton->setEnabled(enable);
+    // Record button is enabled only in Operate mode, when chaser is attached, and not for Sequence
+    Function *func = m_doc->function(m_chaserID);
+    bool isSequence = (func != NULL && func->type() == Function::SequenceType);
+    m_recordButton->setEnabled(enable && m_chaserID != Function::invalidId() && !isSequence);
 
     m_topPercentageLabel->setEnabled(enable);
     m_sideFader->setEnabled(enable);
@@ -321,9 +345,16 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     setPreviousKeySequence(cuelist->previousKeySequence());
     setPlaybackKeySequence(cuelist->playbackKeySequence());
     setStopKeySequence(cuelist->stopKeySequence());
+    setRecordKeySequence(cuelist->recordKeySequence());
 
     /* Sliders mode */
     setSideFaderMode(cuelist->sideFaderMode());
+
+    /* Recording settings */
+    setRecordAllChannels(cuelist->recordAllChannels());
+    setRecordNonZeroOnly(cuelist->recordNonZeroOnly());
+    setRecordChannelsMask(cuelist->recordChannelsMask());
+    setRecordCuePrefix(cuelist->recordCuePrefix());
 
     /* Common stuff */
     return VCWidget::copyFrom(widget);
@@ -366,6 +397,17 @@ void VCCueList::setChaser(quint32 id)
     }
 
     updateStepList();
+
+    /* Update record button state */
+    if (m_recordButton != NULL)
+    {
+        Function *func = m_doc->function(m_chaserID);
+        bool isSequence = (func != NULL && func->type() == Function::SequenceType);
+        bool enable = (m_doc->mode() == Doc::Operate && 
+                      m_chaserID != Function::invalidId() && 
+                      !isSequence);
+        m_recordButton->setEnabled(enable);
+    }
 
     /* Current status */
     if (chaser != NULL && chaser->isRunning())
@@ -1349,6 +1391,16 @@ QKeySequence VCCueList::stopKeySequence() const
     return m_stopKeySequence;
 }
 
+void VCCueList::setRecordKeySequence(const QKeySequence& keySequence)
+{
+    m_recordKeySequence = QKeySequence(keySequence);
+}
+
+QKeySequence VCCueList::recordKeySequence() const
+{
+    return m_recordKeySequence;
+}
+
 void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
 {
     if (acceptsInput() == false)
@@ -1362,6 +1414,8 @@ void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
         slotPlayback();
     else if (m_stopKeySequence == keySequence)
         slotStop();
+    else if (m_recordKeySequence == keySequence)
+        slotRecordButtonClicked();
 }
 
 void VCCueList::updateFeedback()
@@ -1466,6 +1520,24 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
 
         if (value > HYSTERESIS)
             m_stopLatestValue = value;
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), recordInputSourceId))
+    {
+        // Use hysteresis to avoid triggering multiple times from a single
+        // value change. A zero value is accepted as input. And the non-zero values have to visit
+        // above $HYSTERESIS before a zero is accepted again.
+        if (m_recordLatestValue == 0 && value > 0)
+        {
+            slotRecordButtonClicked();
+            m_recordLatestValue = value;
+        }
+        else if (m_recordLatestValue > HYSTERESIS && value == 0)
+        {
+            m_recordLatestValue = 0;
+        }
+
+        if (value > HYSTERESIS)
+            m_recordLatestValue = value;
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
@@ -1602,6 +1674,216 @@ FunctionParent VCCueList::functionParent() const
 }
 
 /*****************************************************************************
+ * Recording
+ *****************************************************************************/
+
+void VCCueList::slotRecordButtonClicked()
+{
+    if (m_doc->mode() != Doc::Operate)
+        return;
+
+    if (m_chaserID == Function::invalidId())
+        return;
+
+    // Don't allow recording for Sequence
+    Function *func = m_doc->function(m_chaserID);
+    if (func != NULL && func->type() == Function::SequenceType)
+        return;
+
+    recordLiveCue();
+}
+
+void VCCueList::recordLiveCue()
+{
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    // Don't allow recording for Sequence
+    if (ch->type() == Function::SequenceType)
+        return;
+
+    // Get current DMX values from universes
+    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+    QByteArray preGMValues(ua.size() * UNIVERSE_SIZE, 0);
+
+    for (int i = 0; i < ua.count(); ++i)
+    {
+        if (ua.at(i) == NULL)
+            continue;
+        const int offset = i * UNIVERSE_SIZE;
+        preGMValues.replace(offset, UNIVERSE_SIZE, ua.at(i)->preGMValues());
+        if (ua.at(i)->passthrough())
+        {
+            for (int j = 0; j < UNIVERSE_SIZE; ++j)
+            {
+                const int ofs = offset + j;
+                preGMValues[ofs] =
+                    static_cast<char>(ua.at(i)->applyPassthrough(j, static_cast<uchar>(preGMValues[ofs])));
+            }
+        }
+    }
+
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    // Create new scene
+    Scene *newScene = new Scene(m_doc);
+    
+    // Set path to /bank/[chaser name]
+    QString chaserName = ch->name();
+    if (chaserName.isEmpty())
+        chaserName = tr("Unnamed");
+    QString scenePath = QString("bank/%1").arg(chaserName);
+    newScene->setPath(scenePath);
+
+    // Get channel mask
+    QByteArray recordMask = m_recordChannelsMask;
+    if (m_recordAllChannels || recordMask.isEmpty())
+    {
+        // If all channels or mask not set, create mask for all channels
+        int totalChannels = ua.size() * UNIVERSE_SIZE;
+        if (totalChannels == 0)
+            totalChannels = 4 * UNIVERSE_SIZE; // Default to 4 universes
+        recordMask = QByteArray(totalChannels, 1);
+    }
+
+    // Iterate through all fixtures and channels
+    foreach (Fixture *fxi, m_doc->fixtures())
+    {
+        if (fxi == NULL)
+            continue;
+
+        quint32 baseAddress = fxi->universeAddress();
+        quint32 fxID = fxi->id();
+
+        for (quint32 channel = 0; channel < fxi->channels(); channel++)
+        {
+            quint32 absAddress = baseAddress + channel;
+
+            if (absAddress >= (quint32)recordMask.length())
+                continue;
+
+            // Check if channel should be recorded
+            bool shouldRecord = false;
+            if (m_recordAllChannels)
+            {
+                shouldRecord = true;
+            }
+            else
+            {
+                if (absAddress < (quint32)recordMask.length())
+                    shouldRecord = (recordMask[absAddress] == 1);
+            }
+
+            if (shouldRecord)
+            {
+                uchar value = 0;
+                if (absAddress < (quint32)preGMValues.length())
+                    value = preGMValues.at(absAddress);
+
+                // Skip zero values if option is enabled
+                if (m_recordNonZeroOnly && value == 0)
+                    continue;
+
+                SceneValue sv = SceneValue(fxID, channel, value);
+                newScene->setValue(sv);
+            }
+        }
+    }
+
+    // Show dialog to enter scene name
+    QString prefix = m_recordCuePrefix.isEmpty() ? "cue" : m_recordCuePrefix;
+    // Sanitize prefix - remove invalid characters for file paths
+    prefix = prefix.replace("/", "_").replace("\\", "_").replace(":", "_");
+    QString defaultName = QString("%1_%2").arg(prefix).arg(ch->steps().count() + 1);
+    bool ok;
+    QString sceneName = QInputDialog::getText(this, 
+                                             tr("Record Cue"), 
+                                             tr("Enter cue name:"), 
+                                             QLineEdit::Normal, 
+                                             defaultName, 
+                                             &ok);
+    
+    // If user cancelled, delete scene and return
+    if (!ok)
+    {
+        delete newScene;
+        return;
+    }
+    
+    // Sanitize and validate scene name
+    sceneName = sceneName.trimmed();
+    if (sceneName.isEmpty())
+    {
+        delete newScene;
+        return;
+    }
+    // Remove invalid characters from scene name
+    sceneName = sceneName.replace("/", "_").replace("\\", "_").replace(":", "_");
+    
+    // Set the scene name
+    newScene->setName(sceneName);
+
+    // Add scene to document
+    if (m_doc->addFunction(newScene))
+    {
+        // Add scene as step to chaser
+        ChaserStep step(newScene->id());
+        ch->addStep(step);
+
+        // Update the step list
+        updateStepList();
+
+        // Mark document as modified
+        m_doc->setModified();
+    }
+    else
+    {
+        delete newScene;
+    }
+}
+
+void VCCueList::setRecordChannelsMask(const QByteArray &mask)
+{
+    m_recordChannelsMask = mask;
+}
+
+QByteArray VCCueList::recordChannelsMask() const
+{
+    return m_recordChannelsMask;
+}
+
+void VCCueList::setRecordAllChannels(bool allChannels)
+{
+    m_recordAllChannels = allChannels;
+}
+
+bool VCCueList::recordAllChannels() const
+{
+    return m_recordAllChannels;
+}
+
+void VCCueList::setRecordNonZeroOnly(bool nonZeroOnly)
+{
+    m_recordNonZeroOnly = nonZeroOnly;
+}
+
+bool VCCueList::recordNonZeroOnly() const
+{
+    return m_recordNonZeroOnly;
+}
+
+void VCCueList::setRecordCuePrefix(const QString &prefix)
+{
+    m_recordCuePrefix = prefix;
+}
+
+QString VCCueList::recordCuePrefix() const
+{
+    return m_recordCuePrefix;
+}
+
+/*****************************************************************************
  * Load & Save
  *****************************************************************************/
 
@@ -1656,6 +1938,12 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             if (str.isEmpty() == false)
                 m_stopKeySequence = stripKeySequence(QKeySequence(str));
         }
+        else if (root.name() == KXMLQLCVCCueListRecord)
+        {
+            QString str = loadXMLSources(root, recordInputSourceId);
+            if (str.isEmpty() == false)
+                m_recordKeySequence = stripKeySequence(QKeySequence(str));
+        }
         else if (root.name() == KXMLQLCVCCueListSlidersMode)
         {
             setSideFaderMode(stringToFaderMode(root.readElementText()));
@@ -1708,6 +1996,24 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             // Collect legacy file format steps into a list
             legacyStepList << root.readElementText().toUInt();
+        }
+        else if (root.name() == KXMLQLCVCCueListRecordAllChannels)
+        {
+            setRecordAllChannels(root.readElementText() == "1" || root.readElementText().toLower() == "true");
+        }
+        else if (root.name() == KXMLQLCVCCueListRecordNonZeroOnly)
+        {
+            setRecordNonZeroOnly(root.readElementText() == "1" || root.readElementText().toLower() == "true");
+        }
+        else if (root.name() == KXMLQLCVCCueListRecordMask)
+        {
+            QString maskStr = root.readElementText();
+            QByteArray mask = QByteArray::fromBase64(maskStr.toLatin1());
+            setRecordChannelsMask(mask);
+        }
+        else if (root.name() == KXMLQLCVCCueListRecordPrefix)
+        {
+            setRecordCuePrefix(root.readElementText());
         }
         else
         {
@@ -1800,6 +2106,13 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     saveXMLInput(doc, inputSource(stopInputSourceId));
     doc->writeEndElement();
 
+    /* Cue list record */
+    doc->writeStartElement(KXMLQLCVCCueListRecord);
+    if (m_recordKeySequence.toString().isEmpty() == false)
+        doc->writeTextElement(KXMLQLCVCWidgetKey, m_recordKeySequence.toString());
+    saveXMLInput(doc, inputSource(recordInputSourceId));
+    doc->writeEndElement();
+
     /* Crossfade cue list */
     if (sideFaderMode() != None)
         doc->writeTextElement(KXMLQLCVCCueListSlidersMode, faderModeToString(sideFaderMode()));
@@ -1811,6 +2124,18 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
         saveXMLInput(doc, cf1Src);
         doc->writeEndElement();
     }
+
+    /* Recording settings */
+    doc->writeTextElement(KXMLQLCVCCueListRecordAllChannels, QString::number(m_recordAllChannels ? 1 : 0));
+    if (m_recordNonZeroOnly)
+        doc->writeTextElement(KXMLQLCVCCueListRecordNonZeroOnly, QString::number(m_recordNonZeroOnly ? 1 : 0));
+    if (!m_recordChannelsMask.isEmpty())
+    {
+        QString maskBase64 = QString::fromLatin1(m_recordChannelsMask.toBase64());
+        doc->writeTextElement(KXMLQLCVCCueListRecordMask, maskBase64);
+    }
+    if (!m_recordCuePrefix.isEmpty() && m_recordCuePrefix != "cue")
+        doc->writeTextElement(KXMLQLCVCCueListRecordPrefix, m_recordCuePrefix);
 
     /* End the <CueList> tag */
     doc->writeEndElement();

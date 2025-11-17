@@ -59,9 +59,14 @@ class Doc;
 #define KXMLQLCVCCueListPrevious        QStringLiteral("Previous")
 #define KXMLQLCVCCueListPlayback        QStringLiteral("Playback")
 #define KXMLQLCVCCueListStop            QStringLiteral("Stop")
+#define KXMLQLCVCCueListRecord          QStringLiteral("Record")
 #define KXMLQLCVCCueListCrossfadeLeft   QStringLiteral("CrossLeft")
 #define KXMLQLCVCCueListCrossfadeRight  QStringLiteral("CrossRight")
 #define KXMLQLCVCCueListSlidersMode     QStringLiteral("SlidersMode")
+#define KXMLQLCVCCueListRecordAllChannels QStringLiteral("RecordAllChannels")
+#define KXMLQLCVCCueListRecordNonZeroOnly QStringLiteral("RecordNonZeroOnly")
+#define KXMLQLCVCCueListRecordMask      QStringLiteral("RecordMask")
+#define KXMLQLCVCCueListRecordPrefix    QStringLiteral("RecordPrefix")
 
 /**
  * VCCueList provides a \ref VirtualConsole widget to control cue lists.
@@ -82,6 +87,7 @@ public:
     static const quint8 playbackInputSourceId;
     static const quint8 stopInputSourceId;
     static const quint8 sideFaderInputSourceId;
+    static const quint8 recordInputSourceId;
 
     /*************************************************************************
      * Initialization
@@ -266,6 +272,7 @@ private:
     QToolButton *m_stopButton;
     QToolButton *m_previousButton;
     QToolButton *m_nextButton;
+    QToolButton *m_recordButton;
     QProgressBar *m_progress;
     bool m_listIsUpdating;
 
@@ -355,6 +362,12 @@ public:
     /** Get the keyboard key combination for stopping the cue list */
     QKeySequence stopKeySequence() const;
 
+    /** Set the keyboard key combination for recording a new cue */
+    void setRecordKeySequence(const QKeySequence& keySequence);
+
+    /** Get the keyboard key combination for recording a new cue */
+    QKeySequence recordKeySequence() const;
+
 protected slots:
     void slotKeyPressed(const QKeySequence& keySequence);
 
@@ -363,6 +376,7 @@ private:
     QKeySequence m_previousKeySequence;
     QKeySequence m_playbackKeySequence;
     QKeySequence m_stopKeySequence;
+    QKeySequence m_recordKeySequence;
 
     /*************************************************************************
      * External Input
@@ -378,6 +392,7 @@ private:
     quint32 m_previousLatestValue;
     quint32 m_playbackLatestValue;
     quint32 m_stopLatestValue;
+    quint32 m_recordLatestValue;
 
     /*************************************************************************
      * VCWidget-inherited
@@ -413,6 +428,54 @@ signals:
 
 private:
     FunctionParent functionParent() const;
+
+    /*************************************************************************
+     * Recording
+     *************************************************************************/
+public:
+    /** Record current DMX values as a new scene and add to chaser */
+    void recordLiveCue();
+
+    /** Set the channel mask for recording */
+    void setRecordChannelsMask(const QByteArray &mask);
+
+    /** Get the channel mask for recording */
+    QByteArray recordChannelsMask() const;
+
+    /** Set recording mode: true = all channels, false = only selected */
+    void setRecordAllChannels(bool allChannels);
+
+    /** Get recording mode */
+    bool recordAllChannels() const;
+
+    /** Set non-zero values only mode */
+    void setRecordNonZeroOnly(bool nonZeroOnly);
+
+    /** Get non-zero values only mode */
+    bool recordNonZeroOnly() const;
+
+    /** Set the prefix for recorded cue names */
+    void setRecordCuePrefix(const QString &prefix);
+
+    /** Get the prefix for recorded cue names */
+    QString recordCuePrefix() const;
+
+private slots:
+    /** Slot called when record button is clicked */
+    void slotRecordButtonClicked();
+
+private:
+    /** Channel mask for recording (0 = excluded, 1 = included) */
+    QByteArray m_recordChannelsMask;
+
+    /** True if recording all channels, false if only selected */
+    bool m_recordAllChannels;
+
+    /** True if recording only non-zero values */
+    bool m_recordNonZeroOnly;
+
+    /** Prefix for recorded cue names */
+    QString m_recordCuePrefix;
 
     /*************************************************************************
      * Load & Save
