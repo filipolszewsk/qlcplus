@@ -95,6 +95,15 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_recordInputWidget->show();
     m_recordLayout->addWidget(m_recordInputWidget);
 
+    m_overwriteInputWidget = new InputSelectionWidget(m_doc, this);
+    m_overwriteInputWidget->setTitle(tr("Overwrite control"));
+    m_overwriteInputWidget->setCustomFeedbackVisibility(true);
+    m_overwriteInputWidget->setKeySequence(m_cueList->overwriteKeySequence());
+    m_overwriteInputWidget->setInputSource(m_cueList->inputSource(VCCueList::overwriteInputSourceId));
+    m_overwriteInputWidget->setWidgetPage(m_cueList->page());
+    m_overwriteInputWidget->show();
+    m_overwriteLayout->addWidget(m_overwriteInputWidget);
+
     /************************************************************************
      * Next Cue page
      ************************************************************************/
@@ -202,6 +211,7 @@ void VCCueListProperties::accept()
     m_cueList->setPlaybackKeySequence(m_playInputWidget->keySequence());
     m_cueList->setStopKeySequence(m_stopInputWidget->keySequence());
     m_cueList->setRecordKeySequence(m_recordInputWidget->keySequence());
+    m_cueList->setOverwriteKeySequence(m_overwriteInputWidget->keySequence());
 
     /* Input sources */
     m_cueList->setInputSource(m_nextInputWidget->inputSource(), VCCueList::nextInputSourceId);
@@ -209,6 +219,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_playInputWidget->inputSource(), VCCueList::playbackInputSourceId);
     m_cueList->setInputSource(m_stopInputWidget->inputSource(), VCCueList::stopInputSourceId);
     m_cueList->setInputSource(m_recordInputWidget->inputSource(), VCCueList::recordInputSourceId);
+    m_cueList->setInputSource(m_overwriteInputWidget->inputSource(), VCCueList::overwriteInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
 
     if (m_noneRadio->isChecked())
@@ -231,6 +242,7 @@ void VCCueListProperties::slotTabChanged()
     m_playInputWidget->stopAutoDetection();
     m_stopInputWidget->stopAutoDetection();
     m_recordInputWidget->stopAutoDetection();
+    m_overwriteInputWidget->stopAutoDetection();
     m_nextInputWidget->stopAutoDetection();
     m_prevInputWidget->stopAutoDetection();
 

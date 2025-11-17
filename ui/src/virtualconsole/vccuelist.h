@@ -60,6 +60,7 @@ class Doc;
 #define KXMLQLCVCCueListPlayback        QStringLiteral("Playback")
 #define KXMLQLCVCCueListStop            QStringLiteral("Stop")
 #define KXMLQLCVCCueListRecord          QStringLiteral("Record")
+#define KXMLQLCVCCueListOverwrite       QStringLiteral("Overwrite")
 #define KXMLQLCVCCueListCrossfadeLeft   QStringLiteral("CrossLeft")
 #define KXMLQLCVCCueListCrossfadeRight  QStringLiteral("CrossRight")
 #define KXMLQLCVCCueListSlidersMode     QStringLiteral("SlidersMode")
@@ -88,6 +89,7 @@ public:
     static const quint8 stopInputSourceId;
     static const quint8 sideFaderInputSourceId;
     static const quint8 recordInputSourceId;
+    static const quint8 overwriteInputSourceId;
 
     /*************************************************************************
      * Initialization
@@ -273,6 +275,7 @@ private:
     QToolButton *m_previousButton;
     QToolButton *m_nextButton;
     QToolButton *m_recordButton;
+    QToolButton *m_overwriteButton;
     QProgressBar *m_progress;
     bool m_listIsUpdating;
 
@@ -368,6 +371,12 @@ public:
     /** Get the keyboard key combination for recording a new cue */
     QKeySequence recordKeySequence() const;
 
+    /** Set the keyboard key combination for overwriting selected cue */
+    void setOverwriteKeySequence(const QKeySequence& keySequence);
+
+    /** Get the keyboard key combination for overwriting selected cue */
+    QKeySequence overwriteKeySequence() const;
+
 protected slots:
     void slotKeyPressed(const QKeySequence& keySequence);
 
@@ -377,6 +386,7 @@ private:
     QKeySequence m_playbackKeySequence;
     QKeySequence m_stopKeySequence;
     QKeySequence m_recordKeySequence;
+    QKeySequence m_overwriteKeySequence;
 
     /*************************************************************************
      * External Input
@@ -393,6 +403,7 @@ private:
     quint32 m_playbackLatestValue;
     quint32 m_stopLatestValue;
     quint32 m_recordLatestValue;
+    quint32 m_overwriteLatestValue;
 
     /*************************************************************************
      * VCWidget-inherited
@@ -436,6 +447,13 @@ public:
     /** Record current DMX values as a new scene and add to chaser */
     void recordLiveCue();
 
+    /** Overwrite selected cue with current DMX values */
+    void overwriteSelectedCue();
+
+private:
+    /** Update overwrite button enabled state based on current conditions */
+    void updateOverwriteButtonState();
+
     /** Set the channel mask for recording */
     void setRecordChannelsMask(const QByteArray &mask);
 
@@ -463,6 +481,9 @@ public:
 private slots:
     /** Slot called when record button is clicked */
     void slotRecordButtonClicked();
+
+    /** Slot called when overwrite button is clicked */
+    void slotOverwriteButtonClicked();
 
 private:
     /** Channel mask for recording (0 = excluded, 1 = included) */

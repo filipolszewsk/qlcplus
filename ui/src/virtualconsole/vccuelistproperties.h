@@ -56,6 +56,7 @@ protected:
     InputSelectionWidget *m_playInputWidget;
     InputSelectionWidget *m_stopInputWidget;
     InputSelectionWidget *m_recordInputWidget;
+    InputSelectionWidget *m_overwriteInputWidget;
     InputSelectionWidget *m_nextInputWidget;
     InputSelectionWidget *m_prevInputWidget;
 

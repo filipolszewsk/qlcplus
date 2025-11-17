@@ -30,6 +30,7 @@
 #include <QSettings>
 #include <QCheckBox>
 #include <QInputDialog>
+#include <QMessageBox>
 #include <QString>
 #include <QLabel>
 #include <QDebug>
@@ -73,6 +74,7 @@ const quint8 VCCueList::playbackInputSourceId = 2;
 const quint8 VCCueList::sideFaderInputSourceId = 3;
 const quint8 VCCueList::stopInputSourceId = 4;
 const quint8 VCCueList::recordInputSourceId = 5;
+const quint8 VCCueList::overwriteInputSourceId = 6;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -259,6 +261,16 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_recordButton, SIGNAL(clicked()), this, SLOT(slotRecordButtonClicked()));
     hbox->addWidget(m_recordButton);
 
+    m_overwriteButton = new QToolButton(this);
+    m_overwriteButton->setIcon(QIcon(":/edit.png"));
+    m_overwriteButton->setIconSize(QSize(24, 24));
+    m_overwriteButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_overwriteButton->setFixedHeight(32);
+    m_overwriteButton->setToolTip(tr("Overwrite selected cue with current DMX values"));
+    m_overwriteButton->setEnabled(false);
+    connect(m_overwriteButton, SIGNAL(clicked()), this, SLOT(slotOverwriteButtonClicked()));
+    hbox->addWidget(m_overwriteButton);
+
     vbox->addItem(hbox);
     grid->addItem(vbox, 0, 1, 6);
 
@@ -288,6 +300,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_playbackLatestValue = 0;
     m_stopLatestValue = 0;
     m_recordLatestValue = 0;
+    m_overwriteLatestValue = 0;
 }
 
 VCCueList::~VCCueList()
@@ -305,6 +318,26 @@ void VCCueList::enableWidgetUI(bool enable)
     Function *func = m_doc->function(m_chaserID);
     bool isSequence = (func != NULL && func->type() == Function::SequenceType);
     m_recordButton->setEnabled(enable && m_chaserID != Function::invalidId() && !isSequence);
+
+    // Overwrite button is enabled only in Operate mode, when chaser is attached, stopped, and item is selected
+    Chaser *ch = chaser();
+    bool chaserStopped = (ch != NULL && ch->stopped());
+    QTreeWidgetItem *selectedItem = m_tree->currentItem();
+    bool hasSelectedItem = (selectedItem != NULL);
+    bool overwriteEnabled = false;
+    if (enable && m_chaserID != Function::invalidId() && !isSequence && chaserStopped && hasSelectedItem)
+    {
+        // Check if selected item is a Scene
+        int stepIndex = m_tree->indexOfTopLevelItem(selectedItem);
+        if (stepIndex >= 0 && stepIndex < ch->steps().count())
+        {
+            ChaserStep step = ch->steps().at(stepIndex);
+            Function *stepFunc = m_doc->function(step.fid);
+            if (stepFunc != NULL && stepFunc->type() == Function::SceneType)
+                overwriteEnabled = true;
+        }
+    }
+    m_overwriteButton->setEnabled(overwriteEnabled);
 
     m_topPercentageLabel->setEnabled(enable);
     m_sideFader->setEnabled(enable);
@@ -346,6 +379,7 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     setPlaybackKeySequence(cuelist->playbackKeySequence());
     setStopKeySequence(cuelist->stopKeySequence());
     setRecordKeySequence(cuelist->recordKeySequence());
+    setOverwriteKeySequence(cuelist->overwriteKeySequence());
 
     /* Sliders mode */
     setSideFaderMode(cuelist->sideFaderMode());
@@ -407,6 +441,12 @@ void VCCueList::setChaser(quint32 id)
                       m_chaserID != Function::invalidId() && 
                       !isSequence);
         m_recordButton->setEnabled(enable);
+    }
+
+    /* Update overwrite button state */
+    if (m_overwriteButton != NULL)
+    {
+        enableWidgetUI(m_doc->mode() == Doc::Operate);
     }
 
     /* Current status */
@@ -897,6 +937,9 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     }
     emit stepChanged(m_primaryIndex);
     emit sideFaderValueChanged();
+
+    // Update overwrite button state
+    updateOverwriteButtonState();
 }
 
 void VCCueList::slotItemActivated(QTreeWidgetItem *item)
@@ -905,6 +948,9 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
         return;
 
     playCueAtIndex(m_tree->indexOfTopLevelItem(item));
+    
+    // Update overwrite button state
+    updateOverwriteButtonState();
 }
 
 void VCCueList::slotItemChanged(QTreeWidgetItem *item, int column)
@@ -976,6 +1022,9 @@ void VCCueList::slotFunctionStopped(quint32 fid)
 
     qDebug() << Q_FUNC_INFO << "Cue stopped";
     updateFeedback();
+
+    // Update overwrite button state
+    updateOverwriteButtonState();
 }
 
 void VCCueList::slotProgressTimeout()
@@ -1401,6 +1450,16 @@ QKeySequence VCCueList::recordKeySequence() const
     return m_recordKeySequence;
 }
 
+void VCCueList::setOverwriteKeySequence(const QKeySequence& keySequence)
+{
+    m_overwriteKeySequence = QKeySequence(keySequence);
+}
+
+QKeySequence VCCueList::overwriteKeySequence() const
+{
+    return m_overwriteKeySequence;
+}
+
 void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
 {
     if (acceptsInput() == false)
@@ -1416,6 +1475,8 @@ void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
         slotStop();
     else if (m_recordKeySequence == keySequence)
         slotRecordButtonClicked();
+    else if (m_overwriteKeySequence == keySequence)
+        slotOverwriteButtonClicked();
 }
 
 void VCCueList::updateFeedback()
@@ -1538,6 +1599,24 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
 
         if (value > HYSTERESIS)
             m_recordLatestValue = value;
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), overwriteInputSourceId))
+    {
+        // Use hysteresis to avoid triggering multiple times from a single
+        // value change. A zero value is accepted as input. And the non-zero values have to visit
+        // above $HYSTERESIS before a zero is accepted again.
+        if (m_overwriteLatestValue == 0 && value > 0)
+        {
+            slotOverwriteButtonClicked();
+            m_overwriteLatestValue = value;
+        }
+        else if (m_overwriteLatestValue > HYSTERESIS && value == 0)
+        {
+            m_overwriteLatestValue = 0;
+        }
+
+        if (value > HYSTERESIS)
+            m_overwriteLatestValue = value;
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
@@ -1677,6 +1756,66 @@ FunctionParent VCCueList::functionParent() const
  * Recording
  *****************************************************************************/
 
+void VCCueList::updateOverwriteButtonState()
+{
+    if (m_overwriteButton == NULL)
+        return;
+
+    if (m_doc->mode() != Doc::Operate)
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    if (m_chaserID == Function::invalidId())
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    Function *func = m_doc->function(m_chaserID);
+    if (func == NULL || func->type() == Function::SequenceType)
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    Chaser *ch = chaser();
+    if (ch == NULL || !ch->stopped())
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    QTreeWidgetItem *selectedItem = m_tree->currentItem();
+    if (selectedItem == NULL)
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    int stepIndex = m_tree->indexOfTopLevelItem(selectedItem);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    ChaserStep step = ch->steps().at(stepIndex);
+    Function *stepFunc = m_doc->function(step.fid);
+    if (stepFunc == NULL || stepFunc->type() != Function::SceneType)
+    {
+        m_overwriteButton->setEnabled(false);
+        return;
+    }
+
+    m_overwriteButton->setEnabled(true);
+}
+
+/*****************************************************************************
+ * Recording
+ *****************************************************************************/
+
 void VCCueList::slotRecordButtonClicked()
 {
     if (m_doc->mode() != Doc::Operate)
@@ -1691,6 +1830,51 @@ void VCCueList::slotRecordButtonClicked()
         return;
 
     recordLiveCue();
+}
+
+void VCCueList::slotOverwriteButtonClicked()
+{
+    if (m_doc->mode() != Doc::Operate)
+        return;
+
+    if (m_chaserID == Function::invalidId())
+        return;
+
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    // Check if chaser is stopped
+    if (!ch->stopped())
+        return; // Cannot overwrite when chaser is running
+
+    // Check if item is selected
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return; // No scene selected
+
+    // Get step index and scene info for confirmation dialog
+    int stepIndex = m_tree->indexOfTopLevelItem(item);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+        return;
+
+    ChaserStep step = ch->steps().at(stepIndex);
+    Function *func = m_doc->function(step.fid);
+    if (func == NULL || func->type() != Function::SceneType)
+        return;
+
+    // Show confirmation dialog
+    QString sceneName = func->name();
+    int ret = QMessageBox::question(this,
+                                    tr("Overwrite Cue"),
+                                    tr("Are you sure you want to overwrite scene \"%1\"?\n\nThis will replace all values in the scene with current DMX values.").arg(sceneName),
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::Yes);
+
+    if (ret == QMessageBox::Yes)
+    {
+        overwriteSelectedCue();
+    }
 }
 
 void VCCueList::recordLiveCue()
@@ -1843,6 +2027,121 @@ void VCCueList::recordLiveCue()
     }
 }
 
+void VCCueList::overwriteSelectedCue()
+{
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    // Get currently selected item
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return;
+
+    // Get index of selected item
+    int stepIndex = m_tree->indexOfTopLevelItem(item);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+        return;
+
+    // Get ChaserStep
+    ChaserStep step = ch->steps().at(stepIndex);
+    
+    // Get Scene
+    Function *func = m_doc->function(step.fid);
+    if (func == NULL || func->type() != Function::SceneType)
+        return;
+
+    Scene *scene = qobject_cast<Scene*>(func);
+    if (scene == NULL)
+        return;
+
+    // Get current DMX values (same logic as recordLiveCue)
+    QList<Universe*> ua = m_doc->inputOutputMap()->claimUniverses();
+    QByteArray preGMValues(ua.size() * UNIVERSE_SIZE, 0);
+
+    for (int i = 0; i < ua.count(); ++i)
+    {
+        if (ua.at(i) == NULL)
+            continue;
+        const int offset = i * UNIVERSE_SIZE;
+        preGMValues.replace(offset, UNIVERSE_SIZE, ua.at(i)->preGMValues());
+        if (ua.at(i)->passthrough())
+        {
+            for (int j = 0; j < UNIVERSE_SIZE; ++j)
+            {
+                const int ofs = offset + j;
+                preGMValues[ofs] =
+                    static_cast<char>(ua.at(i)->applyPassthrough(j, static_cast<uchar>(preGMValues[ofs])));
+            }
+        }
+    }
+
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    // Get channel mask (same logic as recordLiveCue)
+    QByteArray recordMask = m_recordChannelsMask;
+    if (m_recordAllChannels || recordMask.isEmpty())
+    {
+        int totalChannels = ua.size() * UNIVERSE_SIZE;
+        if (totalChannels == 0)
+            totalChannels = 4 * UNIVERSE_SIZE; // Default to 4 universes
+        recordMask = QByteArray(totalChannels, 1);
+    }
+
+    // Overwrite values in scene
+    foreach (Fixture *fxi, m_doc->fixtures())
+    {
+        if (fxi == NULL)
+            continue;
+
+        quint32 baseAddress = fxi->universeAddress();
+        quint32 fxID = fxi->id();
+
+        for (quint32 channel = 0; channel < fxi->channels(); channel++)
+        {
+            quint32 absAddress = baseAddress + channel;
+
+            if (absAddress >= (quint32)recordMask.length())
+                continue;
+
+            // Check if channel should be overwritten
+            bool shouldOverwrite = false;
+            if (m_recordAllChannels)
+            {
+                shouldOverwrite = true;
+            }
+            else
+            {
+                if (absAddress < (quint32)recordMask.length())
+                    shouldOverwrite = (recordMask[absAddress] == 1);
+            }
+
+            if (shouldOverwrite)
+            {
+                uchar value = 0;
+                if (absAddress < (quint32)preGMValues.length())
+                    value = preGMValues.at(absAddress);
+
+                // Skip zero values if option is enabled
+                if (m_recordNonZeroOnly && value == 0)
+                {
+                    // Remove value from scene if it was set
+                    scene->unsetValue(fxID, channel);
+                }
+                else
+                {
+                    // Overwrite value in scene
+                    SceneValue sv = SceneValue(fxID, channel, value);
+                    scene->setValue(sv);
+                }
+            }
+        }
+    }
+
+    // Mark document as modified
+    m_doc->setModified();
+}
+
 void VCCueList::setRecordChannelsMask(const QByteArray &mask)
 {
     m_recordChannelsMask = mask;
@@ -1943,6 +2242,12 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             QString str = loadXMLSources(root, recordInputSourceId);
             if (str.isEmpty() == false)
                 m_recordKeySequence = stripKeySequence(QKeySequence(str));
+        }
+        else if (root.name() == KXMLQLCVCCueListOverwrite)
+        {
+            QString str = loadXMLSources(root, overwriteInputSourceId);
+            if (str.isEmpty() == false)
+                m_overwriteKeySequence = stripKeySequence(QKeySequence(str));
         }
         else if (root.name() == KXMLQLCVCCueListSlidersMode)
         {
@@ -2111,6 +2416,13 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     if (m_recordKeySequence.toString().isEmpty() == false)
         doc->writeTextElement(KXMLQLCVCWidgetKey, m_recordKeySequence.toString());
     saveXMLInput(doc, inputSource(recordInputSourceId));
+    doc->writeEndElement();
+
+    /* Cue list overwrite */
+    doc->writeStartElement(KXMLQLCVCCueListOverwrite);
+    if (m_overwriteKeySequence.toString().isEmpty() == false)
+        doc->writeTextElement(KXMLQLCVCWidgetKey, m_overwriteKeySequence.toString());
+    saveXMLInput(doc, inputSource(overwriteInputSourceId));
     doc->writeEndElement();
 
     /* Crossfade cue list */
