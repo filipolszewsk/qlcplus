@@ -93,7 +93,7 @@ VCWidgetItem
         {
             x: 1
             y: 1
-            color: "#00FF00"
+            color: UISettings.monitorLevelBarColor
             height: sliderObj ? parent.height * (sliderObj.monitorValue / 255) : 0
             width: parent.width - 2
         }

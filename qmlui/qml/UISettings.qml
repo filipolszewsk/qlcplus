@@ -59,6 +59,8 @@ QtObject
     property color toolbarSelectionMain: "#12B4FF"
     property color toolbarSelectionSub:  "yellow"
 
+    property color monitorLevelBarColor:  "white"
+
     /* Sizes */
     property int  textSizeDefault:  screenPixelDensity * scalingFactor * 4.5
     property real iconSizeDefault:  screenPixelDensity * scalingFactor * 10 // more or less the size of a finger

@@ -99,9 +99,9 @@ void ClickAndGoSlider::paintEvent(QPaintEvent *e)
         p.drawRect(width() - 6, 0, width(), height());
         p.fillRect(width() - 5, 0, width() - 1, height(), QColor(Qt::darkGray));
         if (invertedAppearance())
-            p.fillRect(width() - 5, 0, width() - 1, levHeight, QColor(Qt::green));
+            p.fillRect(width() - 5, 0, width() - 1, levHeight, QColor(Qt::white));
         else
-            p.fillRect(width() - 5, height() - levHeight, width() - 1, height(), QColor(Qt::green));
+            p.fillRect(width() - 5, height() - levHeight, width() - 1, height(), QColor(Qt::white));
     }
 
     QSlider::paintEvent(e);
