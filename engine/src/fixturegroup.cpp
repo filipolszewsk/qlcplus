@@ -21,6 +21,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDebug>
+#include <QMutexLocker>
 
 #include "fixturegroup.h"
 #include "qlcpoint.h"
@@ -138,6 +139,8 @@ bool FixtureGroup::assignFixture(quint32 id, const QLCPoint& pt)
 
 bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
 {
+    QMutexLocker locker(&m_headsMutex);
+    
     if (m_heads.values().contains(head) == true)
         return false;
 
@@ -181,6 +184,8 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
 
 void FixtureGroup::resignFixture(quint32 id)
 {
+    QMutexLocker locker(&m_headsMutex);
+    
     QMap <QLCPoint,GroupHead>::iterator it = m_heads.begin();
     while(it != m_heads.end())
     {
@@ -195,6 +200,8 @@ void FixtureGroup::resignFixture(quint32 id)
 
 bool FixtureGroup::resignHead(const QLCPoint& pt)
 {
+    QMutexLocker locker(&m_headsMutex);
+    
     const int removed = m_heads.remove(pt);
     if (removed)
         emit changed(this->id());
@@ -204,6 +211,8 @@ bool FixtureGroup::resignHead(const QLCPoint& pt)
 
 void FixtureGroup::swap(const QLCPoint& a, const QLCPoint& b)
 {
+    QMutexLocker locker(&m_headsMutex);
+    
     GroupHead ah = m_heads.value(a);
     GroupHead bh = m_heads.value(b);
 
@@ -222,6 +231,8 @@ void FixtureGroup::swap(const QLCPoint& a, const QLCPoint& b)
 
 void FixtureGroup::reset()
 {
+    QMutexLocker locker(&m_headsMutex);
+    
     m_heads.clear();
     emit changed(this->id());
 }
@@ -375,9 +386,15 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute("Y", QString::number(size().height()));
     doc->writeEndElement();
 
-    /* Fixture heads */
-    QMap <QLCPoint,GroupHead>::iterator it = m_heads.begin();
-    for (; it != m_heads.end(); it++)
+    /* Fixture heads - kopiujemy przed iteracją dla bezpieczeństwa */
+    QMap<QLCPoint, GroupHead> headsCopy;
+    {
+        QMutexLocker locker(&m_headsMutex);
+        headsCopy = m_heads;
+    }
+    
+    QMap <QLCPoint,GroupHead>::const_iterator it = headsCopy.constBegin();
+    for (; it != headsCopy.constEnd(); it++)
     {
         QLCPoint pt = it.key();
         GroupHead head = it.value();

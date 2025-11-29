@@ -25,6 +25,7 @@
 #include <QList>
 #include <QSize>
 #include <QMap>
+#include <QMutex>
 
 #include "grouphead.h"
 #include "qlcpoint.h"
@@ -175,6 +176,7 @@ private slots:
     void slotFixtureRemoved(quint32 id);
 
 private:
+    mutable QMutex m_headsMutex;
     QMap <QLCPoint,GroupHead> m_heads;
 
     /************************************************************************
