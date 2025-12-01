@@ -120,13 +120,10 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     // bottom preset space
     m_presetsLayout = new FlowLayout();
     m_mainVbox->addLayout(m_presetsLayout);
-    m_efx = NULL;
     m_efxStartXOverrideId = Function::invalidAttributeId();
     m_efxStartYOverrideId = Function::invalidAttributeId();
     m_efxWidthOverrideId = Function::invalidAttributeId();
     m_efxHeightOverrideId = Function::invalidAttributeId();
-
-    m_scene = NULL;
 
     m_vSlider->setRange(0, 256);
     m_hSlider->setRange(0, 256);
@@ -510,7 +507,7 @@ void VCXYPad::updateDegreesRange()
 
 void VCXYPad::writeDMX(MasterTimer* timer, QList<Universe *> universes)
 {
-    if (m_scene != NULL)
+    if (!m_scene.isNull())
         writeScenePositions(timer, universes);
     else
         writeXYFixtures(timer, universes);
@@ -568,7 +565,7 @@ void VCXYPad::writeScenePositions(MasterTimer *timer, QList<Universe *> universe
 {
     Q_UNUSED(timer);
 
-    if (m_scene == NULL || m_scene->isRunning() == false)
+    if (m_scene.isNull() || m_scene->isRunning() == false)
         return;
 
     QPointF pt = m_area->position();
@@ -679,7 +676,7 @@ void VCXYPad::slotRangeValueChanged()
     QRectF rect(QPointF(m_hRangeSlider->minimumPosition(), m_vRangeSlider->minimumPosition()),
                QPointF(m_hRangeSlider->maximumPosition(), m_vRangeSlider->maximumPosition()));
     m_area->setRangeWindow(rect);
-    if (m_efx != NULL && m_efx->isRunning())
+    if (!m_efx.isNull() && m_efx->isRunning())
     {
         m_efx->adjustAttribute(rect.x() + rect.width() / 2, m_efxStartXOverrideId);
         m_efx->adjustAttribute(rect.y() + rect.height() / 2, m_efxStartYOverrideId);
@@ -707,7 +704,7 @@ void VCXYPad::slotUniverseWritten(quint32 idx, const QByteArray &universeData)
 {
     QVariantList positions;
 
-    if (m_scene)
+    if (!m_scene.isNull())
     {
         QMap <quint32, QPointF> fxMap;
 
@@ -856,12 +853,12 @@ void VCXYPad::slotPresetClicked(bool checked)
     Q_ASSERT(preset != NULL);
 
     // stop any previously started EFX
-    if (m_efx != NULL && m_efx->isRunning())
+    if (!m_efx.isNull() && m_efx->isRunning())
     {
         disconnect(m_efx, SIGNAL(durationChanged(uint)), this, SLOT(slotEFXDurationChanged(uint)));
 
         m_efx->stopAndWait();
-        m_efx = NULL;
+        m_efx.clear();
         m_efxStartXOverrideId = Function::invalidAttributeId();
         m_efxStartYOverrideId = Function::invalidAttributeId();
         m_efxWidthOverrideId = Function::invalidAttributeId();
@@ -869,10 +866,10 @@ void VCXYPad::slotPresetClicked(bool checked)
     }
 
     // stop any previously started Scene
-    if (m_scene != NULL)
+    if (!m_scene.isNull())
     {
         m_scene->stop(functionParent());
-        m_scene = NULL;
+        m_scene.clear();
         foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
         {
             if (!fader.isNull())
@@ -937,6 +934,10 @@ void VCXYPad::slotPresetClicked(bool checked)
         if (f == NULL || f->type() != Function::EFXType)
             return;
         m_efx = qobject_cast<EFX*>(f);
+        
+        // Verify EFX object still exists before using it
+        if (m_efx.isNull())
+            return;
 
         QRectF rect(QPointF(m_hRangeSlider->minimumPosition(), m_vRangeSlider->minimumPosition()),
                    QPointF(m_hRangeSlider->maximumPosition(), m_vRangeSlider->maximumPosition()));
@@ -974,6 +975,11 @@ void VCXYPad::slotPresetClicked(bool checked)
             return;
 
         m_scene = qobject_cast<Scene*>(f);
+        
+        // Verify Scene object still exists before using it
+        if (m_scene.isNull())
+            return;
+            
         m_sceneChannels.clear();
 
         foreach (SceneValue scv, m_scene->values())
@@ -1049,7 +1055,7 @@ void VCXYPad::slotPresetClicked(bool checked)
 
 void VCXYPad::slotEFXDurationChanged(uint duration)
 {
-    if (m_efx == NULL)
+    if (m_efx.isNull())
         return;
 
     m_area->setEFXInterval(duration);
@@ -1138,7 +1144,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
 
     if (checkInputSource(universe, pagedCh, value, sender(), panInputSourceId))
     {
-        if (m_efx == NULL)
+        if (m_efx.isNull())
         {
             m_lastPos.setX(value);
             updatePosition();
@@ -1155,7 +1161,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), panFineInputSourceId))
     {
-        if (m_efx == NULL)
+        if (m_efx.isNull())
         {
             m_lastPos.setWidth(value);
             updatePosition();
@@ -1163,7 +1169,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), tiltInputSourceId))
     {
-        if (m_efx == NULL)
+        if (m_efx.isNull())
         {
             m_lastPos.setY(value);
             updatePosition();
@@ -1179,7 +1185,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), tiltFineInputSourceId))
     {
-        if (m_efx == NULL)
+        if (m_efx.isNull())
         {
             m_lastPos.setHeight(value);
             updatePosition();
@@ -1187,7 +1193,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), widthInputSourceId))
     {
-        if (m_efx != NULL && m_efx->isRunning())
+        if (!m_efx.isNull() && m_efx->isRunning())
         {
             m_hRangeSlider->setMaximumValue(value);
             slotRangeValueChanged();
@@ -1195,7 +1201,7 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), heightInputSourceId))
     {
-        if (m_efx != NULL && m_efx->isRunning())
+        if (!m_efx.isNull() && m_efx->isRunning())
         {
             m_vRangeSlider->setMaximumValue(value);
             slotRangeValueChanged();

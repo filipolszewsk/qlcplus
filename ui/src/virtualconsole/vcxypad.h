@@ -27,6 +27,7 @@
 #include <QString>
 #include <QMutex>
 #include <QList>
+#include <QPointer>
 
 #include "vcxypadfixture.h"
 #include "vcxypadpreset.h"
@@ -46,6 +47,7 @@ class FlowLayout;
 class QByteArray;
 class QSlider;
 class EFX;
+class Scene;
 class Doc;
 
 /** @addtogroup ui_vc_widgets
@@ -287,14 +289,14 @@ private:
 protected:
     QHash<QWidget *, VCXYPadPreset *> m_presets;
     /** Reference to an EFX Function when an EFX Preset is pressed */
-    EFX *m_efx;
+    QPointer<EFX> m_efx;
     /** Attribute override IDs for a running EFX preset */
     int m_efxStartXOverrideId;
     int m_efxStartYOverrideId;
     int m_efxWidthOverrideId;
     int m_efxHeightOverrideId;
 
-    Scene *m_scene;
+    QPointer<Scene> m_scene;
     QList<SceneChannel> m_sceneChannels;
 
     /*********************************************************************
