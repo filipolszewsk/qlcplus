@@ -926,7 +926,8 @@ void Universe::registerPanTiltPair(const PanTiltChannelPair &pair)
              << (pair.isPan ? "Pan" : "Tilt")
              << "MSB:" << pair.msbChannel 
              << "LSB:" << pair.lsbChannel
-             << "Range:" << pair.rangeMin << "-" << pair.rangeMax;
+             << "Range:" << pair.rangeMin << "-" << pair.rangeMax
+             << (pair.reverse ? "(REVERSED)" : "");
 }
 
 void Universe::unregisterPanTiltPair(ushort msbChannel)
@@ -962,7 +963,11 @@ void Universe::applyPanTiltScaling(ushort msbChannel, quint16 value16bit)
     const PanTiltChannelPair &pair = m_panTiltPairs[msbChannel];
     
     // Input: 16-bit value (AFTER GM and modifiers applied to MSB)
-    // Scale: 16-bit input → custom range degrees → physical 16-bit output
+    // Scale: 16-bit input → reverse (if enabled) → custom range degrees → physical 16-bit output
+    
+    // STEP 0: Apply reverse if enabled (invert the DMX value)
+    if (pair.reverse)
+        value16bit = 65535 - value16bit;
     
     // STEP 1: Map 16-bit input (0-65535) → custom range degrees (absolute 0-540)
     qreal customSpan = pair.rangeMax - pair.rangeMin;
@@ -984,6 +989,7 @@ void Universe::applyPanTiltScaling(ushort msbChannel, quint16 value16bit)
     
     qDebug() << "[PanTilt Scale]" << (pair.isPan ? "Pan" : "Tilt")
              << "Head:" << pair.headIndex
+             << (pair.reverse ? "(REVERSED)" : "")
              << "16-bit In:" << value16bit << "→ Degrees:" << degrees 
              << "→ 16-bit Out:" << dmxOutput << "(" << (dmxOutput >> 8) << "," << (dmxOutput & 0xFF) << ")";
 }

@@ -545,6 +545,7 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
             panPair.rangeMin = qMax(range.panMin, qreal(0));
             panPair.rangeMax = qMin(range.panMax, physPanMax);
             panPair.physicalMax = physPanMax;
+            panPair.reverse = range.panReverse;
             
             universes.at(targetUni)->registerPanTiltPair(panPair);
         }
@@ -587,6 +588,7 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
             tiltPair.rangeMin = qMax(range.tiltMin, qreal(0));
             tiltPair.rangeMax = qMin(range.tiltMax, physTiltMax);
             tiltPair.physicalMax = physTiltMax;
+            tiltPair.reverse = range.tiltReverse;
             
             universes.at(targetUni)->registerPanTiltPair(tiltPair);
         }
@@ -801,6 +803,7 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
             panPair.rangeMin = qMax(range.panMin, qreal(0));
             panPair.rangeMax = qMin(range.panMax, physPanMax);
             panPair.physicalMax = physPanMax;
+            panPair.reverse = range.panReverse;
             
             universe->registerPanTiltPair(panPair);
         }
@@ -822,6 +825,7 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
             tiltPair.rangeMin = qMax(range.tiltMin, qreal(0));
             tiltPair.rangeMax = qMin(range.tiltMax, physTiltMax);
             tiltPair.physicalMax = physTiltMax;
+            tiltPair.reverse = range.tiltReverse;
             
             universe->registerPanTiltPair(tiltPair);
         }

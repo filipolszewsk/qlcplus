@@ -1267,6 +1267,8 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
             range.panMax = attrs.value(KXMLFixturePanMax).toString().toDouble();
             range.tiltMin = attrs.value(KXMLFixtureTiltMin).toString().toDouble();
             range.tiltMax = attrs.value(KXMLFixtureTiltMax).toString().toDouble();
+            range.panReverse = (attrs.value(KXMLFixturePanReverse).toString() == "1");
+            range.tiltReverse = (attrs.value(KXMLFixtureTiltReverse).toString() == "1");
             // Store temporarily - will be applied after fixture mode is set
             tempPanTiltRanges[head] = range;
             xmlDoc.skipCurrentElement();
@@ -1511,6 +1513,8 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLFixturePanMax, QString::number(range.panMax));
             doc->writeAttribute(KXMLFixtureTiltMin, QString::number(range.tiltMin));
             doc->writeAttribute(KXMLFixtureTiltMax, QString::number(range.tiltMax));
+            doc->writeAttribute(KXMLFixturePanReverse, range.panReverse ? "1" : "0");
+            doc->writeAttribute(KXMLFixtureTiltReverse, range.tiltReverse ? "1" : "0");
             doc->writeEndElement();
         }
     }

@@ -65,6 +65,8 @@ void PanTiltRangeEditor::setRange(const PanTiltRange &range)
     m_panMaxSpin->setValue(range.panMax);
     m_tiltMinSpin->setValue(range.tiltMin);
     m_tiltMaxSpin->setValue(range.tiltMax);
+    m_panReverseCheck->setChecked(range.panReverse);
+    m_tiltReverseCheck->setChecked(range.tiltReverse);
     
     slotEnabledChanged(range.enabled);
 }
@@ -77,6 +79,8 @@ PanTiltRange PanTiltRangeEditor::getRange() const
     range.panMax = m_panMaxSpin->value();
     range.tiltMin = m_tiltMinSpin->value();
     range.tiltMax = m_tiltMaxSpin->value();
+    range.panReverse = m_panReverseCheck->isChecked();
+    range.tiltReverse = m_tiltReverseCheck->isChecked();
     return range;
 }
 
@@ -86,4 +90,6 @@ void PanTiltRangeEditor::slotEnabledChanged(bool enabled)
     m_panMaxSpin->setEnabled(enabled);
     m_tiltMinSpin->setEnabled(enabled);
     m_tiltMaxSpin->setEnabled(enabled);
+    m_panReverseCheck->setEnabled(enabled);
+    m_tiltReverseCheck->setEnabled(enabled);
 }

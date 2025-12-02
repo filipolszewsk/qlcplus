@@ -74,10 +74,11 @@ struct PanTiltChannelPair
     qreal rangeMin;         /** Custom range minimum in degrees (absolute: 0-540) */
     qreal rangeMax;         /** Custom range maximum in degrees (absolute: 0-540) */
     qreal physicalMax;      /** Physical limit from fixture definition (540 for Pan, 270 for Tilt) */
+    bool reverse;           /** Flag to reverse direction (invert DMX values) */
     
     PanTiltChannelPair() : fixtureID(0), channelIndex(0), headIndex(0), isPan(true),
                            msbChannel(0), lsbChannel(QLCChannel::invalid()),
-                           rangeMin(0), rangeMax(0), physicalMax(360) {}
+                           rangeMin(0), rangeMax(0), physicalMax(360), reverse(false) {}
 };
 
 /** Universe class contains input/output data for one DMX universe

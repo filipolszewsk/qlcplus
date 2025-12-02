@@ -69,6 +69,8 @@ class Doc;
 #define KXMLFixturePanMax           QStringLiteral("PanMax")
 #define KXMLFixtureTiltMin          QStringLiteral("TiltMin")
 #define KXMLFixtureTiltMax          QStringLiteral("TiltMax")
+#define KXMLFixturePanReverse       QStringLiteral("PanReverse")
+#define KXMLFixtureTiltReverse      QStringLiteral("TiltReverse")
 
 typedef struct
 {
@@ -83,13 +85,18 @@ struct PanTiltRange
     qreal panMax;           /** Maximum Pan angle in degrees (absolute: 0-540) */
     qreal tiltMin;          /** Minimum Tilt angle in degrees (absolute: 0-270) */
     qreal tiltMax;          /** Maximum Tilt angle in degrees (absolute: 0-270) */
+    bool panReverse;        /** Flag to reverse Pan direction */
+    bool tiltReverse;       /** Flag to reverse Tilt direction */
     
     /** Default constructor */
-    PanTiltRange() : enabled(false), panMin(0), panMax(0), tiltMin(0), tiltMax(0) {}
+    PanTiltRange() : enabled(false), panMin(0), panMax(0), tiltMin(0), tiltMax(0), 
+                     panReverse(false), tiltReverse(false) {}
     
     /** Constructor with values */
-    PanTiltRange(bool en, qreal pMin, qreal pMax, qreal tMin, qreal tMax)
-        : enabled(en), panMin(pMin), panMax(pMax), tiltMin(tMin), tiltMax(tMax) {}
+    PanTiltRange(bool en, qreal pMin, qreal pMax, qreal tMin, qreal tMax, 
+                 bool pReverse = false, bool tReverse = false)
+        : enabled(en), panMin(pMin), panMax(pMax), tiltMin(tMin), tiltMax(tMax),
+          panReverse(pReverse), tiltReverse(tReverse) {}
 };
 
 class Fixture : public QObject
