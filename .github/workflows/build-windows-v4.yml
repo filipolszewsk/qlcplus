@@ -1,0 +1,170 @@
+name: Build Windows Installer (QLC+ 4.14)
+
+on:
+  push:
+    branches: [ main, master, feature/windows-installer-workflow ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Pozwala uruchomić ręcznie z GitHub UI
+
+jobs:
+  build-windows-v4:
+    runs-on: windows-latest
+    name: Build QLC+ 4.14 Windows Installer
+    
+    env:
+      CI_REPO_SLUG: ${{ github.repository }}
+      CI_BRANCH: ${{ github.head_ref }}
+      CI_PULL_REQUEST: ${{ github.event.number }}
+      QT_VERSION: "6.8.1"
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup ccache (for faster builds)
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: windows-build-v4-${{ github.sha }}
+
+      - name: Set environment variables
+        shell: bash
+        run: |
+          echo "CI_BRANCH=$(echo $GITHUB_REF | cut -d '/' -f 3)" >> $GITHUB_ENV
+          echo "CI_SECURE_ENV_VARS=$(if [ -z '${{ secrets.something }}' ]; then echo 'false'; else echo 'true'; fi)" >> $GITHUB_ENV
+          echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
+          echo "NPROC=$(nproc)" >> $GITHUB_ENV
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
+          echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
+          echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//' | cut -d ' ' -f 1)" >> $GITHUB_ENV
+          echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> $GITHUB_ENV
+
+      - name: Print environment variables
+        shell: bash
+        run: |
+          echo "CI_BRANCH: ${CI_BRANCH}"
+          echo "CI_PULL_REQUEST: ${CI_PULL_REQUEST}"
+          echo "CI_REPO_SLUG: ${CI_REPO_SLUG}"
+          echo "CI_EVENT_TYPE: ${CI_EVENT_TYPE}"
+          echo "CI_SECURE_ENV_VARS: ${CI_SECURE_ENV_VARS}"
+          echo "NPROC: ${NPROC}"
+          echo "QTDIR: ${QTDIR}"
+          echo "APPVERSION: ${APPVERSION}"
+          echo "OUTFILE: ${OUTFILE}"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          dir: "${{ github.workspace }}/qt/"
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+
+      - name: Install MSYS2 and dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          release: true
+          update: false
+          path-type: inherit
+          install: >-
+            wget
+            unzip
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-libs
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-libmad
+            mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-flac
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-python-lxml
+            mingw-w64-x86_64-nsis
+
+      - name: Install D2XX SDK (for FTDI DMX USB support)
+        shell: msys2 {0}
+        run: |
+          mkdir -p /c/projects/D2XXSDK
+          wget https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip -O /c/projects/D2XXSDK/cdm.zip
+          cd /c/projects/D2XXSDK
+          unzip cdm.zip
+          cd amd64
+          gendef.exe - ftd2xx64.dll > ftd2xx.def
+          dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
+
+      - name: Print program versions
+        shell: msys2 {0}
+        run: |
+          echo "pwd:"
+          pwd
+          echo "CXX:"
+          which ${CXX} || true
+          ${CXX} -v || true
+          echo "cmake:"
+          which cmake || true
+          cmake --version || true
+          pkg-config --modversion libusb-1.0
+          echo "ccache:"
+          ccache --version || true
+
+      - name: Fix build paths and configuration
+        shell: msys2 {0}
+        run: |
+          # Force a release build
+          sed -i -e 's/Debug/Release/g' CMakeLists.txt
+          # Disable Velleman plugin (optional - remove if needed)
+          sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
+          # Fix MSYS2 system path
+          sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
+          # Fix project path in NSIS script
+          sed -i -e 's/c\:\\projects/d:\\a\\qlcplus/g' platforms/windows/${{env.NSIS_SCRIPT}}
+
+      - name: Configure build for Windows (v4)
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build QLC+
+        shell: msys2 {0}
+        run: |
+          cd build
+          ninja
+
+      - name: Install QLC+
+        shell: msys2 {0}
+        run: |
+          cd build
+          ninja install
+
+      - name: Run windeployqt (v4)
+        shell: msys2 {0}
+        run: |
+          ./translate.sh ui
+          cp *.qm /c/qlcplus
+          cd /c/qlcplus
+          ${{ env.QTDIR }}/bin/windeployqt qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
+
+      - name: Build Windows installer
+        shell: msys2 {0}
+        run: |
+          cd /c/qlcplus
+          echo "Creating installer package..."
+          makensis -X'SetCompressor /FINAL lzma' ${{env.NSIS_SCRIPT}}
+          mv /c/qlcplus/${{env.OUTFILE}} ${{ github.workspace }}/${{env.OUTFILE}}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QLC+-Windows-v4-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}
+          path: ${{env.OUTFILE}}
+          retention-days: 30
+
