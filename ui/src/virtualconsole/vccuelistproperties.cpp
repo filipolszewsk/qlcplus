@@ -137,13 +137,24 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     else if (cueList->sideFaderMode() == VCCueList::Crossfade)
         m_crossFadeRadio->setChecked(true);
 
+    /* Next/Prev controls secondary selection */
+    m_nextPrevSecondaryCheck->setChecked(cueList->nextPrevControlsSecondary());
+
     m_crossfadeInputWidget = new InputSelectionWidget(m_doc, this);
-    m_crossfadeInputWidget->setTitle(tr("External Input"));
+    m_crossfadeInputWidget->setTitle(tr("Crossfade Slider External Input"));
     m_crossfadeInputWidget->setKeyInputVisibility(false);
     m_crossfadeInputWidget->setInputSource(m_cueList->inputSource(VCCueList::sideFaderInputSourceId));
     m_crossfadeInputWidget->setWidgetPage(m_cueList->page());
     m_crossfadeInputWidget->show();
     m_crossFadeLayout->addWidget(m_crossfadeInputWidget);
+
+    m_secondarySelectInputWidget = new InputSelectionWidget(m_doc, this);
+    m_secondarySelectInputWidget->setTitle(tr("Secondary Select Slider (1=first cue, 2=second, ...)"));
+    m_secondarySelectInputWidget->setKeyInputVisibility(false);
+    m_secondarySelectInputWidget->setInputSource(m_cueList->inputSource(VCCueList::secondarySelectInputSourceId));
+    m_secondarySelectInputWidget->setWidgetPage(m_cueList->page());
+    m_secondarySelectInputWidget->show();
+    m_secondarySelectLayout->addWidget(m_secondarySelectInputWidget);
 
     /* Playback layout */
     connect(m_play_stop_pause, SIGNAL(clicked(bool)), this, SLOT(slotPlaybackLayoutChanged()));
@@ -221,6 +232,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_recordInputWidget->inputSource(), VCCueList::recordInputSourceId);
     m_cueList->setInputSource(m_overwriteInputWidget->inputSource(), VCCueList::overwriteInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
+    m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
 
     if (m_noneRadio->isChecked())
         m_cueList->setSideFaderMode(VCCueList::None);
@@ -228,6 +240,9 @@ void VCCueListProperties::accept()
         m_cueList->setSideFaderMode(VCCueList::Steps);
     else
         m_cueList->setSideFaderMode(VCCueList::Crossfade);
+
+    /* Next/Prev controls secondary */
+    m_cueList->setNextPrevControlsSecondary(m_nextPrevSecondaryCheck->isChecked());
 
     /* Recording settings */
     m_cueList->setRecordAllChannels(m_recordAllChannelsRadio->isChecked());
@@ -247,6 +262,7 @@ void VCCueListProperties::slotTabChanged()
     m_prevInputWidget->stopAutoDetection();
 
     m_crossfadeInputWidget->stopAutoDetection();
+    m_secondarySelectInputWidget->stopAutoDetection();
 }
 
 /****************************************************************************

@@ -75,6 +75,7 @@ const quint8 VCCueList::sideFaderInputSourceId = 3;
 const quint8 VCCueList::stopInputSourceId = 4;
 const quint8 VCCueList::recordInputSourceId = 5;
 const quint8 VCCueList::overwriteInputSourceId = 6;
+const quint8 VCCueList::secondarySelectInputSourceId = 7;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -101,6 +102,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_secondaryIndex(0)
     , m_primaryTop(true)
     , m_slidersMode(None)
+    , m_nextPrevControlsSecondary(false)
     , m_recordAllChannels(true)
     , m_recordNonZeroOnly(false)
     , m_recordCuePrefix("cue")
@@ -179,6 +181,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
 
     connect(m_tree, SIGNAL(itemActivated(QTreeWidgetItem*,int)),
             this, SLOT(slotItemActivated(QTreeWidgetItem*)));
+    connect(m_tree, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
+            this, SLOT(slotItemClicked(QTreeWidgetItem*)));
     connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
     vbox->addWidget(m_tree);
@@ -383,6 +387,9 @@ bool VCCueList::copyFrom(const VCWidget *widget)
 
     /* Sliders mode */
     setSideFaderMode(cuelist->sideFaderMode());
+
+    /* Next/Prev controls secondary */
+    setNextPrevControlsSecondary(cuelist->nextPrevControlsSecondary());
 
     /* Recording settings */
     setRecordAllChannels(cuelist->recordAllChannels());
@@ -796,6 +803,27 @@ void VCCueList::slotNextCue()
     if (ch == NULL)
         return;
 
+    // In Crossfade mode with secondary control enabled, Next/Prev change the crossfade target
+    if (sideFaderMode() == Crossfade && m_nextPrevControlsSecondary)
+    {
+        int stepsCount = m_tree->topLevelItemCount();
+        if (stepsCount <= 1)
+            return;
+
+        int newSecondaryIndex = m_secondaryIndex + 1;
+        if (newSecondaryIndex >= stepsCount)
+            newSecondaryIndex = 0;
+        // Skip primary index
+        if (newSecondaryIndex == m_primaryIndex)
+        {
+            newSecondaryIndex++;
+            if (newSecondaryIndex >= stepsCount)
+                newSecondaryIndex = 0;
+        }
+        setSecondaryIndex(newSecondaryIndex);
+        return;
+    }
+
     if (ch->isRunning())
     {
         if (ch->isPaused())
@@ -841,6 +869,27 @@ void VCCueList::slotPreviousCue()
     Chaser *ch = chaser();
     if (ch == NULL)
         return;
+
+    // In Crossfade mode with secondary control enabled, Next/Prev change the crossfade target
+    if (sideFaderMode() == Crossfade && m_nextPrevControlsSecondary)
+    {
+        int stepsCount = m_tree->topLevelItemCount();
+        if (stepsCount <= 1)
+            return;
+
+        int newSecondaryIndex = m_secondaryIndex - 1;
+        if (newSecondaryIndex < 0)
+            newSecondaryIndex = stepsCount - 1;
+        // Skip primary index
+        if (newSecondaryIndex == m_primaryIndex)
+        {
+            newSecondaryIndex--;
+            if (newSecondaryIndex < 0)
+                newSecondaryIndex = stepsCount - 1;
+        }
+        setSecondaryIndex(newSecondaryIndex);
+        return;
+    }
 
     if (ch->isRunning())
     {
@@ -947,7 +996,34 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
     if (mode() != Doc::Operate)
         return;
 
-    playCueAtIndex(m_tree->indexOfTopLevelItem(item));
+    int clickedIndex = m_tree->indexOfTopLevelItem(item);
+
+    // In Crossfade mode with secondary control enabled, activation changes the crossfade target
+    if (sideFaderMode() == Crossfade && m_nextPrevControlsSecondary)
+    {
+        // Allow setting secondary to primary (secondary = primary is valid)
+        setSecondaryIndex(clickedIndex);
+        return;
+    }
+
+    playCueAtIndex(clickedIndex);
+    
+    // Update overwrite button state
+    updateOverwriteButtonState();
+}
+
+void VCCueList::slotItemClicked(QTreeWidgetItem *item)
+{
+    if (mode() != Doc::Operate)
+        return;
+
+    // In Crossfade mode with secondary control enabled, clicks change the crossfade target
+    if (sideFaderMode() == Crossfade && m_nextPrevControlsSecondary)
+    {
+        int clickedIndex = m_tree->indexOfTopLevelItem(item);
+        // Allow setting secondary to primary (secondary = primary is valid)
+        setSecondaryIndex(clickedIndex);
+    }
     
     // Update overwrite button state
     updateOverwriteButtonState();
@@ -1223,6 +1299,16 @@ QString VCCueList::faderModeToString(VCCueList::FaderMode mode)
     return "None";
 }
 
+void VCCueList::setNextPrevControlsSecondary(bool enable)
+{
+    m_nextPrevControlsSecondary = enable;
+}
+
+bool VCCueList::nextPrevControlsSecondary() const
+{
+    return m_nextPrevControlsSecondary;
+}
+
 /*****************************************************************************
  * Crossfade
  *****************************************************************************/
@@ -1232,7 +1318,22 @@ void VCCueList::setFaderInfo(int index)
     if (ch == NULL || !ch->isRunning())
         return;
 
-    int tmpIndex = ch->computeNextStep(index);
+    // Reset any previously set background
+    QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
+    if (item != NULL)
+        item->setBackground(COL_NUM, m_defCol);
+
+    int tmpIndex;
+    if (m_nextPrevControlsSecondary)
+    {
+        // In manual mode, secondary starts equal to primary (no auto-advance)
+        tmpIndex = index;
+    }
+    else
+    {
+        // In automatic mode, secondary is the next step
+        tmpIndex = ch->computeNextStep(index);
+    }
 
     m_topStepLabel->setText(QString("#%1").arg(m_primaryTop ? index + 1 : tmpIndex + 1));
     m_topStepLabel->setStyleSheet(m_primaryTop ? cfLabelBlueStyle : cfLabelOrangeStyle);
@@ -1240,15 +1341,56 @@ void VCCueList::setFaderInfo(int index)
     m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? tmpIndex + 1 : index + 1));
     m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
 
-    // reset any previously set background
+    // Only highlight secondary if different from primary
+    if (tmpIndex != index)
+    {
+        item = m_tree->topLevelItem(tmpIndex);
+        if (item != NULL)
+            item->setBackground(COL_NUM, QColor("#FF8000"));
+    }
+    m_secondaryIndex = tmpIndex;
+
+    emit sideFaderValueChanged();
+}
+
+void VCCueList::setSecondaryIndex(int index)
+{
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    int stepsCount = m_tree->topLevelItemCount();
+    if (stepsCount == 0)
+        return;
+
+    // Wrap index around if needed
+    if (index < 0)
+        index = stepsCount - 1;
+    else if (index >= stepsCount)
+        index = 0;
+
+    // Reset any previously set background
     QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
     if (item != NULL)
         item->setBackground(COL_NUM, m_defCol);
 
-    item = m_tree->topLevelItem(tmpIndex);
-    if (item != NULL)
-        item->setBackground(COL_NUM, QColor("#FF8000"));
-    m_secondaryIndex = tmpIndex;
+    // Set new secondary index
+    m_secondaryIndex = index;
+
+    // Update labels based on which is on top
+    m_topStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_primaryIndex + 1 : m_secondaryIndex + 1));
+    m_topStepLabel->setStyleSheet(m_primaryTop ? cfLabelBlueStyle : cfLabelOrangeStyle);
+
+    m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_secondaryIndex + 1 : m_primaryIndex + 1));
+    m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
+
+    // Only highlight secondary if different from primary
+    if (m_secondaryIndex != m_primaryIndex)
+    {
+        item = m_tree->topLevelItem(m_secondaryIndex);
+        if (item != NULL)
+            item->setBackground(COL_NUM, QColor("#FF8000"));
+    }
 
     emit sideFaderValueChanged();
 }
@@ -1361,6 +1503,13 @@ void VCCueList::slotSideFaderValueChanged(int value)
         Chaser *ch = chaser();
         if (!(ch == NULL || ch->stopped()))
         {
+            // Don't do crossfade if secondary equals primary
+            if (m_secondaryIndex == m_primaryIndex)
+            {
+                updateFeedback();
+                return;
+            }
+
             ch->adjustStepIntensity(qreal(value) / 100.0, m_primaryTop ? m_primaryIndex : m_secondaryIndex,
                                     Chaser::FadeControlMode(getFadeMode()));
             ch->adjustStepIntensity(qreal(100 - value) / 100.0, m_primaryTop ? m_secondaryIndex : m_primaryIndex,
@@ -1627,6 +1776,29 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
                           (float) m_sideFader->minimum(),
                           (float) m_sideFader->maximum());
         m_sideFader->setValue(val);
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), secondarySelectInputSourceId))
+    {
+        // Secondary select slider: 0 = nothing, 1 = first position, 2 = second, etc.
+        if (sideFaderMode() != Crossfade || !m_nextPrevControlsSecondary)
+            return;
+
+        if (value == 0)
+            return; // 0 does nothing
+
+        int stepsCount = m_tree->topLevelItemCount();
+        if (stepsCount == 0)
+            return;
+
+        // value 1 = index 0, value 2 = index 1, etc.
+        int targetIndex = value - 1;
+
+        // Clamp to last available position
+        if (targetIndex >= stepsCount)
+            targetIndex = stepsCount - 1;
+
+        // Allow setting secondary to primary (secondary = primary is valid)
+        setSecondaryIndex(targetIndex);
     }
 }
 
@@ -2253,6 +2425,15 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             setSideFaderMode(stringToFaderMode(root.readElementText()));
         }
+        else if (root.name() == KXMLQLCVCCueListNextPrevSecondary)
+        {
+            QString val = root.readElementText();
+            setNextPrevControlsSecondary(val == "1" || val.toLower() == "true");
+        }
+        else if (root.name() == KXMLQLCVCCueListSecondarySelect)
+        {
+            loadXMLSources(root, secondarySelectInputSourceId);
+        }
         else if (root.name() == KXMLQLCVCCueListCrossfadeLeft)
         {
             loadXMLSources(root, sideFaderInputSourceId);
@@ -2429,11 +2610,24 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     if (sideFaderMode() != None)
         doc->writeTextElement(KXMLQLCVCCueListSlidersMode, faderModeToString(sideFaderMode()));
 
+    /* Next/Prev controls secondary */
+    if (m_nextPrevControlsSecondary)
+        doc->writeTextElement(KXMLQLCVCCueListNextPrevSecondary, QString::number(1));
+
     QSharedPointer<QLCInputSource> cf1Src = inputSource(sideFaderInputSourceId);
     if (!cf1Src.isNull() && cf1Src->isValid())
     {
         doc->writeStartElement(KXMLQLCVCCueListCrossfadeLeft);
         saveXMLInput(doc, cf1Src);
+        doc->writeEndElement();
+    }
+
+    /* Secondary select slider */
+    QSharedPointer<QLCInputSource> secSelSrc = inputSource(secondarySelectInputSourceId);
+    if (!secSelSrc.isNull() && secSelSrc->isValid())
+    {
+        doc->writeStartElement(KXMLQLCVCCueListSecondarySelect);
+        saveXMLInput(doc, secSelSrc);
         doc->writeEndElement();
     }
 

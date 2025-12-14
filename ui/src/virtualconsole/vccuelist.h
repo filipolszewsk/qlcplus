@@ -68,6 +68,8 @@ class Doc;
 #define KXMLQLCVCCueListRecordNonZeroOnly QStringLiteral("RecordNonZeroOnly")
 #define KXMLQLCVCCueListRecordMask      QStringLiteral("RecordMask")
 #define KXMLQLCVCCueListRecordPrefix    QStringLiteral("RecordPrefix")
+#define KXMLQLCVCCueListNextPrevSecondary QStringLiteral("NextPrevSecondary")
+#define KXMLQLCVCCueListSecondarySelect QStringLiteral("SecondarySelect")
 
 /**
  * VCCueList provides a \ref VirtualConsole widget to control cue lists.
@@ -90,6 +92,7 @@ public:
     static const quint8 sideFaderInputSourceId;
     static const quint8 recordInputSourceId;
     static const quint8 overwriteInputSourceId;
+    static const quint8 secondarySelectInputSourceId;
 
     /*************************************************************************
      * Initialization
@@ -215,6 +218,9 @@ private slots:
         pressing the key binding or clicking an item with mouse) */
     void slotItemActivated(QTreeWidgetItem *item);
 
+    /** Slot that is called when an item is clicked */
+    void slotItemClicked(QTreeWidgetItem *item);
+
     /** Slot that is called whenever an item field has been changed.
         Note that only 'Notes" column is considered */
     void slotItemChanged(QTreeWidgetItem*item, int column);
@@ -297,6 +303,13 @@ public:
 
     FaderMode stringToFaderMode(QString modeStr);
     QString faderModeToString(FaderMode mode);
+
+    /** Set whether Next/Prev buttons control secondary selection in Crossfade mode */
+    void setNextPrevControlsSecondary(bool enable);
+
+    /** Get whether Next/Prev buttons control secondary selection in Crossfade mode */
+    bool nextPrevControlsSecondary() const;
+
     bool isSideFaderVisible();
     bool sideFaderButtonIsChecked();
     QString topPercentageValue();
@@ -318,6 +331,9 @@ public slots:
 protected:
     void setFaderInfo(int index);
 
+    /** Set the secondary (crossfade target) index and update UI */
+    void setSecondaryIndex(int index);
+
 protected slots:
     void slotShowCrossfadePanel(bool enable);
     void slotSideFaderValueChanged(int value);
@@ -336,6 +352,7 @@ private:
     int m_primaryIndex, m_secondaryIndex;
     bool m_primaryTop;
     FaderMode m_slidersMode;
+    bool m_nextPrevControlsSecondary;
 
     /*************************************************************************
      * Key sequences

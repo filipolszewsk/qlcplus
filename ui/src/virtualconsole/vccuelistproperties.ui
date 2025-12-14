@@ -319,6 +319,19 @@
         </widget>
        </item>
        <item>
+        <widget class="QCheckBox" name="m_nextPrevSecondaryCheck">
+         <property name="text">
+          <string>Next/Prev buttons control crossfade target selection</string>
+         </property>
+         <property name="toolTip">
+          <string>When enabled in Crossfade mode, Next/Prev buttons change the crossfade target (orange) instead of the current step (blue)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="m_secondarySelectLayout"/>
+       </item>
+       <item>
         <widget class="QFrame" name="frame">
          <property name="frameShape">
           <enum>QFrame::NoFrame</enum>
