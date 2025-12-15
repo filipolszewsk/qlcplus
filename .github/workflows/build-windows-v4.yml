@@ -16,6 +16,7 @@ jobs:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
+      QT_VERSION: "6.8.1"
     
     steps:
       - name: Checkout code
@@ -26,7 +27,7 @@ jobs:
       - name: Setup ccache (for faster builds)
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: windows-build-v4-${{ github.sha }}
+          key: ${{ github.job }}-build-v4
 
       - name: Set environment variables
         shell: bash
@@ -35,9 +36,10 @@ jobs:
           echo "CI_SECURE_ENV_VARS=$(if [ -z '${{ secrets.something }}' ]; then echo 'false'; else echo 'true'; fi)" >> $GITHUB_ENV
           echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
           echo "NPROC=$(nproc)" >> $GITHUB_ENV
+          echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
+          echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt5.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
           echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//' | cut -d ' ' -f 1)" >> $GITHUB_ENV
           echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> $GITHUB_ENV
 
@@ -50,26 +52,33 @@ jobs:
           echo "CI_EVENT_TYPE: ${CI_EVENT_TYPE}"
           echo "CI_SECURE_ENV_VARS: ${CI_SECURE_ENV_VARS}"
           echo "NPROC: ${NPROC}"
+          echo "QTDIR: ${QTDIR}"
           echo "APPVERSION: ${APPVERSION}"
           echo "OUTFILE: ${OUTFILE}"
 
-      - name: Install MSYS2 and dependencies (including Qt6)
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          dir: "${{ github.workspace }}/qt/"
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+
+      - name: Update and install MSYS2 (64bit)
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
-          update: true
+          msystem: mingw64
+          release: true
+          update: false
           path-type: inherit
           install: >-
-            git
-            mingw-w64-x86_64-toolchain
+            wget
+            unzip
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-libs
             mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-qt6-base
-            mingw-w64-x86_64-qt6-multimedia
-            mingw-w64-x86_64-qt6-serialport
-            mingw-w64-x86_64-qt6-websockets
-            mingw-w64-x86_64-qt6-3d
-            mingw-w64-x86_64-qt6-imageformats
             mingw-w64-x86_64-libmad
             mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-flac
@@ -77,10 +86,8 @@ jobs:
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-python-lxml
             mingw-w64-x86_64-nsis
-            wget
-            unzip
 
-      - name: Install D2XX SDK (for FTDI DMX USB support)
+      - name: D2XX SDK (64 bit)
         shell: msys2 {0}
         run: |
           mkdir -p /c/projects/D2XXSDK
@@ -106,56 +113,54 @@ jobs:
           echo "ccache:"
           ccache --version || true
 
-      - name: Fix build paths and configuration
+      - name: Fix build
         shell: msys2 {0}
         run: |
-          # Force a release build
+          # force a release build
           sed -i -e 's/Debug/Release/g' CMakeLists.txt
-          # Disable Velleman plugin (optional - remove if needed)
+          # disable Velleman plugin
           sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
-          # Fix MSYS2 system path
+          # fix MSYS2 system path
           sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
-          # Fix project path in NSIS script
+          # fix project path in NSIS script
           sed -i -e 's/c\:\\projects/d:\\a\\qlcplus/g' platforms/windows/${{env.NSIS_SCRIPT}}
 
-      - name: Configure build for Windows (v4)
+      - name: Configure v4 build for Windows
         shell: msys2 {0}
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      - name: Build QLC+
+      - name: Build for Windows
         shell: msys2 {0}
         run: |
-          cmake --build build -j 2
+          cd build
+          ninja
 
-      - name: Install QLC+
+      - name: Install on Windows
         shell: msys2 {0}
         run: |
           cd build
           ninja install
 
-      - name: Run windeployqt (v4)
+      - name: Run windeployqt for v4
         shell: msys2 {0}
         run: |-
           ./translate.sh ui
           cp *.qm /c/qlcplus
           cd /c/qlcplus
-          /mingw64/bin/windeployqt.exe --release qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
+          ${{ env.QTDIR }}/bin/windeployqt qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
 
-      - name: Build Windows installer
+      - name: Build installation package
         shell: msys2 {0}
         run: |
           cd /c/qlcplus
           echo 'Creating package...'
           makensis -X'SetCompressor /FINAL lzma' ${{env.NSIS_SCRIPT}}
-          mv /c/qlcplus/${{env.OUTFILE}} ${{ github.workspace }}/${{env.OUTFILE}}
+          mv /c/qlcplus/${{env.OUTFILE}} /d/a/qlcplus/qlcplus/build-v4-${{env.OUTFILE}}
 
-      - name: Upload installer artifact
+      - name: Store executable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QLC+-Windows-v4-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}
-          path: ${{env.OUTFILE}}
+          name: QLC+-build-v4-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.exe
+          path: build-v4-${{env.OUTFILE}}
           retention-days: 30
-
