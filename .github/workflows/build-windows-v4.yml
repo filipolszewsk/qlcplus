@@ -16,7 +16,6 @@ jobs:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
-      QT_VERSION: "6.8.1"
     
     steps:
       - name: Checkout code
@@ -36,7 +35,6 @@ jobs:
           echo "CI_SECURE_ENV_VARS=$(if [ -z '${{ secrets.something }}' ]; then echo 'false'; else echo 'true'; fi)" >> $GITHUB_ENV
           echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
           echo "NPROC=$(nproc)" >> $GITHUB_ENV
-          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt6.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
@@ -52,34 +50,26 @@ jobs:
           echo "CI_EVENT_TYPE: ${CI_EVENT_TYPE}"
           echo "CI_SECURE_ENV_VARS: ${CI_SECURE_ENV_VARS}"
           echo "NPROC: ${NPROC}"
-          echo "QTDIR: ${QTDIR}"
           echo "APPVERSION: ${APPVERSION}"
           echo "OUTFILE: ${OUTFILE}"
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          dir: "${{ github.workspace }}/qt/"
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
-
-      - name: Install MSYS2 and dependencies
+      - name: Install MSYS2 and dependencies (including Qt6)
         uses: msys2/setup-msys2@v2
         with:
-          msystem: mingw64
-          release: true
-          update: false
+          msystem: MINGW64
+          update: true
           path-type: inherit
           install: >-
-            wget
-            unzip
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gcc-libs
+            git
+            mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-serialport
+            mingw-w64-x86_64-qt6-websockets
+            mingw-w64-x86_64-qt6-3d
+            mingw-w64-x86_64-qt6-imageformats
             mingw-w64-x86_64-libmad
             mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-flac
@@ -87,6 +77,8 @@ jobs:
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-python-lxml
             mingw-w64-x86_64-nsis
+            wget
+            unzip
 
       - name: Install D2XX SDK (for FTDI DMX USB support)
         shell: msys2 {0}
@@ -129,15 +121,14 @@ jobs:
       - name: Configure build for Windows (v4)
         shell: msys2 {0}
         run: |
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" \
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build QLC+
         shell: msys2 {0}
         run: |
-          cd build
-          ninja
+          cmake --build build -j 2
 
       - name: Install QLC+
         shell: msys2 {0}
@@ -148,11 +139,10 @@ jobs:
       - name: Run windeployqt (v4)
         shell: msys2 {0}
         run: |-
-          export QTDIR="${{ env.QTDIR }}"
           ./translate.sh ui
           cp *.qm /c/qlcplus
           cd /c/qlcplus
-          ${{ env.QTDIR }}/bin/windeployqt qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
+          /mingw64/bin/windeployqt.exe --release qlcplus.exe qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll plugins/dmxusb.dll
 
       - name: Build Windows installer
         shell: msys2 {0}
