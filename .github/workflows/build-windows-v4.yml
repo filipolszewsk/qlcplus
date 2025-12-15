@@ -23,11 +23,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
+          fetch-depth: 0
 
       - name: Setup ccache (for faster builds)
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ github.job }}-build-v4
+          save: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
       - name: Set environment variables
         shell: bash
@@ -36,7 +38,7 @@ jobs:
           echo "CI_SECURE_ENV_VARS=$(if [ -z '${{ secrets.something }}' ]; then echo 'false'; else echo 'true'; fi)" >> $GITHUB_ENV
           echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
           echo "NPROC=$(nproc)" >> $GITHUB_ENV
-          echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt5.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
@@ -65,6 +67,7 @@ jobs:
           arch: 'win64_mingw'
           dir: "${{ github.workspace }}/qt/"
           modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          cache: true
 
       - name: Update and install MSYS2 (64bit)
         uses: msys2/setup-msys2@v2
@@ -156,7 +159,7 @@ jobs:
           cd /c/qlcplus
           echo 'Creating package...'
           makensis -X'SetCompressor /FINAL lzma' ${{env.NSIS_SCRIPT}}
-          mv /c/qlcplus/${{env.OUTFILE}} /d/a/qlcplus/qlcplus/build-v4-${{env.OUTFILE}}
+          mv /c/qlcplus/${{env.OUTFILE}} ${{ github.workspace }}/build-v4-${{env.OUTFILE}}
 
       - name: Store executable artifact
         uses: actions/upload-artifact@v4
