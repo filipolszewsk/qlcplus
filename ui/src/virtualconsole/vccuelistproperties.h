@@ -71,11 +71,12 @@ protected slots:
     void slotChaserDetachClicked();
     void slotPlaybackLayoutChanged();
     void slotSelectChannelsClicked();
-    void slotStepIndexOutputFixtureChanged();
 
 private:
     void updateChaserName();
-    void updateStepIndexOutputChannels();
+    void stepIndexOutputUpdateFixtures();
+    void stepIndexOutputSelectChannel(quint32 fixtureId, quint32 channel);
+    void stepIndexOutputGetSelectedChannel(quint32 &fixtureId, quint32 &channel);
     quint32 m_chaserId;
 };
 

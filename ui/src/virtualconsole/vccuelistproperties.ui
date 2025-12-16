@@ -452,8 +452,8 @@
          <property name="title">
           <string>Step Index Output</string>
          </property>
-         <layout class="QGridLayout" name="gridLayout_StepIndexOutput">
-          <item row="0" column="0">
+         <layout class="QVBoxLayout" name="verticalLayout_StepIndexOutput">
+          <item>
            <widget class="QCheckBox" name="m_stepIndexOutputEnabledCheck">
             <property name="text">
              <string>Enable step index output</string>
@@ -463,32 +463,49 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_StepIndexFixture">
+          <item>
+           <widget class="QLabel" name="label_StepIndexInfo">
             <property name="text">
-             <string>Fixture:</string>
+             <string>Select a single channel to output the step index:</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="m_stepIndexOutputFixtureCombo">
-            <property name="toolTip">
-             <string>Select the fixture for step index output</string>
+          <item>
+           <widget class="QTreeWidget" name="m_stepIndexOutputTree">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
             </property>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_StepIndexChannel">
-            <property name="text">
-             <string>Channel:</string>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>150</height>
+             </size>
             </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="m_stepIndexOutputChannelCombo">
-            <property name="toolTip">
-             <string>Select the channel within the fixture</string>
+            <property name="alternatingRowColors">
+             <bool>true</bool>
             </property>
+            <property name="selectionMode">
+             <enum>QAbstractItemView::SingleSelection</enum>
+            </property>
+            <property name="sortingEnabled">
+             <bool>true</bool>
+            </property>
+            <property name="allColumnsShowFocus">
+             <bool>true</bool>
+            </property>
+            <column>
+             <property name="text">
+              <string>Name</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Type</string>
+             </property>
+            </column>
            </widget>
           </item>
          </layout>
