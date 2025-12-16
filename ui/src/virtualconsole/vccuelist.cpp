@@ -1503,9 +1503,22 @@ void VCCueList::slotSideFaderValueChanged(int value)
         Chaser *ch = chaser();
         if (!(ch == NULL || ch->stopped()))
         {
-            // Don't do crossfade if secondary equals primary
             if (m_secondaryIndex == m_primaryIndex)
             {
+                // "Virtual" crossfade - secondary equals primary, so no actual intensity change needed
+                // But we still need to flip m_primaryTop when slider reaches the end for bidirectional operation
+                int primaryValue = m_primaryTop ? value : 100 - value;
+                if (primaryValue == 0)
+                {
+                    // Flip direction for next crossfade
+                    m_primaryTop = !m_primaryTop;
+                    
+                    // Update labels to reflect the flip
+                    m_topStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_primaryIndex + 1 : m_secondaryIndex + 1));
+                    m_topStepLabel->setStyleSheet(m_primaryTop ? cfLabelBlueStyle : cfLabelOrangeStyle);
+                    m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_secondaryIndex + 1 : m_primaryIndex + 1));
+                    m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
+                }
                 updateFeedback();
                 return;
             }
@@ -1534,12 +1547,41 @@ void VCCueList::stopStepIfNeeded(Chaser *ch)
 
     if (primaryValue == 0)
     {
-        m_primaryTop = !m_primaryTop;
+        // Crossfade completed: primary reached 0%
+        // Stop the old primary step
         action.m_stepIndex = m_primaryIndex;
         ch->setAction(action);
+        
+        // Flip the direction for bidirectional operation
+        m_primaryTop = !m_primaryTop;
+        
+        // CRITICAL: Swap indices so the now-active step becomes the new primary
+        // and the stopped step becomes the new secondary (ready for next crossfade)
+        int tmp = m_primaryIndex;
+        m_primaryIndex = m_secondaryIndex;
+        m_secondaryIndex = tmp;
+        
+        // Update labels to reflect the swap
+        m_topStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_primaryIndex + 1 : m_secondaryIndex + 1));
+        m_topStepLabel->setStyleSheet(m_primaryTop ? cfLabelBlueStyle : cfLabelOrangeStyle);
+        m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_secondaryIndex + 1 : m_primaryIndex + 1));
+        m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
+        
+        // Update tree highlight: clear old, set new secondary
+        QTreeWidgetItem *item = m_tree->topLevelItem(m_primaryIndex);
+        if (item != NULL)
+            item->setBackground(COL_NUM, m_defCol);  // Clear old secondary (now primary)
+        if (m_secondaryIndex != m_primaryIndex)
+        {
+            item = m_tree->topLevelItem(m_secondaryIndex);
+            if (item != NULL)
+                item->setBackground(COL_NUM, QColor("#FF8000"));  // Highlight new secondary
+        }
     }
     else if (secondaryValue == 0)
     {
+        // User dragged slider back to start without completing crossfade
+        // Just stop the secondary step
         action.m_stepIndex = m_secondaryIndex;
         ch->setAction(action);
     }
