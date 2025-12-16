@@ -52,11 +52,11 @@ EFX::EFX(Doc* doc)
     , m_waveFadeIn(0.2)       // Default: 20% fade in
     , m_waveFadeOut(0.2)      // Default: 20% fade out
     , m_fixtureGroupID(FixtureGroup::invalidId())
+    , m_autoApplyOffsetTemplate(false)
+    , m_offsetTemplateDirty(false)
     , m_offsetDirection(LeftToRight)
     , m_offsetStep(90)
     , m_wings(1)
-    , m_autoApplyOffsetTemplate(false)
-    , m_offsetTemplateDirty(false)
     , m_propagationMode(Parallel)
     , m_legacyFadeBus(Bus::invalid())
     , m_legacyHoldBus(Bus::invalid())
