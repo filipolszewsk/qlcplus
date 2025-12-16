@@ -2,7 +2,7 @@ name: Build Windows Installer (QLC+ 4.14)
 
 on:
   push:
-    branches: [ main, master, feature/windows-installer-workflow ]
+    branches: [ main, master, feature/windows-installer-workflow, feature/step-index-output-with-installer ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:  # Pozwala uruchomić ręcznie z GitHub UI
