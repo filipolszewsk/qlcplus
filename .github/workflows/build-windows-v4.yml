@@ -29,7 +29,7 @@ jobs:
         with:
           key: ${{ github.job }}-build-v4
 
-      - name: Set environment variables
+      - name: Set ENV variables
         shell: bash
         run: |
           echo "CI_BRANCH=$(echo $GITHUB_REF | cut -d '/' -f 3)" >> $GITHUB_ENV
@@ -37,13 +37,17 @@ jobs:
           echo "CI_EVENT_TYPE=$(if [ 'schedule' == '${{ github.event_name }}' ]; then echo 'cron'; else echo '${{ github.event_name }}'; fi)" >> $GITHUB_ENV
           echo "NPROC=$(nproc)" >> $GITHUB_ENV
           echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
-          echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "OUTFILE=$(grep 'OutFile' platforms/windows/qlcplus4Qt5.nsi | cut -d'"' -f 2)" >> $GITHUB_ENV
-          echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//' | cut -d ' ' -f 1)" >> $GITHUB_ENV
+          echo "BUILD_DATE=`date -u '+%Y%m%d'`" >> $GITHUB_ENV
+          echo "GIT_REV=`git rev-parse --short HEAD`" >> $GITHUB_ENV
+
+      - name: Set v4 ENV variables
+        shell: bash
+        run: |
+          echo "OUTFILE=`grep 'OutFile' platforms/windows/qlcplus4Qt5.nsi | cut -d'"' -f 2`" >> $GITHUB_ENV
+          echo "APPVERSION=`grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//' | cut -d ' ' -f 1`" >> $GITHUB_ENV
           echo "NSIS_SCRIPT=qlcplus4Qt6.nsi" >> $GITHUB_ENV
 
-      - name: Print environment variables
+      - name: Print ENV vars
         shell: bash
         run: |
           echo "CI_BRANCH: ${CI_BRANCH}"
@@ -53,8 +57,6 @@ jobs:
           echo "CI_SECURE_ENV_VARS: ${CI_SECURE_ENV_VARS}"
           echo "NPROC: ${NPROC}"
           echo "QTDIR: ${QTDIR}"
-          echo "APPVERSION: ${APPVERSION}"
-          echo "OUTFILE: ${OUTFILE}"
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
