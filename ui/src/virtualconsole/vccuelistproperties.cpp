@@ -19,6 +19,10 @@
 
 #include <QAction>
 #include <QDebug>
+#include <QVBoxLayout>
+#include <QTreeWidget>
+#include <QDialogButtonBox>
+#include <QHeaderView>
 
 #include "vccuelistproperties.h"
 #include "inputselectionwidget.h"
@@ -34,6 +38,8 @@
 VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     : QDialog(cueList)
     , m_doc(doc)
+    , m_stepIndexOutputFixture(Function::invalidId())
+    , m_stepIndexOutputChannel(0)
 {
     Q_ASSERT(doc != NULL);
     Q_ASSERT(cueList != NULL);
@@ -190,20 +196,29 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     /* Step Index Output */
     m_stepIndexOutputEnabledCheck->setChecked(m_cueList->stepIndexOutputEnabled());
     
-    // Fill fixtures and channels tree (like VCSlider Level mode)
-    stepIndexOutputUpdateFixtures();
+    // Store current fixture/channel
+    m_stepIndexOutputFixture = m_cueList->stepIndexOutputFixture();
+    m_stepIndexOutputChannel = m_cueList->stepIndexOutputChannel();
     
-    // Select current fixture/channel
-    quint32 currentFixture = m_cueList->stepIndexOutputFixture();
-    quint32 currentChannel = m_cueList->stepIndexOutputChannel();
-    stepIndexOutputSelectChannel(currentFixture, currentChannel);
+    // Update display
+    updateStepIndexOutputDisplay();
     
     // Enable/disable controls based on checkbox
     bool enabled = m_stepIndexOutputEnabledCheck->isChecked();
-    m_stepIndexOutputTree->setEnabled(enabled);
+    m_stepIndexOutputChannelEdit->setEnabled(enabled);
+    m_stepIndexOutputSelectButton->setEnabled(enabled);
+    m_stepIndexOutputClearButton->setEnabled(enabled);
     
     connect(m_stepIndexOutputEnabledCheck, SIGNAL(toggled(bool)),
-            m_stepIndexOutputTree, SLOT(setEnabled(bool)));
+            m_stepIndexOutputChannelEdit, SLOT(setEnabled(bool)));
+    connect(m_stepIndexOutputEnabledCheck, SIGNAL(toggled(bool)),
+            m_stepIndexOutputSelectButton, SLOT(setEnabled(bool)));
+    connect(m_stepIndexOutputEnabledCheck, SIGNAL(toggled(bool)),
+            m_stepIndexOutputClearButton, SLOT(setEnabled(bool)));
+    connect(m_stepIndexOutputSelectButton, SIGNAL(clicked()),
+            this, SLOT(slotStepIndexOutputSelectClicked()));
+    connect(m_stepIndexOutputClearButton, SIGNAL(clicked()),
+            this, SLOT(slotStepIndexOutputClearClicked()));
 
     /* Connections */
     connect(m_recordAllChannelsRadio, SIGNAL(toggled(bool)), 
@@ -269,14 +284,9 @@ void VCCueListProperties::accept()
     m_cueList->setRecordCuePrefix(m_recordPrefixEdit->text());
 
     /* Step Index Output settings */
-    // Get selected fixture and channel from tree
-    quint32 fixture = Function::invalidId();
-    quint32 channel = 0;
-    stepIndexOutputGetSelectedChannel(fixture, channel);
-    
     // Set fixture and channel BEFORE enabling, so registration works correctly
-    m_cueList->setStepIndexOutputFixture(fixture);
-    m_cueList->setStepIndexOutputChannel(channel);
+    m_cueList->setStepIndexOutputFixture(m_stepIndexOutputFixture);
+    m_cueList->setStepIndexOutputChannel(m_stepIndexOutputChannel);
     // Enable last so DMXSource registration has valid fixture
     m_cueList->setStepIndexOutputEnabled(m_stepIndexOutputEnabledCheck->isChecked());
 
@@ -341,20 +351,58 @@ void VCCueListProperties::updateChaserName()
         m_chaserEdit->setText(function->name());
 }
 
-void VCCueListProperties::stepIndexOutputUpdateFixtures()
+void VCCueListProperties::updateStepIndexOutputDisplay()
 {
-    m_stepIndexOutputTree->clear();
+    if (m_stepIndexOutputFixture == Function::invalidId())
+    {
+        m_stepIndexOutputChannelEdit->setText("");
+        return;
+    }
     
+    Fixture *fxi = m_doc->fixture(m_stepIndexOutputFixture);
+    if (fxi == NULL)
+    {
+        m_stepIndexOutputChannelEdit->setText("");
+        return;
+    }
+    
+    const QLCChannel *ch = fxi->channel(m_stepIndexOutputChannel);
+    QString chName = ch ? ch->name() : QString::number(m_stepIndexOutputChannel + 1);
+    
+    QString text = QString("%1 - Ch %2: %3")
+        .arg(fxi->name())
+        .arg(m_stepIndexOutputChannel + 1)
+        .arg(chName);
+    m_stepIndexOutputChannelEdit->setText(text);
+}
+
+void VCCueListProperties::slotStepIndexOutputSelectClicked()
+{
+    // Create a dialog with tree widget for selection
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Select Step Index Output Channel"));
+    dialog.resize(400, 500);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setHeaderLabels(QStringList() << tr("Name") << tr("Type"));
+    tree->setAlternatingRowColors(true);
+    tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    tree->setAllColumnsShowFocus(true);
+    
+    // Fill tree with fixtures and channels
     foreach (Fixture *fxi, m_doc->fixtures())
     {
         Q_ASSERT(fxi != NULL);
         
-        QTreeWidgetItem *fxiItem = new QTreeWidgetItem(m_stepIndexOutputTree);
+        QTreeWidgetItem *fxiItem = new QTreeWidgetItem(tree);
         fxiItem->setText(0, fxi->name());
         fxiItem->setIcon(0, fxi->getIconFromType());
         fxiItem->setText(1, fxi->typeString());
         fxiItem->setData(0, Qt::UserRole, fxi->id());
-        fxiItem->setData(0, Qt::UserRole + 1, -1); // -1 means it's a fixture, not a channel
+        fxiItem->setData(0, Qt::UserRole + 1, -1); // -1 means it's a fixture
+        fxiItem->setFlags(fxiItem->flags() & ~Qt::ItemIsSelectable); // Fixtures not selectable
         
         // Add channels as children
         for (quint32 ch = 0; ch < fxi->channels(); ch++)
@@ -375,56 +423,45 @@ void VCCueListProperties::stepIndexOutputUpdateFixtures()
             
             chItem->setData(0, Qt::UserRole, fxi->id());
             chItem->setData(0, Qt::UserRole + 1, (int)ch);
+            
+            // Select current channel
+            if (fxi->id() == m_stepIndexOutputFixture && ch == m_stepIndexOutputChannel)
+            {
+                tree->setCurrentItem(chItem);
+                tree->expandItem(fxiItem);
+            }
         }
     }
     
-    m_stepIndexOutputTree->header()->resizeSections(QHeaderView::ResizeToContents);
-}
-
-void VCCueListProperties::stepIndexOutputSelectChannel(quint32 fixtureId, quint32 channel)
-{
-    if (fixtureId == Function::invalidId())
-        return;
+    tree->header()->resizeSections(QHeaderView::ResizeToContents);
+    layout->addWidget(tree);
     
-    // Find the fixture item
-    for (int i = 0; i < m_stepIndexOutputTree->topLevelItemCount(); i++)
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttonBox, SIGNAL(accepted()), &dialog, SLOT(accept()));
+    connect(buttonBox, SIGNAL(rejected()), &dialog, SLOT(reject()));
+    layout->addWidget(buttonBox);
+    
+    if (dialog.exec() == QDialog::Accepted)
     {
-        QTreeWidgetItem *fxiItem = m_stepIndexOutputTree->topLevelItem(i);
-        if (fxiItem->data(0, Qt::UserRole).toUInt() == fixtureId)
+        QTreeWidgetItem *item = tree->currentItem();
+        if (item != NULL)
         {
-            // Find the channel item
-            for (int j = 0; j < fxiItem->childCount(); j++)
+            int chIndex = item->data(0, Qt::UserRole + 1).toInt();
+            if (chIndex >= 0) // It's a channel, not a fixture
             {
-                QTreeWidgetItem *chItem = fxiItem->child(j);
-                if (chItem->data(0, Qt::UserRole + 1).toInt() == (int)channel)
-                {
-                    m_stepIndexOutputTree->setCurrentItem(chItem);
-                    m_stepIndexOutputTree->expandItem(fxiItem);
-                    return;
-                }
+                m_stepIndexOutputFixture = item->data(0, Qt::UserRole).toUInt();
+                m_stepIndexOutputChannel = (quint32)chIndex;
+                updateStepIndexOutputDisplay();
             }
         }
     }
 }
 
-void VCCueListProperties::stepIndexOutputGetSelectedChannel(quint32 &fixtureId, quint32 &channel)
+void VCCueListProperties::slotStepIndexOutputClearClicked()
 {
-    fixtureId = Function::invalidId();
-    channel = 0;
-    
-    QTreeWidgetItem *item = m_stepIndexOutputTree->currentItem();
-    if (item == NULL)
-        return;
-    
-    int chIndex = item->data(0, Qt::UserRole + 1).toInt();
-    if (chIndex < 0)
-    {
-        // It's a fixture item, not a channel - don't select
-        return;
-    }
-    
-    fixtureId = item->data(0, Qt::UserRole).toUInt();
-    channel = (quint32)chIndex;
+    m_stepIndexOutputFixture = Function::invalidId();
+    m_stepIndexOutputChannel = 0;
+    updateStepIndexOutputDisplay();
 }
 
 void VCCueListProperties::slotSelectChannelsClicked()

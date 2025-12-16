@@ -464,49 +464,40 @@
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="label_StepIndexInfo">
-            <property name="text">
-             <string>Select a single channel to output the step index:</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QTreeWidget" name="m_stepIndexOutputTree">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>150</height>
-             </size>
-            </property>
-            <property name="alternatingRowColors">
-             <bool>true</bool>
-            </property>
-            <property name="selectionMode">
-             <enum>QAbstractItemView::SingleSelection</enum>
-            </property>
-            <property name="sortingEnabled">
-             <bool>true</bool>
-            </property>
-            <property name="allColumnsShowFocus">
-             <bool>true</bool>
-            </property>
-            <column>
-             <property name="text">
-              <string>Name</string>
-             </property>
-            </column>
-            <column>
-             <property name="text">
-              <string>Type</string>
-             </property>
-            </column>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayout_StepIndexChannel">
+            <item>
+             <widget class="QLineEdit" name="m_stepIndexOutputChannelEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="placeholderText">
+               <string>Click Select to choose a channel...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="m_stepIndexOutputSelectButton">
+              <property name="text">
+               <string>Select...</string>
+              </property>
+              <property name="icon">
+               <iconset resource="../qlcui.qrc">
+                <normaloff>:/attach.png</normaloff>:/attach.png</iconset>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="m_stepIndexOutputClearButton">
+              <property name="text">
+               <string>Clear</string>
+              </property>
+              <property name="icon">
+               <iconset resource="../qlcui.qrc">
+                <normaloff>:/detach.png</normaloff>:/detach.png</iconset>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
