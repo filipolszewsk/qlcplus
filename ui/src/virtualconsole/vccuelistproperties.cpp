@@ -186,6 +186,50 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
         prefix = "cue";
     m_recordPrefixEdit->setText(prefix);
 
+    /* Step Index Output */
+    m_stepIndexOutputEnabledCheck->setChecked(m_cueList->stepIndexOutputEnabled());
+    
+    // Fill fixture combo box
+    m_stepIndexOutputFixtureCombo->clear();
+    m_stepIndexOutputFixtureCombo->addItem(tr("None"), Function::invalidId());
+    foreach (Fixture *fxi, m_doc->fixtures())
+    {
+        Q_ASSERT(fxi != NULL);
+        QString name = QString("%1: %2").arg(fxi->id()).arg(fxi->name());
+        m_stepIndexOutputFixtureCombo->addItem(name, fxi->id());
+    }
+    
+    // Set current fixture
+    quint32 currentFixture = m_cueList->stepIndexOutputFixture();
+    int comboIndex = m_stepIndexOutputFixtureCombo->findData(currentFixture);
+    if (comboIndex >= 0)
+        m_stepIndexOutputFixtureCombo->setCurrentIndex(comboIndex);
+    else
+        m_stepIndexOutputFixtureCombo->setCurrentIndex(0); // None
+    
+    // Fill channel combo box for current fixture
+    updateStepIndexOutputChannels();
+    
+    // Set current channel
+    quint32 currentChannel = m_cueList->stepIndexOutputChannel();
+    comboIndex = m_stepIndexOutputChannelCombo->findData(currentChannel);
+    if (comboIndex >= 0)
+        m_stepIndexOutputChannelCombo->setCurrentIndex(comboIndex);
+    else
+        m_stepIndexOutputChannelCombo->setCurrentIndex(0);
+    
+    // Enable/disable controls based on checkbox
+    bool enabled = m_stepIndexOutputEnabledCheck->isChecked();
+    m_stepIndexOutputFixtureCombo->setEnabled(enabled);
+    m_stepIndexOutputChannelCombo->setEnabled(enabled);
+    
+    connect(m_stepIndexOutputEnabledCheck, SIGNAL(toggled(bool)),
+            m_stepIndexOutputFixtureCombo, SLOT(setEnabled(bool)));
+    connect(m_stepIndexOutputEnabledCheck, SIGNAL(toggled(bool)),
+            m_stepIndexOutputChannelCombo, SLOT(setEnabled(bool)));
+    connect(m_stepIndexOutputFixtureCombo, SIGNAL(currentIndexChanged(int)),
+            this, SLOT(slotStepIndexOutputFixtureChanged()));
+
     /* Connections */
     connect(m_recordAllChannelsRadio, SIGNAL(toggled(bool)), 
             m_selectChannelsButton, SLOT(setDisabled(bool)));
@@ -249,6 +293,15 @@ void VCCueListProperties::accept()
     m_cueList->setRecordNonZeroOnly(m_recordNonZeroCheck->isChecked());
     m_cueList->setRecordCuePrefix(m_recordPrefixEdit->text());
 
+    /* Step Index Output settings */
+    // Set fixture and channel BEFORE enabling, so registration works correctly
+    quint32 fixture = m_stepIndexOutputFixtureCombo->currentData().toUInt();
+    m_cueList->setStepIndexOutputFixture(fixture);
+    quint32 channel = m_stepIndexOutputChannelCombo->currentData().toUInt();
+    m_cueList->setStepIndexOutputChannel(channel);
+    // Enable last so DMXSource registration has valid fixture
+    m_cueList->setStepIndexOutputEnabled(m_stepIndexOutputEnabledCheck->isChecked());
+
     QDialog::accept();
 }
 
@@ -308,6 +361,45 @@ void VCCueListProperties::updateChaserName()
         m_chaserEdit->setText(tr("No function"));
     else
         m_chaserEdit->setText(function->name());
+}
+
+void VCCueListProperties::updateStepIndexOutputChannels()
+{
+    m_stepIndexOutputChannelCombo->clear();
+    
+    quint32 fixtureId = m_stepIndexOutputFixtureCombo->currentData().toUInt();
+    if (fixtureId == Function::invalidId())
+    {
+        m_stepIndexOutputChannelCombo->setEnabled(false);
+        return;
+    }
+    
+    Fixture *fxi = m_doc->fixture(fixtureId);
+    if (fxi == NULL)
+    {
+        m_stepIndexOutputChannelCombo->setEnabled(false);
+        return;
+    }
+    
+    m_stepIndexOutputChannelCombo->setEnabled(true);
+    
+    // Fill channels for selected fixture
+    for (quint32 ch = 0; ch < fxi->channels(); ch++)
+    {
+        const QLCChannel *channel = fxi->channel(ch);
+        if (channel == NULL)
+            continue;
+        
+        QString name = QString("%1: %2").arg(ch + 1).arg(channel->name());
+        m_stepIndexOutputChannelCombo->addItem(name, ch);
+    }
+}
+
+void VCCueListProperties::slotStepIndexOutputFixtureChanged()
+{
+    updateStepIndexOutputChannels();
+    // Reset channel selection when fixture changes
+    m_stepIndexOutputChannelCombo->setCurrentIndex(0);
 }
 
 void VCCueListProperties::slotSelectChannelsClicked()

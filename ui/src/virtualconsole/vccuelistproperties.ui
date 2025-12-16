@@ -448,6 +448,53 @@
         </widget>
        </item>
        <item>
+        <widget class="QGroupBox" name="groupBox_StepIndexOutput">
+         <property name="title">
+          <string>Step Index Output</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_StepIndexOutput">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="m_stepIndexOutputEnabledCheck">
+            <property name="text">
+             <string>Enable step index output</string>
+            </property>
+            <property name="toolTip">
+             <string>Output the current step index to a DMX channel</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_StepIndexFixture">
+            <property name="text">
+             <string>Fixture:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="m_stepIndexOutputFixtureCombo">
+            <property name="toolTip">
+             <string>Select the fixture for step index output</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_StepIndexChannel">
+            <property name="text">
+             <string>Channel:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="m_stepIndexOutputChannelCombo">
+            <property name="toolTip">
+             <string>Select the channel within the fixture</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <layout class="QVBoxLayout" name="m_recordInputLayout">
          <item>
           <layout class="QHBoxLayout" name="m_recordLayout"/>

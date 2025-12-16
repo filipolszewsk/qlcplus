@@ -40,6 +40,7 @@ class VCCueListProperties;
 class ClickAndGoSlider;
 class ChaserRunner;
 class MasterTimer;
+class GenericFader;
 class Chaser;
 class Doc;
 
@@ -70,6 +71,10 @@ class Doc;
 #define KXMLQLCVCCueListRecordPrefix    QStringLiteral("RecordPrefix")
 #define KXMLQLCVCCueListNextPrevSecondary QStringLiteral("NextPrevSecondary")
 #define KXMLQLCVCCueListSecondarySelect QStringLiteral("SecondarySelect")
+#define KXMLQLCVCCueListStepIndexOutput QStringLiteral("StepIndexOutput")
+#define KXMLQLCVCCueListStepIndexOutputEnabled QStringLiteral("Enabled")
+#define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
+#define KXMLQLCVCCueListStepIndexOutputChannel QStringLiteral("Channel")
 
 /**
  * VCCueList provides a \ref VirtualConsole widget to control cue lists.
@@ -77,7 +82,7 @@ class Doc;
  * @see VCWidget
  * @see VirtualConsole
  */
-class VCCueList : public VCWidget
+class VCCueList : public VCWidget, public DMXSource
 {
     Q_OBJECT
     Q_DISABLE_COPY(VCCueList)
@@ -514,6 +519,51 @@ private:
 
     /** Prefix for recorded cue names */
     QString m_recordCuePrefix;
+
+    /*************************************************************************
+     * Step Index Output
+     *************************************************************************/
+public:
+    /** Set whether step index output is enabled */
+    void setStepIndexOutputEnabled(bool enable);
+
+    /** Get whether step index output is enabled */
+    bool stepIndexOutputEnabled() const;
+
+    /** Set the fixture for step index output */
+    void setStepIndexOutputFixture(quint32 fixture);
+
+    /** Get the fixture for step index output */
+    quint32 stepIndexOutputFixture() const;
+
+    /** Set the channel for step index output */
+    void setStepIndexOutputChannel(quint32 channel);
+
+    /** Get the channel for step index output */
+    quint32 stepIndexOutputChannel() const;
+
+    /*************************************************************************
+     * DMXSource
+     *************************************************************************/
+public:
+    /** @reimp */
+    void writeDMX(MasterTimer *timer, QList<Universe*> universes);
+
+private:
+    /** True if step index output is enabled */
+    bool m_stepIndexOutputEnabled;
+
+    /** Fixture ID for step index output (Function::invalidId() = not set) */
+    quint32 m_stepIndexOutputFixture;
+
+    /** Channel within fixture for step index output (0-based) */
+    quint32 m_stepIndexOutputChannel;
+
+    /** Current step index value to output */
+    int m_currentStepIndexValue;
+
+    /** Map used to lookup a GenericFader instance for a Universe ID */
+    QMap<quint32, QSharedPointer<GenericFader> > m_fadersMap;
 
     /*************************************************************************
      * Load & Save

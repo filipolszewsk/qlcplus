@@ -54,6 +54,8 @@
 #include "universe.h"
 #include "fixture.h"
 #include "scenevalue.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 
 #define COL_NUM      0
 #define COL_NAME     1
@@ -106,6 +108,10 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_recordAllChannels(true)
     , m_recordNonZeroOnly(false)
     , m_recordCuePrefix("cue")
+    , m_stepIndexOutputEnabled(false)
+    , m_stepIndexOutputFixture(Function::invalidId())
+    , m_stepIndexOutputChannel(0)
+    , m_currentStepIndexValue(-1)
 {
     /* Set the class name "VCCueList" as the object name as well */
     setObjectName(VCCueList::staticMetaObject.className());
@@ -309,6 +315,12 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
 
 VCCueList::~VCCueList()
 {
+    // Unregister DMXSource if registered
+    if (m_stepIndexOutputEnabled && m_stepIndexOutputFixture != Function::invalidId())
+    {
+        if (m_doc->masterTimer() != NULL)
+            m_doc->masterTimer()->unregisterDMXSource(this);
+    }
 }
 
 void VCCueList::enableWidgetUI(bool enable)
@@ -396,6 +408,11 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     setRecordNonZeroOnly(cuelist->recordNonZeroOnly());
     setRecordChannelsMask(cuelist->recordChannelsMask());
     setRecordCuePrefix(cuelist->recordCuePrefix());
+
+    /* Step Index Output settings */
+    setStepIndexOutputEnabled(cuelist->stepIndexOutputEnabled());
+    setStepIndexOutputFixture(cuelist->stepIndexOutputFixture());
+    setStepIndexOutputChannel(cuelist->stepIndexOutputChannel());
 
     /* Common stuff */
     return VCWidget::copyFrom(widget);
@@ -984,6 +1001,13 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     {
         setFaderInfo(m_primaryIndex);
     }
+    
+    // Update step index output value (will be written by writeDMX in next cycle)
+    if (m_stepIndexOutputEnabled && m_stepIndexOutputFixture != Function::invalidId())
+    {
+        m_currentStepIndexValue = stepNumber;
+    }
+    
     emit stepChanged(m_primaryIndex);
     emit sideFaderValueChanged();
 
@@ -1088,6 +1112,12 @@ void VCCueList::slotFunctionStopped(quint32 fid)
         item->setBackground(COL_NUM, m_defCol);
 
     emit stepChanged(-1);
+
+    // Clear step index output value when stopped
+    if (m_stepIndexOutputEnabled)
+    {
+        m_currentStepIndexValue = -1;
+    }
 
     m_progress->setFormat("");
     m_progress->setValue(0);    
@@ -1900,6 +1930,12 @@ void VCCueList::slotModeChanged(Doc::Mode mode)
         enable = true;
         // send the initial feedback for the current step slider
         updateFeedback();
+        
+        // Register DMXSource for step index output if enabled
+        if (m_stepIndexOutputEnabled && m_stepIndexOutputFixture != Function::invalidId())
+        {
+            m_doc->masterTimer()->registerDMXSource(this);
+        }
     }
     else
     {
@@ -1912,6 +1948,14 @@ void VCCueList::slotModeChanged(Doc::Mode mode)
         QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
         if (item != NULL)
             item->setBackground(COL_NUM, m_defCol);
+        
+        // Unregister DMXSource for step index output
+        if (m_stepIndexOutputEnabled)
+        {
+            m_doc->masterTimer()->unregisterDMXSource(this);
+            m_fadersMap.clear();
+            m_currentStepIndexValue = -1;
+        }
     }
 
     enableWidgetUI(enable);
@@ -1937,6 +1981,12 @@ void VCCueList::playCueAtIndex(int idx)
         return;
 
     m_primaryIndex = idx;
+    
+    // Update step index output value
+    if (m_stepIndexOutputEnabled && m_stepIndexOutputFixture != Function::invalidId())
+    {
+        m_currentStepIndexValue = idx;
+    }
 
     Chaser *ch = chaser();
     if (ch == NULL)
@@ -2397,6 +2447,112 @@ QString VCCueList::recordCuePrefix() const
 }
 
 /*****************************************************************************
+ * Step Index Output
+ *****************************************************************************/
+
+void VCCueList::setStepIndexOutputEnabled(bool enable)
+{
+    bool wasEnabled = m_stepIndexOutputEnabled;
+    m_stepIndexOutputEnabled = enable;
+    
+    // Register/unregister DMXSource based on enable state
+    if (enable && !wasEnabled && m_stepIndexOutputFixture != Function::invalidId())
+    {
+        if (m_doc->mode() == Doc::Operate)
+            m_doc->masterTimer()->registerDMXSource(this);
+    }
+    else if (!enable && wasEnabled)
+    {
+        if (m_doc->mode() == Doc::Operate)
+            m_doc->masterTimer()->unregisterDMXSource(this);
+        // Clear faders
+        m_fadersMap.clear();
+        m_currentStepIndexValue = -1;
+    }
+}
+
+bool VCCueList::stepIndexOutputEnabled() const
+{
+    return m_stepIndexOutputEnabled;
+}
+
+void VCCueList::setStepIndexOutputFixture(quint32 fixture)
+{
+    m_stepIndexOutputFixture = fixture;
+    // Clear faders when fixture changes - they will be recreated in writeDMX
+    m_fadersMap.clear();
+}
+
+quint32 VCCueList::stepIndexOutputFixture() const
+{
+    return m_stepIndexOutputFixture;
+}
+
+void VCCueList::setStepIndexOutputChannel(quint32 channel)
+{
+    m_stepIndexOutputChannel = channel;
+}
+
+quint32 VCCueList::stepIndexOutputChannel() const
+{
+    return m_stepIndexOutputChannel;
+}
+
+void VCCueList::writeDMX(MasterTimer *timer, QList<Universe*> universes)
+{
+    Q_UNUSED(timer);
+
+    if (!m_stepIndexOutputEnabled || 
+        m_stepIndexOutputFixture == Function::invalidId() ||
+        m_currentStepIndexValue < 0)
+    {
+        return;
+    }
+
+    Fixture *fxi = m_doc->fixture(m_stepIndexOutputFixture);
+    if (fxi == NULL)
+        return;
+
+    quint32 universe = fxi->universe();
+    if (universe >= (quint32)universes.count())
+        return;
+
+    // Value: m_currentStepIndexValue (0-based) -> DMX value (1-based)
+    // Step 0 = DMX 1, Step 1 = DMX 2, etc.
+    uchar value = static_cast<uchar>((m_currentStepIndexValue + 1) % 256);
+
+    QSharedPointer<GenericFader> fader = m_fadersMap.value(universe, QSharedPointer<GenericFader>());
+    if (fader.isNull())
+    {
+        // Use Override priority so our value takes precedence
+        fader = universes[universe]->requestFader(Universe::Override);
+        fader->adjustIntensity(intensity());
+        m_fadersMap[universe] = fader;
+    }
+
+    FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], m_stepIndexOutputFixture, m_stepIndexOutputChannel);
+    if (fc->universe() == Universe::invalid())
+    {
+        fader->remove(fc);
+        return;
+    }
+
+    // Add Override flag so our value takes precedence over running functions
+    fc->addFlag(FadeChannel::Override);
+    
+    // For LTP channels, mark for autoremove when done
+    const QLCChannel *qlcch = fxi->channel(m_stepIndexOutputChannel);
+    if (qlcch != NULL && qlcch->group() != QLCChannel::Intensity)
+        fc->addFlag(FadeChannel::AutoRemove);
+
+    fc->setCurrent(value);
+    fc->setStart(value);
+    fc->setTarget(value);
+    fc->setReady(false);
+    fc->setElapsed(0);
+}
+
+/*****************************************************************************
  * Load & Save
  *****************************************************************************/
 
@@ -2543,6 +2699,19 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             setRecordCuePrefix(root.readElementText());
         }
+        else if (root.name() == KXMLQLCVCCueListStepIndexOutput)
+        {
+            QXmlStreamAttributes attrs = root.attributes();
+            bool enabled = attrs.value(KXMLQLCVCCueListStepIndexOutputEnabled).toString() == "true";
+            quint32 fixture = attrs.value(KXMLQLCVCCueListStepIndexOutputFixture).toString().toUInt();
+            quint32 channel = attrs.value(KXMLQLCVCCueListStepIndexOutputChannel).toString().toUInt();
+            
+            setStepIndexOutputEnabled(enabled);
+            setStepIndexOutputFixture(fixture);
+            setStepIndexOutputChannel(channel);
+            
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown cuelist tag:" << root.name().toString();
@@ -2684,6 +2853,19 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     }
     if (!m_recordCuePrefix.isEmpty() && m_recordCuePrefix != "cue")
         doc->writeTextElement(KXMLQLCVCCueListRecordPrefix, m_recordCuePrefix);
+
+    /* Step Index Output */
+    if (m_stepIndexOutputEnabled && m_stepIndexOutputFixture != Function::invalidId())
+    {
+        doc->writeStartElement(KXMLQLCVCCueListStepIndexOutput);
+        doc->writeAttribute(KXMLQLCVCCueListStepIndexOutputEnabled, 
+                           m_stepIndexOutputEnabled ? "true" : "false");
+        doc->writeAttribute(KXMLQLCVCCueListStepIndexOutputFixture, 
+                           QString::number(m_stepIndexOutputFixture));
+        doc->writeAttribute(KXMLQLCVCCueListStepIndexOutputChannel, 
+                           QString::number(m_stepIndexOutputChannel));
+        doc->writeEndElement();
+    }
 
     /* End the <CueList> tag */
     doc->writeEndElement();
