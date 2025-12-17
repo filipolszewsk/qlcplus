@@ -274,6 +274,7 @@ void EFXEditor::initMovementPage()
     m_yPhaseSpin->setValue(m_efx->yPhase());
 
     m_waveWidthSpin->setValue(m_efx->waveWidth());
+    m_waveLengthSpin->setValue(m_efx->waveLength());
     m_waveShapeCombo->setCurrentIndex(m_efx->waveShape());
     m_waveFadeInSpin->setValue(m_efx->waveFadeIn());
     m_waveFadeOutSpin->setValue(m_efx->waveFadeOut());
@@ -345,6 +346,8 @@ void EFXEditor::initMovementPage()
 
     connect(m_waveWidthSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotWaveWidthSpinChanged(int)));
+    connect(m_waveLengthSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotWaveLengthSpinChanged(int)));
     connect(m_waveShapeCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotWaveShapeComboChanged(int)));
     connect(m_waveFadeInSpin, SIGNAL(valueChanged(int)),
@@ -1682,6 +1685,8 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
         qDebug() << "ENABLING DimmerWave parameters!";
         m_waveWidthLabel->setEnabled(true);
         m_waveWidthSpin->setEnabled(true);
+        m_waveLengthLabel->setEnabled(true);
+        m_waveLengthSpin->setEnabled(true);
         m_waveShapeLabel->setEnabled(true);
         m_waveShapeCombo->setEnabled(true);
         m_waveFadeInLabel->setEnabled(true);
@@ -1694,6 +1699,8 @@ void EFXEditor::slotAlgorithmSelected(int algoIndex)
         qDebug() << "DISABLING DimmerWave parameters";
         m_waveWidthLabel->setEnabled(false);
         m_waveWidthSpin->setEnabled(false);
+        m_waveLengthLabel->setEnabled(false);
+        m_waveLengthSpin->setEnabled(false);
         m_waveShapeLabel->setEnabled(false);
         m_waveShapeCombo->setEnabled(false);
         m_waveFadeInLabel->setEnabled(false);
@@ -1785,6 +1792,13 @@ void EFXEditor::slotWaveWidthSpinChanged(int value)
 {
     Q_ASSERT(m_efx != NULL);
     m_efx->setWaveWidth(value);
+    redrawPreview();
+}
+
+void EFXEditor::slotWaveLengthSpinChanged(int value)
+{
+    Q_ASSERT(m_efx != NULL);
+    m_efx->setWaveLength(value);
     redrawPreview();
 }
 

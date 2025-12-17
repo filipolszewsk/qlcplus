@@ -90,6 +90,7 @@ class Fixture;
 #define KXMLQLCEFXWaveShape      QStringLiteral("WaveShape")
 #define KXMLQLCEFXWaveFadeIn     QStringLiteral("WaveFadeIn")
 #define KXMLQLCEFXWaveFadeOut    QStringLiteral("WaveFadeOut")
+#define KXMLQLCEFXWaveLength     QStringLiteral("WaveLength")
 
 /**
  * An EFX (effects) function that is used to create
@@ -557,6 +558,20 @@ public:
     int waveFadeOut() const;
 
     /**
+     * Set the maximum wave length (peak dimmer value)
+     *
+     * @param value Maximum dimmer value (0-255)
+     */
+    void setWaveLength(int value);
+
+    /**
+     * Get the maximum wave length
+     *
+     * @return Maximum dimmer value (0-255)
+     */
+    int waveLength() const;
+
+    /**
      * Returns true when DimmerWave has been selected
      */
     bool isWaveParametersEnabled() const;
@@ -579,6 +594,7 @@ private:
     int m_waveShape;          // 0=sine, 1=square, 2=triangle
     float m_waveFadeIn;       // 0-1 (as fraction)
     float m_waveFadeOut;      // 0-1 (as fraction)
+    int m_waveLength;         // 0-255 (maximum dimmer value)
 
     /*********************************************************************
      * Fixtures

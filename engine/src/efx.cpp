@@ -51,6 +51,7 @@ EFX::EFX(Doc* doc)
     , m_waveShape(0)          // Default: sine
     , m_waveFadeIn(0.2)       // Default: 20% fade in
     , m_waveFadeOut(0.2)      // Default: 20% fade out
+    , m_waveLength(255)       // Default: 255 (full brightness)
     , m_fixtureGroupID(FixtureGroup::invalidId())
     , m_autoApplyOffsetTemplate(false)
     , m_offsetTemplateDirty(false)
@@ -142,6 +143,12 @@ bool EFX::copyFrom(const Function* function)
     m_yPhase = efx->m_yPhase;
 
     m_algorithm = efx->m_algorithm;
+    
+    m_waveWidth = efx->m_waveWidth;
+    m_waveShape = efx->m_waveShape;
+    m_waveFadeIn = efx->m_waveFadeIn;
+    m_waveFadeOut = efx->m_waveFadeOut;
+    m_waveLength = efx->m_waveLength;
     
     m_fixtureGroupID = efx->m_fixtureGroupID;
     m_offsetDirection = efx->m_offsetDirection;
@@ -516,8 +523,19 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
             // iterator is 0 to 2π (full cycle)
             // m_waveWidth defines active portion (0-360°)
             // m_waveShape: 0=sine, 1=square, 2=triangle
+            // m_waveLength: maximum dimmer value (0-255)
+            
+            // Special case: constant value when waveWidth is 0 or 360
+            if (m_waveWidth == 0.0 || m_waveWidth == 360.0) {
+                float dimmerValue = m_waveLength / 255.0;  // Convert 0-255 to 0-1
+                *x = 0.0;
+                *y = dimmerValue * 2.0 - 1.0;  // 0-1 → -1..1
+                // Don't break - let rotateAndScale be called at the end
+            }
+            else {
             
             float widthRadians = (m_waveWidth / 360.0) * M_PI * 2.0;
+            float maxValue = m_waveLength / 255.0;  // Scale factor for max value
             
             float dimmerValue = 0.0;
             
@@ -533,20 +551,20 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
                 if (fadeInZone > 0 && phaseInWidth < fadeInZone) {
                     // Fade in zone
                     float fadeProgress = phaseInWidth / fadeInZone;
-                    dimmerValue = applyWaveShape(fadeProgress, m_waveShape);
+                    dimmerValue = applyWaveShape(fadeProgress, m_waveShape) * maxValue;
                 }
                 else if (phaseInWidth < fadeInZone + sustainZone) {
-                    // Sustain zone (full brightness)
-                    dimmerValue = 1.0;
+                    // Sustain zone (at max value)
+                    dimmerValue = maxValue;
                 }
                 else if (fadeOutZone > 0) {
                     // Fade out zone
                     float fadeProgress = (phaseInWidth - fadeInZone - sustainZone) / fadeOutZone;
-                    dimmerValue = applyWaveShape(1.0 - fadeProgress, m_waveShape);
+                    dimmerValue = applyWaveShape(1.0 - fadeProgress, m_waveShape) * maxValue;
                 }
                 else {
                     // No fade out, sustain to the end
-                    dimmerValue = 1.0;
+                    dimmerValue = maxValue;
                 }
             }
             else {
@@ -558,6 +576,7 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
             // Convert 0-1 to -1..1 range (required by rotateAndScale)
             *x = 0.0;  // X unused for dimmer
             *y = dimmerValue * 2.0 - 1.0;  // 0-1 → -1..1
+            }
         }
         break;
     }
@@ -793,6 +812,17 @@ void EFX::setWaveFadeOut(int percent)
 int EFX::waveFadeOut() const
 {
     return static_cast<int>(m_waveFadeOut * 100.0);
+}
+
+void EFX::setWaveLength(int value)
+{
+    m_waveLength = CLAMP(value, 0, 255);
+    emit changed(this->id());
+}
+
+int EFX::waveLength() const
+{
+    return m_waveLength;
 }
 
 bool EFX::isWaveParametersEnabled() const
@@ -1780,6 +1810,7 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
         doc->writeTextElement(KXMLQLCEFXWaveShape, QString::number(waveShape()));
         doc->writeTextElement(KXMLQLCEFXWaveFadeIn, QString::number(waveFadeIn()));
         doc->writeTextElement(KXMLQLCEFXWaveFadeOut, QString::number(waveFadeOut()));
+        doc->writeTextElement(KXMLQLCEFXWaveLength, QString::number(waveLength()));
     }
 
     /* End the <Function> tag */
@@ -2003,6 +2034,11 @@ bool EFX::loadXML(QXmlStreamReader &root)
         {
             /* Wave Fade Out */
             setWaveFadeOut(root.readElementText().toInt());
+        }
+        else if (root.name() == KXMLQLCEFXWaveLength)
+        {
+            /* Wave Length */
+            setWaveLength(root.readElementText().toInt());
         }
         else
         {
