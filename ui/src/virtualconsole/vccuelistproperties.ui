@@ -510,6 +510,9 @@
          <item>
           <layout class="QHBoxLayout" name="m_overwriteLayout"/>
          </item>
+         <item>
+          <layout class="QHBoxLayout" name="m_deleteLayout"/>
+         </item>
         </layout>
        </item>
        <item>

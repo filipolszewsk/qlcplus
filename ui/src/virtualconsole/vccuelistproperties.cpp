@@ -111,6 +111,15 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_overwriteInputWidget->show();
     m_overwriteLayout->addWidget(m_overwriteInputWidget);
 
+    m_deleteInputWidget = new InputSelectionWidget(m_doc, this);
+    m_deleteInputWidget->setTitle(tr("Delete control"));
+    m_deleteInputWidget->setCustomFeedbackVisibility(true);
+    m_deleteInputWidget->setKeySequence(m_cueList->deleteKeySequence());
+    m_deleteInputWidget->setInputSource(m_cueList->inputSource(VCCueList::deleteInputSourceId));
+    m_deleteInputWidget->setWidgetPage(m_cueList->page());
+    m_deleteInputWidget->show();
+    m_deleteLayout->addWidget(m_deleteInputWidget);
+
     /************************************************************************
      * Next Cue page
      ************************************************************************/
@@ -257,6 +266,7 @@ void VCCueListProperties::accept()
     m_cueList->setStopKeySequence(m_stopInputWidget->keySequence());
     m_cueList->setRecordKeySequence(m_recordInputWidget->keySequence());
     m_cueList->setOverwriteKeySequence(m_overwriteInputWidget->keySequence());
+    m_cueList->setDeleteKeySequence(m_deleteInputWidget->keySequence());
 
     /* Input sources */
     m_cueList->setInputSource(m_nextInputWidget->inputSource(), VCCueList::nextInputSourceId);
@@ -265,6 +275,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_stopInputWidget->inputSource(), VCCueList::stopInputSourceId);
     m_cueList->setInputSource(m_recordInputWidget->inputSource(), VCCueList::recordInputSourceId);
     m_cueList->setInputSource(m_overwriteInputWidget->inputSource(), VCCueList::overwriteInputSourceId);
+    m_cueList->setInputSource(m_deleteInputWidget->inputSource(), VCCueList::deleteInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
     m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
 
@@ -299,6 +310,7 @@ void VCCueListProperties::slotTabChanged()
     m_stopInputWidget->stopAutoDetection();
     m_recordInputWidget->stopAutoDetection();
     m_overwriteInputWidget->stopAutoDetection();
+    m_deleteInputWidget->stopAutoDetection();
     m_nextInputWidget->stopAutoDetection();
     m_prevInputWidget->stopAutoDetection();
 

@@ -77,7 +77,8 @@ const quint8 VCCueList::sideFaderInputSourceId = 3;
 const quint8 VCCueList::stopInputSourceId = 4;
 const quint8 VCCueList::recordInputSourceId = 5;
 const quint8 VCCueList::overwriteInputSourceId = 6;
-const quint8 VCCueList::secondarySelectInputSourceId = 7;
+const quint8 VCCueList::deleteInputSourceId = 7;
+const quint8 VCCueList::secondarySelectInputSourceId = 8;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -281,6 +282,16 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_overwriteButton, SIGNAL(clicked()), this, SLOT(slotOverwriteButtonClicked()));
     hbox->addWidget(m_overwriteButton);
 
+    m_deleteButton = new QToolButton(this);
+    m_deleteButton->setIcon(QIcon(":/editdelete.png"));
+    m_deleteButton->setIconSize(QSize(24, 24));
+    m_deleteButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_deleteButton->setFixedHeight(32);
+    m_deleteButton->setToolTip(tr("Delete selected cue"));
+    m_deleteButton->setEnabled(false);
+    connect(m_deleteButton, SIGNAL(clicked()), this, SLOT(slotDeleteButtonClicked()));
+    hbox->addWidget(m_deleteButton);
+
     vbox->addItem(hbox);
     grid->addItem(vbox, 0, 1, 6);
 
@@ -311,6 +322,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_stopLatestValue = 0;
     m_recordLatestValue = 0;
     m_overwriteLatestValue = 0;
+    m_deleteLatestValue = 0;
 }
 
 VCCueList::~VCCueList()
@@ -341,6 +353,7 @@ void VCCueList::enableWidgetUI(bool enable)
     QTreeWidgetItem *selectedItem = m_tree->currentItem();
     bool hasSelectedItem = (selectedItem != NULL);
     bool overwriteEnabled = false;
+    bool deleteEnabled = false;
     if (enable && m_chaserID != Function::invalidId() && !isSequence && chaserStopped && hasSelectedItem)
     {
         // Check if selected item is a Scene
@@ -351,9 +364,12 @@ void VCCueList::enableWidgetUI(bool enable)
             Function *stepFunc = m_doc->function(step.fid);
             if (stepFunc != NULL && stepFunc->type() == Function::SceneType)
                 overwriteEnabled = true;
+            // Delete is enabled for any step type
+            deleteEnabled = true;
         }
     }
     m_overwriteButton->setEnabled(overwriteEnabled);
+    m_deleteButton->setEnabled(deleteEnabled);
 
     m_topPercentageLabel->setEnabled(enable);
     m_sideFader->setEnabled(enable);
@@ -396,6 +412,7 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     setStopKeySequence(cuelist->stopKeySequence());
     setRecordKeySequence(cuelist->recordKeySequence());
     setOverwriteKeySequence(cuelist->overwriteKeySequence());
+    setDeleteKeySequence(cuelist->deleteKeySequence());
 
     /* Sliders mode */
     setSideFaderMode(cuelist->sideFaderMode());
@@ -1011,8 +1028,9 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     emit stepChanged(m_primaryIndex);
     emit sideFaderValueChanged();
 
-    // Update overwrite button state
+    // Update overwrite and delete button states
     updateOverwriteButtonState();
+    updateDeleteButtonState();
 }
 
 void VCCueList::slotItemActivated(QTreeWidgetItem *item)
@@ -1032,8 +1050,9 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
 
     playCueAtIndex(clickedIndex);
     
-    // Update overwrite button state
+    // Update overwrite and delete button states
     updateOverwriteButtonState();
+    updateDeleteButtonState();
 }
 
 void VCCueList::slotItemClicked(QTreeWidgetItem *item)
@@ -1049,8 +1068,9 @@ void VCCueList::slotItemClicked(QTreeWidgetItem *item)
         setSecondaryIndex(clickedIndex);
     }
     
-    // Update overwrite button state
+    // Update overwrite and delete button states
     updateOverwriteButtonState();
+    updateDeleteButtonState();
 }
 
 void VCCueList::slotItemChanged(QTreeWidgetItem *item, int column)
@@ -1129,8 +1149,9 @@ void VCCueList::slotFunctionStopped(quint32 fid)
     qDebug() << Q_FUNC_INFO << "Cue stopped";
     updateFeedback();
 
-    // Update overwrite button state
+    // Update overwrite and delete button states
     updateOverwriteButtonState();
+    updateDeleteButtonState();
 }
 
 void VCCueList::slotProgressTimeout()
@@ -1681,6 +1702,16 @@ QKeySequence VCCueList::overwriteKeySequence() const
     return m_overwriteKeySequence;
 }
 
+void VCCueList::setDeleteKeySequence(const QKeySequence& keySequence)
+{
+    m_deleteKeySequence = QKeySequence(keySequence);
+}
+
+QKeySequence VCCueList::deleteKeySequence() const
+{
+    return m_deleteKeySequence;
+}
+
 void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
 {
     if (acceptsInput() == false)
@@ -1698,6 +1729,8 @@ void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
         slotRecordButtonClicked();
     else if (m_overwriteKeySequence == keySequence)
         slotOverwriteButtonClicked();
+    else if (m_deleteKeySequence == keySequence)
+        slotDeleteButtonClicked();
 }
 
 void VCCueList::updateFeedback()
@@ -1838,6 +1871,24 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
 
         if (value > HYSTERESIS)
             m_overwriteLatestValue = value;
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), deleteInputSourceId))
+    {
+        // Use hysteresis to avoid triggering multiple times from a single
+        // value change. A zero value is accepted as input. And the non-zero values have to visit
+        // above $HYSTERESIS before a zero is accepted again.
+        if (m_deleteLatestValue == 0 && value > 0)
+        {
+            slotDeleteButtonClicked();
+            m_deleteLatestValue = value;
+        }
+        else if (m_deleteLatestValue > HYSTERESIS && value == 0)
+        {
+            m_deleteLatestValue = 0;
+        }
+
+        if (value > HYSTERESIS)
+            m_deleteLatestValue = value;
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
@@ -2076,6 +2127,54 @@ void VCCueList::updateOverwriteButtonState()
     m_overwriteButton->setEnabled(true);
 }
 
+void VCCueList::updateDeleteButtonState()
+{
+    if (m_deleteButton == NULL)
+        return;
+
+    if (m_doc->mode() != Doc::Operate)
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    if (m_chaserID == Function::invalidId())
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    Function *func = m_doc->function(m_chaserID);
+    if (func == NULL || func->type() == Function::SequenceType)
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    Chaser *ch = chaser();
+    if (ch == NULL || !ch->stopped())
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    QTreeWidgetItem *selectedItem = m_tree->currentItem();
+    if (selectedItem == NULL)
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    int stepIndex = m_tree->indexOfTopLevelItem(selectedItem);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+    {
+        m_deleteButton->setEnabled(false);
+        return;
+    }
+
+    m_deleteButton->setEnabled(true);
+}
+
 /*****************************************************************************
  * Recording
  *****************************************************************************/
@@ -2139,6 +2238,138 @@ void VCCueList::slotOverwriteButtonClicked()
     {
         overwriteSelectedCue();
     }
+}
+
+void VCCueList::slotDeleteButtonClicked()
+{
+    if (m_doc->mode() != Doc::Operate)
+        return;
+
+    if (m_chaserID == Function::invalidId())
+        return;
+
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    // Check if chaser is stopped
+    if (!ch->stopped())
+        return; // Cannot delete when chaser is running
+
+    // Check if item is selected
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return; // No cue selected
+
+    // Get step index and function info for confirmation dialog
+    int stepIndex = m_tree->indexOfTopLevelItem(item);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+        return;
+
+    ChaserStep step = ch->steps().at(stepIndex);
+    Function *func = m_doc->function(step.fid);
+    QString funcName = func ? func->name() : tr("Unknown");
+
+    // Show confirmation dialog
+    int ret = QMessageBox::question(this,
+                                    tr("Delete Cue"),
+                                    tr("Are you sure you want to delete cue \"%1\"?\n\nIf the associated scene is not used elsewhere, it will also be deleted from the document.").arg(funcName),
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::No);
+
+    if (ret == QMessageBox::Yes)
+    {
+        deleteSelectedCue();
+    }
+}
+
+void VCCueList::deleteSelectedCue()
+{
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    // Get currently selected item
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return;
+
+    // Get index of selected item
+    int stepIndex = m_tree->indexOfTopLevelItem(item);
+    if (stepIndex < 0 || stepIndex >= ch->steps().count())
+        return;
+
+    // Get ChaserStep to retrieve function ID before removing
+    ChaserStep step = ch->steps().at(stepIndex);
+    quint32 functionId = step.fid;
+
+    // Remove step from chaser
+    if (!ch->removeStep(stepIndex))
+        return;
+
+    // Check if the function is used elsewhere in the document
+    Function *func = m_doc->function(functionId);
+    if (func != NULL)
+    {
+        bool usedElsewhere = false;
+
+        // Check all chasers (including this one after removal)
+        foreach (Function *f, m_doc->functionsByType(Function::ChaserType))
+        {
+            Chaser *otherChaser = qobject_cast<Chaser*>(f);
+            if (otherChaser == NULL)
+                continue;
+
+            foreach (ChaserStep s, otherChaser->steps())
+            {
+                if (s.fid == functionId)
+                {
+                    usedElsewhere = true;
+                    break;
+                }
+            }
+            if (usedElsewhere)
+                break;
+        }
+
+        // Check all sequences
+        if (!usedElsewhere)
+        {
+            foreach (Function *f, m_doc->functionsByType(Function::SequenceType))
+            {
+                Chaser *seq = qobject_cast<Chaser*>(f);
+                if (seq == NULL)
+                    continue;
+
+                foreach (ChaserStep s, seq->steps())
+                {
+                    if (s.fid == functionId)
+                    {
+                        usedElsewhere = true;
+                        break;
+                    }
+                }
+                if (usedElsewhere)
+                    break;
+            }
+        }
+
+        // If not used elsewhere, delete the function
+        if (!usedElsewhere)
+        {
+            m_doc->deleteFunction(functionId);
+        }
+    }
+
+    // Update the step list
+    updateStepList();
+
+    // Mark document as modified
+    m_doc->setModified();
+
+    // Update button states
+    updateOverwriteButtonState();
+    updateDeleteButtonState();
 }
 
 void VCCueList::recordLiveCue()
@@ -2619,6 +2850,12 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             if (str.isEmpty() == false)
                 m_overwriteKeySequence = stripKeySequence(QKeySequence(str));
         }
+        else if (root.name() == KXMLQLCVCCueListDelete)
+        {
+            QString str = loadXMLSources(root, deleteInputSourceId);
+            if (str.isEmpty() == false)
+                m_deleteKeySequence = stripKeySequence(QKeySequence(str));
+        }
         else if (root.name() == KXMLQLCVCCueListSlidersMode)
         {
             setSideFaderMode(stringToFaderMode(root.readElementText()));
@@ -2815,6 +3052,13 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     if (m_overwriteKeySequence.toString().isEmpty() == false)
         doc->writeTextElement(KXMLQLCVCWidgetKey, m_overwriteKeySequence.toString());
     saveXMLInput(doc, inputSource(overwriteInputSourceId));
+    doc->writeEndElement();
+
+    /* Cue list delete */
+    doc->writeStartElement(KXMLQLCVCCueListDelete);
+    if (m_deleteKeySequence.toString().isEmpty() == false)
+        doc->writeTextElement(KXMLQLCVCWidgetKey, m_deleteKeySequence.toString());
+    saveXMLInput(doc, inputSource(deleteInputSourceId));
     doc->writeEndElement();
 
     /* Crossfade cue list */
