@@ -28,6 +28,7 @@
 #include "vcframe.h"
 #include "vcxypad.h"
 #include "doc.h"
+#include "fixture.h"
 
 #include <QTreeWidgetItem>
 #include <QDebug>
@@ -73,6 +74,52 @@ void VCMultiPatchEditor::accept()
             QTreeWidgetItem *item = topItem->child(j);
             quint32 sourceId = item->data(0, Qt::UserRole).toUInt();
             QVariant data = item->data(1, Qt::EditRole);
+            
+            // Special handling for output channel (sourceId == 0xFFFF)
+            if (sourceId == 0xFFFF && widget->type() == VCWidget::SliderWidget)
+            {
+                VCSlider *slider = qobject_cast<VCSlider*>(widget);
+                if (slider && slider->sliderMode() == VCSlider::Level)
+                {
+                    if (data.isValid())
+                    {
+                        quint32 address = data.toUInt();
+                        if (address == QLCIOPlugin::invalidLine())
+                        {
+                            slider->clearLevelChannels();
+                        }
+                        else
+                        {
+                            quint32 universe = address >> 16;
+                            quint32 absoluteChannel = address & 0xFFFF;
+                            
+                            // Convert to universeAddress format used by fixtureForAddress
+                            // universeAddress = (universe << 9) | channel_in_universe
+                            quint32 universeAddress = (universe << 9) | absoluteChannel;
+                            
+                            quint32 fixtureId = m_doc->fixtureForAddress(universeAddress);
+                            if (fixtureId != Fixture::invalidId())
+                            {
+                                Fixture *fxi = m_doc->fixture(fixtureId);
+                                if (fxi)
+                                {
+                                    quint32 relativeChannel = absoluteChannel - fxi->address();
+                                    slider->clearLevelChannels();
+                                    slider->addLevelChannel(fixtureId, relativeChannel);
+                                }
+                            }
+                            else
+                            {
+                                qDebug() << "Could not find fixture for universe" << universe 
+                                         << "channel" << absoluteChannel;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            
+            // Existing input source handling
             if (data.isValid())
             {
                 quint32 address = data.toUInt();
@@ -183,6 +230,30 @@ void VCMultiPatchEditor::fillTree()
                 if (src)
                     flashItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
                 flashItem->setFlags(flashItem->flags() | Qt::ItemIsEditable);
+
+                // Add Output Channel for Level mode sliders
+                if (slider->sliderMode() == VCSlider::Level)
+                {
+                    QTreeWidgetItem *outputItem = new QTreeWidgetItem(topItem);
+                    outputItem->setText(0, tr("Output Channel"));
+                    outputItem->setData(0, Qt::UserRole, 0xFFFF); // Special ID for output channel
+                    
+                    // Get first level channel and convert to universe.absoluteChannel format
+                    QList<VCSlider::LevelChannel> levelChannels = slider->levelChannels();
+                    if (!levelChannels.isEmpty())
+                    {
+                        VCSlider::LevelChannel lch = levelChannels.first();
+                        Fixture *fxi = m_doc->fixture(lch.fixture);
+                        if (fxi)
+                        {
+                            quint32 universe = fxi->universe();
+                            quint32 absoluteChannel = fxi->address() + lch.channel;
+                            // Store in format: (universe << 16) | absoluteChannel
+                            outputItem->setData(1, Qt::EditRole, (universe << 16) | absoluteChannel);
+                        }
+                    }
+                    outputItem->setFlags(outputItem->flags() | Qt::ItemIsEditable);
+                }
             }
         }
         else if (widget->type() == VCWidget::ButtonWidget)
