@@ -288,7 +288,11 @@ void GenericFader::write(Universe *universe)
         }
 
         if (flags & FadeChannel::AutoRemove && value == fc.target())
-            it.remove();
+        {
+            // Don't auto-remove Intensity channels - they may be controlled by submaster
+            if (!(flags & FadeChannel::Intensity))
+                it.remove();
+        }
     }
 
     // self-request deletion when fadeout is complete
