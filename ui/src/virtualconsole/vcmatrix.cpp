@@ -603,8 +603,6 @@ void VCMatrix::setFunction(quint32 id)
     Function *old = m_doc->function(m_matrixID);
     if (old != NULL)
     {
-        disconnect(old, SIGNAL(running(quint32)),
-                this, SLOT(slotFunctionRunning(quint32)));
         disconnect(old, SIGNAL(stopped(quint32)),
                 this, SLOT(slotFunctionStopped()));
         disconnect(old, SIGNAL(changed(quint32)),
@@ -618,8 +616,6 @@ void VCMatrix::setFunction(quint32 id)
     else
     {
         m_matrixID = id;
-        connect(matrix, SIGNAL(running(quint32)),
-                this, SLOT(slotFunctionRunning(quint32)));
         connect(matrix, SIGNAL(stopped(quint32)),
                 this, SLOT(slotFunctionStopped()));
         connect(matrix, SIGNAL(changed(quint32)),
@@ -676,14 +672,6 @@ void VCMatrix::slotFunctionStopped()
 void VCMatrix::slotFunctionChanged()
 {
     m_updateTimer->start(UPDATE_TIMEOUT);
-}
-
-void VCMatrix::slotFunctionRunning(quint32 fid)
-{
-    Q_UNUSED(fid);
-    // When function starts, synchronize the control knobs with the property
-    // values that were just loaded from m_properties in RGBMatrix::preRun()
-    slotUpdate();
 }
 
 void VCMatrix::slotUpdate()
@@ -1418,13 +1406,23 @@ void VCMatrix::slotCustomControlValueChanged()
                 {
                     if (prop.m_name == control->m_resource)
                     {
+                        QString propValue;
                         if (prop.m_type == RGBScriptProperty::List)
                         {
                             if (knob->value() < prop.m_listValues.count())
-                                script->setProperty(control->m_resource, prop.m_listValues.at(knob->value()));
+                            {
+                                propValue = prop.m_listValues.at(knob->value());
+                                script->setProperty(control->m_resource, propValue);
+                            }
                         }
                         else
-                            script->setProperty(control->m_resource, QString::number(knob->value()));
+                        {
+                            propValue = QString::number(knob->value());
+                            script->setProperty(control->m_resource, propValue);
+                        }
+                        // Save to matrix properties so it persists when function starts
+                        if (!propValue.isEmpty())
+                            matrix->setProperty(control->m_resource, propValue);
                         break;
                     }
                 }

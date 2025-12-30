@@ -204,8 +204,6 @@ private slots:
     void slotFunctionStopped();
     /** Update widget when function changes. */
     void slotFunctionChanged();
-    /** Update widget when function starts/runs. */
-    void slotFunctionRunning(quint32 fid);
     void slotUpdate();
 
 private:
