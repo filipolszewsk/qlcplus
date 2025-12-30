@@ -603,6 +603,8 @@ void VCMatrix::setFunction(quint32 id)
     Function *old = m_doc->function(m_matrixID);
     if (old != NULL)
     {
+        disconnect(old, SIGNAL(running(quint32)),
+                this, SLOT(slotFunctionRunning(quint32)));
         disconnect(old, SIGNAL(stopped(quint32)),
                 this, SLOT(slotFunctionStopped()));
         disconnect(old, SIGNAL(changed(quint32)),
@@ -616,6 +618,8 @@ void VCMatrix::setFunction(quint32 id)
     else
     {
         m_matrixID = id;
+        connect(matrix, SIGNAL(running(quint32)),
+                this, SLOT(slotFunctionRunning(quint32)));
         connect(matrix, SIGNAL(stopped(quint32)),
                 this, SLOT(slotFunctionStopped()));
         connect(matrix, SIGNAL(changed(quint32)),
@@ -672,6 +676,14 @@ void VCMatrix::slotFunctionStopped()
 void VCMatrix::slotFunctionChanged()
 {
     m_updateTimer->start(UPDATE_TIMEOUT);
+}
+
+void VCMatrix::slotFunctionRunning(quint32 fid)
+{
+    Q_UNUSED(fid);
+    // When function starts, synchronize the control knobs with the property
+    // values that were just loaded from m_properties in RGBMatrix::preRun()
+    slotUpdate();
 }
 
 void VCMatrix::slotUpdate()
