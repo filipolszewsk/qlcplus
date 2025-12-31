@@ -318,6 +318,20 @@
            </property>
           </widget>
          </item>
+         <item row="4" column="2">
+          <widget class="QPushButton" name="m_editPresetButton">
+           <property name="text">
+            <string> Edit</string>
+           </property>
+           <property name="icon">
+            <iconset resource="../qlcui.qrc">
+             <normaloff>:/edit.png</normaloff>:/edit.png</iconset>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
          <item row="0" column="2">
           <widget class="QGroupBox" name="groupBox">
            <property name="title">

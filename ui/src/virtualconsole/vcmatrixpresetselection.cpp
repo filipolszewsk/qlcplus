@@ -270,3 +270,64 @@ void VCMatrixPresetSelection::slotCheckAllToggled(bool checked)
         }
     }
 }
+
+void VCMatrixPresetSelection::setInitialValues(const QString &presetName,
+                                               const QMap<QString, QString> &properties,
+                                               const QMap<QString, bool> &dynamicProperties)
+{
+    // Set preset combo to the given preset name
+    int idx = m_presetCombo->findText(presetName);
+    if (idx >= 0)
+        m_presetCombo->setCurrentIndex(idx);
+    
+    // slotUpdatePresetProperties is called automatically by currentIndexChanged signal
+    // Now we need to set the property values and checkboxes
+    
+    // Set properties values in widgets
+    QLayout *layout = m_propertiesLayout->layout();
+    for (int i = 0; i < layout->count(); ++i)
+    {
+        QWidget *widget = layout->itemAt(i)->widget();
+        if (!widget)
+            continue;
+            
+        QString pName = widget->property("pName").toString();
+        if (pName.isEmpty())
+            continue;
+        
+        // Set value widgets
+        if (properties.contains(pName))
+        {
+            QString pValue = properties.value(pName);
+            
+            if (QComboBox *combo = qobject_cast<QComboBox*>(widget))
+            {
+                int vidx = combo->findText(pValue);
+                if (vidx >= 0)
+                    combo->setCurrentIndex(vidx);
+            }
+            else if (QSpinBox *spin = qobject_cast<QSpinBox*>(widget))
+            {
+                spin->setValue(pValue.toInt());
+            }
+            else if (QDoubleSpinBox *dspin = qobject_cast<QDoubleSpinBox*>(widget))
+            {
+                dspin->setValue(pValue.toDouble());
+            }
+            else if (QLineEdit *edit = qobject_cast<QLineEdit*>(widget))
+            {
+                edit->setText(pValue);
+            }
+            
+            // Update internal map
+            m_properties[pName] = pValue;
+        }
+        
+        // Set dynamic checkbox
+        if (QCheckBox *check = qobject_cast<QCheckBox*>(widget))
+        {
+            check->setChecked(dynamicProperties.value(pName, false));
+            m_dynamicProperties[pName] = dynamicProperties.value(pName, false);
+        }
+    }
+}

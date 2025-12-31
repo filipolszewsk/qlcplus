@@ -99,6 +99,7 @@ protected slots:
     void slotAddColorResetClicked();
     void slotAddAnimationClicked();
     void slotAddTextClicked();
+    void slotEditPresetClicked();
     void slotRemoveClicked();
 
     void slotInputValueChanged(quint32 universe, quint32 channel);

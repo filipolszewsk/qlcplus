@@ -264,6 +264,9 @@ protected slots:
 protected:
     QHash<QWidget *, VCMatrixControl *> m_controls;
     QHash<VCMatrixControl *, QWidget *> m_widgets;
+    
+    /** ID of the last clicked Animation/Text preset (for reset detection) */
+    quint8 m_lastActivePresetID;
 
     /*********************************************************************
      * QLC+ Mode

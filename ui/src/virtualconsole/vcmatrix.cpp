@@ -57,6 +57,7 @@ VCMatrix::VCMatrix(QWidget *parent, Doc *doc)
     , m_matrixID(Function::invalidId())
     , m_instantApply(true)
     , m_visibilityMask(VCMatrix::defaultVisibilityMask())
+    , m_lastActivePresetID(0)
 {
     /* Set the class name "VCMatrix" as the object name as well */
     setObjectName(VCMatrix::staticMetaObject.className());
@@ -1308,6 +1309,9 @@ void VCMatrix::slotCustomControlClicked()
         }
         else if (control->m_type == VCMatrixControl::Animation)
         {
+            // Only reset if this is a different preset than last clicked
+            bool isDifferentPreset = (control->m_id != m_lastActivePresetID);
+            
             RGBAlgorithm* algo = RGBAlgorithm::algorithm(m_doc, control->m_resource);
             if (!control->m_properties.isEmpty())
             {
@@ -1316,21 +1320,56 @@ void VCMatrix::slotCustomControlClicked()
                 while (it.hasNext())
                 {
                     it.next();
-                    script->setProperty(it.key(), it.value());
-                    matrix->setProperty(it.key(), it.value());
+                    QString propName = it.key();
+                    
+                    // Check if there's an AnimationKnob controlling this property
+                    // If so, skip - knob has priority over preset value
+                    bool hasKnobForProperty = false;
+                    for (QHash<QWidget *, VCMatrixControl *>::iterator knobIt = m_controls.begin();
+                         knobIt != m_controls.end(); ++knobIt)
+                    {
+                        VCMatrixControl *knobControl = knobIt.value();
+                        if (knobControl->m_type == VCMatrixControl::AnimationKnob &&
+                            knobControl->m_resource == propName)
+                        {
+                            hasKnobForProperty = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!hasKnobForProperty)
+                    {
+                        script->setProperty(propName, it.value());
+                        matrix->setProperty(propName, it.value());
+                    }
                 }
             }
             matrix->setAlgorithm(algo);
+            // Only reset steps if switching to a different preset
+            if (isDifferentPreset)
+            {
+                matrix->resetSteps();
+                m_lastActivePresetID = control->m_id;
+            }
             if (instantChanges() == true)
                 matrix->updateColorDelta();
             btn->setDown(true);
         }
         else if (control->m_type == VCMatrixControl::Text)
         {
+            // Only reset if this is a different preset than last clicked
+            bool isDifferentPreset = (control->m_id != m_lastActivePresetID);
+            
             RGBAlgorithm* algo = RGBAlgorithm::algorithm(m_doc, "Text");
             RGBText* text = static_cast<RGBText*> (algo);
             text->setText(control->m_resource);
             matrix->setAlgorithm(algo);
+            // Only reset steps if switching to a different preset
+            if (isDifferentPreset)
+            {
+                matrix->resetSteps();
+                m_lastActivePresetID = control->m_id;
+            }
             if (instantChanges() == true)
                 matrix->updateColorDelta();
             btn->setDown(true);

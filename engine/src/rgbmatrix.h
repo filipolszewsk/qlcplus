@@ -200,6 +200,9 @@ public:
 
     void updateColorDelta();
 
+    /** Reset animation steps to the beginning based on direction */
+    void resetSteps();
+
     /** Set the colors of the current algorithm */
     void setMapColors(RGBAlgorithm *algorithm);
 

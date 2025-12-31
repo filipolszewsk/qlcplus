@@ -388,6 +388,16 @@ void RGBMatrix::updateColorDelta()
         m_stepHandler->calculateColorDelta(m_rgbColors[0], m_rgbColors[1], m_algorithm);
 }
 
+void RGBMatrix::resetSteps()
+{
+    QMutexLocker algorithmLocker(&m_algorithmMutex);
+    if (m_algorithm != NULL && m_stepHandler != NULL)
+    {
+        QColor endColor = m_rgbColors.count() > 1 ? m_rgbColors[1] : QColor();
+        m_stepHandler->initializeDirection(direction(), m_rgbColors[0], endColor, m_stepsCount, m_algorithm);
+    }
+}
+
 void RGBMatrix::setMapColors(RGBAlgorithm *algorithm)
 {
     QMutexLocker algorithmLocker(&m_algorithmMutex);

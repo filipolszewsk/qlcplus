@@ -117,6 +117,8 @@ VCMatrixProperties::VCMatrixProperties(VCMatrix* matrix, Doc* doc)
 
     connect(m_removeButton, SIGNAL(clicked()),
             this, SLOT(slotRemoveClicked()));
+    connect(m_editPresetButton, SIGNAL(clicked()),
+            this, SLOT(slotEditPresetClicked()));
 
     m_presetInputWidget = new InputSelectionWidget(m_doc, this);
     m_presetInputWidget->setCustomFeedbackVisibility(true);
@@ -489,6 +491,25 @@ void VCMatrixProperties::slotAddTextClicked()
     }
 }
 
+void VCMatrixProperties::slotEditPresetClicked()
+{
+    VCMatrixControl *control = getSelectedControl();
+    if (control == NULL || control->m_type != VCMatrixControl::Animation)
+        return;
+    
+    VCMatrixPresetSelection ps(m_doc, this);
+    ps.setInitialValues(control->m_resource, control->m_properties, control->m_dynamicProperties);
+    
+    if (ps.exec() == QDialog::Accepted)
+    {
+        // Update existing control with new values
+        control->m_resource = ps.selectedPreset();
+        control->m_properties = ps.customizedProperties();
+        control->m_dynamicProperties = ps.dynamicProperties();
+        updateTree();
+    }
+}
+
 void VCMatrixProperties::slotRemoveClicked()
 {
     if (m_controlsTree->selectedItems().isEmpty())
@@ -574,6 +595,13 @@ void VCMatrixProperties::slotTreeSelectionChanged()
             m_presetInputWidget->setCustomFeedbackVisibility(false);
             m_presetInputWidget->setKeyInputVisibility(false);
         }
+        
+        // Enable Edit button only for Animation presets
+        m_editPresetButton->setEnabled(control->m_type == VCMatrixControl::Animation);
+    }
+    else
+    {
+        m_editPresetButton->setEnabled(false);
     }
 }
 

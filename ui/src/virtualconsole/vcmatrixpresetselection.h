@@ -42,6 +42,11 @@ public:
     QMap<QString, QString> customizedProperties();
     QMap<QString, bool> dynamicProperties() const;
 
+    /** Set initial values for editing an existing preset */
+    void setInitialValues(const QString &presetName,
+                          const QMap<QString, QString> &properties,
+                          const QMap<QString, bool> &dynamicProperties);
+
 protected slots:
     void slotUpdatePresetProperties();
 
