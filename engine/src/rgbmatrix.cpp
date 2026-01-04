@@ -86,6 +86,7 @@ RGBMatrix::RGBMatrix(Doc *doc)
      , m_stepHandler(new RGBMatrixStep())
      , m_stepsCount(0)
      , m_stepBeatDuration(0)
+     , m_continuousPhase(0.0)
      , m_controlMode(RGBMatrix::ControlModeRgb)
      , m_enablePerFixtureMapping(false)
  {
@@ -395,6 +396,10 @@ void RGBMatrix::resetSteps()
     {
         QColor endColor = m_rgbColors.count() > 1 ? m_rgbColors[1] : QColor();
         m_stepHandler->initializeDirection(direction(), m_rgbColors[0], endColor, m_stepsCount, m_algorithm);
+        
+        // Update continuous phase when steps are reset
+        if (m_stepsCount > 0)
+            m_continuousPhase = double(m_stepHandler->currentStepIndex()) / double(m_stepsCount);
     }
 }
 
@@ -439,7 +444,6 @@ void RGBMatrix::setProperty(QString propName, QString value)
     
     // ŁATKA: Zapisz stary stepsCount przed zmianą (dla skalowania step index)
     int oldStepsCount = m_stepsCount;
-    int oldStepIndex = (m_stepHandler != NULL) ? m_stepHandler->currentStepIndex() : 0;
     
     m_properties[propName] = value;
     if (m_algorithm != NULL && m_algorithm->type() == RGBAlgorithm::Script)
@@ -454,14 +458,21 @@ void RGBMatrix::setProperty(QString propName, QString value)
     m_stepsCount = algorithmStepsCount();
     
     // ŁATKA: Skaluj currentStepIndex do nowego stepsCount (zachowaj fazę)
-    // Analogicznie do EFXFixture::durationChanged() - zapobiega desynchronizacji
-    // gdy zmienia się prędkość w runtime (np. Wave Speed w LEDbar.js)
-    if (m_stepHandler != NULL && oldStepsCount > 0 && m_stepsCount > 0 && oldStepsCount != m_stepsCount)
+    // Używamy m_continuousPhase (ciągła wartość 0.0-1.0) zamiast dyskretnego stepIndex
+    // aby uniknąć kumulacji błędów zaokrągleń przy wielokrotnych zmianach prędkości.
+    // Analogicznie do EFXFixture::durationChanged() używającego m_currentAngle.
+    if (m_stepHandler != NULL && m_stepsCount > 0 && oldStepsCount != m_stepsCount)
     {
-        // Oblicz fazę (0.0 - 1.0) w starym cyklu
-        float phase = float(oldStepIndex) / float(oldStepsCount);
-        // Przeskaluj do nowego stepsCount zachowując fazę
-        int newStepIndex = int(phase * float(m_stepsCount));
+        // Jeśli m_continuousPhase nie jest jeszcze zaktualizowany (pierwsza zmiana),
+        // oblicz go z aktualnego stepIndex
+        if (oldStepsCount > 0)
+        {
+            int currentStepIndex = m_stepHandler->currentStepIndex();
+            m_continuousPhase = double(currentStepIndex) / double(oldStepsCount);
+        }
+        
+        // Przeskaluj fazę do nowego stepsCount (zachowaj ciągłą fazę, nie dyskretny index)
+        int newStepIndex = int(round(m_continuousPhase * double(m_stepsCount)));
         // Upewnij się że nie przekracza zakresu
         if (newStepIndex >= m_stepsCount)
             newStepIndex = m_stepsCount - 1;
@@ -776,6 +787,10 @@ void RGBMatrix::preRun(MasterTimer *timer)
 
             // Copy direction from parent class direction
             m_stepHandler->initializeDirection(direction(), m_rgbColors[0], m_rgbColors[1], m_stepsCount, m_runAlgorithm);
+            
+            // Update continuous phase when starting playback
+            if (m_stepsCount > 0)
+                m_continuousPhase = double(m_stepHandler->currentStepIndex()) / double(m_stepsCount);
 
             if (m_runAlgorithm->type() == RGBAlgorithm::Script)
             {
@@ -946,6 +961,11 @@ void RGBMatrix::roundCheck()
 
     if (m_stepHandler->checkNextStep(runOrder(), m_rgbColors[0], m_rgbColors[1], m_stepsCount) == false)
         stop(FunctionParent::master());
+
+    // Update continuous phase based on current step index (prevents cumulative rounding errors)
+    // This is analogous to how EFX uses m_currentAngle for phase scaling
+    if (m_stepsCount > 0)
+        m_continuousPhase = double(m_stepHandler->currentStepIndex()) / double(m_stepsCount);
 
     m_roundTime.restart();
 
