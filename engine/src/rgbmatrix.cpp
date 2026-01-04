@@ -436,6 +436,11 @@ void RGBMatrix::setMapColors(RGBAlgorithm *algorithm)
 void RGBMatrix::setProperty(QString propName, QString value)
 {
     QMutexLocker algoLocker(&m_algorithmMutex);
+    
+    // ŁATKA: Zapisz stary stepsCount przed zmianą (dla skalowania step index)
+    int oldStepsCount = m_stepsCount;
+    int oldStepIndex = (m_stepHandler != NULL) ? m_stepHandler->currentStepIndex() : 0;
+    
     m_properties[propName] = value;
     if (m_algorithm != NULL && m_algorithm->type() == RGBAlgorithm::Script)
     {
@@ -447,6 +452,23 @@ void RGBMatrix::setProperty(QString propName, QString value)
             setColor(i, QColor::fromRgb(colors.at(i)));
     }
     m_stepsCount = algorithmStepsCount();
+    
+    // ŁATKA: Skaluj currentStepIndex do nowego stepsCount (zachowaj fazę)
+    // Analogicznie do EFXFixture::durationChanged() - zapobiega desynchronizacji
+    // gdy zmienia się prędkość w runtime (np. Wave Speed w LEDbar.js)
+    if (m_stepHandler != NULL && oldStepsCount > 0 && m_stepsCount > 0 && oldStepsCount != m_stepsCount)
+    {
+        // Oblicz fazę (0.0 - 1.0) w starym cyklu
+        float phase = float(oldStepIndex) / float(oldStepsCount);
+        // Przeskaluj do nowego stepsCount zachowując fazę
+        int newStepIndex = int(phase * float(m_stepsCount));
+        // Upewnij się że nie przekracza zakresu
+        if (newStepIndex >= m_stepsCount)
+            newStepIndex = m_stepsCount - 1;
+        if (newStepIndex < 0)
+            newStepIndex = 0;
+        m_stepHandler->setCurrentStepIndex(newStepIndex);
+    }
 }
 
 QString RGBMatrix::property(QString propName)
