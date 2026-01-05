@@ -78,8 +78,9 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->setIconSize(QSize(20, 20));
     
-    // Install event filter to catch arrow keys for moving selected fixtures
+    // Install event filter to catch arrow keys and mouse events for moving selected fixtures
     m_table->installEventFilter(this);
+    m_table->viewport()->installEventFilter(this);
     
     updateTable();
 }
@@ -90,11 +91,8 @@ FixtureGroupEditor::~FixtureGroupEditor()
 
 bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
 {
-    if (obj != m_table)
-        return QWidget::eventFilter(obj, event);
-    
-    // Handle keyboard arrow keys
-    if (event->type() == QEvent::KeyPress)
+    // Handle keyboard arrow keys (on table)
+    if (obj == m_table && event->type() == QEvent::KeyPress)
     {
         QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
         QList<QLCPoint> selectedPoints = getSelectedPoints();
@@ -134,69 +132,72 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
         }
     }
     
-    // Handle mouse drag & drop for multi-selection
-    if (event->type() == QEvent::MouseButtonPress)
+    // Handle mouse drag & drop for multi-selection (on viewport)
+    if (obj == m_table->viewport())
     {
-        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton)
+        if (event->type() == QEvent::MouseButtonPress)
         {
-            QPoint cell = cellAtPos(mouseEvent->pos());
-            if (cell.x() >= 0 && cell.y() >= 0)
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton)
             {
-                // Check if clicking on a selected cell with fixture
-                QList<QLCPoint> selectedPoints = getSelectedPoints();
-                QLCPoint clickedPoint(cell.x(), cell.y());
-                
-                if (selectedPoints.contains(clickedPoint) && selectedPoints.size() > 1)
+                QPoint cell = cellAtPos(mouseEvent->pos());
+                if (cell.x() >= 0 && cell.y() >= 0)
                 {
-                    // Start drag operation
-                    m_dragging = true;
-                    m_dragStartPos = mouseEvent->pos();
-                    m_dragStartCell = cell;
-                    m_dragSelectedPoints = selectedPoints;
-                    return true; // Consume event to prevent default selection change
+                    // Check if clicking on a selected cell with fixture
+                    QList<QLCPoint> selectedPoints = getSelectedPoints();
+                    QLCPoint clickedPoint(cell.x(), cell.y());
+                    
+                    if (selectedPoints.contains(clickedPoint) && selectedPoints.size() > 1)
+                    {
+                        // Start drag operation
+                        m_dragging = true;
+                        m_dragStartPos = mouseEvent->pos();
+                        m_dragStartCell = cell;
+                        m_dragSelectedPoints = selectedPoints;
+                        return true; // Consume event to prevent default selection change
+                    }
                 }
             }
         }
-    }
-    
-    if (event->type() == QEvent::MouseMove && m_dragging)
-    {
-        // Just track the movement, actual move happens on release
-        return true;
-    }
-    
-    if (event->type() == QEvent::MouseButtonRelease && m_dragging)
-    {
-        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
-        m_dragging = false;
         
-        QPoint endCell = cellAtPos(mouseEvent->pos());
-        if (endCell.x() >= 0 && endCell.y() >= 0)
+        if (event->type() == QEvent::MouseMove && m_dragging)
         {
-            int deltaX = endCell.x() - m_dragStartCell.x();
-            int deltaY = endCell.y() - m_dragStartCell.y();
-            
-            if (deltaX != 0 || deltaY != 0)
-            {
-                // Calculate new positions for reselection
-                QList<QLCPoint> newPositions;
-                foreach (const QLCPoint& pt, m_dragSelectedPoints)
-                    newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
-                
-                moveSelectedHeads(deltaX, deltaY);
-                updateTable();
-                reselectPoints(newPositions);
-            }
-            else
-            {
-                // Click without move - restore selection
-                reselectPoints(m_dragSelectedPoints);
-            }
+            // Just track the movement, actual move happens on release
+            return true;
         }
         
-        m_dragSelectedPoints.clear();
-        return true;
+        if (event->type() == QEvent::MouseButtonRelease && m_dragging)
+        {
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            m_dragging = false;
+            
+            QPoint endCell = cellAtPos(mouseEvent->pos());
+            if (endCell.x() >= 0 && endCell.y() >= 0)
+            {
+                int deltaX = endCell.x() - m_dragStartCell.x();
+                int deltaY = endCell.y() - m_dragStartCell.y();
+                
+                if (deltaX != 0 || deltaY != 0)
+                {
+                    // Calculate new positions for reselection
+                    QList<QLCPoint> newPositions;
+                    foreach (const QLCPoint& pt, m_dragSelectedPoints)
+                        newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
+                    
+                    moveSelectedHeads(deltaX, deltaY);
+                    updateTable();
+                    reselectPoints(newPositions);
+                }
+                else
+                {
+                    // Click without move - restore selection
+                    reselectPoints(m_dragSelectedPoints);
+                }
+            }
+            
+            m_dragSelectedPoints.clear();
+            return true;
+        }
     }
     
     return QWidget::eventFilter(obj, event);
@@ -204,11 +205,9 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
 
 QPoint FixtureGroupEditor::cellAtPos(const QPoint& pos) const
 {
-    // Get the viewport position
-    QPoint viewportPos = m_table->viewport()->mapFrom(m_table, pos);
-    
-    int row = m_table->rowAt(viewportPos.y());
-    int col = m_table->columnAt(viewportPos.x());
+    // pos is already in viewport coordinates when coming from viewport events
+    int row = m_table->rowAt(pos.y());
+    int col = m_table->columnAt(pos.x());
     
     return QPoint(col, row);
 }
