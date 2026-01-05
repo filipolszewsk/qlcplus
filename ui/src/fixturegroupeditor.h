@@ -21,6 +21,7 @@
 #define FIXTUREGROUPEDITOR_H
 
 #include <QWidget>
+#include <QKeyEvent>
 
 #include "ui_fixturegroupeditor.h"
 #include "qlcpoint.h"
@@ -43,6 +44,9 @@ public:
 private:
     void updateTable();
     void addFixtureHeads(Qt::ArrowType direction);
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
     void slotNameEdited(const QString& text);
@@ -68,8 +72,6 @@ private:
     Doc* m_doc;          //! The QLC engine object
     int m_row;           //! Currently selected row
     int m_column;        //! Currently selected column
-    QLCPoint m_dragStartPoint; //! Starting point for drag operation
-    bool m_isDragging;         //! Flag to track drag state
 };
 
 /** @} */

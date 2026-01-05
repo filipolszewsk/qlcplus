@@ -22,6 +22,7 @@
 #include <QSettings>
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QKeyEvent>
 #include <QDebug>
 
 #include "fixturegroupeditor.h"
@@ -41,8 +42,6 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     , m_doc(doc)
     , m_row(0)
     , m_column(0)
-    , m_dragStartPoint(-1, -1)
-    , m_isDragging(false)
 {
     Q_ASSERT(grp != NULL);
     Q_ASSERT(doc != NULL);
@@ -74,11 +73,55 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_table->setIconSize(QSize(20, 20));
+    
+    // Install event filter to catch arrow keys for moving selected fixtures
+    m_table->installEventFilter(this);
+    
     updateTable();
 }
 
 FixtureGroupEditor::~FixtureGroupEditor()
 {
+}
+
+bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_table && event->type() == QEvent::KeyPress)
+    {
+        QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+        
+        // Check if we have multiple fixtures selected
+        QList<QLCPoint> selectedPoints = getSelectedPoints();
+        if (selectedPoints.size() > 1)
+        {
+            int deltaX = 0;
+            int deltaY = 0;
+            
+            switch (keyEvent->key())
+            {
+                case Qt::Key_Left:
+                    deltaX = -1;
+                    break;
+                case Qt::Key_Right:
+                    deltaX = 1;
+                    break;
+                case Qt::Key_Up:
+                    deltaY = -1;
+                    break;
+                case Qt::Key_Down:
+                    deltaY = 1;
+                    break;
+                default:
+                    return QWidget::eventFilter(obj, event);
+            }
+            
+            moveSelectedHeads(deltaX, deltaY);
+            updateTable();
+            return true; // Event handled
+        }
+    }
+    
+    return QWidget::eventFilter(obj, event);
 }
 
 void FixtureGroupEditor::updateTable()
@@ -215,63 +258,28 @@ void FixtureGroupEditor::slotCellActivated(int row, int column)
 {
     m_row = row;
     m_column = column;
-    
-    // Store drag start point for multi-selection drag
-    m_dragStartPoint = QLCPoint(column, row);
-    m_isDragging = true;
 
     // Enable remove button if any selected cell has a fixture
-    bool hasFixture = false;
-    foreach (QTableWidgetItem* item, m_table->selectedItems())
-    {
-        if (item != NULL)
-        {
-            hasFixture = true;
-            break;
-        }
-    }
-    m_removeButton->setEnabled(hasFixture);
+    QList<QLCPoint> selectedPoints = getSelectedPoints();
+    m_removeButton->setEnabled(!selectedPoints.isEmpty());
 }
 
 void FixtureGroupEditor::slotCellChanged(int row, int column)
 {
+    // This is now only called for single-cell internal operations
+    // Multi-selection movement is handled by arrow keys via eventFilter
     if (row < 0 || column < 0)
     {
         updateTable();
         return;
     }
 
-    if (!m_isDragging || m_dragStartPoint.x() < 0)
-    {
-        updateTable();
-        return;
-    }
-
-    // Calculate movement delta
-    int deltaX = column - m_dragStartPoint.x();
-    int deltaY = row - m_dragStartPoint.y();
+    // Single cell swap (legacy behavior)
+    QLCPoint from(m_column, m_row);
+    QLCPoint to(column, row);
     
-    if (deltaX == 0 && deltaY == 0)
-        return;
-
-    // Get all selected points that contain fixtures
-    QList<QLCPoint> selectedPoints = getSelectedPoints();
-    
-    if (selectedPoints.isEmpty())
-    {
-        // Fallback to single cell behavior
-        QLCPoint from(m_column, m_row);
-        QLCPoint to(column, row);
+    if (from != to)
         m_grp->swap(from, to);
-    }
-    else
-    {
-        // Move all selected heads
-        moveSelectedHeads(deltaX, deltaY);
-    }
-
-    m_isDragging = false;
-    m_dragStartPoint = QLCPoint(-1, -1);
 
     updateTable();
     m_table->setCurrentCell(row, column);
