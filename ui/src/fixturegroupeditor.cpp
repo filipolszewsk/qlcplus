@@ -44,8 +44,8 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     , m_row(0)
     , m_column(0)
     , m_dragging(false)
-    , m_dragStartPos()
     , m_dragStartCell(-1, -1)
+    , m_dragCurrentCell(-1, -1)
 {
     Q_ASSERT(grp != NULL);
     Q_ASSERT(doc != NULL);
@@ -132,7 +132,7 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
         }
     }
     
-    // Handle mouse drag & drop for multi-selection (on viewport)
+    // Handle mouse drag & drop (on viewport)
     if (obj == m_table->viewport())
     {
         if (event->type() == QEvent::MouseButtonPress)
@@ -147,13 +147,24 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
                     QList<QLCPoint> selectedPoints = getSelectedPoints();
                     QLCPoint clickedPoint(cell.x(), cell.y());
                     
-                    if (selectedPoints.contains(clickedPoint) && selectedPoints.size() > 1)
+                    // Start drag if clicking on a selected fixture (even single)
+                    if (selectedPoints.contains(clickedPoint) && !selectedPoints.isEmpty())
                     {
-                        // Start drag operation
+                        // Store original state for live preview
                         m_dragging = true;
-                        m_dragStartPos = mouseEvent->pos();
                         m_dragStartCell = cell;
-                        m_dragSelectedPoints = selectedPoints;
+                        m_dragCurrentCell = cell;
+                        m_dragOriginalPoints = selectedPoints;
+                        
+                        // Save original heads for potential restore
+                        m_dragOriginalHeads.clear();
+                        QMap<QLCPoint, GroupHead> headsMap = m_grp->headsMap();
+                        foreach (const QLCPoint& pt, selectedPoints)
+                        {
+                            if (headsMap.contains(pt))
+                                m_dragOriginalHeads[pt] = headsMap[pt];
+                        }
+                        
                         return true; // Consume event to prevent default selection change
                     }
                 }
@@ -162,40 +173,73 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
         
         if (event->type() == QEvent::MouseMove && m_dragging)
         {
-            // Just track the movement, actual move happens on release
+            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+            QPoint cell = cellAtPos(mouseEvent->pos());
+            
+            // Only update if cell changed
+            if (cell.x() >= 0 && cell.y() >= 0 && cell != m_dragCurrentCell)
+            {
+                int deltaX = cell.x() - m_dragCurrentCell.x();
+                int deltaY = cell.y() - m_dragCurrentCell.y();
+                
+                // Try to move - if successful, update current cell
+                QList<QLCPoint> currentPoints = getSelectedPoints();
+                if (!currentPoints.isEmpty())
+                {
+                    // Check bounds before moving
+                    bool canMove = true;
+                    int gridWidth = m_grp->size().width();
+                    int gridHeight = m_grp->size().height();
+                    
+                    foreach (const QLCPoint& pt, currentPoints)
+                    {
+                        int newX = pt.x() + deltaX;
+                        int newY = pt.y() + deltaY;
+                        if (newX < 0 || newX >= gridWidth || newY < 0 || newY >= gridHeight)
+                        {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canMove)
+                    {
+                        // Calculate new positions for reselection
+                        QList<QLCPoint> newPositions;
+                        foreach (const QLCPoint& pt, currentPoints)
+                            newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
+                        
+                        moveSelectedHeads(deltaX, deltaY);
+                        updateTable();
+                        reselectPoints(newPositions);
+                        m_dragCurrentCell = cell;
+                    }
+                }
+            }
             return true;
         }
         
         if (event->type() == QEvent::MouseButtonRelease && m_dragging)
         {
-            QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
             m_dragging = false;
             
-            QPoint endCell = cellAtPos(mouseEvent->pos());
-            if (endCell.x() >= 0 && endCell.y() >= 0)
-            {
-                int deltaX = endCell.x() - m_dragStartCell.x();
-                int deltaY = endCell.y() - m_dragStartCell.y();
-                
-                if (deltaX != 0 || deltaY != 0)
-                {
-                    // Calculate new positions for reselection
-                    QList<QLCPoint> newPositions;
-                    foreach (const QLCPoint& pt, m_dragSelectedPoints)
-                        newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
-                    
-                    moveSelectedHeads(deltaX, deltaY);
-                    updateTable();
-                    reselectPoints(newPositions);
-                }
-                else
-                {
-                    // Click without move - restore selection
-                    reselectPoints(m_dragSelectedPoints);
-                }
-            }
+            // Calculate final positions for selection
+            int totalDeltaX = m_dragCurrentCell.x() - m_dragStartCell.x();
+            int totalDeltaY = m_dragCurrentCell.y() - m_dragStartCell.y();
             
-            m_dragSelectedPoints.clear();
+            QList<QLCPoint> finalPositions;
+            foreach (const QLCPoint& pt, m_dragOriginalPoints)
+                finalPositions.append(QLCPoint(pt.x() + totalDeltaX, pt.y() + totalDeltaY));
+            
+            // Ensure selection is correct
+            reselectPoints(finalPositions);
+            
+            // Clear drag state
+            m_dragOriginalPoints.clear();
+            m_dragOriginalHeads.clear();
+            m_dragStartCell = QPoint(-1, -1);
+            m_dragCurrentCell = QPoint(-1, -1);
+            
             return true;
         }
     }

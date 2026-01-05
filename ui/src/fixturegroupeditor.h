@@ -25,6 +25,7 @@
 
 #include "ui_fixturegroupeditor.h"
 #include "qlcpoint.h"
+#include "fixturegroup.h"
 
 class FixtureGroup;
 class Doc;
@@ -77,9 +78,10 @@ private:
     
     // Drag & drop state
     bool m_dragging;
-    QPoint m_dragStartPos;
     QPoint m_dragStartCell;
-    QList<QLCPoint> m_dragSelectedPoints;
+    QPoint m_dragCurrentCell;
+    QList<QLCPoint> m_dragOriginalPoints;  // Original positions at drag start
+    QMap<QLCPoint, GroupHead> m_dragOriginalHeads;  // Original heads for restore
 };
 
 /** @} */
