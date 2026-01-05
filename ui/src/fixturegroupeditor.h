@@ -66,12 +66,20 @@ private slots:
 private:
     void moveSelectedHeads(int deltaX, int deltaY);
     QList<QLCPoint> getSelectedPoints() const;
+    void reselectPoints(const QList<QLCPoint>& points);
+    QPoint cellAtPos(const QPoint& pos) const;
 
 private:
     FixtureGroup* m_grp; //! The group being edited
     Doc* m_doc;          //! The QLC engine object
     int m_row;           //! Currently selected row
     int m_column;        //! Currently selected column
+    
+    // Drag & drop state
+    bool m_dragging;
+    QPoint m_dragStartPos;
+    QPoint m_dragStartCell;
+    QList<QLCPoint> m_dragSelectedPoints;
 };
 
 /** @} */

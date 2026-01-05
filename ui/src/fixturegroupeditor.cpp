@@ -23,6 +23,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QDebug>
 
 #include "fixturegroupeditor.h"
@@ -42,6 +43,9 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     , m_doc(doc)
     , m_row(0)
     , m_column(0)
+    , m_dragging(false)
+    , m_dragStartPos()
+    , m_dragStartCell(-1, -1)
 {
     Q_ASSERT(grp != NULL);
     Q_ASSERT(doc != NULL);
@@ -86,13 +90,16 @@ FixtureGroupEditor::~FixtureGroupEditor()
 
 bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
 {
-    if (obj == m_table && event->type() == QEvent::KeyPress)
+    if (obj != m_table)
+        return QWidget::eventFilter(obj, event);
+    
+    // Handle keyboard arrow keys
+    if (event->type() == QEvent::KeyPress)
     {
         QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-        
-        // Check if we have multiple fixtures selected
         QList<QLCPoint> selectedPoints = getSelectedPoints();
-        if (selectedPoints.size() > 1)
+        
+        if (!selectedPoints.isEmpty())
         {
             int deltaX = 0;
             int deltaY = 0;
@@ -115,13 +122,122 @@ bool FixtureGroupEditor::eventFilter(QObject* obj, QEvent* event)
                     return QWidget::eventFilter(obj, event);
             }
             
+            // Calculate new positions for reselection
+            QList<QLCPoint> newPositions;
+            foreach (const QLCPoint& pt, selectedPoints)
+                newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
+            
             moveSelectedHeads(deltaX, deltaY);
             updateTable();
-            return true; // Event handled
+            reselectPoints(newPositions);
+            return true;
         }
     }
     
+    // Handle mouse drag & drop for multi-selection
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton)
+        {
+            QPoint cell = cellAtPos(mouseEvent->pos());
+            if (cell.x() >= 0 && cell.y() >= 0)
+            {
+                // Check if clicking on a selected cell with fixture
+                QList<QLCPoint> selectedPoints = getSelectedPoints();
+                QLCPoint clickedPoint(cell.x(), cell.y());
+                
+                if (selectedPoints.contains(clickedPoint) && selectedPoints.size() > 1)
+                {
+                    // Start drag operation
+                    m_dragging = true;
+                    m_dragStartPos = mouseEvent->pos();
+                    m_dragStartCell = cell;
+                    m_dragSelectedPoints = selectedPoints;
+                    return true; // Consume event to prevent default selection change
+                }
+            }
+        }
+    }
+    
+    if (event->type() == QEvent::MouseMove && m_dragging)
+    {
+        // Just track the movement, actual move happens on release
+        return true;
+    }
+    
+    if (event->type() == QEvent::MouseButtonRelease && m_dragging)
+    {
+        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
+        m_dragging = false;
+        
+        QPoint endCell = cellAtPos(mouseEvent->pos());
+        if (endCell.x() >= 0 && endCell.y() >= 0)
+        {
+            int deltaX = endCell.x() - m_dragStartCell.x();
+            int deltaY = endCell.y() - m_dragStartCell.y();
+            
+            if (deltaX != 0 || deltaY != 0)
+            {
+                // Calculate new positions for reselection
+                QList<QLCPoint> newPositions;
+                foreach (const QLCPoint& pt, m_dragSelectedPoints)
+                    newPositions.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
+                
+                moveSelectedHeads(deltaX, deltaY);
+                updateTable();
+                reselectPoints(newPositions);
+            }
+            else
+            {
+                // Click without move - restore selection
+                reselectPoints(m_dragSelectedPoints);
+            }
+        }
+        
+        m_dragSelectedPoints.clear();
+        return true;
+    }
+    
     return QWidget::eventFilter(obj, event);
+}
+
+QPoint FixtureGroupEditor::cellAtPos(const QPoint& pos) const
+{
+    // Get the viewport position
+    QPoint viewportPos = m_table->viewport()->mapFrom(m_table, pos);
+    
+    int row = m_table->rowAt(viewportPos.y());
+    int col = m_table->columnAt(viewportPos.x());
+    
+    return QPoint(col, row);
+}
+
+void FixtureGroupEditor::reselectPoints(const QList<QLCPoint>& points)
+{
+    m_table->clearSelection();
+    
+    int gridWidth = m_grp->size().width();
+    int gridHeight = m_grp->size().height();
+    
+    foreach (const QLCPoint& pt, points)
+    {
+        int col = pt.x();
+        int row = pt.y();
+        
+        // Only select if within bounds
+        if (col >= 0 && col < gridWidth && row >= 0 && row < gridHeight)
+        {
+            QTableWidgetItem* item = m_table->item(row, col);
+            if (item != NULL)
+                item->setSelected(true);
+            else
+            {
+                // Select the cell even if empty (for consistency)
+                m_table->setCurrentCell(row, col, QItemSelectionModel::Select);
+            }
+        }
+    }
 }
 
 void FixtureGroupEditor::updateTable()
