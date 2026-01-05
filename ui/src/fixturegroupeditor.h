@@ -23,6 +23,7 @@
 #include <QWidget>
 
 #include "ui_fixturegroupeditor.h"
+#include "qlcpoint.h"
 
 class FixtureGroup;
 class Doc;
@@ -59,10 +60,16 @@ private slots:
     void slotResized();
 
 private:
+    void moveSelectedHeads(int deltaX, int deltaY);
+    QList<QLCPoint> getSelectedPoints() const;
+
+private:
     FixtureGroup* m_grp; //! The group being edited
     Doc* m_doc;          //! The QLC engine object
     int m_row;           //! Currently selected row
     int m_column;        //! Currently selected column
+    QLCPoint m_dragStartPoint; //! Starting point for drag operation
+    bool m_isDragging;         //! Flag to track drag state
 };
 
 /** @} */

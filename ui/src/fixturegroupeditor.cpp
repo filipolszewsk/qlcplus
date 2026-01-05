@@ -39,6 +39,10 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     : QWidget(parent)
     , m_grp(grp)
     , m_doc(doc)
+    , m_row(0)
+    , m_column(0)
+    , m_dragStartPoint(-1, -1)
+    , m_isDragging(false)
 {
     Q_ASSERT(grp != NULL);
     Q_ASSERT(doc != NULL);
@@ -184,23 +188,49 @@ void FixtureGroupEditor::slotUpClicked()
 
 void FixtureGroupEditor::slotRemoveFixtureClicked()
 {
-    QTableWidgetItem* item = m_table->currentItem();
-    if (item == NULL)
-        return;
+    QList<QLCPoint> selectedPoints = getSelectedPoints();
+    
+    if (selectedPoints.isEmpty())
+    {
+        // Fallback to single cell behavior
+        QTableWidgetItem* item = m_table->currentItem();
+        if (item == NULL)
+            return;
 
-    if (m_grp->resignHead(QLCPoint(m_column, m_row)) == true)
-        delete item;
+        if (m_grp->resignHead(QLCPoint(m_column, m_row)) == true)
+            delete item;
+    }
+    else
+    {
+        // Remove all selected fixtures
+        foreach (const QLCPoint& pt, selectedPoints)
+        {
+            m_grp->resignHead(pt);
+        }
+        updateTable();
+    }
 }
 
 void FixtureGroupEditor::slotCellActivated(int row, int column)
 {
     m_row = row;
     m_column = column;
+    
+    // Store drag start point for multi-selection drag
+    m_dragStartPoint = QLCPoint(column, row);
+    m_isDragging = true;
 
-    if (m_table->currentItem() == NULL)
-        m_removeButton->setEnabled(false);
-    else
-        m_removeButton->setEnabled(true);
+    // Enable remove button if any selected cell has a fixture
+    bool hasFixture = false;
+    foreach (QTableWidgetItem* item, m_table->selectedItems())
+    {
+        if (item != NULL)
+        {
+            hasFixture = true;
+            break;
+        }
+    }
+    m_removeButton->setEnabled(hasFixture);
 }
 
 void FixtureGroupEditor::slotCellChanged(int row, int column)
@@ -211,18 +241,37 @@ void FixtureGroupEditor::slotCellChanged(int row, int column)
         return;
     }
 
-    QMap <QLCPoint,GroupHead> hash = m_grp->headsMap();
-    QLCPoint from(m_column, m_row);
-    QLCPoint to(column, row);
-    GroupHead fromHead;
-    GroupHead toHead;
+    if (!m_isDragging || m_dragStartPoint.x() < 0)
+    {
+        updateTable();
+        return;
+    }
 
-    if (hash.contains(from) == true)
-        fromHead = hash[from];
-    if (hash.contains(to) == true)
-        toHead = hash[to];
+    // Calculate movement delta
+    int deltaX = column - m_dragStartPoint.x();
+    int deltaY = row - m_dragStartPoint.y();
+    
+    if (deltaX == 0 && deltaY == 0)
+        return;
 
-    m_grp->swap(from, to);
+    // Get all selected points that contain fixtures
+    QList<QLCPoint> selectedPoints = getSelectedPoints();
+    
+    if (selectedPoints.isEmpty())
+    {
+        // Fallback to single cell behavior
+        QLCPoint from(m_column, m_row);
+        QLCPoint to(column, row);
+        m_grp->swap(from, to);
+    }
+    else
+    {
+        // Move all selected heads
+        moveSelectedHeads(deltaX, deltaY);
+    }
+
+    m_isDragging = false;
+    m_dragStartPoint = QLCPoint(-1, -1);
 
     updateTable();
     m_table->setCurrentCell(row, column);
@@ -292,5 +341,125 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
 
         updateTable();
         m_table->setCurrentCell(row, col);
+    }
+}
+
+QList<QLCPoint> FixtureGroupEditor::getSelectedPoints() const
+{
+    QList<QLCPoint> points;
+    QMap<QLCPoint, GroupHead> headsMap = m_grp->headsMap();
+    
+    foreach (QTableWidgetItem* item, m_table->selectedItems())
+    {
+        if (item == NULL)
+            continue;
+            
+        int col = item->column();
+        int row = item->row();
+        QLCPoint pt(col, row);
+        
+        // Only include points that have fixtures
+        if (headsMap.contains(pt))
+            points.append(pt);
+    }
+    
+    return points;
+}
+
+void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
+{
+    QList<QLCPoint> selectedPoints = getSelectedPoints();
+    if (selectedPoints.isEmpty())
+        return;
+
+    int gridWidth = m_grp->size().width();
+    int gridHeight = m_grp->size().height();
+
+    // Check if all new positions are within grid bounds
+    foreach (const QLCPoint& pt, selectedPoints)
+    {
+        int newX = pt.x() + deltaX;
+        int newY = pt.y() + deltaY;
+        
+        if (newX < 0 || newX >= gridWidth || newY < 0 || newY >= gridHeight)
+        {
+            qDebug() << "Move blocked: destination out of bounds";
+            return;
+        }
+    }
+
+    // Collect source heads and clear their positions
+    QMap<QLCPoint, GroupHead> headsToMove;
+    QMap<QLCPoint, GroupHead> currentMap = m_grp->headsMap();
+    
+    foreach (const QLCPoint& pt, selectedPoints)
+    {
+        if (currentMap.contains(pt))
+        {
+            headsToMove[pt] = currentMap[pt];
+        }
+    }
+
+    // Calculate target positions and collect heads that need to be swapped
+    QMap<QLCPoint, GroupHead> headsToSwap;  // heads at target positions not in selection
+    QList<QLCPoint> targetPoints;
+    
+    foreach (const QLCPoint& pt, selectedPoints)
+    {
+        QLCPoint targetPt(pt.x() + deltaX, pt.y() + deltaY);
+        targetPoints.append(targetPt);
+        
+        // If target has a head that's not part of our selection, save it for swap
+        if (currentMap.contains(targetPt) && !selectedPoints.contains(targetPt))
+        {
+            headsToSwap[targetPt] = currentMap[targetPt];
+        }
+    }
+
+    // Clear source positions
+    foreach (const QLCPoint& pt, selectedPoints)
+    {
+        m_grp->resignHead(pt);
+    }
+
+    // Clear target positions that had heads not in selection
+    foreach (const QLCPoint& pt, headsToSwap.keys())
+    {
+        m_grp->resignHead(pt);
+    }
+
+    // Move heads to new positions
+    QMapIterator<QLCPoint, GroupHead> it(headsToMove);
+    while (it.hasNext())
+    {
+        it.next();
+        QLCPoint newPt(it.key().x() + deltaX, it.key().y() + deltaY);
+        m_grp->assignHead(newPt, it.value());
+    }
+
+    // Swap: place displaced heads at original positions of moved heads
+    if (!headsToSwap.isEmpty())
+    {
+        QMapIterator<QLCPoint, GroupHead> swapIt(headsToSwap);
+        QList<QLCPoint> sourcePositions = headsToMove.keys();
+        int i = 0;
+        
+        while (swapIt.hasNext() && i < sourcePositions.size())
+        {
+            swapIt.next();
+            // Find an empty source position
+            while (i < sourcePositions.size())
+            {
+                QLCPoint sourcePt = sourcePositions[i];
+                // Check if this source position is not a target for another head
+                if (!targetPoints.contains(sourcePt))
+                {
+                    m_grp->assignHead(sourcePt, swapIt.value());
+                    break;
+                }
+                i++;
+            }
+            i++;
+        }
     }
 }
