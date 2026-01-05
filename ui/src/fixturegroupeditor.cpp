@@ -557,6 +557,13 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
 
     QMap<QLCPoint, GroupHead> currentMap = m_grp->headsMap();
     
+    // Calculate target positions
+    QList<QLCPoint> targetPoints;
+    foreach (const QLCPoint& pt, selectedPoints)
+    {
+        targetPoints.append(QLCPoint(pt.x() + deltaX, pt.y() + deltaY));
+    }
+    
     // Collect heads to move (from selected positions)
     QMap<QLCPoint, GroupHead> headsToMove;
     foreach (const QLCPoint& pt, selectedPoints)
@@ -566,17 +573,23 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
     }
 
     // Collect heads that will be displaced (at target positions, not in selection)
-    // Map: target position -> head that needs to move to corresponding source position
-    QMap<QLCPoint, GroupHead> headsToSwap;
-    foreach (const QLCPoint& pt, selectedPoints)
+    QList<QPair<QLCPoint, GroupHead>> headsToSwap;
+    foreach (const QLCPoint& targetPt, targetPoints)
     {
-        QLCPoint targetPt(pt.x() + deltaX, pt.y() + deltaY);
-        
         // If target has a head that's not part of our selection, it needs to swap
         if (currentMap.contains(targetPt) && !selectedPoints.contains(targetPt))
         {
-            headsToSwap[targetPt] = currentMap[targetPt];
+            headsToSwap.append(qMakePair(targetPt, currentMap[targetPt]));
         }
+    }
+    
+    // Calculate "free" source positions = source positions that are NOT target positions
+    // These are the positions where displaced heads can go
+    QList<QLCPoint> freeSourcePositions;
+    foreach (const QLCPoint& srcPt, selectedPoints)
+    {
+        if (!targetPoints.contains(srcPt))
+            freeSourcePositions.append(srcPt);
     }
 
     // Clear all affected positions first
@@ -584,9 +597,9 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
     {
         m_grp->resignHead(pt);
     }
-    foreach (const QLCPoint& pt, headsToSwap.keys())
+    for (int i = 0; i < headsToSwap.size(); i++)
     {
-        m_grp->resignHead(pt);
+        m_grp->resignHead(headsToSwap[i].first);
     }
 
     // Move selected heads to their new positions
@@ -598,15 +611,19 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
         m_grp->assignHead(newPt, moveIt.value());
     }
 
-    // Swap displaced heads to their corresponding source positions
-    // A head at target position (tx, ty) goes to source position (tx - deltaX, ty - deltaY)
-    QMapIterator<QLCPoint, GroupHead> swapIt(headsToSwap);
-    while (swapIt.hasNext())
+    // Place displaced heads in free source positions
+    int freeIdx = 0;
+    for (int i = 0; i < headsToSwap.size(); i++)
     {
-        swapIt.next();
-        QLCPoint targetPt = swapIt.key();
-        // Calculate the corresponding source position (inverse of the move)
-        QLCPoint sourcePt(targetPt.x() - deltaX, targetPt.y() - deltaY);
-        m_grp->assignHead(sourcePt, swapIt.value());
+        QPair<QLCPoint, GroupHead> pair = headsToSwap[i];
+        if (freeIdx < freeSourcePositions.size())
+        {
+            m_grp->assignHead(freeSourcePositions[freeIdx], pair.second);
+            freeIdx++;
+        }
+        else
+        {
+            qDebug() << "Warning: No free position for displaced head at" << pair.first;
+        }
     }
 }
