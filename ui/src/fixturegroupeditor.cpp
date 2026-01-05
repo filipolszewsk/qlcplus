@@ -555,78 +555,58 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
         }
     }
 
-    // Collect source heads and clear their positions
-    QMap<QLCPoint, GroupHead> headsToMove;
     QMap<QLCPoint, GroupHead> currentMap = m_grp->headsMap();
     
+    // Collect heads to move (from selected positions)
+    QMap<QLCPoint, GroupHead> headsToMove;
     foreach (const QLCPoint& pt, selectedPoints)
     {
         if (currentMap.contains(pt))
-        {
             headsToMove[pt] = currentMap[pt];
-        }
     }
 
-    // Calculate target positions and collect heads that need to be swapped
-    QMap<QLCPoint, GroupHead> headsToSwap;  // heads at target positions not in selection
-    QList<QLCPoint> targetPoints;
-    
+    // Collect heads that will be displaced (at target positions, not in selection)
+    // Map: target position -> head that needs to move to corresponding source position
+    QMap<QLCPoint, GroupHead> headsToSwap;
     foreach (const QLCPoint& pt, selectedPoints)
     {
         QLCPoint targetPt(pt.x() + deltaX, pt.y() + deltaY);
-        targetPoints.append(targetPt);
         
-        // If target has a head that's not part of our selection, save it for swap
+        // If target has a head that's not part of our selection, it needs to swap
         if (currentMap.contains(targetPt) && !selectedPoints.contains(targetPt))
         {
             headsToSwap[targetPt] = currentMap[targetPt];
         }
     }
 
-    // Clear source positions
+    // Clear all affected positions first
     foreach (const QLCPoint& pt, selectedPoints)
     {
         m_grp->resignHead(pt);
     }
-
-    // Clear target positions that had heads not in selection
     foreach (const QLCPoint& pt, headsToSwap.keys())
     {
         m_grp->resignHead(pt);
     }
 
-    // Move heads to new positions
-    QMapIterator<QLCPoint, GroupHead> it(headsToMove);
-    while (it.hasNext())
+    // Move selected heads to their new positions
+    QMapIterator<QLCPoint, GroupHead> moveIt(headsToMove);
+    while (moveIt.hasNext())
     {
-        it.next();
-        QLCPoint newPt(it.key().x() + deltaX, it.key().y() + deltaY);
-        m_grp->assignHead(newPt, it.value());
+        moveIt.next();
+        QLCPoint newPt(moveIt.key().x() + deltaX, moveIt.key().y() + deltaY);
+        m_grp->assignHead(newPt, moveIt.value());
     }
 
-    // Swap: place displaced heads at original positions of moved heads
-    if (!headsToSwap.isEmpty())
+    // Swap displaced heads to their corresponding source positions
+    // A head at target position (tx, ty) goes to source position (tx - deltaX, ty - deltaY)
+    QMapIterator<QLCPoint, GroupHead> swapIt(headsToSwap);
+    while (swapIt.hasNext())
     {
-        QMapIterator<QLCPoint, GroupHead> swapIt(headsToSwap);
-        QList<QLCPoint> sourcePositions = headsToMove.keys();
-        int i = 0;
-        
-        while (swapIt.hasNext() && i < sourcePositions.size())
-        {
-            swapIt.next();
-            // Find an empty source position
-            while (i < sourcePositions.size())
-            {
-                QLCPoint sourcePt = sourcePositions[i];
-                // Check if this source position is not a target for another head
-                if (!targetPoints.contains(sourcePt))
-                {
-                    m_grp->assignHead(sourcePt, swapIt.value());
-                    break;
-                }
-                i++;
-            }
-            i++;
-        }
+        swapIt.next();
+        QLCPoint targetPt = swapIt.key();
+        // Calculate the corresponding source position (inverse of the move)
+        QLCPoint sourcePt(targetPt.x() - deltaX, targetPt.y() - deltaY);
+        m_grp->assignHead(sourcePt, swapIt.value());
     }
 }
