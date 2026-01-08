@@ -526,6 +526,8 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
             // m_waveLength: maximum dimmer value (0-255)
             
             // Special case: constant value when waveWidth is 0 or 360
+            // COMMENTED OUT: For 360° we want normal logic with fade in/out, not constant value
+            /*
             if (m_waveWidth == 0.0 || m_waveWidth == 360.0) {
                 float dimmerValue = m_waveLength / 255.0;  // Convert 0-255 to 0-1
                 *x = 0.0;
@@ -533,6 +535,7 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
                 // Don't break - let rotateAndScale be called at the end
             }
             else {
+            */
             
             float widthRadians = (m_waveWidth / 360.0) * M_PI * 2.0;
             float maxValue = m_waveLength / 255.0;  // Scale factor for max value
@@ -576,7 +579,6 @@ void EFX::calculatePoint(float iterator, float *x, float *y) const
             // Convert 0-1 to -1..1 range (required by rotateAndScale)
             *x = 0.0;  // X unused for dimmer
             *y = dimmerValue * 2.0 - 1.0;  // 0-1 → -1..1
-            }
         }
         break;
     }
