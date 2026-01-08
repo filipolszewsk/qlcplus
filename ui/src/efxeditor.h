@@ -121,6 +121,8 @@ private slots:
     void slotRemoveFixtureClicked();
     void slotRaiseFixtureClicked();
     void slotLowerFixtureClicked();
+    void slotCopyClicked();
+    void slotPasteClicked();
 
     void slotParallelRadioToggled(bool state);
     void slotSerialRadioToggled(bool state);
