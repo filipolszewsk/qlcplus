@@ -285,6 +285,13 @@ protected slots:
 
 private:
     FunctionParent functionParent() const;
+    
+    /**
+     * Stop any running EFX or Scene functions and clean up their resources.
+     * This is called when switching from Operate to Design mode or when
+     * changing presets.
+     */
+    void stopRunningFunctions();
 
 protected:
     QHash<QWidget *, VCXYPadPreset *> m_presets;

@@ -842,17 +842,9 @@ QMap<quint32,QString> VCXYPad::presetsMap() const
     return map;
 }
 
-void VCXYPad::slotPresetClicked(bool checked)
+void VCXYPad::stopRunningFunctions()
 {
-    if (mode() == Doc::Design)
-        return;
-
-    QPushButton *btn = qobject_cast<QPushButton*>(sender());
-    VCXYPadPreset *preset = m_presets[btn];
-
-    Q_ASSERT(preset != NULL);
-
-    // stop any previously started EFX
+    // Stop any previously started EFX
     if (!m_efx.isNull() && m_efx->isRunning())
     {
         disconnect(m_efx, SIGNAL(durationChanged(uint)), this, SLOT(slotEFXDurationChanged(uint)));
@@ -865,7 +857,7 @@ void VCXYPad::slotPresetClicked(bool checked)
         m_efxHeightOverrideId = Function::invalidAttributeId();
     }
 
-    // stop any previously started Scene
+    // Stop any previously started Scene
     if (!m_scene.isNull())
     {
         m_scene->stop(functionParent());
@@ -877,6 +869,23 @@ void VCXYPad::slotPresetClicked(bool checked)
         }
         m_fadersMap.clear();
     }
+
+    // Disable EFX preview in the area
+    m_area->enableEFXPreview(false);
+}
+
+void VCXYPad::slotPresetClicked(bool checked)
+{
+    if (mode() == Doc::Design)
+        return;
+
+    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    VCXYPadPreset *preset = m_presets[btn];
+
+    Q_ASSERT(preset != NULL);
+
+    // Stop any previously started EFX or Scene
+    stopRunningFunctions();
 
     // deactivate all previously activated buttons first
     for (QHash<QWidget *, VCXYPadPreset *>::iterator it = m_presets.begin();
@@ -1256,6 +1265,9 @@ void VCXYPad::slotModeChanged(Doc::Mode mode)
     }
     else
     {
+        // When switching from Operate to Design mode, stop all running functions
+        // to prevent them from continuing in the background
+        stopRunningFunctions();
         enableWidgetUI(false);
     }
 
