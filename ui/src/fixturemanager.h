@@ -35,6 +35,7 @@ class QTreeWidget;
 class QTabWidget;
 class OutputMap;
 class QSplitter;
+class QStackedWidget;
 class QAction;
 class QMenu;
 class UniverseGridView;
@@ -165,6 +166,7 @@ private:
 
 private:
     QSplitter* m_splitter;
+    QStackedWidget* m_rightPanel;
     FixtureTreeWidget* m_fixtures_tree;
     QTreeWidget* m_channel_groups_tree;
     QWidget* m_rdmManager;

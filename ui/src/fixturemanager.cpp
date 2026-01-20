@@ -27,6 +27,7 @@
 #include <QMessageBox>
 #include <QToolButton>
 #include <QFileDialog>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QSplitter>
 #include <QToolBar>
@@ -77,6 +78,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_splitter(NULL)
+    , m_rightPanel(NULL)
     , m_fixtures_tree(NULL)
     , m_channel_groups_tree(NULL)
     , m_rdmManager(NULL)
@@ -140,11 +142,36 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     slotModeChanged(m_doc->mode());
 
     QSettings settings;
+    // Clean up any stale settings from previous buggy code
+    settings.remove("fixturemanager/splitterratio");
+    
     QVariant var = settings.value(SETTINGS_SPLITTER);
     if (var.isValid() == true)
+    {
         m_splitter->restoreState(var.toByteArray());
+        
+        // Verify the restored state looks reasonable
+        // If the splitter sizes look wrong, reset to defaults
+        QList<int> sizes = m_splitter->sizes();
+        int total = 0;
+        for (int s : sizes)
+            total += s;
+        
+        // If total size is too small or any visible widget has 0 size, reset
+        if (total < 100)
+        {
+            settings.remove(SETTINGS_SPLITTER);
+            int w = this->width() > 0 ? this->width() : 800;
+            m_splitter->setSizes(QList<int>() << w / 2 << w / 2 << 0);
+        }
+    }
     else
-        m_splitter->setSizes(QList <int> () << int(this->width() / 2) << int(this->width() / 2));
+    {
+        // Default: left panel gets half, right panel gets half
+        // Third widget (universeGridView) starts hidden so gets 0
+        int w = this->width() > 0 ? this->width() : 800;
+        m_splitter->setSizes(QList<int>() << w / 2 << w / 2 << 0);
+    }
 }
 
 FixtureManager::~FixtureManager()
@@ -384,16 +411,25 @@ void FixtureManager::initDataView()
 */
     connect(tabs, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
 
-    /* Create the text view */
-    createInfo();
-
+    // Create right panel as QStackedWidget - this keeps splitter stable with exactly 2 widgets
+    m_rightPanel = new QStackedWidget(this);
+    m_splitter->addWidget(m_rightPanel);
+    
+    // Create info browser and add to stack (index 0)
+    m_info = new QTextBrowser(this);
+    m_rightPanel->addWidget(m_info);
+    
+    // Create universe grid view and add to stack (index 1)
     m_universeGridView = new UniverseGridView(this, m_doc);
-    m_universeGridView->hide();
-    m_splitter->addWidget(m_universeGridView);
+    m_rightPanel->addWidget(m_universeGridView);
     connect(m_universeGridView, SIGNAL(fixtureSelected(quint32)),
             this, SLOT(slotGridFixtureSelected(quint32)));
     connect(m_universeGridView, SIGNAL(fixtureAddressChangeRequested(quint32, quint32)),
             this, SLOT(slotFixtureAddressChangeRequested(quint32, quint32)));
+    
+    // m_groupEditor will be created lazily when a group is selected
+    // Default: show info panel
+    m_rightPanel->setCurrentWidget(m_info);
 
     slotSelectionChanged();
 }
@@ -523,46 +559,29 @@ void FixtureManager::fixtureSelected(quint32 id)
 
 void FixtureManager::fixtureGroupSelected(FixtureGroup* grp)
 {
-    QByteArray state = m_splitter->saveState();
-
-    if (m_info != NULL)
-    {
-        delete m_info;
-        m_info = NULL;
-    }
-
+    // Remove old group editor from stack if exists
     if (m_groupEditor != NULL)
     {
+        m_rightPanel->removeWidget(m_groupEditor);
         delete m_groupEditor;
         m_groupEditor = NULL;
     }
 
+    // Create new group editor and add to stack
     m_groupEditor = new FixtureGroupEditor(grp, m_doc, this);
-    m_splitter->addWidget(m_groupEditor);
-
-    m_splitter->restoreState(state);
+    m_rightPanel->addWidget(m_groupEditor);
+    // Note: setCurrentWidget is called in slotSelectionChanged after this
 }
 
 void FixtureManager::createInfo()
 {
-    QByteArray state = m_splitter->saveState();
-
-    if (m_info != NULL)
+    // m_info is created once in initDataView() and added to m_rightPanel
+    // This function is kept for safety but should not need to do anything
+    if (m_info == NULL)
     {
-        delete m_info;
-        m_info = NULL;
+        m_info = new QTextBrowser(this);
+        m_rightPanel->addWidget(m_info);
     }
-
-    if (m_groupEditor != NULL)
-    {
-        delete m_groupEditor;
-        m_groupEditor = NULL;
-    }
-
-    m_info = new QTextBrowser(this);
-    m_splitter->addWidget(m_info);
-
-    m_splitter->restoreState(state);
 }
 
 void FixtureManager::slotSelectionChanged()
@@ -578,56 +597,33 @@ void FixtureManager::slotSelectionChanged()
         QVariant grpvar = item->data(KColumnName, PROP_GROUP);
         if (fxivar.isValid() == true)
         {
-            // Selected a fixture
-            // Don't hide grid view - let it stay visible
-            // m_universeGridView->hide();  // REMOVED
-            // if (m_info != NULL) m_info->show();  // REMOVED
-            // if (m_groupEditor != NULL) m_groupEditor->show();  // REMOVED
-            
-            // Highlight fixture in grid view
+            // Selected a fixture - show grid view and highlight the fixture
             m_universeGridView->setSelectedFixture(fxivar.toUInt());
-            
+            m_rightPanel->setCurrentWidget(m_universeGridView);
             fixtureSelected(fxivar.toUInt());
         }
         else if (grpvar.isValid() == true)
         {
-            // Selected a group - hide grid, show info
-            m_universeGridView->hide();
-            if (m_info != NULL) m_info->show();
-            if (m_groupEditor != NULL) m_groupEditor->show();
+            // Selected a group - show group editor
             FixtureGroup* grp = m_doc->fixtureGroup(grpvar.toUInt());
             Q_ASSERT(grp != NULL);
             fixtureGroupSelected(grp);
+            m_rightPanel->setCurrentWidget(m_groupEditor);
         }
         else
         {
-
             QVariant uniID = item->data(KColumnName, PROP_UNIVERSE);
             if (uniID.isValid() == true)
             {
-                if (m_info != NULL) m_info->hide();
-                if (m_groupEditor != NULL) m_groupEditor->hide();
+                // Selected a universe - show grid view for that universe
                 m_universeGridView->setUniverse(uniID.toUInt());
-                m_universeGridView->show();
-                
-                // Ensure grid view has reasonable size (not collapsed)
-                QList<int> sizes = m_splitter->sizes();
-                if (sizes.count() >= 2 && sizes.at(1) < 100)
-                {
-                    // Grid is too small or collapsed - give it 50% of space
-                    int totalWidth = m_splitter->width();
-                    m_splitter->setSizes(QList<int>() << totalWidth / 2 << totalWidth / 2);
-                }
+                m_rightPanel->setCurrentWidget(m_universeGridView);
             }
         }
     }
     else
     {
-        // More than one or less than one selected
-        m_universeGridView->hide();
-        if (m_info != NULL) m_info->show();
-        if (m_groupEditor != NULL) m_groupEditor->show();
-
+        // More than one or less than one selected - show info panel
         QString info = "<HTML><BODY>";
         if (selectedCount > 1)
         {
@@ -686,9 +682,8 @@ void FixtureManager::slotSelectionChanged()
         }
         info += "</BODY></HTML>";
 
-        if (m_info == NULL)
-            createInfo();
         m_info->setText(info);
+        m_rightPanel->setCurrentWidget(m_info);
     }
 
     // Enable/disable actions
@@ -746,6 +741,9 @@ void FixtureManager::slotChannelsGroupSelectionChanged()
         m_removeAction->setEnabled(false);
         m_propertiesAction->setEnabled(false);
     }
+    
+    // Always show info panel for channel groups tab
+    m_rightPanel->setCurrentWidget(m_info);
 }
 
 void FixtureManager::slotDoubleClicked(QTreeWidgetItem* item)
@@ -854,8 +852,15 @@ void FixtureManager::slotGridFixtureSelected(quint32 id)
             QVariant grpVar = child->data(KColumnName, PROP_GROUP);
             if (!grpVar.isValid())
             {
+                // Block signals to prevent slotSelectionChanged from hiding the grid
+                // during the programmatic selection change
+                m_fixtures_tree->blockSignals(true);
                 m_fixtures_tree->setCurrentItem(child);
                 child->setSelected(true);
+                m_fixtures_tree->blockSignals(false);
+                
+                // Manually update the grid view highlight (since we blocked signals)
+                m_universeGridView->setSelectedFixture(id);
                 m_fixtures_tree->scrollToItem(child);
                 return;
             }
@@ -872,28 +877,30 @@ void FixtureManager::slotFixtureAddressChangeRequested(quint32 fixtureID, quint3
     // Change the address
     fixture->setAddress(newAddress);
     
+    // Format address string once before iterating
+    // Format like "001 - 008" for fixture with 8 channels
+    QString addressStr;
+    if (fixture->channels() > 1)
+    {
+        addressStr = QString("%1 - %2")
+            .arg(fixture->address() + 1, 3, 10, QChar('0'))
+            .arg(fixture->address() + fixture->channels(), 3, 10, QChar('0'));
+    }
+    else
+    {
+        addressStr = QString("%1").arg(fixture->address() + 1, 3, 10, QChar('0'));
+    }
+    
     // Update the address display in the fixture tree
-    // Use recursive search to find the item (it might be in a group)
+    // Fixture may appear multiple times (under group AND under universe), update ALL occurrences
     QTreeWidgetItemIterator it(m_fixtures_tree);
     while (*it)
     {
         QVariant var = (*it)->data(KColumnName, PROP_ID);
         if (var.isValid() && var.toUInt() == fixtureID)
         {
-            // Format address like "001 - 008" for fixture with 8 channels
-            QString addressStr;
-            if (fixture->channels() > 1)
-            {
-                addressStr = QString("%1 - %2")
-                    .arg(fixture->address() + 1, 3, 10, QChar('0'))
-                    .arg(fixture->address() + fixture->channels(), 3, 10, QChar('0'));
-            }
-            else
-            {
-                addressStr = QString("%1").arg(fixture->address() + 1, 3, 10, QChar('0'));
-            }
             (*it)->setText(KColumnAddress, addressStr);
-            break;
+            // Don't break - continue to update all occurrences of this fixture
         }
         ++it;
     }
