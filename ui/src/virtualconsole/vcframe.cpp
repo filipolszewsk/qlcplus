@@ -834,6 +834,21 @@ void VCFrame::remapInputSource(quint32 oldUni, quint32 oldAddr, quint32 newUni, 
     }
 }
 
+bool VCFrame::hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const
+{
+    // Check frame's own input sources
+    if (VCWidget::hasInputsInRange(universe, address, channels))
+        return true;
+
+    // Check children
+    foreach (VCWidget *child, m_pagesMap.keys())
+    {
+        if (child->hasInputsInRange(universe, address, channels))
+            return true;
+    }
+    return false;
+}
+
 /*****************************************************************************
  * Clipboard
  *****************************************************************************/

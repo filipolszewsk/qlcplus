@@ -712,6 +712,23 @@ void VCWidget::remapInputSource(quint32 oldUni, quint32 oldAddr, quint32 newUni,
     }
 }
 
+bool VCWidget::hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const
+{
+    foreach (QSharedPointer<QLCInputSource> src, m_inputs.values())
+    {
+        if (src.isNull())
+            continue;
+
+        if (src->universe() == universe &&
+            src->channel() >= address &&
+            src->channel() < address + channels)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void VCWidget::sendFeedback(int value, quint8 id)
 {
     /* Send input feedback */

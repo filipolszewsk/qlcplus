@@ -445,6 +445,12 @@ public:
                                   quint32 channels);
 
     /**
+     * Check if this widget has any input sources in the given address range.
+     * Used to determine if remapInputSource would affect any widgets.
+     */
+    virtual bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const;
+
+    /**
      * Send feedback to an external controller.
      *
      * @param value value from 0 to 255 to be sent

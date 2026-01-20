@@ -874,8 +874,18 @@ void FixtureManager::slotFixtureAddressChangeRequested(quint32 fixtureID, quint3
     if (!fixture)
         return;
     
-    // Change the address
-    fixture->setAddress(newAddress);
+    // Save old values for potential VC input remap
+    quint32 oldUniverse = fixture->universe();
+    quint32 oldAddr = fixture->address();
+    quint32 channels = fixture->channels();
+    
+    // Extract universe and address from full address (newAddress = universe * 512 + channel)
+    quint32 newUniverse = newAddress >> 9;      // Upper bits = universe
+    quint32 newAddr = newAddress & 0x01FF;      // Lower 9 bits = address (0-511)
+    
+    // Change the universe and address
+    fixture->setUniverse(newUniverse);
+    fixture->setAddress(newAddr);
     
     // Format address string once before iterating
     // Format like "001 - 008" for fixture with 8 channels
@@ -908,6 +918,25 @@ void FixtureManager::slotFixtureAddressChangeRequested(quint32 fixtureID, quint3
     // Update the grid view
     m_universeGridView->update();
     m_universeGridView->setSelectedFixture(fixtureID);
+    
+    // Ask about VC input remap only if there are widgets using this fixture's channels as external input
+    if ((oldUniverse != newUniverse || oldAddr != newAddr) &&
+        VirtualConsole::instance() != NULL &&
+        VirtualConsole::instance()->contents() != NULL &&
+        VirtualConsole::instance()->contents()->hasInputsInRange(oldUniverse, oldAddr, channels))
+    {
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            tr("Update Virtual Console"),
+            tr("Do you want to update referring Virtual Console input widgets?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+            
+        if (reply == QMessageBox::Yes)
+        {
+            VirtualConsole::instance()->contents()->remapInputSource(
+                oldUniverse, oldAddr, newUniverse, newAddr, channels);
+        }
+    }
 }
 
 QString FixtureManager::fixtureInfoStyleSheetHeader()

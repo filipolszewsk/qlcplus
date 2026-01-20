@@ -177,6 +177,9 @@ public:
                           quint32 newUni, quint32 newAddr, 
                           quint32 channels);
 
+    /** @reimp */
+    bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const;
+
 public slots:
     void slotPreviousPage();
     void slotNextPage();
