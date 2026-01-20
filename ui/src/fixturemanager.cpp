@@ -42,6 +42,7 @@
 #include "qlcchannel.h"
 #include "qlcfile.h"
 
+#include "universegridview.h"
 #include "createfixturegroup.h"
 #include "fixturegroupeditor.h"
 #include "fixturetreewidget.h"
@@ -80,6 +81,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_channel_groups_tree(NULL)
     , m_rdmManager(NULL)
     , m_info(NULL)
+    , m_universeGridView(NULL)
     , m_groupEditor(NULL)
     , m_currentTabIndex(0)
     , m_addAction(NULL)
@@ -385,6 +387,14 @@ void FixtureManager::initDataView()
     /* Create the text view */
     createInfo();
 
+    m_universeGridView = new UniverseGridView(this, m_doc);
+    m_universeGridView->hide();
+    m_splitter->addWidget(m_universeGridView);
+    connect(m_universeGridView, SIGNAL(fixtureSelected(quint32)),
+            this, SLOT(slotGridFixtureSelected(quint32)));
+    connect(m_universeGridView, SIGNAL(fixtureAddressChangeRequested(quint32, quint32)),
+            this, SLOT(slotFixtureAddressChangeRequested(quint32, quint32)));
+
     slotSelectionChanged();
 }
 
@@ -569,53 +579,55 @@ void FixtureManager::slotSelectionChanged()
         if (fxivar.isValid() == true)
         {
             // Selected a fixture
+            // Don't hide grid view - let it stay visible
+            // m_universeGridView->hide();  // REMOVED
+            // if (m_info != NULL) m_info->show();  // REMOVED
+            // if (m_groupEditor != NULL) m_groupEditor->show();  // REMOVED
+            
+            // Highlight fixture in grid view
+            m_universeGridView->setSelectedFixture(fxivar.toUInt());
+            
             fixtureSelected(fxivar.toUInt());
         }
         else if (grpvar.isValid() == true)
         {
+            // Selected a group - hide grid, show info
+            m_universeGridView->hide();
+            if (m_info != NULL) m_info->show();
+            if (m_groupEditor != NULL) m_groupEditor->show();
             FixtureGroup* grp = m_doc->fixtureGroup(grpvar.toUInt());
             Q_ASSERT(grp != NULL);
             fixtureGroupSelected(grp);
         }
         else
         {
-            QString info = "<HTML><BODY>";
-            QString uniName;
-            double totalWeight = 0;
-            int totalPower = 0;
+
             QVariant uniID = item->data(KColumnName, PROP_UNIVERSE);
             if (uniID.isValid() == true)
-                uniName = m_doc->inputOutputMap()->getUniverseNameByID(uniID.toUInt());
-
-            foreach (Fixture *fixture, m_doc->fixtures())
             {
-                if (fixture == NULL || fixture->universe() != uniID.toUInt() || fixture->fixtureMode() == NULL)
-                    continue;
-
-                QLCFixtureMode *mode = fixture->fixtureMode();
-                totalWeight += mode->physical().weight();
-                totalPower += mode->physical().powerConsumption();
+                if (m_info != NULL) m_info->hide();
+                if (m_groupEditor != NULL) m_groupEditor->hide();
+                m_universeGridView->setUniverse(uniID.toUInt());
+                m_universeGridView->show();
+                
+                // Ensure grid view has reasonable size (not collapsed)
+                QList<int> sizes = m_splitter->sizes();
+                if (sizes.count() >= 2 && sizes.at(1) < 100)
+                {
+                    // Grid is too small or collapsed - give it 50% of space
+                    int totalWidth = m_splitter->width();
+                    m_splitter->setSizes(QList<int>() << totalWidth / 2 << totalWidth / 2);
+                }
             }
-
-            if (m_info == NULL)
-                createInfo();
-
-            info += QString("<H1>%1</H1><P>%2 <B>%3</B></P>")
-                    .arg(uniName).arg(tr("This group contains all fixtures of"))
-                    .arg(uniName);
-
-            info += QString("<BR><P><B>%1</B>: %2Kg<BR><B>%3</B>: %4W</P>")
-                    .arg(tr("Total estimated weight")).arg(QString::number(totalWeight))
-                    .arg(tr("Maximum estimated power consumption")).arg(totalPower);
-
-            info += "</BODY></HTML>";
-
-            m_info->setText(info);
         }
     }
     else
     {
         // More than one or less than one selected
+        m_universeGridView->hide();
+        if (m_info != NULL) m_info->show();
+        if (m_groupEditor != NULL) m_groupEditor->show();
+
         QString info = "<HTML><BODY>";
         if (selectedCount > 1)
         {
@@ -797,6 +809,98 @@ void FixtureManager::selectGroup(quint32 id)
             break;
         }
     }
+
+}
+
+void FixtureManager::slotGridFixtureSelected(quint32 id)
+{
+    // Find the fixture item at universe level (not inside groups)
+    // We want to select the fixture directly under its universe, not in a group
+    
+    Fixture *fixture = m_doc->fixture(id);
+    if (!fixture)
+        return;
+    
+    // Find the universe item first
+    quint32 universeID = fixture->universe();
+    QTreeWidgetItem *universeItem = NULL;
+    
+    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
+    {
+        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
+        QVariant uniVar = item->data(KColumnName, PROP_UNIVERSE);
+        if (uniVar.isValid() && uniVar.toUInt() == universeID)
+        {
+            universeItem = item;
+            break;
+        }
+    }
+    
+    if (!universeItem)
+        return;
+    
+    // Expand universe if collapsed
+    universeItem->setExpanded(true);
+    
+    // Find fixture as direct child of universe
+    for (int i = 0; i < universeItem->childCount(); i++)
+    {
+        QTreeWidgetItem* child = universeItem->child(i);
+        QVariant fxiVar = child->data(KColumnName, PROP_ID);
+        
+        if (fxiVar.isValid() && fxiVar.toUInt() == id)
+        {
+            // Check if this is a direct fixture (not a group)
+            QVariant grpVar = child->data(KColumnName, PROP_GROUP);
+            if (!grpVar.isValid())
+            {
+                m_fixtures_tree->setCurrentItem(child);
+                child->setSelected(true);
+                m_fixtures_tree->scrollToItem(child);
+                return;
+            }
+        }
+    }
+}
+
+void FixtureManager::slotFixtureAddressChangeRequested(quint32 fixtureID, quint32 newAddress)
+{
+    Fixture *fixture = m_doc->fixture(fixtureID);
+    if (!fixture)
+        return;
+    
+    // Change the address
+    fixture->setAddress(newAddress);
+    
+    // Update the address display in the fixture tree
+    // Use recursive search to find the item (it might be in a group)
+    QTreeWidgetItemIterator it(m_fixtures_tree);
+    while (*it)
+    {
+        QVariant var = (*it)->data(KColumnName, PROP_ID);
+        if (var.isValid() && var.toUInt() == fixtureID)
+        {
+            // Format address like "001 - 008" for fixture with 8 channels
+            QString addressStr;
+            if (fixture->channels() > 1)
+            {
+                addressStr = QString("%1 - %2")
+                    .arg(fixture->address() + 1, 3, 10, QChar('0'))
+                    .arg(fixture->address() + fixture->channels(), 3, 10, QChar('0'));
+            }
+            else
+            {
+                addressStr = QString("%1").arg(fixture->address() + 1, 3, 10, QChar('0'));
+            }
+            (*it)->setText(KColumnAddress, addressStr);
+            break;
+        }
+        ++it;
+    }
+    
+    // Update the grid view
+    m_universeGridView->update();
+    m_universeGridView->setSelectedFixture(fixtureID);
 }
 
 QString FixtureManager::fixtureInfoStyleSheetHeader()

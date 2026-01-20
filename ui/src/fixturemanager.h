@@ -37,6 +37,7 @@ class OutputMap;
 class QSplitter;
 class QAction;
 class QMenu;
+class UniverseGridView;
 
 /** @addtogroup ui_fixtures
  * @{
@@ -148,6 +149,10 @@ private slots:
 
     void slotDisplayFixtureInfo(QString &info);
 
+    void slotGridFixtureSelected(quint32 id);
+    
+    void slotFixtureAddressChangeRequested(quint32 fixtureID, quint32 newAddress);
+
 private:
     /** Select a fixture group */
     void selectGroup(quint32 id);
@@ -165,6 +170,7 @@ private:
     QWidget* m_rdmManager;
 
     QTextBrowser* m_info;
+    UniverseGridView* m_universeGridView;
     FixtureGroupEditor* m_groupEditor;
     int m_currentTabIndex;
 

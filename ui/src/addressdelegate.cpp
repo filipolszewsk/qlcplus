@@ -41,7 +41,7 @@ void AddressDelegate::setEditorData(QWidget *editor, const QModelIndex &index) c
     quint32 value = index.model()->data(index, Qt::EditRole).toUInt();
 
     QLineEdit *lineEdit = static_cast<QLineEdit*>(editor);
-    if (value != QLCIOPlugin::invalidIO())
+    if (value != QLCIOPlugin::invalidLine())
     {
         quint32 universe = value >> 16;
         quint32 channel = value & 0xFFFF;
@@ -57,7 +57,7 @@ void AddressDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, c
 {
     QLineEdit *lineEdit = static_cast<QLineEdit*>(editor);
     QString text = lineEdit->text();
-    quint32 address = QLCIOPlugin::invalidIO();
+    quint32 address = QLCIOPlugin::invalidLine();
 
     if (text.isEmpty() == false)
     {
@@ -84,7 +84,7 @@ QString AddressDelegate::displayText(const QVariant &value, const QLocale &local
 {
     Q_UNUSED(locale);
     quint32 address = value.toUInt();
-    if (address != QLCIOPlugin::invalidIO())
+    if (address != QLCIOPlugin::invalidLine())
     {
         quint32 universe = address >> 16;
         quint32 channel = address & 0xFFFF;

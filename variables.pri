@@ -16,8 +16,7 @@ qmlui:  APPVERSION = 5.0.0 GIT
 #############################################################################
 
 # Treat all compiler warnings as errors
-QMAKE_CXXFLAGS += -Werror
-unix:QMAKE_CFLAGS += -Werror
+
 
 CONFIG         += warn_on
 

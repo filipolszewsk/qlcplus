@@ -47,6 +47,7 @@ SOURCES += ../../plugins/interfaces/rdmprotocol.cpp
 
 # Headers
 HEADERS += aboutbox.h \
+           virtualconsole/addressdelegate.h \
            addchannelsgroup.h \
            addfixture.h \
            addresstool.h \
@@ -107,6 +108,7 @@ HEADERS += aboutbox.h \
            simpledeskengine.h \
            speeddial.h \
            speeddialwidget.h \
+           universegridview.h \
            universeitemwidget.h \
            videoeditor.h \
            videoprovider.h
@@ -152,6 +154,7 @@ HEADERS += virtualconsole/addvcbuttonmatrix.h \
            virtualconsole/vclabel.h \
            virtualconsole/vcmatrix.h \
            virtualconsole/vcmatrixcontrol.h \
+           virtualconsole/vcmultipatcheditor.h \
            virtualconsole/vcmatrixpresetselection.h \
            virtualconsole/vcmatrixproperties.h \
            virtualconsole/vcproperties.h \
@@ -220,6 +223,7 @@ FORMS += virtualconsole/addvcbuttonmatrix.ui \
          virtualconsole/vcclockproperties.ui \
          virtualconsole/vccuelistproperties.ui \
          virtualconsole/vcframeproperties.ui \
+         virtualconsole/vcmultipatcheditor.ui \
          virtualconsole/vcmatrixpresetselection.ui \
          virtualconsole/vcmatrixproperties.ui \
          virtualconsole/vcproperties.ui \
@@ -231,6 +235,7 @@ FORMS += virtualconsole/addvcbuttonmatrix.ui \
 
 # Sources
 SOURCES += aboutbox.cpp \
+           addressdelegate.cpp \
            addchannelsgroup.cpp \
            addfixture.cpp \
            addresstool.cpp \
@@ -291,6 +296,7 @@ SOURCES += aboutbox.cpp \
            simpledeskengine.cpp \
            speeddial.cpp \
            speeddialwidget.cpp \
+           universegridview.cpp \
            universeitemwidget.cpp \
            videoeditor.cpp \
            videoprovider.cpp
@@ -336,6 +342,7 @@ SOURCES += virtualconsole/addvcbuttonmatrix.cpp \
            virtualconsole/vclabel.cpp \
            virtualconsole/vcmatrix.cpp \
            virtualconsole/vcmatrixcontrol.cpp \
+           virtualconsole/vcmultipatcheditor.cpp \
            virtualconsole/vcmatrixpresetselection.cpp \
            virtualconsole/vcmatrixproperties.cpp \
            virtualconsole/vcproperties.cpp \
