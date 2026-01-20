@@ -181,6 +181,16 @@
         </property>
        </widget>
       </item>
+      <item row="8" column="0" colspan="3">
+       <widget class="QCheckBox" name="m_updateInputsCheck">
+        <property name="text">
+         <string>Update referring VC inputs</string>
+        </property>
+        <property name="toolTip">
+         <string>Update the external input of the referring Virtual Console widgets</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

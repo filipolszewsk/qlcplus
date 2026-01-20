@@ -686,11 +686,29 @@ QSharedPointer<QLCInputSource> VCWidget::inputSource(quint8 id) const
 void VCWidget::remapInputSources(int pgNum)
 {
     QHash <quint8, QSharedPointer<QLCInputSource> >::iterator it = m_inputs.begin();
-    for (; it != m_inputs.end(); it++)
+    foreach (quint8 key, m_inputs.keys())
     {
-        const QSharedPointer<QLCInputSource>& src(it.value());
-        src->setPage(pgNum);
-        setInputSource(src, it.key());
+        QSharedPointer<QLCInputSource> src = m_inputs.value(key);
+        if (!src.isNull())
+            src->setPage(pgNum);
+    }
+}
+
+void VCWidget::remapInputSource(quint32 oldUni, quint32 oldAddr, quint32 newUni, quint32 newAddr, quint32 channels)
+{
+    foreach (QSharedPointer<QLCInputSource> src, m_inputs.values())
+    {
+        if (src.isNull())
+            continue;
+
+        if (src->universe() == oldUni &&
+            src->channel() >= oldAddr &&
+            src->channel() < oldAddr + channels)
+        {
+            quint32 offset = src->channel() - oldAddr;
+            src->setUniverse(newUni);
+            src->setChannel(newAddr + offset);
+        }
     }
 }
 

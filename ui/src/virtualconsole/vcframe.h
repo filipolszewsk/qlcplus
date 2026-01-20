@@ -172,6 +172,11 @@ public:
     virtual void addWidgetToPageMap(VCWidget *widget);
     virtual void removeWidgetFromPageMap(VCWidget *widget);
 
+    /** @reimp */
+    void remapInputSource(quint32 oldUni, quint32 oldAddr, 
+                          quint32 newUni, quint32 newAddr, 
+                          quint32 channels);
+
 public slots:
     void slotPreviousPage();
     void slotNextPage();

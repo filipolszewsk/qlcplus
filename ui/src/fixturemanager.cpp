@@ -56,6 +56,8 @@
 #include "fixture.h"
 #include "apputil.h"
 #include "doc.h"
+#include "virtualconsole.h"
+#include "vcframe.h"
 
 #define SETTINGS_SPLITTER "fixturemanager/splitterstate"
 
@@ -1396,6 +1398,9 @@ void FixtureManager::editFixtureProperties()
     {
         if (af.invalidAddress() == false)
         {
+            quint32 oldUniverse = fxi->universe();
+            quint32 oldAddress = fxi->address();
+            quint32 oldChannels = fxi->channels();
             bool changed = false;
 
             fxi->blockSignals(true);
@@ -1443,6 +1448,13 @@ void FixtureManager::editFixtureProperties()
             // Emit changed signal
             if (changed)
                 fxi->setID(fxi->id());
+
+            if (af.updateInputs() == true && VirtualConsole::instance() != NULL && VirtualConsole::instance()->contents() != NULL)
+            {
+                 VirtualConsole::instance()->contents()->remapInputSource(oldUniverse, oldAddress,
+                                                                        af.universe(), af.address(),
+                                                                        oldChannels);
+            }
 
             updateView();
             slotSelectionChanged();

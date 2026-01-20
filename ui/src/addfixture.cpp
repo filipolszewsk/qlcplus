@@ -62,6 +62,7 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
 
     setupUi(this);
     m_addrErrorLabel->hide();
+    m_updateInputsCheck->hide();
 
     QAction* action = new QAction(this);
     action->setShortcut(QKeySequence(QKeySequence::Close));
@@ -130,8 +131,10 @@ AddFixture::AddFixture(QWidget* parent, const Doc* doc, const Fixture* fxi)
         {
             m_channelsSpin->setValue(fxi->channels());
             m_modeCombo->setCurrentIndex(index);
+            m_modeCombo->setCurrentIndex(index);
             slotModeActivated(index);
         }
+        m_updateInputsCheck->show();
     }
     else
     {
@@ -218,6 +221,11 @@ quint32 AddFixture::channels() const
 bool AddFixture::invalidAddress()
 {
     return m_invalidAddressFlag;
+}
+
+bool AddFixture::updateInputs() const
+{
+    return m_updateInputsCheck->isChecked();
 }
 
 /*****************************************************************************

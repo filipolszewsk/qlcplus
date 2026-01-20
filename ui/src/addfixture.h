@@ -198,6 +198,10 @@ protected slots:
 
 protected:
     void checkOverlapping();
+
+public:
+    /** Get if the user wants to update the referring VC inputs */
+    bool updateInputs() const;
 };
 
 /** @} */

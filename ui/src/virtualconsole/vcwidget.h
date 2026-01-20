@@ -437,6 +437,14 @@ public:
     void remapInputSources(int pgNum);
 
     /**
+     * Remap input sources from an old address to a new address.
+     * Use when a fixture address changes.
+     */
+    virtual void remapInputSource(quint32 oldUni, quint32 oldAddr,
+                                  quint32 newUni, quint32 newAddr,
+                                  quint32 channels);
+
+    /**
      * Send feedback to an external controller.
      *
      * @param value value from 0 to 255 to be sent

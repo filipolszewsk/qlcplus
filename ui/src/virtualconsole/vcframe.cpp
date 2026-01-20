@@ -822,6 +822,18 @@ void VCFrame::slotInputValueChanged(quint32 universe, quint32 channel, uchar val
     }
 }
 
+void VCFrame::remapInputSource(quint32 oldUni, quint32 oldAddr, quint32 newUni, quint32 newAddr, quint32 channels)
+{
+    // Remap frame's own input sources
+    VCWidget::remapInputSource(oldUni, oldAddr, newUni, newAddr, channels);
+
+    // Remap children
+    foreach (VCWidget *child, m_pagesMap.keys())
+    {
+        child->remapInputSource(oldUni, oldAddr, newUni, newAddr, channels);
+    }
+}
+
 /*****************************************************************************
  * Clipboard
  *****************************************************************************/
