@@ -24,6 +24,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QToolButton>
+#include <QMainWindow>
 #include <QComboBox>
 #include <QWidget>
 #include <QLabel>
@@ -32,6 +33,30 @@
 
 
 #include "vcwidget.h"
+
+class VCFrame;
+
+/*********************************************************************
+ * DetachedVCFrame - Window for detached VCFrame widgets
+ *********************************************************************/
+
+class DetachedVCFrame : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    DetachedVCFrame(QWidget *parent, VCFrame *frame);
+    VCFrame* frame() const { return m_frame; }
+
+protected:
+    void closeEvent(QCloseEvent *ev) override;
+
+signals:
+    void closing(VCFrame *frame);
+
+private:
+    VCFrame *m_frame;
+};
 
 /** @addtogroup ui_vc_widgets
  * @{
@@ -135,6 +160,16 @@ protected slots:
      */
     void slotEnableButtonClicked(bool checked);
 
+    /** Detach frame to a separate window */
+    void slotDetachButtonClicked();
+
+    /** Reattach frame to its original parent (slot for window closing) */
+    void reattachToParent();
+
+public:
+    /** Check if this frame is currently detached */
+    bool isDetached() const;
+
 protected:
     void createHeader();
 
@@ -142,11 +177,18 @@ protected:
     QHBoxLayout *m_hbox;
     QToolButton *m_collapseButton;
     QToolButton *m_enableButton;
+    QToolButton *m_detachButton;
     QLabel *m_label;
     bool m_collapsed;
     bool m_showHeader;
     bool m_showEnableButton;
     int m_width, m_height;
+
+    /** Detached window state */
+    DetachedVCFrame *m_detachedWindow;
+    QWidget *m_originalParent;
+    QPoint m_originalPosition;
+    int m_originalPage;
 
     /*********************************************************************
      * Pages

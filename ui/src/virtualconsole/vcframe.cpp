@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QMapIterator>
 #include <QMetaObject>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QMessageBox>
 #include <QSettings>
@@ -54,6 +55,30 @@
 #include "apputil.h"
 #include "doc.h"
 
+/*********************************************************************
+ * DetachedVCFrame implementation
+ *********************************************************************/
+
+DetachedVCFrame::DetachedVCFrame(QWidget *parent, VCFrame *frame)
+    : QMainWindow(parent)
+    , m_frame(frame)
+{
+    setWindowFlags(Qt::Window);
+    setAttribute(Qt::WA_DeleteOnClose, false);
+}
+
+void DetachedVCFrame::closeEvent(QCloseEvent *ev)
+{
+    emit closing(m_frame);
+    // Don't destroy the frame - it will be reparented
+    setCentralWidget(NULL);
+    QMainWindow::closeEvent(ev);
+}
+
+/*********************************************************************
+ * VCFrame implementation
+ *********************************************************************/
+
 const QSize VCFrame::defaultSize(QSize(200, 200));
 
 const quint8 VCFrame::nextPageInputSourceId = 0;
@@ -66,6 +91,7 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_hbox(NULL)
     , m_collapseButton(NULL)
     , m_enableButton(NULL)
+    , m_detachButton(NULL)
     , m_label(NULL)
     , m_collapsed(false)
     , m_showHeader(true)
@@ -77,6 +103,10 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_prevPageBtn(NULL)
     , m_pageCombo(NULL)
     , m_pagesLoop(false)
+    , m_detachedWindow(NULL)
+    , m_originalParent(NULL)
+    , m_originalPosition(0, 0)
+    , m_originalPage(0)
 {
     /* Set the class name "VCFrame" as the object name as well */
     setObjectName(VCFrame::staticMetaObject.className());
@@ -99,6 +129,13 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
 
 VCFrame::~VCFrame()
 {
+    // Clean up detached window if frame is destroyed while detached
+    if (m_detachedWindow != NULL)
+    {
+        m_detachedWindow->setCentralWidget(NULL);
+        delete m_detachedWindow;
+        m_detachedWindow = NULL;
+    }
 }
 
 bool VCFrame::isBottomFrame()
@@ -218,6 +255,8 @@ void VCFrame::setHeaderVisible(bool enable)
         m_collapseButton->hide();
         m_label->hide();
         m_enableButton->hide();
+        if (m_detachButton)
+            m_detachButton->hide();
     }
     else
     {
@@ -225,6 +264,8 @@ void VCFrame::setHeaderVisible(bool enable)
         m_label->show();
         if (m_showEnableButton)
             m_enableButton->show();
+        if (m_detachButton && !isDetached())
+            m_detachButton->show();
     }
 }
 
@@ -286,6 +327,89 @@ void VCFrame::slotCollapseButtonToggled(bool toggle)
 void VCFrame::slotEnableButtonClicked(bool checked)
 {
     setDisableState(!checked);
+}
+
+void VCFrame::slotDetachButtonClicked()
+{
+    if (isDetached())
+        return;
+
+    // Store original parent information
+    m_originalParent = parentWidget();
+    m_originalPosition = pos();
+    m_originalPage = page();
+
+    // Remove from parent's page map if parent is a VCFrame
+    VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
+    if (parentFrame != NULL)
+        parentFrame->removeWidgetFromPageMap(this);
+
+    // Create detached window
+    m_detachedWindow = new DetachedVCFrame(NULL, this);
+    m_detachedWindow->setWindowTitle(caption().isEmpty() ? tr("Detached Frame") : caption());
+    m_detachedWindow->resize(size().width() + 20, size().height() + 40);
+
+    // Connect closing signal
+    connect(m_detachedWindow, SIGNAL(closing(VCFrame*)),
+            this, SLOT(reattachToParent()));
+
+    // Move this frame to the detached window
+    setParent(m_detachedWindow);
+    m_detachedWindow->setCentralWidget(this);
+
+    // Hide detach button while detached
+    if (m_detachButton)
+        m_detachButton->hide();
+
+    // Show everything
+    m_detachedWindow->show();
+    show();
+
+    qDebug() << "VCFrame detached:" << caption();
+}
+
+bool VCFrame::isDetached() const
+{
+    return m_detachedWindow != NULL;
+}
+
+void VCFrame::reattachToParent()
+{
+    if (!isDetached() || m_originalParent == NULL)
+        return;
+
+    qDebug() << "VCFrame reattaching:" << caption();
+
+    // Disconnect from detached window before it's destroyed
+    disconnect(m_detachedWindow, SIGNAL(closing(VCFrame*)),
+               this, SLOT(reattachToParent()));
+
+    // Remove from detached window (prevent destruction)
+    m_detachedWindow->setCentralWidget(NULL);
+
+    // Reparent to original parent
+    setParent(m_originalParent);
+    move(m_originalPosition);
+    setPage(m_originalPage);
+
+    // Re-add to parent's page map if parent is a VCFrame
+    VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
+    if (parentFrame != NULL)
+        parentFrame->addWidgetToPageMap(this);
+
+    // Show detach button again
+    if (m_detachButton)
+        m_detachButton->show();
+
+    // Show the frame
+    show();
+
+    // Clean up
+    m_detachedWindow->deleteLater();
+    m_detachedWindow = NULL;
+    m_originalParent = NULL;
+
+    m_doc->setModified();
 }
 
 void VCFrame::createHeader()
@@ -353,6 +477,21 @@ void VCFrame::createHeader()
 
     m_hbox->addWidget(m_enableButton);
     connect(m_enableButton, SIGNAL(clicked(bool)), this, SLOT(slotEnableButtonClicked(bool)));
+
+    /* Detach button */
+    m_detachButton = new QToolButton(this);
+    m_detachButton->setStyle(AppUtil::saneStyle());
+    m_detachButton->setIconSize(QSize(32, 32));
+    m_detachButton->setMinimumSize(QSize(32, 32));
+    m_detachButton->setMaximumSize(QSize(32, 32));
+    m_detachButton->setIcon(QIcon(":/detach.png"));
+    m_detachButton->setToolTip(tr("Detach to separate window"));
+    QString dBtnSS = "QToolButton { background-color: #E0DFDF; border: 1px solid gray; border-radius: 3px; padding: 3px; } ";
+    dBtnSS += "QToolButton:pressed { background-color: #919090; border: 1px solid gray; border-radius: 3px; padding: 3px; } ";
+    m_detachButton->setStyleSheet(dBtnSS);
+
+    m_hbox->addWidget(m_detachButton);
+    connect(m_detachButton, SIGNAL(clicked()), this, SLOT(slotDetachButtonClicked()));
 }
 
 /*********************************************************************
