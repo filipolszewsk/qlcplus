@@ -166,12 +166,16 @@ protected slots:
     /** Detach frame to a separate window */
     void slotDetachButtonClicked();
 
-    /** Reattach frame to its original parent (slot for window closing) */
+public slots:
+    /** Reattach frame to its original parent (called from DetachedVCFrame::closeEvent) */
     void slotReattachToParent();
 
 public:
     /** Check if this frame is currently detached */
     bool isDetached() const;
+
+    /** Returns the logical parent (original parent if detached, current parent otherwise) */
+    QWidget* logicalParent() const;
 
     /** Detach frame programmatically (e.g., when loading from XML) */
     void detachToWindow(const QRect &windowGeometry = QRect());
@@ -197,9 +201,12 @@ protected:
     /** Detached window state */
     DetachedVCFrame *m_detachedWindow;
     QWidget *m_originalParent;
-    QPoint m_originalPosition;
+    QRect m_originalGeometry;  /** Original geometry within parent before detaching */
     int m_originalPage;
     QRect m_detachedGeometry;  /** Saved geometry of detached window for persistence */
+    
+    /** List of child frames that are currently detached from this frame */
+    QList<VCFrame*> m_detachedChildren;
 
     /*********************************************************************
      * Pages

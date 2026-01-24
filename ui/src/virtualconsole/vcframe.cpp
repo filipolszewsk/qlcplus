@@ -23,6 +23,7 @@
 #include <QMapIterator>
 #include <QMetaObject>
 #include <QCloseEvent>
+#include <QScrollArea>
 #include <QComboBox>
 #include <QMessageBox>
 #include <QSettings>
@@ -70,12 +71,18 @@ DetachedVCFrame::DetachedVCFrame(QWidget *parent, VCFrame *frame)
 
 void DetachedVCFrame::closeEvent(QCloseEvent *ev)
 {
-    // Save current geometry before closing
     if (m_frame != NULL)
+    {
+        // Save current geometry before closing
         m_frame->setDetachedGeometry(geometry());
+    }
     
+    // Emit signal FIRST (synchronous - slot runs before we continue)
     emit closing(m_frame);
-    // The slot will handle reparenting and will set centralWidget to NULL
+    
+    // THEN set central widget to NULL to prevent destruction
+    setCentralWidget(NULL);
+    
     QMainWindow::closeEvent(ev);
 }
 
@@ -109,7 +116,7 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_pagesLoop(false)
     , m_detachedWindow(NULL)
     , m_originalParent(NULL)
-    , m_originalPosition(0, 0)
+    , m_originalGeometry()
     , m_originalPage(0)
 {
     /* Set the class name "VCFrame" as the object name as well */
@@ -345,17 +352,23 @@ void VCFrame::detachToWindow(const QRect &windowGeometry)
 
     // Store original parent information
     m_originalParent = parentWidget();
-    m_originalPosition = pos();
+    m_originalGeometry = geometry();  // Save full geometry (position + size)
     m_originalPage = page();
 
-    qDebug() << "VCFrame detaching:" << caption() 
-             << "from parent:" << m_originalParent 
-             << "pos:" << m_originalPosition;
+    qDebug() << "=== VCFrame::detachToWindow() ===";
+    qDebug() << "Frame:" << caption() << "ID:" << id();
+    qDebug() << "Original parent:" << m_originalParent;
+    qDebug() << "Original geometry:" << m_originalGeometry;
+    qDebug() << "Original page:" << m_originalPage;
 
     // Remove from parent's page map if parent is a VCFrame
+    // and add to parent's detached children list
     VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
     if (parentFrame != NULL)
+    {
         parentFrame->removeWidgetFromPageMap(this);
+        parentFrame->m_detachedChildren.append(this);
+    }
 
     // Create detached window
     m_detachedWindow = new DetachedVCFrame(NULL, this);
@@ -371,7 +384,7 @@ void VCFrame::detachToWindow(const QRect &windowGeometry)
         m_detachedWindow->resize(size().width() + 20, size().height() + 40);
     }
 
-    // Connect closing signal
+    // Connect closing signal - will be called synchronously from closeEvent
     connect(m_detachedWindow, SIGNAL(closing(VCFrame*)),
             this, SLOT(slotReattachToParent()));
 
@@ -396,6 +409,13 @@ bool VCFrame::isDetached() const
     return m_detachedWindow != NULL;
 }
 
+QWidget* VCFrame::logicalParent() const
+{
+    if (isDetached() && m_originalParent != NULL)
+        return m_originalParent;
+    return parentWidget();
+}
+
 QRect VCFrame::detachedGeometry() const
 {
     if (m_detachedWindow != NULL)
@@ -410,61 +430,100 @@ void VCFrame::setDetachedGeometry(const QRect &geometry)
 
 void VCFrame::slotReattachToParent()
 {
+    qDebug() << "=== VCFrame::slotReattachToParent() START ===";
+    qDebug() << "this:" << this << "caption:" << caption();
+    qDebug() << "sender():" << sender();
+    qDebug() << "m_detachedWindow:" << m_detachedWindow;
+    qDebug() << "m_originalParent:" << m_originalParent;
+    qDebug() << "m_originalGeometry:" << m_originalGeometry;
+
     // Get the detached window from sender
     DetachedVCFrame *window = qobject_cast<DetachedVCFrame*>(sender());
     if (window == NULL)
         window = m_detachedWindow;
     
-    if (window == NULL || m_originalParent == NULL)
+    if (m_originalParent == NULL)
     {
-        qWarning() << "VCFrame::slotReattachToParent() - invalid state";
+        qWarning() << "VCFrame::slotReattachToParent() - m_originalParent is NULL!";
         return;
     }
 
-    qDebug() << "VCFrame reattaching:" << caption() 
-             << "to parent:" << m_originalParent 
-             << "pos:" << m_originalPosition;
+    qDebug() << "Window:" << window << "Starting reparent process...";
 
-    // Remove from detached window (prevent destruction)
-    window->setCentralWidget(NULL);
-
-    // Reparent to original parent
+    // Step 2: Reparent to original parent
     setParent(m_originalParent);
-    
-    // Restore geometry within parent
-    move(m_originalPosition);
+    qDebug() << "Reparented to:" << parentWidget();
+
+    // Step 3: Restore geometry within parent
+    setGeometry(m_originalGeometry);
+    qDebug() << "Geometry set to:" << geometry();
+
+    // Step 4: Restore page
     setPage(m_originalPage);
 
-    // Re-add to parent's page map if parent is a VCFrame
+    // Step 5: Re-add to parent's page map if parent is a VCFrame
+    // and remove from parent's detached children list
     VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
     if (parentFrame != NULL)
     {
         parentFrame->addWidgetToPageMap(this);
-        // Make sure the frame is visible on the correct page
-        if (parentFrame->multipageMode() && m_originalPage != parentFrame->currentPage())
-        {
-            hide();
-        }
+        parentFrame->m_detachedChildren.removeOne(this);
+        qDebug() << "Added to parent's page map, removed from detached children";
     }
 
-    // Show detach button again
+    // Step 6: Show detach button again
     if (m_detachButton)
         m_detachButton->show();
 
-    // Show the frame (if on current page or not in multipage parent)
-    if (parentFrame == NULL || !parentFrame->multipageMode() || 
-        m_originalPage == parentFrame->currentPage())
+    // Step 7: ALWAYS show the frame and bring to front
+    show();
+    raise();
+    qDebug() << "show() and raise() called";
+
+    // Step 8: If in multipage mode and not on current page, hide
+    if (parentFrame != NULL && parentFrame->multipageMode() && 
+        m_originalPage != parentFrame->currentPage())
     {
-        show();
-        raise(); // Bring to front
+        hide();
+        qDebug() << "Hidden because on different page";
     }
 
-    // Clean up
+    // Step 9: Force visual update
+    repaint();
+    if (m_originalParent)
+    {
+        m_originalParent->update();
+        // Try to scroll into view if inside a scroll area
+        QWidget *p = m_originalParent->parentWidget();
+        while (p != NULL)
+        {
+            QScrollArea *scrollArea = qobject_cast<QScrollArea*>(p);
+            if (scrollArea != NULL)
+            {
+                scrollArea->ensureWidgetVisible(this, 50, 50);
+                qDebug() << "Scrolled to make frame visible";
+                break;
+            }
+            p = p->parentWidget();
+        }
+    }
+
+    // Step 10: Clean up
+    // Note: The DetachedVCFrame window deletes itself via WA_DeleteOnClose or deleteLater
+    DetachedVCFrame *oldWindow = m_detachedWindow;
     m_detachedWindow = NULL;
     m_originalParent = NULL;
-    window->deleteLater();
+    
+    // Schedule window deletion if it still exists
+    if (oldWindow)
+        oldWindow->deleteLater();
 
     m_doc->setModified();
+
+    qDebug() << "=== VCFrame::slotReattachToParent() END ===";
+    qDebug() << "Final parent:" << parentWidget();
+    qDebug() << "Final geometry:" << geometry();
+    qDebug() << "Final isVisible:" << isVisible();
 }
 
 void VCFrame::createHeader()
@@ -1292,7 +1351,10 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
         {
             /* Detached - will be processed in postLoad() */
             if (root.readElementText() == KXMLQLCTrue)
+            {
+                qDebug() << "loadXML: Setting pendingDetach=true for" << caption() << "ID:" << id();
                 setProperty("pendingDetach", true);
+            }
         }
         else if (root.name() == KXMLQLCVCFrameDetachedGeometry)
         {
@@ -1303,6 +1365,7 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
             int w = attrs.value(QStringLiteral("Width")).toInt();
             int h = attrs.value(QStringLiteral("Height")).toInt();
             m_detachedGeometry = QRect(x, y, w, h);
+            qDebug() << "loadXML: Loaded detached geometry:" << m_detachedGeometry << "for" << caption();
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCVCFrameShowHeader)
@@ -1550,7 +1613,15 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
     if (isBottomFrame() == false)
     {
         /* Save widget proportions only for child frames */
-        if (isCollapsed())
+        if (isDetached())
+        {
+            /* When detached, save the original geometry (relative to original parent) */
+            QRect currentGeom = geometry();
+            setGeometry(m_originalGeometry);
+            saveXMLWindowState(doc);
+            setGeometry(currentGeom);
+        }
+        else if (isCollapsed())
         {
             resize(QSize(m_width, m_height));
             saveXMLWindowState(doc);
@@ -1672,6 +1743,14 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
         if (widget->parentWidget() == this)
             widget->saveXML(doc);
     }
+    
+    /* Save detached children - these are not in the Qt widget hierarchy
+       but logically belong to this frame */
+    foreach (VCFrame* detachedFrame, m_detachedChildren)
+    {
+        qDebug() << "Saving detached child frame:" << detachedFrame->caption() << "ID:" << detachedFrame->id();
+        detachedFrame->saveXML(doc);
+    }
 
     /* End the <Frame> tag */
     doc->writeEndElement();
@@ -1696,11 +1775,14 @@ void VCFrame::postLoad()
     }
 
     /* Process pending detach after all children are loaded */
+    qDebug() << "postLoad: Checking pendingDetach for" << caption() << "ID:" << id() << "value:" << property("pendingDetach").toBool();
     if (property("pendingDetach").toBool())
     {
+        qDebug() << "postLoad: Will detach" << caption() << "with geometry:" << m_detachedGeometry;
         setProperty("pendingDetach", QVariant()); // Clear the property
         // Use a single-shot timer to detach after the GUI is fully initialized
         QTimer::singleShot(100, this, [this]() {
+            qDebug() << "postLoad timer: Detaching" << caption() << "now";
             detachToWindow(m_detachedGeometry);
         });
     }
