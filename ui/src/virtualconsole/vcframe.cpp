@@ -30,6 +30,7 @@
 #include <QAction>
 #include <QStyle>
 #include <QDebug>
+#include <QTimer>
 #include <QPoint>
 #include <QSize>
 #include <QMenu>
@@ -69,9 +70,12 @@ DetachedVCFrame::DetachedVCFrame(QWidget *parent, VCFrame *frame)
 
 void DetachedVCFrame::closeEvent(QCloseEvent *ev)
 {
+    // Save current geometry before closing
+    if (m_frame != NULL)
+        m_frame->setDetachedGeometry(geometry());
+    
     emit closing(m_frame);
-    // Don't destroy the frame - it will be reparented
-    setCentralWidget(NULL);
+    // The slot will handle reparenting and will set centralWidget to NULL
     QMainWindow::closeEvent(ev);
 }
 
@@ -331,6 +335,11 @@ void VCFrame::slotEnableButtonClicked(bool checked)
 
 void VCFrame::slotDetachButtonClicked()
 {
+    detachToWindow(m_detachedGeometry);
+}
+
+void VCFrame::detachToWindow(const QRect &windowGeometry)
+{
     if (isDetached())
         return;
 
@@ -338,6 +347,10 @@ void VCFrame::slotDetachButtonClicked()
     m_originalParent = parentWidget();
     m_originalPosition = pos();
     m_originalPage = page();
+
+    qDebug() << "VCFrame detaching:" << caption() 
+             << "from parent:" << m_originalParent 
+             << "pos:" << m_originalPosition;
 
     // Remove from parent's page map if parent is a VCFrame
     VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
@@ -347,11 +360,20 @@ void VCFrame::slotDetachButtonClicked()
     // Create detached window
     m_detachedWindow = new DetachedVCFrame(NULL, this);
     m_detachedWindow->setWindowTitle(caption().isEmpty() ? tr("Detached Frame") : caption());
-    m_detachedWindow->resize(size().width() + 20, size().height() + 40);
+    
+    // Set window geometry
+    if (windowGeometry.isValid())
+    {
+        m_detachedWindow->setGeometry(windowGeometry);
+    }
+    else
+    {
+        m_detachedWindow->resize(size().width() + 20, size().height() + 40);
+    }
 
     // Connect closing signal
     connect(m_detachedWindow, SIGNAL(closing(VCFrame*)),
-            this, SLOT(reattachToParent()));
+            this, SLOT(slotReattachToParent()));
 
     // Move this frame to the detached window
     setParent(m_detachedWindow);
@@ -365,6 +387,7 @@ void VCFrame::slotDetachButtonClicked()
     m_detachedWindow->show();
     show();
 
+    m_doc->setModified();
     qDebug() << "VCFrame detached:" << caption();
 }
 
@@ -373,41 +396,73 @@ bool VCFrame::isDetached() const
     return m_detachedWindow != NULL;
 }
 
-void VCFrame::reattachToParent()
+QRect VCFrame::detachedGeometry() const
 {
-    if (!isDetached() || m_originalParent == NULL)
+    if (m_detachedWindow != NULL)
+        return m_detachedWindow->geometry();
+    return m_detachedGeometry;
+}
+
+void VCFrame::setDetachedGeometry(const QRect &geometry)
+{
+    m_detachedGeometry = geometry;
+}
+
+void VCFrame::slotReattachToParent()
+{
+    // Get the detached window from sender
+    DetachedVCFrame *window = qobject_cast<DetachedVCFrame*>(sender());
+    if (window == NULL)
+        window = m_detachedWindow;
+    
+    if (window == NULL || m_originalParent == NULL)
+    {
+        qWarning() << "VCFrame::slotReattachToParent() - invalid state";
         return;
+    }
 
-    qDebug() << "VCFrame reattaching:" << caption();
-
-    // Disconnect from detached window before it's destroyed
-    disconnect(m_detachedWindow, SIGNAL(closing(VCFrame*)),
-               this, SLOT(reattachToParent()));
+    qDebug() << "VCFrame reattaching:" << caption() 
+             << "to parent:" << m_originalParent 
+             << "pos:" << m_originalPosition;
 
     // Remove from detached window (prevent destruction)
-    m_detachedWindow->setCentralWidget(NULL);
+    window->setCentralWidget(NULL);
 
     // Reparent to original parent
     setParent(m_originalParent);
+    
+    // Restore geometry within parent
     move(m_originalPosition);
     setPage(m_originalPage);
 
     // Re-add to parent's page map if parent is a VCFrame
     VCFrame *parentFrame = qobject_cast<VCFrame*>(m_originalParent);
     if (parentFrame != NULL)
+    {
         parentFrame->addWidgetToPageMap(this);
+        // Make sure the frame is visible on the correct page
+        if (parentFrame->multipageMode() && m_originalPage != parentFrame->currentPage())
+        {
+            hide();
+        }
+    }
 
     // Show detach button again
     if (m_detachButton)
         m_detachButton->show();
 
-    // Show the frame
-    show();
+    // Show the frame (if on current page or not in multipage parent)
+    if (parentFrame == NULL || !parentFrame->multipageMode() || 
+        m_originalPage == parentFrame->currentPage())
+    {
+        show();
+        raise(); // Bring to front
+    }
 
     // Clean up
-    m_detachedWindow->deleteLater();
     m_detachedWindow = NULL;
     m_originalParent = NULL;
+    window->deleteLater();
 
     m_doc->setModified();
 }
@@ -1233,6 +1288,23 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
             if (root.readElementText() == KXMLQLCTrue)
                 disableState = true;
         }
+        else if (root.name() == KXMLQLCVCFrameDetached)
+        {
+            /* Detached - will be processed in postLoad() */
+            if (root.readElementText() == KXMLQLCTrue)
+                setProperty("pendingDetach", true);
+        }
+        else if (root.name() == KXMLQLCVCFrameDetachedGeometry)
+        {
+            /* Detached window geometry */
+            QXmlStreamAttributes attrs = root.attributes();
+            int x = attrs.value(QStringLiteral("X")).toInt();
+            int y = attrs.value(QStringLiteral("Y")).toInt();
+            int w = attrs.value(QStringLiteral("Width")).toInt();
+            int h = attrs.value(QStringLiteral("Height")).toInt();
+            m_detachedGeometry = QRect(x, y, w, h);
+            root.skipCurrentElement();
+        }
         else if (root.name() == KXMLQLCVCFrameShowHeader)
         {
             if (root.readElementText() == KXMLQLCTrue)
@@ -1514,6 +1586,22 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
         /* Disabled */
         doc->writeTextElement(KXMLQLCVCFrameIsDisabled, isDisabled() ? KXMLQLCTrue : KXMLQLCFalse);
 
+        /* Detached state */
+        if (isDetached())
+        {
+            doc->writeTextElement(KXMLQLCVCFrameDetached, KXMLQLCTrue);
+            QRect geom = detachedGeometry();
+            if (geom.isValid())
+            {
+                doc->writeStartElement(KXMLQLCVCFrameDetachedGeometry);
+                doc->writeAttribute(QStringLiteral("X"), QString::number(geom.x()));
+                doc->writeAttribute(QStringLiteral("Y"), QString::number(geom.y()));
+                doc->writeAttribute(QStringLiteral("Width"), QString::number(geom.width()));
+                doc->writeAttribute(QStringLiteral("Height"), QString::number(geom.height()));
+                doc->writeEndElement();
+            }
+        }
+
         /* Enable control */
         QString keySeq = m_enableKeySequence.toString();
         QSharedPointer<QLCInputSource> enableSrc = inputSource(enableInputSourceId);
@@ -1605,6 +1693,16 @@ void VCFrame::postLoad()
            direct parent. */
         if (widget->parentWidget() == this)
             widget->postLoad();
+    }
+
+    /* Process pending detach after all children are loaded */
+    if (property("pendingDetach").toBool())
+    {
+        setProperty("pendingDetach", QVariant()); // Clear the property
+        // Use a single-shot timer to detach after the GUI is fully initialized
+        QTimer::singleShot(100, this, [this]() {
+            detachToWindow(m_detachedGeometry);
+        });
     }
 }
 

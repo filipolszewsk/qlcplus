@@ -78,6 +78,9 @@ private:
 #define KXMLQLCVCFramePrevious    QStringLiteral("Previous")
 #define KXMLQLCVCFramePagesLoop   QStringLiteral("PagesLoop")
 
+#define KXMLQLCVCFrameDetached         QStringLiteral("Detached")
+#define KXMLQLCVCFrameDetachedGeometry QStringLiteral("DetachedGeometry")
+
 class VCFrameProperties;
 class VCFramePageShortcut;
 
@@ -164,11 +167,18 @@ protected slots:
     void slotDetachButtonClicked();
 
     /** Reattach frame to its original parent (slot for window closing) */
-    void reattachToParent();
+    void slotReattachToParent();
 
 public:
     /** Check if this frame is currently detached */
     bool isDetached() const;
+
+    /** Detach frame programmatically (e.g., when loading from XML) */
+    void detachToWindow(const QRect &windowGeometry = QRect());
+
+    /** Get/set the saved detached window geometry */
+    QRect detachedGeometry() const;
+    void setDetachedGeometry(const QRect &geometry);
 
 protected:
     void createHeader();
@@ -189,6 +199,7 @@ protected:
     QWidget *m_originalParent;
     QPoint m_originalPosition;
     int m_originalPage;
+    QRect m_detachedGeometry;  /** Saved geometry of detached window for persistence */
 
     /*********************************************************************
      * Pages
