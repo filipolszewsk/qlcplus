@@ -151,7 +151,9 @@ VCFrame::~VCFrame()
 
 bool VCFrame::isBottomFrame()
 {
-    return (parentWidget() != NULL && qobject_cast<VCFrame*>(parentWidget()) == NULL);
+    // Use logical parent for detached frames
+    QWidget* parent = isDetached() ? m_originalParent : parentWidget();
+    return (parent != NULL && qobject_cast<VCFrame*>(parent) == NULL);
 }
 
 void VCFrame::setDisableState(bool disable)
@@ -1610,6 +1612,7 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
     /* Save appearance */
     saveXMLAppearance(doc);
 
+    qDebug() << "saveXML: Frame" << caption() << "ID:" << id() << "isBottomFrame:" << isBottomFrame();
     if (isBottomFrame() == false)
     {
         /* Save widget proportions only for child frames */
@@ -1658,10 +1661,13 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
         doc->writeTextElement(KXMLQLCVCFrameIsDisabled, isDisabled() ? KXMLQLCTrue : KXMLQLCFalse);
 
         /* Detached state */
+        qDebug() << "saveXML: Checking detached state for" << caption() << "ID:" << id() << "isDetached:" << isDetached();
         if (isDetached())
         {
+            qDebug() << "saveXML: Writing Detached=True for" << caption();
             doc->writeTextElement(KXMLQLCVCFrameDetached, KXMLQLCTrue);
             QRect geom = detachedGeometry();
+            qDebug() << "saveXML: Detached geometry:" << geom;
             if (geom.isValid())
             {
                 doc->writeStartElement(KXMLQLCVCFrameDetachedGeometry);
