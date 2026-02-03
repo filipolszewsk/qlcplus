@@ -159,6 +159,26 @@
         </widget>
        </item>
        <item row="4" column="0" colspan="4">
+        <widget class="QCheckBox" name="m_autoStartCheck">
+         <property name="text">
+          <string>Auto start in Operate mode</string>
+         </property>
+         <property name="toolTip">
+          <string>Automatically start the cue list when entering Operate mode</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="4">
+        <widget class="QCheckBox" name="m_showChannelColumnsCheck">
+         <property name="text">
+          <string>Show channel value columns</string>
+         </property>
+         <property name="toolTip">
+          <string>Display additional columns with channel values from each scene (based on recording channel mask)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0" colspan="4">
         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>

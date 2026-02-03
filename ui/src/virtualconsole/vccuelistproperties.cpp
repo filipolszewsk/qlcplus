@@ -67,6 +67,12 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     /* Next/Prev behavior */
     m_nextPrevBehaviorCombo->setCurrentIndex(m_cueList->nextPrevBehavior());
 
+    /* Auto start */
+    m_autoStartCheck->setChecked(cueList->autoStartInOperate());
+
+    /* Show channel columns */
+    m_showChannelColumnsCheck->setChecked(cueList->showChannelColumns());
+
     /* Connections */
     connect(m_chaserAttachButton, SIGNAL(clicked()), this, SLOT(slotChaserAttachClicked()));
     connect(m_chaserDetachButton, SIGNAL(clicked()), this, SLOT(slotChaserDetachClicked()));
@@ -258,6 +264,12 @@ void VCCueListProperties::accept()
 
     /* Next/Prev behavior */
     m_cueList->setNextPrevBehavior(VCCueList::NextPrevBehavior(m_nextPrevBehaviorCombo->currentIndex()));
+
+    /* Auto start */
+    m_cueList->setAutoStartInOperate(m_autoStartCheck->isChecked());
+
+    /* Show channel columns */
+    m_cueList->setShowChannelColumns(m_showChannelColumnsCheck->isChecked());
 
     /* Key sequences */
     m_cueList->setNextKeySequence(m_nextInputWidget->keySequence());

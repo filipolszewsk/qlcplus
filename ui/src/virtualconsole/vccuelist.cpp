@@ -56,6 +56,55 @@
 #include "scenevalue.h"
 #include "genericfader.h"
 #include "fadechannel.h"
+#include "qlcchannel.h"
+
+#include <QSpinBox>
+
+/*****************************************************************************
+ * ChannelValueDelegate - SpinBox delegate for editing channel values (0-255)
+ *****************************************************************************/
+
+class ChannelValueDelegate : public QStyledItemDelegate
+{
+public:
+    ChannelValueDelegate(QObject *parent = 0) : QStyledItemDelegate(parent) {}
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                          const QModelIndex &index) const override
+    {
+        Q_UNUSED(option);
+        Q_UNUSED(index);
+
+        QSpinBox *editor = new QSpinBox(parent);
+        editor->setFrame(false);
+        editor->setMinimum(0);
+        editor->setMaximum(255);
+        return editor;
+    }
+
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override
+    {
+        int value = index.model()->data(index, Qt::EditRole).toInt();
+        QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
+        spinBox->setValue(value);
+    }
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override
+    {
+        QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
+        spinBox->interpretText();
+        int value = spinBox->value();
+        model->setData(index, value, Qt::EditRole);
+    }
+
+    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option,
+                              const QModelIndex &index) const override
+    {
+        Q_UNUSED(index);
+        editor->setGeometry(option.rect);
+    }
+};
 
 #define COL_NUM      0
 #define COL_NAME     1
@@ -110,6 +159,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_recordAllChannels(true)
     , m_recordNonZeroOnly(false)
     , m_recordCuePrefix("cue")
+    , m_showChannelColumns(false)
     , m_stepIndexOutputEnabled(false)
     , m_stepIndexOutputFixture(Function::invalidId())
     , m_stepIndexOutputChannel(0)
@@ -581,6 +631,29 @@ void VCCueList::updateStepList()
             default:
             case Chaser::Default:
                 item->setText(COL_DURATION, QString());
+        }
+
+        // Add channel values if channel columns are enabled
+        if (m_showChannelColumns && !m_channelColumns.isEmpty())
+        {
+            Scene *scene = qobject_cast<Scene*>(function);
+            if (scene != NULL)
+            {
+                int colOffset = COL_NOTES + 1;
+                for (int i = 0; i < m_channelColumns.size(); i++)
+                {
+                    const ChannelColumnInfo &col = m_channelColumns.at(i);
+                    if (col.fixtureId != UINT_MAX)
+                    {
+                        uchar value = scene->value(col.fixtureId, col.fixtureChannel);
+                        item->setText(colOffset + i, QString::number(value));
+                    }
+                    else
+                    {
+                        item->setText(colOffset + i, "-");
+                    }
+                }
+            }
         }
     }
 
@@ -1079,21 +1152,41 @@ void VCCueList::slotItemClicked(QTreeWidgetItem *item)
 
 void VCCueList::slotItemChanged(QTreeWidgetItem *item, int column)
 {
-    if (m_listIsUpdating || column != COL_NOTES)
+    if (m_listIsUpdating)
         return;
 
     Chaser *ch = chaser();
     if (ch == NULL)
         return;
 
-    QString itemText = item->text(column);
     int idx = m_tree->indexOfTopLevelItem(item);
-    ChaserStep step = ch->steps().at(idx);
+    if (idx < 0 || idx >= ch->steps().count())
+        return;
 
-    step.note = itemText;
-    ch->replaceStep(step, idx);
-
-    emit stepNoteChanged(idx, itemText);
+    if (column == COL_NOTES)
+    {
+        // Handle notes column edit
+        QString itemText = item->text(column);
+        ChaserStep step = ch->steps().at(idx);
+        step.note = itemText;
+        ch->replaceStep(step, idx);
+        emit stepNoteChanged(idx, itemText);
+    }
+    else if (m_showChannelColumns && column > COL_NOTES && 
+             column <= COL_NOTES + m_channelColumns.size())
+    {
+        // Handle channel value column edit
+        int channelIdx = column - COL_NOTES - 1;
+        bool ok;
+        int value = item->text(column).toInt(&ok);
+        if (!ok || value < 0 || value > 255)
+        {
+            // Revert to old value by refreshing
+            updateStepList();
+            return;
+        }
+        updateSceneChannelValue(idx, channelIdx, static_cast<uchar>(value));
+    }
 }
 
 void VCCueList::slotStepNoteChanged(int idx, QString note)
@@ -1965,10 +2058,7 @@ void VCCueList::adjustIntensity(qreal val)
 void VCCueList::setCaption(const QString& text)
 {
     VCWidget::setCaption(text);
-
-    QStringList list;
-    list << "#" << text << tr("Fade In") << tr("Fade Out") << tr("Duration") << tr("Notes");
-    m_tree->setHeaderLabels(list);
+    updateTreeHeader();
 }
 
 void VCCueList::setFont(const QFont& font)
@@ -2696,6 +2786,190 @@ QString VCCueList::recordCuePrefix() const
 }
 
 /*****************************************************************************
+ * Channel Columns
+ *****************************************************************************/
+
+void VCCueList::setShowChannelColumns(bool show)
+{
+    if (m_showChannelColumns == show)
+        return;
+
+    m_showChannelColumns = show;
+
+    if (show)
+    {
+        buildChannelColumns();
+        // Set up SpinBox delegates for channel value columns
+        int colOffset = COL_NOTES + 1;
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            m_tree->setItemDelegateForColumn(colOffset + i, new ChannelValueDelegate(this));
+        }
+    }
+    else
+    {
+        // Remove delegates for channel columns (set to default)
+        int colOffset = COL_NOTES + 1;
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            m_tree->setItemDelegateForColumn(colOffset + i, nullptr);
+        }
+        m_channelColumns.clear();
+    }
+
+    updateTreeHeader();
+    updateStepList();
+}
+
+bool VCCueList::showChannelColumns() const
+{
+    return m_showChannelColumns;
+}
+
+QList<ChannelColumnInfo> VCCueList::channelColumns() const
+{
+    return m_channelColumns;
+}
+
+void VCCueList::setChannelColumnName(int index, const QString &name)
+{
+    if (index < 0 || index >= m_channelColumns.size())
+        return;
+
+    m_channelColumns[index].customName = name;
+    updateTreeHeader();
+}
+
+int VCCueList::channelColumnCount() const
+{
+    return m_channelColumns.size();
+}
+
+void VCCueList::buildChannelColumns()
+{
+    m_channelColumns.clear();
+
+    if (m_recordChannelsMask.isEmpty())
+        return;
+
+    // Iterate through the recording mask and find fixtures for each enabled address
+    for (int addr = 0; addr < m_recordChannelsMask.size(); addr++)
+    {
+        if (m_recordChannelsMask[addr] == 0)
+            continue;
+
+        // Find fixture and channel for this absolute address
+        ChannelColumnInfo info = findFixtureForAddress(addr);
+        if (info.fixtureId != UINT_MAX)
+            m_channelColumns.append(info);
+    }
+}
+
+ChannelColumnInfo VCCueList::findFixtureForAddress(quint32 address) const
+{
+    ChannelColumnInfo info;
+    info.absoluteAddress = address;
+
+    // Calculate universe and channel within universe
+    quint32 universe = address / UNIVERSE_SIZE;
+    quint32 channelInUniverse = address % UNIVERSE_SIZE;
+
+    // Iterate through all fixtures to find one that contains this address
+    foreach (Fixture *fxi, m_doc->fixtures())
+    {
+        if (fxi == NULL)
+            continue;
+
+        if (fxi->universe() != universe)
+            continue;
+
+        quint32 fxiAddress = fxi->address();
+        quint32 fxiChannels = fxi->channels();
+
+        // Check if the channel falls within this fixture's range
+        if (channelInUniverse >= fxiAddress && channelInUniverse < fxiAddress + fxiChannels)
+        {
+            info.fixtureId = fxi->id();
+            info.fixtureChannel = channelInUniverse - fxiAddress;
+            return info;
+        }
+    }
+
+    return info;
+}
+
+QString VCCueList::getDefaultChannelName(const ChannelColumnInfo &col) const
+{
+    if (col.fixtureId == UINT_MAX)
+        return QString("Ch %1").arg(col.absoluteAddress + 1);
+
+    Fixture *fxi = m_doc->fixture(col.fixtureId);
+    if (fxi == NULL)
+        return QString("Ch %1").arg(col.absoluteAddress + 1);
+
+    const QLCChannel *ch = fxi->channel(col.fixtureChannel);
+    if (ch != NULL)
+    {
+        // Use fixture name abbreviation + channel name
+        QString fxiName = fxi->name();
+        if (fxiName.length() > 8)
+            fxiName = fxiName.left(8);
+        return QString("%1: %2").arg(fxiName).arg(ch->name());
+    }
+
+    return QString("%1 Ch%2").arg(fxi->name().left(8)).arg(col.fixtureChannel + 1);
+}
+
+void VCCueList::updateSceneChannelValue(int stepIdx, int channelIdx, uchar value)
+{
+    Chaser *ch = chaser();
+    if (ch == NULL || stepIdx < 0 || stepIdx >= ch->steps().count())
+        return;
+
+    if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
+        return;
+
+    ChaserStep step = ch->steps().at(stepIdx);
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(step.fid));
+    if (scene == NULL)
+        return;
+
+    const ChannelColumnInfo &col = m_channelColumns.at(channelIdx);
+    if (col.fixtureId == UINT_MAX)
+        return;
+
+    // Create SceneValue with the new value
+    // When called with blind=false (default), Scene::setValue will update
+    // the running scene's DMX output immediately in Operate mode
+    SceneValue sv(col.fixtureId, col.fixtureChannel, value);
+    scene->setValue(sv);
+
+    m_doc->setModified();
+}
+
+void VCCueList::updateTreeHeader()
+{
+    QStringList list;
+    list << "#" << caption() << tr("Fade In") << tr("Fade Out") << tr("Duration") << tr("Notes");
+
+    // Add channel column headers if enabled
+    if (m_showChannelColumns)
+    {
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            const ChannelColumnInfo &col = m_channelColumns.at(i);
+            if (!col.customName.isEmpty())
+                list << col.customName;
+            else
+                list << getDefaultChannelName(col);
+        }
+    }
+
+    m_tree->setHeaderLabels(list);
+    m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
+}
+
+/*****************************************************************************
  * Step Index Output
  *****************************************************************************/
 
@@ -2971,6 +3245,46 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             setAutoStartInOperate(root.readElementText() == "1");
         }
+        else if (root.name() == KXMLQLCVCCueListChannelColumns)
+        {
+            QXmlStreamAttributes attrs = root.attributes();
+            bool showColumns = attrs.value(KXMLQLCVCCueListShowChannelColumns).toString() == "1";
+            
+            // Read channel column definitions
+            m_channelColumns.clear();
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLQLCVCCueListChannelColumn)
+                {
+                    QXmlStreamAttributes colAttrs = root.attributes();
+                    quint32 address = colAttrs.value(KXMLQLCVCCueListChannelColumnAddress).toString().toUInt();
+                    QString customName = colAttrs.value(KXMLQLCVCCueListChannelColumnName).toString();
+                    
+                    ChannelColumnInfo info = findFixtureForAddress(address);
+                    info.customName = customName;
+                    m_channelColumns.append(info);
+                    
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
+            
+            // Set up the show flag and delegates after loading all columns
+            m_showChannelColumns = showColumns;
+            if (showColumns && !m_channelColumns.isEmpty())
+            {
+                int colOffset = COL_NOTES + 1;
+                for (int i = 0; i < m_channelColumns.size(); i++)
+                {
+                    m_tree->setItemDelegateForColumn(colOffset + i, new ChannelValueDelegate(this));
+                }
+            }
+            
+            updateTreeHeader();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown cuelist tag:" << root.name().toString();
@@ -3136,6 +3450,27 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     /* Auto start in operate mode */
     if (m_autoStartInOperate)
         doc->writeTextElement(KXMLQLCVCCueListAutoStart, QString::number(1));
+
+    /* Channel columns */
+    if (m_showChannelColumns || !m_channelColumns.isEmpty())
+    {
+        doc->writeStartElement(KXMLQLCVCCueListChannelColumns);
+        doc->writeAttribute(KXMLQLCVCCueListShowChannelColumns, 
+                           m_showChannelColumns ? "1" : "0");
+        
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            const ChannelColumnInfo &col = m_channelColumns.at(i);
+            doc->writeStartElement(KXMLQLCVCCueListChannelColumn);
+            doc->writeAttribute(KXMLQLCVCCueListChannelColumnAddress, 
+                               QString::number(col.absoluteAddress));
+            if (!col.customName.isEmpty())
+                doc->writeAttribute(KXMLQLCVCCueListChannelColumnName, col.customName);
+            doc->writeEndElement();
+        }
+        
+        doc->writeEndElement();
+    }
 
     /* End the <CueList> tag */
     doc->writeEndElement();

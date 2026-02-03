@@ -77,6 +77,35 @@ class Doc;
 #define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
 #define KXMLQLCVCCueListStepIndexOutputChannel QStringLiteral("Channel")
 #define KXMLQLCVCCueListAutoStart       QStringLiteral("AutoStart")
+#define KXMLQLCVCCueListChannelColumns  QStringLiteral("ChannelColumns")
+#define KXMLQLCVCCueListChannelColumn   QStringLiteral("Column")
+#define KXMLQLCVCCueListChannelColumnAddress QStringLiteral("Address")
+#define KXMLQLCVCCueListChannelColumnName QStringLiteral("CustomName")
+#define KXMLQLCVCCueListShowChannelColumns QStringLiteral("ShowColumns")
+
+/**
+ * Structure to hold information about a channel column in the cue list
+ */
+struct ChannelColumnInfo
+{
+    quint32 absoluteAddress;  ///< DMX address (universe * 512 + channel)
+    quint32 fixtureId;        ///< Fixture ID
+    quint32 fixtureChannel;   ///< Channel number relative to fixture
+    QString customName;       ///< Optional custom name for the column header
+
+    ChannelColumnInfo()
+        : absoluteAddress(0)
+        , fixtureId(UINT_MAX)
+        , fixtureChannel(0)
+    {}
+
+    ChannelColumnInfo(quint32 addr, quint32 fxiId, quint32 fxiCh, const QString &name = QString())
+        : absoluteAddress(addr)
+        , fixtureId(fxiId)
+        , fixtureChannel(fxiCh)
+        , customName(name)
+    {}
+};
 
 /**
  * VCCueList provides a \ref VirtualConsole widget to control cue lists.
@@ -547,6 +576,48 @@ private:
 
     /** Prefix for recorded cue names */
     QString m_recordCuePrefix;
+
+    /*************************************************************************
+     * Channel Columns
+     *************************************************************************/
+public:
+    /** Set whether channel columns should be displayed */
+    void setShowChannelColumns(bool show);
+
+    /** Get whether channel columns are displayed */
+    bool showChannelColumns() const;
+
+    /** Get the list of channel columns */
+    QList<ChannelColumnInfo> channelColumns() const;
+
+    /** Set custom name for a channel column */
+    void setChannelColumnName(int index, const QString &name);
+
+    /** Get the number of channel columns */
+    int channelColumnCount() const;
+
+    /** Rebuild channel columns based on recording mask */
+    void buildChannelColumns();
+
+private:
+    /** Find fixture and channel for a given absolute DMX address */
+    ChannelColumnInfo findFixtureForAddress(quint32 address) const;
+
+    /** Get default name for a channel column */
+    QString getDefaultChannelName(const ChannelColumnInfo &col) const;
+
+    /** Update a scene's channel value */
+    void updateSceneChannelValue(int stepIdx, int channelIdx, uchar value);
+
+    /** Update the tree widget header labels */
+    void updateTreeHeader();
+
+private:
+    /** Whether to show channel columns */
+    bool m_showChannelColumns;
+
+    /** List of channel columns to display */
+    QList<ChannelColumnInfo> m_channelColumns;
 
     /*************************************************************************
      * Step Index Output
