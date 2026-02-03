@@ -107,6 +107,7 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_collapsed(false)
     , m_showHeader(true)
     , m_showEnableButton(true)
+    , m_showBorder(true)
     , m_multiPageMode(false)
     , m_currentPage(0)
     , m_totalPagesNumber(1)
@@ -298,6 +299,17 @@ void VCFrame::setEnableButtonVisible(bool show)
 bool VCFrame::isEnableButtonVisible() const
 {
     return m_showEnableButton;
+}
+
+void VCFrame::setShowBorder(bool enable)
+{
+    m_showBorder = enable;
+    update();
+}
+
+bool VCFrame::isShowBorder() const
+{
+    return m_showBorder;
 }
 
 bool VCFrame::isCollapsed() const
@@ -1130,6 +1142,7 @@ bool VCFrame::copyFrom(const VCWidget* widget)
 
     setHeaderVisible(frame->m_showHeader);
     setEnableButtonVisible(frame->m_showEnableButton);
+    setShowBorder(frame->m_showBorder);
 
     setMultipageMode(frame->m_multiPageMode);
     setTotalPagesNumber(frame->m_totalPagesNumber);
@@ -1383,6 +1396,10 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
                 setEnableButtonVisible(true);
             else
                 setEnableButtonVisible(false);
+        }
+        else if (root.name() == KXMLQLCVCFrameShowBorder)
+        {
+            setShowBorder(root.readElementText() == KXMLQLCTrue);
         }
         else if (root.name() == KXMLQLCVCSoloFrameMixing && this->type() == SoloFrameWidget)
         {
@@ -1645,6 +1662,9 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
         /* ShowEnableButton */
         doc->writeTextElement(KXMLQLCVCFrameShowEnableButton, isEnableButtonVisible() ? KXMLQLCTrue : KXMLQLCFalse);
 
+        /* ShowBorder */
+        doc->writeTextElement(KXMLQLCVCFrameShowBorder, isShowBorder() ? KXMLQLCTrue : KXMLQLCFalse);
+
         /* Solo frame mixing */
         if (this->type() == SoloFrameWidget)
         {
@@ -1826,6 +1846,43 @@ QMenu* VCFrame::customMenu(QMenu* parentMenu)
 /*****************************************************************************
  * Event handlers
  *****************************************************************************/
+
+void VCFrame::paintEvent(QPaintEvent* e)
+{
+    if (m_showBorder)
+    {
+        VCWidget::paintEvent(e);
+    }
+    else
+    {
+        /* No point coming here if there is no VC instance */
+        VirtualConsole* vc = VirtualConsole::instance();
+        if (vc == NULL)
+            return;
+
+        QPainter painter(this);
+        QWidget::paintEvent(e);
+
+        /* Draw selection frame only in Design mode when selected */
+        if (mode() == Doc::Design && vc->isWidgetSelected(this))
+        {
+            QPen pen(Qt::DashLine);
+            pen.setColor(Qt::blue);
+            pen.setCapStyle(Qt::RoundCap);
+            pen.setWidth(0);
+            painter.setPen(pen);
+            painter.drawRect(0, 0, rect().width() - 1, rect().height() - 1);
+
+            /* Draw a resize handle */
+            if (allowResize())
+            {
+                QIcon icon(":/resize.png");
+                painter.drawPixmap(rect().width() - 16, rect().height() - 16,
+                                   icon.pixmap(QSize(16, 16), QIcon::Normal, QIcon::On));
+            }
+        }
+    }
+}
 
 void VCFrame::handleWidgetSelection(QMouseEvent* e)
 {

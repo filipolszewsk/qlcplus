@@ -70,6 +70,7 @@ private:
 #define KXMLQLCVCFrameIsDisabled        QStringLiteral("Disabled")
 #define KXMLQLCVCFrameEnableSource      QStringLiteral("Enable")
 #define KXMLQLCVCFrameShowEnableButton  QStringLiteral("ShowEnableButton")
+#define KXMLQLCVCFrameShowBorder        QStringLiteral("ShowBorder")
 
 #define KXMLQLCVCFrameMultipage   QStringLiteral("Multipage")
 #define KXMLQLCVCFramePagesNumber QStringLiteral("PagesNum")
@@ -122,19 +123,19 @@ public:
     void setLiveEdit(bool liveEdit);
 
     /** @reimp */
-    void setCaption(const QString& text);
+    void setCaption(const QString& text) override;
 
     /** @reimp */
-    void setFont(const QFont& font);
+    void setFont(const QFont& font) override;
 
     /** @reimp */
-    QFont font() const;
+    QFont font() const override;
 
     /** @reimp */
-    void setForegroundColor(const QColor& color);
+    void setForegroundColor(const QColor& color) override;
 
     /** @reimp */
-    QColor foregroundColor() const;
+    QColor foregroundColor() const override;
 
     void setHeaderVisible(bool enable);
 
@@ -143,6 +144,10 @@ public:
     void setEnableButtonVisible(bool enable);
 
     bool isEnableButtonVisible() const;
+
+    void setShowBorder(bool enable);
+
+    bool isShowBorder() const;
 
     bool isCollapsed() const;
 
@@ -196,6 +201,7 @@ protected:
     bool m_collapsed;
     bool m_showHeader;
     bool m_showEnableButton;
+    bool m_showBorder;
     int m_width, m_height;
 
     /** Detached window state */
@@ -235,10 +241,10 @@ public:
     /** @reimp */
     void remapInputSource(quint32 oldUni, quint32 oldAddr, 
                           quint32 newUni, quint32 newAddr, 
-                          quint32 channels);
+                          quint32 channels) override;
 
     /** @reimp */
-    bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const;
+    bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const override;
 
 public slots:
     void slotPreviousPage();
@@ -266,7 +272,7 @@ protected:
      *************************************************************************/
 protected slots:
     /** @reimp */
-    void slotModeChanged(Doc::Mode mode);
+    void slotModeChanged(Doc::Mode mode) override;
 
     /*********************************************************************
      * Submasters
@@ -282,7 +288,7 @@ public:
      *********************************************************************/
 public:
     /** @reimp */
-    void adjustIntensity(qreal val);
+    void adjustIntensity(qreal val) override;
 
     /*************************************************************************
      * Key sequences
@@ -308,7 +314,7 @@ public:
 
 protected slots:
     /** @reimp */
-    void slotKeyPressed(const QKeySequence& keySequence);
+    void slotKeyPressed(const QKeySequence& keySequence) override;
 
 private:
     QKeySequence m_enableKeySequence;
@@ -320,22 +326,22 @@ private:
      *************************************************************************/
 public:
     /** @reimp */
-    void updateFeedback();
+    void updateFeedback() override;
 
 protected slots:
     /** @reimp */
-    void slotInputValueChanged(quint32 universe, quint32 channel, uchar value);
+    void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
 
     /*********************************************************************
      * Clipboard
      *********************************************************************/
 public:
     /** Create a copy of this widget into the given parent */
-    VCWidget* createCopy(VCWidget* parent);
+    VCWidget* createCopy(VCWidget* parent) override;
 
 protected:
     /** Copy the contents for this widget from another widget */
-    bool copyFrom(const VCWidget* widget);
+    bool copyFrom(const VCWidget* widget) override;
 
     /*********************************************************************
      * Properties
@@ -346,22 +352,22 @@ protected:
 
 public:
     /** @reimp */
-    virtual void editProperties();
+    void editProperties() override;
 
     /*********************************************************************
      * Load & Save
      *********************************************************************/
 public:
-    bool loadXML(QXmlStreamReader &root);
+    bool loadXML(QXmlStreamReader &root) override;
 
-    bool saveXML(QXmlStreamWriter *doc);
+    bool saveXML(QXmlStreamWriter *doc) override;
 
     /**
      * @reimp
      *
      * Propagates the postLoad() call to all children.
      */
-    void postLoad();
+    void postLoad() override;
 
 protected:
     /** Can be overridden by subclasses */
@@ -373,14 +379,15 @@ protected:
 public:
     /** Get a custom menu specific to this widget. Ownership is transferred
         to the caller, which must delete the returned menu pointer. */
-    virtual QMenu* customMenu(QMenu* parentMenu);
+    QMenu* customMenu(QMenu* parentMenu) override;
 
     /*********************************************************************
      * Event handlers
      *********************************************************************/
 protected:
-    void handleWidgetSelection(QMouseEvent* e);
-    void mouseMoveEvent(QMouseEvent* e);
+    void paintEvent(QPaintEvent* e) override;
+    void handleWidgetSelection(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
 };
 
 /** @} */

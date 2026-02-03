@@ -229,23 +229,31 @@ void VCSoloFrame::paintEvent(QPaintEvent* e)
     if (mode() == Doc::Design && vc->isWidgetSelected(this) == true)
         drawSelectionFrame = true;
 
-    /* Draw a dotted line around the widget */
-    QPen pen(drawSelectionFrame ? Qt::DashLine : Qt::SolidLine);
-    pen.setColor(Qt::red);
-
-    if (drawSelectionFrame == true)
+    /* Draw border only if border is visible or selection frame is needed */
+    if (isShowBorder() || drawSelectionFrame)
     {
-        pen.setCapStyle(Qt::RoundCap);
-        pen.setWidth(0);
-    }
-    else
-    {
-        pen.setCapStyle(Qt::FlatCap);
-        pen.setWidth(1);
-    }
+        QPen pen(drawSelectionFrame ? Qt::DashLine : Qt::SolidLine);
 
-    painter.setPen(pen);
-    painter.drawRect(0, 0, rect().width()-1, rect().height()-1);
+        /* Use red for visible border, blue for selection-only */
+        if (isShowBorder())
+            pen.setColor(Qt::red);
+        else
+            pen.setColor(Qt::blue);
+
+        if (drawSelectionFrame == true)
+        {
+            pen.setCapStyle(Qt::RoundCap);
+            pen.setWidth(0);
+        }
+        else
+        {
+            pen.setCapStyle(Qt::FlatCap);
+            pen.setWidth(1);
+        }
+
+        painter.setPen(pen);
+        painter.drawRect(0, 0, rect().width()-1, rect().height()-1);
+    }
 
     if (drawSelectionFrame)
     {

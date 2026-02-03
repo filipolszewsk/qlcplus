@@ -27,7 +27,6 @@
 #include <QString>
 #include <QMutex>
 #include <QList>
-#include <QPointer>
 
 #include "vcxypadfixture.h"
 #include "vcxypadpreset.h"
@@ -47,7 +46,6 @@ class FlowLayout;
 class QByteArray;
 class QSlider;
 class EFX;
-class Scene;
 class Doc;
 
 /** @addtogroup ui_vc_widgets
@@ -285,25 +283,18 @@ protected slots:
 
 private:
     FunctionParent functionParent() const;
-    
-    /**
-     * Stop any running EFX or Scene functions and clean up their resources.
-     * This is called when switching from Operate to Design mode or when
-     * changing presets.
-     */
-    void stopRunningFunctions();
 
 protected:
     QHash<QWidget *, VCXYPadPreset *> m_presets;
     /** Reference to an EFX Function when an EFX Preset is pressed */
-    QPointer<EFX> m_efx;
+    EFX *m_efx;
     /** Attribute override IDs for a running EFX preset */
     int m_efxStartXOverrideId;
     int m_efxStartYOverrideId;
     int m_efxWidthOverrideId;
     int m_efxHeightOverrideId;
 
-    QPointer<Scene> m_scene;
+    Scene *m_scene;
     QList<SceneChannel> m_sceneChannels;
 
     /*********************************************************************
