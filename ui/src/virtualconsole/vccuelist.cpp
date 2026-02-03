@@ -57,17 +57,25 @@
 #include "genericfader.h"
 #include "fadechannel.h"
 #include "qlcchannel.h"
+#include "channelcolumneditor.h"
 
 #include <QSpinBox>
+#include <QComboBox>
 
 /*****************************************************************************
- * ChannelValueDelegate - SpinBox delegate for editing channel values (0-255)
+ * ChannelValueDelegate - delegate for editing channel values
+ * Supports Raw (SpinBox), Scaled (SpinBox with conversion), and Dropdown modes
  *****************************************************************************/
 
 class ChannelValueDelegate : public QStyledItemDelegate
 {
 public:
-    ChannelValueDelegate(QObject *parent = 0) : QStyledItemDelegate(parent) {}
+    ChannelValueDelegate(QObject *parent = nullptr)
+        : QStyledItemDelegate(parent)
+        , m_columnInfo(nullptr)
+    {}
+
+    void setColumnInfo(const ChannelColumnInfo *info) { m_columnInfo = info; }
 
     QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
                           const QModelIndex &index) const override
@@ -75,27 +83,74 @@ public:
         Q_UNUSED(option);
         Q_UNUSED(index);
 
-        QSpinBox *editor = new QSpinBox(parent);
-        editor->setFrame(false);
-        editor->setMinimum(0);
-        editor->setMaximum(255);
-        return editor;
+        if (m_columnInfo && m_columnInfo->displayMode == DisplayDropdown &&
+            !m_columnInfo->dropdownMappings.isEmpty())
+        {
+            QComboBox *combo = new QComboBox(parent);
+            combo->setFrame(false);
+
+            // Add mappings sorted by DMX value
+            QMapIterator<int, QString> it(m_columnInfo->dropdownMappings);
+            while (it.hasNext())
+            {
+                it.next();
+                combo->addItem(it.value(), it.key());
+            }
+            return combo;
+        }
+        else
+        {
+            QSpinBox *editor = new QSpinBox(parent);
+            editor->setFrame(false);
+            editor->setMinimum(0);
+            editor->setMaximum(255);
+            return editor;
+        }
     }
 
     void setEditorData(QWidget *editor, const QModelIndex &index) const override
     {
-        int value = index.model()->data(index, Qt::EditRole).toInt();
-        QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
-        spinBox->setValue(value);
+        int dmxValue = index.model()->data(index, Qt::UserRole).toInt();
+
+        if (QComboBox *combo = qobject_cast<QComboBox*>(editor))
+        {
+            // Find nearest lower mapping
+            int bestIdx = 0;
+            int bestValue = -1;
+            for (int i = 0; i < combo->count(); ++i)
+            {
+                int mapValue = combo->itemData(i).toInt();
+                if (mapValue <= dmxValue && mapValue > bestValue)
+                {
+                    bestValue = mapValue;
+                    bestIdx = i;
+                }
+            }
+            combo->setCurrentIndex(bestIdx);
+        }
+        else if (QSpinBox *spinBox = qobject_cast<QSpinBox*>(editor))
+        {
+            spinBox->setValue(dmxValue);
+        }
     }
 
     void setModelData(QWidget *editor, QAbstractItemModel *model,
                       const QModelIndex &index) const override
     {
-        QSpinBox *spinBox = static_cast<QSpinBox*>(editor);
-        spinBox->interpretText();
-        int value = spinBox->value();
-        model->setData(index, value, Qt::EditRole);
+        int dmxValue = 0;
+
+        if (QComboBox *combo = qobject_cast<QComboBox*>(editor))
+        {
+            dmxValue = combo->currentData().toInt();
+        }
+        else if (QSpinBox *spinBox = qobject_cast<QSpinBox*>(editor))
+        {
+            spinBox->interpretText();
+            dmxValue = spinBox->value();
+        }
+
+        model->setData(index, dmxValue, Qt::EditRole);
+        model->setData(index, dmxValue, Qt::UserRole);
     }
 
     void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option,
@@ -104,6 +159,51 @@ public:
         Q_UNUSED(index);
         editor->setGeometry(option.rect);
     }
+
+    QString displayText(const QVariant &value, const QLocale &locale) const override
+    {
+        Q_UNUSED(locale);
+
+        int dmxValue = value.toInt();
+
+        if (!m_columnInfo)
+            return QString::number(dmxValue);
+
+        switch (m_columnInfo->displayMode)
+        {
+            case DisplayDropdown:
+            {
+                // Find nearest lower mapping
+                QString label;
+                int bestValue = -1;
+                QMapIterator<int, QString> it(m_columnInfo->dropdownMappings);
+                while (it.hasNext())
+                {
+                    it.next();
+                    if (it.key() <= dmxValue && it.key() > bestValue)
+                    {
+                        bestValue = it.key();
+                        label = it.value();
+                    }
+                }
+                return label.isEmpty() ? QString::number(dmxValue) : label;
+            }
+
+            case DisplayScaled:
+            {
+                double scaled = m_columnInfo->scaleMin +
+                    (dmxValue / 255.0) * (m_columnInfo->scaleMax - m_columnInfo->scaleMin);
+                return QString::number(scaled, 'f', 1) + m_columnInfo->scaleSuffix;
+            }
+
+            case DisplayRaw:
+            default:
+                return QString::number(dmxValue);
+        }
+    }
+
+private:
+    const ChannelColumnInfo *m_columnInfo;
 };
 
 #define COL_NUM      0
@@ -650,6 +750,9 @@ void VCCueList::updateStepList()
                     if (col.fixtureId != UINT_MAX)
                     {
                         uchar value = scene->value(col.fixtureId, col.fixtureChannel);
+                        // Store raw DMX value in UserRole for delegate
+                        item->setData(colOffset + i, Qt::UserRole, value);
+                        // Display text is handled by delegate's displayText()
                         item->setText(colOffset + i, QString::number(value));
                     }
                     else
@@ -1205,7 +1308,7 @@ void VCCueList::slotStepNoteChanged(int idx, QString note)
 
 void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
 {
-    // Only allow renaming channel columns (after COL_NOTES)
+    // Only allow editing channel columns (after COL_NOTES)
     int firstChannelCol = COL_NOTES + 1;
     if (logicalIndex < firstChannelCol)
         return;
@@ -1214,22 +1317,19 @@ void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
     if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
         return;
 
-    // Get current column name
-    QString currentName = m_tree->headerItem()->text(logicalIndex);
-
-    // Show rename dialog
-    bool ok;
-    QString newName = QInputDialog::getText(this,
-        tr("Rename Column"),
-        tr("Enter new column name:"),
-        QLineEdit::Normal,
-        currentName,
-        &ok);
-
-    if (ok && !newName.isEmpty() && newName != currentName)
+    // Open channel column editor dialog
+    ChannelColumnEditor editor(m_channelColumns[channelIdx], this);
+    if (editor.exec() == QDialog::Accepted)
     {
-        setChannelColumnName(channelIdx, newName);
+        m_channelColumns[channelIdx] = editor.columnInfo();
+
+        // Update delegate for this column to reflect new settings
+        ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+        delegate->setColumnInfo(&m_channelColumns[channelIdx]);
+        m_tree->setItemDelegateForColumn(logicalIndex, delegate);
+
         updateTreeHeader();
+        updateStepList();
         m_doc->setModified();
     }
 }
@@ -2834,11 +2934,13 @@ void VCCueList::setShowChannelColumns(bool show)
     if (show)
     {
         buildChannelColumns();
-        // Set up SpinBox delegates for channel value columns
+        // Set up delegates for channel value columns with column info
         int colOffset = COL_NOTES + 1;
         for (int i = 0; i < m_channelColumns.size(); i++)
         {
-            m_tree->setItemDelegateForColumn(colOffset + i, new ChannelValueDelegate(this));
+            ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+            delegate->setColumnInfo(&m_channelColumns[i]);
+            m_tree->setItemDelegateForColumn(colOffset + i, delegate);
         }
     }
     else
@@ -3297,9 +3399,39 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                     
                     ChannelColumnInfo info = findFixtureForAddress(address);
                     info.customName = customName;
-                    m_channelColumns.append(info);
                     
-                    root.skipCurrentElement();
+                    // Load display mode
+                    if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnDisplayMode))
+                    {
+                        info.displayMode = static_cast<ChannelDisplayMode>(
+                            colAttrs.value(KXMLQLCVCCueListChannelColumnDisplayMode).toString().toInt());
+                    }
+                    
+                    // Load scale settings
+                    if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnScaleMin))
+                        info.scaleMin = colAttrs.value(KXMLQLCVCCueListChannelColumnScaleMin).toString().toDouble();
+                    if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnScaleMax))
+                        info.scaleMax = colAttrs.value(KXMLQLCVCCueListChannelColumnScaleMax).toString().toDouble();
+                    if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnScaleSuffix))
+                        info.scaleSuffix = colAttrs.value(KXMLQLCVCCueListChannelColumnScaleSuffix).toString();
+                    
+                    // Load dropdown mappings
+                    while (root.readNextStartElement())
+                    {
+                        if (root.name() == KXMLQLCVCCueListChannelColumnMapping)
+                        {
+                            QXmlStreamAttributes mapAttrs = root.attributes();
+                            int mapValue = mapAttrs.value(KXMLQLCVCCueListChannelColumnMappingValue).toString().toInt();
+                            QString mapLabel = root.readElementText();
+                            info.dropdownMappings[mapValue] = mapLabel;
+                        }
+                        else
+                        {
+                            root.skipCurrentElement();
+                        }
+                    }
+                    
+                    m_channelColumns.append(info);
                 }
                 else
                 {
@@ -3314,7 +3446,9 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                 int colOffset = COL_NOTES + 1;
                 for (int i = 0; i < m_channelColumns.size(); i++)
                 {
-                    m_tree->setItemDelegateForColumn(colOffset + i, new ChannelValueDelegate(this));
+                    ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+                    delegate->setColumnInfo(&m_channelColumns[i]);
+                    m_tree->setItemDelegateForColumn(colOffset + i, delegate);
                 }
             }
             
@@ -3501,6 +3635,37 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
                                QString::number(col.absoluteAddress));
             if (!col.customName.isEmpty())
                 doc->writeAttribute(KXMLQLCVCCueListChannelColumnName, col.customName);
+            
+            // Save display mode settings
+            doc->writeAttribute(KXMLQLCVCCueListChannelColumnDisplayMode,
+                               QString::number(col.displayMode));
+            
+            // Save scale settings (for Scaled mode)
+            if (col.displayMode == DisplayScaled)
+            {
+                doc->writeAttribute(KXMLQLCVCCueListChannelColumnScaleMin,
+                                   QString::number(col.scaleMin, 'f', 2));
+                doc->writeAttribute(KXMLQLCVCCueListChannelColumnScaleMax,
+                                   QString::number(col.scaleMax, 'f', 2));
+                if (!col.scaleSuffix.isEmpty())
+                    doc->writeAttribute(KXMLQLCVCCueListChannelColumnScaleSuffix, col.scaleSuffix);
+            }
+            
+            // Save dropdown mappings (for Dropdown mode)
+            if (col.displayMode == DisplayDropdown && !col.dropdownMappings.isEmpty())
+            {
+                QMapIterator<int, QString> it(col.dropdownMappings);
+                while (it.hasNext())
+                {
+                    it.next();
+                    doc->writeStartElement(KXMLQLCVCCueListChannelColumnMapping);
+                    doc->writeAttribute(KXMLQLCVCCueListChannelColumnMappingValue,
+                                       QString::number(it.key()));
+                    doc->writeCharacters(it.value());
+                    doc->writeEndElement();
+                }
+            }
+            
             doc->writeEndElement();
         }
         

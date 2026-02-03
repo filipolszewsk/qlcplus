@@ -117,6 +117,7 @@ add_library(${module_name}
     virtualconsole/vcbuttonproperties.cpp virtualconsole/vcbuttonproperties.h virtualconsole/vcbuttonproperties.ui
     virtualconsole/vcclock.cpp virtualconsole/vcclock.h
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
+    virtualconsole/channelcolumneditor.cpp virtualconsole/channelcolumneditor.h
     virtualconsole/vccuelist.cpp virtualconsole/vccuelist.h
     virtualconsole/vccuelistproperties.cpp virtualconsole/vccuelistproperties.h virtualconsole/vccuelistproperties.ui
     virtualconsole/vcdockarea.cpp virtualconsole/vcdockarea.h

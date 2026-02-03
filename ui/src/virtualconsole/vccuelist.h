@@ -22,6 +22,7 @@
 #define VCCUELIST_H
 
 #include <QKeySequence>
+#include <QMap>
 #include <QWidget>
 
 #include "dmxsource.h"
@@ -82,6 +83,22 @@ class Doc;
 #define KXMLQLCVCCueListChannelColumnAddress QStringLiteral("Address")
 #define KXMLQLCVCCueListChannelColumnName QStringLiteral("CustomName")
 #define KXMLQLCVCCueListShowChannelColumns QStringLiteral("ShowColumns")
+#define KXMLQLCVCCueListChannelColumnDisplayMode QStringLiteral("DisplayMode")
+#define KXMLQLCVCCueListChannelColumnScaleMin QStringLiteral("ScaleMin")
+#define KXMLQLCVCCueListChannelColumnScaleMax QStringLiteral("ScaleMax")
+#define KXMLQLCVCCueListChannelColumnScaleSuffix QStringLiteral("ScaleSuffix")
+#define KXMLQLCVCCueListChannelColumnMapping QStringLiteral("Mapping")
+#define KXMLQLCVCCueListChannelColumnMappingValue QStringLiteral("Value")
+
+/**
+ * Display mode for channel columns
+ */
+enum ChannelDisplayMode
+{
+    DisplayRaw = 0,      ///< Raw DMX value 0-255
+    DisplayDropdown,     ///< Dropdown with custom value->label mappings
+    DisplayScaled        ///< Scaled display (e.g., 0-360°, 0-100%)
+};
 
 /**
  * Structure to hold information about a channel column in the cue list
@@ -93,10 +110,19 @@ struct ChannelColumnInfo
     quint32 fixtureChannel;   ///< Channel number relative to fixture
     QString customName;       ///< Optional custom name for the column header
 
+    ChannelDisplayMode displayMode;     ///< How to display values
+    QMap<int, QString> dropdownMappings; ///< DMX value -> label for dropdown mode
+    double scaleMin;                     ///< Minimum scaled value
+    double scaleMax;                     ///< Maximum scaled value
+    QString scaleSuffix;                 ///< Suffix for scaled display (e.g., "°", "%")
+
     ChannelColumnInfo()
         : absoluteAddress(0)
         , fixtureId(UINT_MAX)
         , fixtureChannel(0)
+        , displayMode(DisplayRaw)
+        , scaleMin(0.0)
+        , scaleMax(255.0)
     {}
 
     ChannelColumnInfo(quint32 addr, quint32 fxiId, quint32 fxiCh, const QString &name = QString())
@@ -104,6 +130,9 @@ struct ChannelColumnInfo
         , fixtureId(fxiId)
         , fixtureChannel(fxiCh)
         , customName(name)
+        , displayMode(DisplayRaw)
+        , scaleMin(0.0)
+        , scaleMax(255.0)
     {}
 };
 
