@@ -227,8 +227,12 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_tree->setItemsExpandable(false);
     m_tree->header()->setSortIndicatorShown(false);
     m_tree->header()->setMinimumSectionSize(0); // allow columns to be hidden
-    m_tree->header()->setSectionsClickable(false);
+    m_tree->header()->setSectionsClickable(true);  // Enable for double-click rename of channel columns
     m_tree->header()->setSectionsMovable(false);
+
+    // Connect header double-click for renaming channel columns
+    connect(m_tree->header(), SIGNAL(sectionDoubleClicked(int)),
+            this, SLOT(slotHeaderDoubleClicked(int)));
 
     // Make only the notes column editable
     m_tree->setItemDelegateForColumn(COL_NUM, new NoEditDelegate(this));
@@ -1197,6 +1201,37 @@ void VCCueList::slotStepNoteChanged(int idx, QString note)
     ChaserStep step = ch->steps().at(idx);
     step.note = note;
     ch->replaceStep(step, idx);
+}
+
+void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
+{
+    // Only allow renaming channel columns (after COL_NOTES)
+    int firstChannelCol = COL_NOTES + 1;
+    if (logicalIndex < firstChannelCol)
+        return;
+
+    int channelIdx = logicalIndex - firstChannelCol;
+    if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
+        return;
+
+    // Get current column name
+    QString currentName = m_tree->headerItem()->text(logicalIndex);
+
+    // Show rename dialog
+    bool ok;
+    QString newName = QInputDialog::getText(this,
+        tr("Rename Column"),
+        tr("Enter new column name:"),
+        QLineEdit::Normal,
+        currentName,
+        &ok);
+
+    if (ok && !newName.isEmpty() && newName != currentName)
+    {
+        setChannelColumnName(channelIdx, newName);
+        updateTreeHeader();
+        m_doc->setModified();
+    }
 }
 
 void VCCueList::slotFunctionRunning(quint32 fid)

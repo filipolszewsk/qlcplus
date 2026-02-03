@@ -262,6 +262,9 @@ private slots:
         Note that only 'Notes" column is considered */
     void slotItemChanged(QTreeWidgetItem*item, int column);
 
+    /** Slot called when a header column is double-clicked (for renaming channel columns) */
+    void slotHeaderDoubleClicked(int logicalIndex);
+
     /** Slot called whenever a function is started */
     void slotFunctionRunning(quint32 fid);
 
