@@ -100,6 +100,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_chaserID(Function::invalidId())
     , m_nextPrevBehavior(DefaultRunFirst)
     , m_playbackLayout(PlayPauseStop)
+    , m_autoStartInOperate(false)
     , m_timer(NULL)
     , m_primaryIndex(0)
     , m_secondaryIndex(0)
@@ -430,6 +431,9 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     setStepIndexOutputEnabled(cuelist->stepIndexOutputEnabled());
     setStepIndexOutputFixture(cuelist->stepIndexOutputFixture());
     setStepIndexOutputChannel(cuelist->stepIndexOutputChannel());
+
+    /* Auto start */
+    setAutoStartInOperate(cuelist->autoStartInOperate());
 
     /* Common stuff */
     return VCWidget::copyFrom(widget);
@@ -1310,6 +1314,16 @@ VCCueList::PlaybackLayout VCCueList::playbackLayout() const
     return m_playbackLayout;
 }
 
+void VCCueList::setAutoStartInOperate(bool enable)
+{
+    m_autoStartInOperate = enable;
+}
+
+bool VCCueList::autoStartInOperate() const
+{
+    return m_autoStartInOperate;
+}
+
 VCCueList::FaderMode VCCueList::sideFaderMode() const
 {
     return m_slidersMode;
@@ -1987,6 +2001,14 @@ void VCCueList::slotModeChanged(Doc::Mode mode)
         {
             m_doc->masterTimer()->registerDMXSource(this);
         }
+        
+        // Auto start cue list if enabled and chaser is attached
+        if (m_autoStartInOperate && m_chaserID != Function::invalidId())
+        {
+            Chaser *ch = chaser();
+            if (ch != NULL && !ch->isRunning())
+                slotPlayback();
+        }
     }
     else
     {
@@ -2096,7 +2118,7 @@ void VCCueList::updateOverwriteButtonState()
     }
 
     Chaser *ch = chaser();
-    if (ch == NULL || !ch->stopped())
+    if (ch == NULL)
     {
         m_overwriteButton->setEnabled(false);
         return;
@@ -2206,10 +2228,6 @@ void VCCueList::slotOverwriteButtonClicked()
     Chaser *ch = chaser();
     if (ch == NULL)
         return;
-
-    // Check if chaser is stopped
-    if (!ch->stopped())
-        return; // Cannot overwrite when chaser is running
 
     // Check if item is selected
     QTreeWidgetItem *item = m_tree->currentItem();
@@ -2949,6 +2967,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLQLCVCCueListAutoStart)
+        {
+            setAutoStartInOperate(root.readElementText() == "1");
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown cuelist tag:" << root.name().toString();
@@ -3110,6 +3132,10 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
                            QString::number(m_stepIndexOutputChannel));
         doc->writeEndElement();
     }
+
+    /* Auto start in operate mode */
+    if (m_autoStartInOperate)
+        doc->writeTextElement(KXMLQLCVCCueListAutoStart, QString::number(1));
 
     /* End the <CueList> tag */
     doc->writeEndElement();

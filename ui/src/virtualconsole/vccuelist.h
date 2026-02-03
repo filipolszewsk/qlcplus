@@ -76,6 +76,7 @@ class Doc;
 #define KXMLQLCVCCueListStepIndexOutputEnabled QStringLiteral("Enabled")
 #define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
 #define KXMLQLCVCCueListStepIndexOutputChannel QStringLiteral("Channel")
+#define KXMLQLCVCCueListAutoStart       QStringLiteral("AutoStart")
 
 /**
  * VCCueList provides a \ref VirtualConsole widget to control cue lists.
@@ -270,6 +271,12 @@ public:
 
     void setPlaybackLayout(PlaybackLayout layout);
     PlaybackLayout playbackLayout() const;
+
+    /** Set whether the cue list should auto-start when entering Operate mode */
+    void setAutoStartInOperate(bool enable);
+
+    /** Get whether the cue list should auto-start when entering Operate mode */
+    bool autoStartInOperate() const;
 signals:
     void playbackButtonClicked();
     void stopButtonClicked();
@@ -281,6 +288,7 @@ private:
 
     NextPrevBehavior m_nextPrevBehavior;
     PlaybackLayout m_playbackLayout;
+    bool m_autoStartInOperate;
     QTreeWidget *m_tree;
     QToolButton *m_crossfadeButton;
     QToolButton *m_playbackButton;
