@@ -28,6 +28,7 @@ class QTableWidget;
 class QDoubleSpinBox;
 class QStackedWidget;
 class QToolButton;
+class QCheckBox;
 
 struct ChannelColumnInfo;
 
@@ -63,6 +64,7 @@ private:
 
     QLineEdit *m_nameEdit;
     QComboBox *m_modeCombo;
+    QCheckBox *m_hiddenCheck;
     QStackedWidget *m_settingsStack;
 
     // Scaled mode widgets

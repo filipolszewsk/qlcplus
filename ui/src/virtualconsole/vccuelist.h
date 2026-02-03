@@ -89,6 +89,7 @@ class Doc;
 #define KXMLQLCVCCueListChannelColumnScaleSuffix QStringLiteral("ScaleSuffix")
 #define KXMLQLCVCCueListChannelColumnMapping QStringLiteral("Mapping")
 #define KXMLQLCVCCueListChannelColumnMappingValue QStringLiteral("Value")
+#define KXMLQLCVCCueListChannelColumnHidden QStringLiteral("Hidden")
 
 /**
  * Display mode for channel columns
@@ -115,6 +116,7 @@ struct ChannelColumnInfo
     double scaleMin;                     ///< Minimum scaled value
     double scaleMax;                     ///< Maximum scaled value
     QString scaleSuffix;                 ///< Suffix for scaled display (e.g., "°", "%")
+    bool hidden;                         ///< Whether this column is hidden
 
     ChannelColumnInfo()
         : absoluteAddress(0)
@@ -123,6 +125,7 @@ struct ChannelColumnInfo
         , displayMode(DisplayRaw)
         , scaleMin(0.0)
         , scaleMax(255.0)
+        , hidden(false)
     {}
 
     ChannelColumnInfo(quint32 addr, quint32 fxiId, quint32 fxiCh, const QString &name = QString())
@@ -133,6 +136,7 @@ struct ChannelColumnInfo
         , displayMode(DisplayRaw)
         , scaleMin(0.0)
         , scaleMax(255.0)
+        , hidden(false)
     {}
 };
 
@@ -643,6 +647,9 @@ private:
 
     /** Update the tree widget header labels */
     void updateTreeHeader();
+
+    /** Apply hidden state to channel columns */
+    void applyColumnHiddenState();
 
 private:
     /** Whether to show channel columns */

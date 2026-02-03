@@ -1328,6 +1328,9 @@ void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
         delegate->setColumnInfo(&m_channelColumns[channelIdx]);
         m_tree->setItemDelegateForColumn(logicalIndex, delegate);
 
+        // Hide or show column based on hidden flag
+        m_tree->header()->setSectionHidden(logicalIndex, m_channelColumns[channelIdx].hidden);
+
         updateTreeHeader();
         updateStepList();
         m_doc->setModified();
@@ -2956,6 +2959,19 @@ void VCCueList::setShowChannelColumns(bool show)
 
     updateTreeHeader();
     updateStepList();
+    applyColumnHiddenState();
+}
+
+void VCCueList::applyColumnHiddenState()
+{
+    if (!m_showChannelColumns)
+        return;
+
+    int colOffset = COL_NOTES + 1;
+    for (int i = 0; i < m_channelColumns.size(); i++)
+    {
+        m_tree->header()->setSectionHidden(colOffset + i, m_channelColumns[i].hidden);
+    }
 }
 
 bool VCCueList::showChannelColumns() const
@@ -3415,6 +3431,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                     if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnScaleSuffix))
                         info.scaleSuffix = colAttrs.value(KXMLQLCVCCueListChannelColumnScaleSuffix).toString();
                     
+                    // Load hidden state
+                    if (colAttrs.hasAttribute(KXMLQLCVCCueListChannelColumnHidden))
+                        info.hidden = colAttrs.value(KXMLQLCVCCueListChannelColumnHidden).toString() == "1";
+                    
                     // Load dropdown mappings
                     while (root.readNextStartElement())
                     {
@@ -3453,6 +3473,7 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             }
             
             updateTreeHeader();
+            applyColumnHiddenState();
         }
         else
         {
@@ -3650,6 +3671,10 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
                 if (!col.scaleSuffix.isEmpty())
                     doc->writeAttribute(KXMLQLCVCCueListChannelColumnScaleSuffix, col.scaleSuffix);
             }
+            
+            // Save hidden state
+            if (col.hidden)
+                doc->writeAttribute(KXMLQLCVCCueListChannelColumnHidden, "1");
             
             // Save dropdown mappings (for Dropdown mode)
             if (col.displayMode == DisplayDropdown && !col.dropdownMappings.isEmpty())

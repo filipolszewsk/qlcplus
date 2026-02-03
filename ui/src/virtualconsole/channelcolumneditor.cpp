@@ -29,6 +29,7 @@
 #include <QToolButton>
 #include <QHeaderView>
 #include <QDialogButtonBox>
+#include <QCheckBox>
 #include <QLabel>
 
 #include "channelcolumneditor.h"
@@ -58,6 +59,10 @@ void ChannelColumnEditor::setupUi()
     m_nameEdit = new QLineEdit(this);
     nameLayout->addRow(tr("Name:"), m_nameEdit);
     mainLayout->addLayout(nameLayout);
+
+    // Hidden checkbox
+    m_hiddenCheck = new QCheckBox(tr("Hide this column"), this);
+    mainLayout->addWidget(m_hiddenCheck);
 
     // Display mode section
     QFormLayout *modeLayout = new QFormLayout();
@@ -172,6 +177,7 @@ void ChannelColumnEditor::setupUi()
 void ChannelColumnEditor::loadFromInfo()
 {
     m_nameEdit->setText(m_info.customName);
+    m_hiddenCheck->setChecked(m_info.hidden);
 
     // Set display mode
     int modeIndex = m_modeCombo->findData(m_info.displayMode);
@@ -205,6 +211,7 @@ void ChannelColumnEditor::loadFromInfo()
 void ChannelColumnEditor::saveToInfo()
 {
     m_info.customName = m_nameEdit->text();
+    m_info.hidden = m_hiddenCheck->isChecked();
     m_info.displayMode = static_cast<ChannelDisplayMode>(m_modeCombo->currentData().toInt());
 
     // Save scale settings
