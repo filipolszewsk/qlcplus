@@ -37,6 +37,7 @@
 #include <QList>
 #include <QIcon>
 
+#include "importfunctionsdialog.h"
 #include "functionstreewidget.h"
 #include "functionselection.h"
 #include "collectioneditor.h"
@@ -96,6 +97,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_cloneAction(NULL)
     , m_deleteAction(NULL)
     , m_selectAllAction(NULL)
+    , m_importAction(NULL)
     , m_editor(NULL)
     , m_scene_editor(NULL)
 {
@@ -286,6 +288,12 @@ void FunctionManager::initActions()
     m_selectAllAction->setShortcut(QKeySequence("CTRL+A"));
     connect(m_selectAllAction, SIGNAL(triggered(bool)),
             this, SLOT(slotSelectAll()));
+
+    m_importAction = new QAction(QIcon(":/fileimport.png"),
+                                 tr("&Import functions..."), this);
+    m_importAction->setShortcut(QKeySequence("CTRL+I"));
+    connect(m_importAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotImportFunctions()));
 }
 
 void FunctionManager::initToolbar()
@@ -311,6 +319,7 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_wizardAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_cloneAction);
+    m_toolbar->addAction(m_importAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_deleteAction);
 }
@@ -630,6 +639,16 @@ void FunctionManager::slotSelectAll()
     m_tree->selectAll();
 }
 
+void FunctionManager::slotImportFunctions()
+{
+    ImportFunctionsDialog dialog(this, m_doc);
+    if (dialog.exec() == QDialog::Accepted && dialog.importedCount() > 0)
+    {
+        m_tree->updateTree();
+        m_doc->setModified();
+    }
+}
+
 void FunctionManager::updateActionStatus()
 {
     bool validSelection = false;
@@ -828,6 +847,7 @@ void FunctionManager::slotTreeContextMenuRequested()
     menu.addAction(m_addFolderAction);
     menu.addSeparator();
     menu.addAction(m_wizardAction);
+    menu.addAction(m_importAction);
 
     updateActionStatus();
 

@@ -61,6 +61,8 @@ add_library(${module_name}
     functionliveeditdialog.cpp functionliveeditdialog.h
     functionmanager.cpp functionmanager.h
     functionselection.cpp functionselection.h functionselection.ui
+    fixturemappingdialog.cpp fixturemappingdialog.h
+    importfunctionsdialog.cpp importfunctionsdialog.h
     functionstreewidget.cpp functionstreewidget.h
     functionwizard.cpp functionwizard.h functionwizard.ui
     grandmasterslider.cpp grandmasterslider.h
