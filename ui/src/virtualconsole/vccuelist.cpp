@@ -60,6 +60,7 @@
 #include "channelcolumneditor.h"
 
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QComboBox>
 
 /*****************************************************************************
@@ -98,6 +99,15 @@ public:
             }
             return combo;
         }
+        else if (m_columnInfo && m_columnInfo->displayMode == DisplayScaled)
+        {
+            QDoubleSpinBox *editor = new QDoubleSpinBox(parent);
+            editor->setFrame(false);
+            editor->setDecimals(1);
+            editor->setMinimum(m_columnInfo->scaleMin);
+            editor->setMaximum(m_columnInfo->scaleMax);
+            return editor;
+        }
         else
         {
             QSpinBox *editor = new QSpinBox(parent);
@@ -128,6 +138,13 @@ public:
             }
             combo->setCurrentIndex(bestIdx);
         }
+        else if (QDoubleSpinBox *dblSpinBox = qobject_cast<QDoubleSpinBox*>(editor))
+        {
+            // Convert DMX (0-255) to scaled value
+            double scaled = m_columnInfo->scaleMin +
+                (dmxValue / 255.0) * (m_columnInfo->scaleMax - m_columnInfo->scaleMin);
+            dblSpinBox->setValue(scaled);
+        }
         else if (QSpinBox *spinBox = qobject_cast<QSpinBox*>(editor))
         {
             spinBox->setValue(dmxValue);
@@ -142,6 +159,18 @@ public:
         if (QComboBox *combo = qobject_cast<QComboBox*>(editor))
         {
             dmxValue = combo->currentData().toInt();
+        }
+        else if (QDoubleSpinBox *dblSpinBox = qobject_cast<QDoubleSpinBox*>(editor))
+        {
+            dblSpinBox->interpretText();
+            double scaled = dblSpinBox->value();
+            // Convert scaled value back to DMX (0-255)
+            if (m_columnInfo && m_columnInfo->scaleMax != m_columnInfo->scaleMin)
+            {
+                dmxValue = qRound(((scaled - m_columnInfo->scaleMin) /
+                    (m_columnInfo->scaleMax - m_columnInfo->scaleMin)) * 255.0);
+                dmxValue = qBound(0, dmxValue, 255);
+            }
         }
         else if (QSpinBox *spinBox = qobject_cast<QSpinBox*>(editor))
         {
@@ -887,8 +916,27 @@ void VCCueList::slotFunctionRemoved(quint32 fid)
 
 void VCCueList::slotFunctionChanged(quint32 fid)
 {
-    if (fid == m_chaserID && !m_updateTimer->isActive())
-        m_updateTimer->start(UPDATE_TIMEOUT);
+    if (fid == m_chaserID)
+    {
+        if (!m_updateTimer->isActive())
+            m_updateTimer->start(UPDATE_TIMEOUT);
+        return;
+    }
+
+    // Check if fid is a Scene that is a step in the chaser
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    foreach (ChaserStep step, ch->steps())
+    {
+        if (step.fid == fid)
+        {
+            if (!m_updateTimer->isActive())
+                m_updateTimer->start(UPDATE_TIMEOUT);
+            return;
+        }
+    }
 }
 
 void VCCueList::slotFunctionNameChanged(quint32 fid)
@@ -3473,6 +3521,7 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             }
             
             updateTreeHeader();
+            updateStepList();
             applyColumnHiddenState();
         }
         else
