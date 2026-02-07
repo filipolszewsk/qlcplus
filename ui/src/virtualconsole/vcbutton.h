@@ -26,7 +26,10 @@
 #include <QIcon>
 
 #include "vcwidget.h"
+#include "scenevalue.h"
 #include "function.h"
+
+class QTimer;
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -60,8 +63,10 @@ class QEvent;
 
 #define KXMLQLCVCButtonKey QStringLiteral("Key")
 
-#define KXMLQLCVCButtonIntensity        QStringLiteral("Intensity")
-#define KXMLQLCVCButtonIntensityAdjust  QStringLiteral("Adjust")
+#define KXMLQLCVCButtonIntensity              QStringLiteral("Intensity")
+#define KXMLQLCVCButtonIntensityAdjust        QStringLiteral("Adjust")
+
+#define KXMLQLCVCButtonMonitorChannelValues   QStringLiteral("MonitorChannelValues")
 
 class VCButton : public VCWidget
 {
@@ -327,6 +332,32 @@ private:
     bool m_flashOverrides;
     bool m_flashForceLTP;
 
+
+    /*********************************************************************
+     * Channel value monitoring
+     *********************************************************************/
+public:
+    /** Enable/disable monitoring of DMX channel values to highlight button */
+    void setMonitorChannelValues(bool enable);
+
+    /** Check whether channel value monitoring is enabled */
+    bool monitorChannelValues() const;
+
+protected slots:
+    /** Periodically checks DMX output against the scene's channel values */
+    void slotCheckChannelValues();
+
+    /** @reimp Handle mode change to start/stop the monitor timer */
+    void slotModeChanged(Doc::Mode mode);
+
+protected:
+    /** Rebuild the cached scene values from the assigned function */
+    void updateCachedSceneValues();
+
+private:
+    bool m_monitorChannelValues;
+    QTimer* m_channelMonitorTimer;
+    QList<SceneValue> m_cachedSceneValues;
 
     /*********************************************************************
      * Button press / release handlers

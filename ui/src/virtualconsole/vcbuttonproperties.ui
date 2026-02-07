@@ -321,6 +321,16 @@
         </property>
        </widget>
       </item>
+      <item row="2" column="0" colspan="4">
+       <widget class="QCheckBox" name="m_monitorChannelValues">
+        <property name="toolTip">
+         <string>Highlight this button when DMX output matches the scene's channel values, even if the scene is not running directly</string>
+        </property>
+        <property name="text">
+         <string>Monitor channel values</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>

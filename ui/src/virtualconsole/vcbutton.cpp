@@ -51,14 +51,18 @@
 
 #include "vcbuttonproperties.h"
 #include "vcpropertieseditor.h"
+#include "inputoutputmap.h"
 #include "virtualconsole.h"
 #include "chaseraction.h"
 #include "mastertimer.h"
 #include "vcsoloframe.h"
 #include "vcbutton.h"
+#include "universe.h"
 #include "function.h"
+#include "fixture.h"
 #include "apputil.h"
 #include "chaser.h"
+#include "scene.h"
 #include "doc.h"
 
 const QSize VCButton::defaultSize(QSize(50, 50));
@@ -74,6 +78,8 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     , m_startupIntensity(1.0)
     , m_flashOverrides(false)
     , m_flashForceLTP(false)
+    , m_monitorChannelValues(false)
+    , m_channelMonitorTimer(NULL)
 {
     /* Set the class name "VCButton" as the object name as well */
     setObjectName(VCButton::staticMetaObject.className());
@@ -170,6 +176,7 @@ bool VCButton::copyFrom(const VCWidget* widget)
 
     m_flashForceLTP = button->flashForceLTP();
     m_flashOverrides = button->flashOverrides();
+    setMonitorChannelValues(button->monitorChannelValues());
 
     /* Copy common stuff */
     return VCWidget::copyFrom(widget);
@@ -394,6 +401,10 @@ void VCButton::setFunction(quint32 fid)
         m_function = Function::invalidId();
         setToolTip(QString());
     }
+
+    /* Update cached scene values for channel monitoring */
+    if (m_monitorChannelValues)
+        updateCachedSceneValues();
 }
 
 quint32 VCButton::function() const
@@ -702,7 +713,138 @@ void VCButton::setFlashForceLTP(bool forceLTP)
     m_flashForceLTP = forceLTP;
 }
 
+/*****************************************************************************
+ * Channel value monitoring
+ *****************************************************************************/
 
+void VCButton::setMonitorChannelValues(bool enable)
+{
+    if (m_monitorChannelValues == enable)
+        return;
+
+    m_monitorChannelValues = enable;
+
+    if (enable)
+    {
+        updateCachedSceneValues();
+
+        if (m_channelMonitorTimer == NULL)
+        {
+            m_channelMonitorTimer = new QTimer(this);
+            m_channelMonitorTimer->setInterval(200);
+            connect(m_channelMonitorTimer, SIGNAL(timeout()),
+                    this, SLOT(slotCheckChannelValues()));
+        }
+
+        /* Start the timer only if we are in Operate mode */
+        if (mode() == Doc::Operate)
+            m_channelMonitorTimer->start();
+    }
+    else
+    {
+        if (m_channelMonitorTimer != NULL)
+        {
+            m_channelMonitorTimer->stop();
+            delete m_channelMonitorTimer;
+            m_channelMonitorTimer = NULL;
+        }
+        m_cachedSceneValues.clear();
+    }
+}
+
+bool VCButton::monitorChannelValues() const
+{
+    return m_monitorChannelValues;
+}
+
+void VCButton::updateCachedSceneValues()
+{
+    m_cachedSceneValues.clear();
+
+    Function* func = m_doc->function(m_function);
+    if (func == NULL || func->type() != Function::SceneType)
+        return;
+
+    Scene* scene = qobject_cast<Scene*>(func);
+    if (scene == NULL)
+        return;
+
+    m_cachedSceneValues = scene->values();
+}
+
+void VCButton::slotCheckChannelValues()
+{
+    if (!m_monitorChannelValues || m_cachedSceneValues.isEmpty())
+        return;
+
+    /* Read the DMX output and compare to cached scene values */
+    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+    bool allMatch = true;
+
+    for (int i = 0; i < m_cachedSceneValues.count(); i++)
+    {
+        const SceneValue& scv = m_cachedSceneValues.at(i);
+        Fixture* fixture = m_doc->fixture(scv.fxi);
+        if (fixture == NULL)
+        {
+            allMatch = false;
+            break;
+        }
+
+        quint32 uni = fixture->universe();
+        quint32 addr = fixture->address() + scv.channel;
+
+        if ((int)uni >= universes.count())
+        {
+            allMatch = false;
+            break;
+        }
+
+        uchar currentValue = universes.at(uni)->preGMValue(addr);
+        if (currentValue != scv.value)
+        {
+            allMatch = false;
+            break;
+        }
+    }
+
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    if (allMatch && state() == Inactive)
+        setState(Monitoring);
+    else if (!allMatch && state() == Monitoring)
+        setState(Inactive);
+    else if (!allMatch && state() == Active)
+    {
+        /* Something else overrode the channel values - stop the function */
+        Function* func = m_doc->function(m_function);
+        if (func != NULL)
+        {
+            func->stop(functionParent());
+            resetIntensityOverrideAttribute();
+        }
+        /* slotFunctionStopped() will set state to Inactive */
+    }
+}
+
+void VCButton::slotModeChanged(Doc::Mode mode)
+{
+    /* Call the base class implementation */
+    VCWidget::slotModeChanged(mode);
+
+    if (m_monitorChannelValues && m_channelMonitorTimer != NULL)
+    {
+        if (mode == Doc::Operate)
+            m_channelMonitorTimer->start();
+        else
+        {
+            m_channelMonitorTimer->stop();
+            /* Reset to inactive when leaving operate mode */
+            if (state() == Monitoring)
+                setState(Inactive);
+        }
+    }
+}
 
 /*****************************************************************************
  * Button press / release handlers
@@ -973,6 +1115,10 @@ bool VCButton::loadXML(QXmlStreamReader &root)
             setStartupIntensity(qreal(root.readElementText().toInt()) / qreal(100));
             enableStartupIntensity(adjust);
         }
+        else if (root.name() == KXMLQLCVCButtonMonitorChannelValues)
+        {
+            setMonitorChannelValues(root.readElementText() == KXMLQLCTrue);
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown button tag:" << root.name().toString();
@@ -1034,6 +1180,10 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
                      isStartupIntensityEnabled() ? KXMLQLCTrue : KXMLQLCFalse);
     doc->writeCharacters(QString::number(int(startupIntensity() * 100)));
     doc->writeEndElement();
+
+    /* Channel value monitoring (only save if enabled, for backward compat) */
+    if (m_monitorChannelValues)
+        doc->writeTextElement(KXMLQLCVCButtonMonitorChannelValues, KXMLQLCTrue);
 
     /* External input */
     saveXMLInput(doc);

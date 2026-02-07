@@ -65,6 +65,9 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     m_nameEdit->setText(m_button->caption());
     slotSetFunction(button->function());
 
+    /* Channel value monitoring */
+    m_monitorChannelValues->setChecked(m_button->monitorChannelValues());
+
     /* Press action */
     if (button->action() == VCButton::Flash)
         m_flash->setChecked(true);
@@ -129,12 +132,16 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
     if (func == NULL)
     {
         m_functionEdit->setText(tr("No function"));
+        m_monitorChannelValues->setEnabled(false);
     }
     else
     {
         m_functionEdit->setText(func->name());
         if (m_nameEdit->text().simplified().contains(QString::number(m_button->id())))
             m_nameEdit->setText(func->name());
+
+        /* Channel monitoring only works with Scene functions */
+        m_monitorChannelValues->setEnabled(func->type() == Function::SceneType);
     }
 }
 
@@ -236,6 +243,8 @@ void VCButtonProperties::accept()
         m_button->setFlashForceLTP(m_forceLTP->isChecked());
     }
 
+
+    m_button->setMonitorChannelValues(m_monitorChannelValues->isChecked());
 
     m_button->updateState();
 
