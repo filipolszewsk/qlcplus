@@ -51,6 +51,7 @@
 
 #include "vcbuttonproperties.h"
 #include "vcpropertieseditor.h"
+#include "scribbledialog.h"
 #include "inputoutputmap.h"
 #include "virtualconsole.h"
 #include "chaseraction.h"
@@ -102,10 +103,15 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     m_resetIconAction = new QAction(QIcon(":/undo.png"), tr("None"), this);
     m_resetIconAction->setShortcut(QKeySequence("SHIFT+ALT+C"));
 
+    m_scribbleIconAction = new QAction(QIcon(":/edit.png"), tr("Scribble..."), this);
+    m_scribbleIconAction->setShortcut(QKeySequence("SHIFT+D"));
+
     connect(m_chooseIconAction, SIGNAL(triggered(bool)),
             this, SLOT(slotChooseIcon()));
     connect(m_resetIconAction, SIGNAL(triggered(bool)),
             this, SLOT(slotResetIcon()));
+    connect(m_scribbleIconAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotScribbleIcon()));
 
     /* Initial size */
     QSettings settings;
@@ -361,6 +367,30 @@ void VCButton::slotResetIcon()
 {
     setIconPath(QString());
     update();
+}
+
+void VCButton::slotScribbleIcon()
+{
+    /* No point coming here if there is no VC */
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc == NULL)
+        return;
+
+    ScribbleDialog dlg(m_doc, this);
+    if (dlg.exec() == QDialog::Accepted)
+    {
+        QString path = dlg.savedIconPath();
+        if (path.isEmpty() == false)
+        {
+            /* Apply to all selected buttons (same pattern as slotChooseIcon) */
+            foreach (VCWidget *widget, vc->selectedWidgets())
+            {
+                VCButton *button = qobject_cast<VCButton*>(widget);
+                if (button != NULL)
+                    button->setIconPath(path);
+            }
+        }
+    }
 }
 
 /*****************************************************************************
@@ -1024,6 +1054,8 @@ QMenu* VCButton::customMenu(QMenu* parentMenu)
     QMenu* menu = new QMenu(parentMenu);
     menu->setTitle(tr("Icon"));
     menu->addAction(m_chooseIconAction);
+    menu->addAction(m_scribbleIconAction);
+    menu->addSeparator();
     menu->addAction(m_resetIconAction);
 
     return menu;
@@ -1216,9 +1248,18 @@ void VCButton::paintEvent(QPaintEvent* e)
     if (m_action == Toggle || m_action == Flash)
         option.state |= QStyle::State_Enabled;
 
-    /* Icon */
+    /* Icon - scale custom icons (e.g. scribble) proportionally to button size */
     option.icon = m_icon;
-    option.iconSize = m_iconSize;
+    if (m_iconPath.isEmpty() == false)
+    {
+        int dim = qMin(width(), height()) * 7 / 10;
+        if (dim < 16) dim = 16;
+        option.iconSize = QSize(dim, dim);
+    }
+    else
+    {
+        option.iconSize = m_iconSize;
+    }
 
     /* Paint the button */
     QPainter painter(this);

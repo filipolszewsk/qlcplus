@@ -165,6 +165,7 @@ private:
 public slots:
     void slotChooseIcon();
     void slotResetIcon();
+    void slotScribbleIcon();
 
 protected:
     QString m_iconPath;
@@ -173,6 +174,7 @@ protected:
 
     QAction* m_chooseIconAction;
     QAction* m_resetIconAction;
+    QAction* m_scribbleIconAction;
 
     /*********************************************************************
      * Function attachment
