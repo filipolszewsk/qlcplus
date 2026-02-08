@@ -22,6 +22,7 @@
 #define VCBUTTON_H
 
 #include <QKeySequence>
+#include <QElapsedTimer>
 #include <QWidget>
 #include <QIcon>
 
@@ -360,6 +361,12 @@ private:
     bool m_monitorChannelValues;
     QTimer* m_channelMonitorTimer;
     QList<SceneValue> m_cachedSceneValues;
+
+    /** true when this button actively started its function (vs monitoring) */
+    bool m_functionOwner;
+
+    /** Timestamp of last pressFunction() call for grace period */
+    QElapsedTimer m_lastPressTime;
 
     /*********************************************************************
      * Button press / release handlers

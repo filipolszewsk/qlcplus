@@ -81,6 +81,7 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
     , m_flashForceLTP(false)
     , m_monitorChannelValues(false)
     , m_channelMonitorTimer(NULL)
+    , m_functionOwner(false)
 {
     /* Set the class name "VCButton" as the object name as well */
     setObjectName(VCButton::staticMetaObject.className());
@@ -459,9 +460,11 @@ void VCButton::notifyFunctionStarting(quint32 fid, qreal intensity)
     if (fid == m_function || m_function == Function::invalidId())
         return;
 
-    // stop the controlled Function only
-    // if actively started by this Button
-    if (m_state != Active)
+    // FIX: Use m_functionOwner instead of m_state to decide whether to stop.
+    // The monitor timer may have set m_state to Inactive while the function
+    // is still running and owned by this button. Solo Frame must be able
+    // to stop it regardless of the visual state.
+    if (!m_functionOwner)
         return;
 
     if (action() == VCButton::Toggle)
@@ -472,6 +475,7 @@ void VCButton::notifyFunctionStarting(quint32 fid, qreal intensity)
             f->stop(functionParent());
             resetIntensityOverrideAttribute();
         }
+        m_functionOwner = false;
     }
 }
 
@@ -807,6 +811,12 @@ void VCButton::slotCheckChannelValues()
     if (!m_monitorChannelValues || m_cachedSceneValues.isEmpty())
         return;
 
+    /* FIX: Grace period -- skip the check for 500ms after a button press.
+     * This prevents the timer from overriding the state before the
+     * DMX output has actually been updated by the newly started function. */
+    if (m_lastPressTime.isValid() && m_lastPressTime.elapsed() < 500)
+        return;
+
     /* Read the DMX output and compare to cached scene values */
     QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
     bool allMatch = true;
@@ -840,16 +850,28 @@ void VCButton::slotCheckChannelValues()
 
     m_doc->inputOutputMap()->releaseUniverses(false);
 
-    if (allMatch && state() == Inactive)
+    if (allMatch && state() == Inactive && !m_functionOwner)
+    {
+        /* DMX matches the scene but we didn't start it -- show Monitoring */
         setState(Monitoring);
+    }
+    else if (allMatch && m_functionOwner && state() != Active)
+    {
+        /* We own the function and all channels match again
+         * (e.g. an override was removed) -- restore Active */
+        setState(Active);
+    }
     else if (!allMatch && state() == Monitoring)
+    {
         setState(Inactive);
-    else if (!allMatch && state() == Active)
+    }
+    else if (!allMatch && (state() == Active || m_functionOwner))
     {
         /* Some channel values were overridden by another control.
          * Only remove the visual Active state -- do NOT stop the function,
          * because stopping would release ALL channels (including those
-         * that still match) and let the cue list values flood back. */
+         * that still match) and let the cue list values flood back.
+         * m_functionOwner stays true so Solo Frame can still stop us. */
         setState(Inactive);
     }
 }
@@ -866,6 +888,7 @@ void VCButton::slotModeChanged(Doc::Mode mode)
         else
         {
             m_channelMonitorTimer->stop();
+            m_functionOwner = false;  // reset ownership when leaving Operate
             /* Reset to inactive when leaving operate mode */
             if (state() == Monitoring)
                 setState(Inactive);
@@ -890,16 +913,23 @@ void VCButton::pressFunction()
         if (f == NULL)
             return;
 
-        // if the button is in a SoloFrame and the function is running but was
-        // started by a different function (a chaser or collection), turn other
-        // functions off and start this one.
-        if (state() == Active && !(isChildOfSoloFrame() && f->startedAsChild()))
+        // Use m_functionOwner to decide toggle-off, not just visual state.
+        // This handles the case where the monitor timer set state to Inactive
+        // but the function is still running (owned by this button).
+        if ((m_functionOwner || state() == Active) &&
+            !(isChildOfSoloFrame() && f->startedAsChild()))
         {
             f->stop(functionParent());
             resetIntensityOverrideAttribute();
+            m_functionOwner = false;
         }
         else
         {
+            // If the function is already running (ghost - e.g. we lost ownership
+            // tracking due to monitor), stop it first to get a clean start
+            if (f->isRunning())
+                f->stop(functionParent());
+
             adjustFunctionIntensity(f, intensity());
 
             // starting a Chaser is a special case, since it is necessary
@@ -920,6 +950,8 @@ void VCButton::pressFunction()
 
             f->start(m_doc->masterTimer(), functionParent());
             setState(Active);
+            m_functionOwner = true;
+            m_lastPressTime.start();  // grace period for monitor timer
             emit functionStarting(m_function);
         }
     }
@@ -973,9 +1005,13 @@ void VCButton::slotFunctionRunning(quint32 fid)
 {
     if (fid == m_function && m_action == Toggle)
     {
-        if (state() == Inactive)
+        /* FIX: Only set Monitoring state, do NOT emit functionStarting.
+         * Monitoring means the function was started externally (e.g. by
+         * a Cue List or another widget). Emitting functionStarting here
+         * would incorrectly trigger Solo Frame to stop sibling buttons,
+         * even though this button is just observing, not actively starting. */
+        if (state() == Inactive && !m_functionOwner)
             setState(Monitoring);
-        emit functionStarting(m_function);
     }
 }
 
@@ -984,6 +1020,7 @@ void VCButton::slotFunctionStopped(quint32 fid)
     if (fid == m_function && m_action == Toggle)
     {
         resetIntensityOverrideAttribute();
+        m_functionOwner = false;  // FIX: reset ownership when function stops
         setState(Inactive);
         blink(250);
     }
