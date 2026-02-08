@@ -271,6 +271,9 @@ void VCFrame::setHeaderVisible(bool enable)
         m_enableButton->hide();
         if (m_detachButton)
             m_detachButton->hide();
+        if (m_prevPageBtn) m_prevPageBtn->hide();
+        if (m_pageCombo) m_pageCombo->hide();
+        if (m_nextPageBtn) m_nextPageBtn->hide();
     }
     else
     {
@@ -280,6 +283,15 @@ void VCFrame::setHeaderVisible(bool enable)
             m_enableButton->show();
         if (m_detachButton && !isDetached())
             m_detachButton->show();
+        if (m_multiPageMode)
+        {
+            if (m_pageCombo) m_pageCombo->show();
+            if (!m_collapsed)
+            {
+                if (m_prevPageBtn) m_prevPageBtn->show();
+                if (m_nextPageBtn) m_nextPageBtn->show();
+            }
+        }
     }
 }
 
@@ -683,17 +695,24 @@ void VCFrame::setMultipageMode(bool enable)
         connect (m_pageCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSetPage(int)));
         connect (m_nextPageBtn, SIGNAL(clicked()), this, SLOT(slotNextPage()));
 
-        if (this->isCollapsed() == false)
+        if (m_showHeader == false)
+        {
+            m_prevPageBtn->hide();
+            m_nextPageBtn->hide();
+            m_pageCombo->hide();
+        }
+        else if (this->isCollapsed() == false)
         {
             m_prevPageBtn->show();
             m_nextPageBtn->show();
+            m_pageCombo->show();
         }
         else
         {
             m_prevPageBtn->hide();
             m_nextPageBtn->hide();
+            m_pageCombo->show();
         }
-        m_pageCombo->show();
 
         if (m_pagesMap.isEmpty())
         {

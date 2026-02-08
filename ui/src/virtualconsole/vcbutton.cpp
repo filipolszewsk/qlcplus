@@ -846,14 +846,11 @@ void VCButton::slotCheckChannelValues()
         setState(Inactive);
     else if (!allMatch && state() == Active)
     {
-        /* Something else overrode the channel values - stop the function */
-        Function* func = m_doc->function(m_function);
-        if (func != NULL)
-        {
-            func->stop(functionParent());
-            resetIntensityOverrideAttribute();
-        }
-        /* slotFunctionStopped() will set state to Inactive */
+        /* Some channel values were overridden by another control.
+         * Only remove the visual Active state -- do NOT stop the function,
+         * because stopping would release ALL channels (including those
+         * that still match) and let the cue list values flood back. */
+        setState(Inactive);
     }
 }
 

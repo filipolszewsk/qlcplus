@@ -117,6 +117,7 @@ add_library(${module_name}
     virtualconsole/vcaudiotriggersproperties.cpp virtualconsole/vcaudiotriggersproperties.h virtualconsole/vcaudiotriggersproperties.ui
     virtualconsole/vcbutton.cpp virtualconsole/vcbutton.h
     virtualconsole/vcbuttonproperties.cpp virtualconsole/vcbuttonproperties.h virtualconsole/vcbuttonproperties.ui
+    virtualconsole/scribbledialog.cpp virtualconsole/scribbledialog.h
     virtualconsole/vcclock.cpp virtualconsole/vcclock.h
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
     virtualconsole/channelcolumneditor.cpp virtualconsole/channelcolumneditor.h
