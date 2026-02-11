@@ -613,6 +613,9 @@ private:
     /** Prefix for recorded cue names */
     QString m_recordCuePrefix;
 
+    /** Guard to prevent re-entry while record dialog is open */
+    bool m_isRecordDialogOpen;
+
     /*************************************************************************
      * Channel Columns
      *************************************************************************/

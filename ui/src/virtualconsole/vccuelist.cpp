@@ -287,6 +287,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_nextPrevControlsSecondary(false)
     , m_recordAllChannels(true)
     , m_recordNonZeroOnly(false)
+    , m_isRecordDialogOpen(false)
     , m_recordCuePrefix("cue")
     , m_showChannelColumns(false)
     , m_stepIndexOutputEnabled(false)
@@ -1515,6 +1516,19 @@ void VCCueList::startChaser(int startIndex)
 
     adjustFunctionIntensity(ch, intensity());
 
+    // Reset crossfade state so the selected step always starts at full intensity.
+    // Without this, m_primaryTop and slider value can be left in a stale state
+    // from a previous crossfade cycle, causing getPrimaryIntensity() to return 0.
+    if (sideFaderMode() == Crossfade)
+    {
+        m_primaryTop = true;
+        m_sideFader->blockSignals(true);
+        m_sideFader->setValue(100);
+        m_sideFader->blockSignals(false);
+        m_topPercentageLabel->setText("100%");
+        m_bottomPercentageLabel->setText("0%");
+    }
+
     ChaserAction action;
     action.m_action = ChaserSetStepIndex;
     action.m_stepIndex = startIndex;
@@ -2131,57 +2145,60 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), recordInputSourceId))
     {
-        // Use hysteresis to avoid triggering multiple times from a single
-        // value change. A zero value is accepted as input. And the non-zero values have to visit
-        // above $HYSTERESIS before a zero is accepted again.
+        // Button-style hysteresis: trigger on rising edge (0 -> non-zero),
+        // reset on falling edge (non-zero -> 0). Any non-zero value is accepted
+        // so that controllers sending low values (1-3) also work reliably.
         if (m_recordLatestValue == 0 && value > 0)
         {
             slotRecordButtonClicked();
-            m_recordLatestValue = value;
+            // slotRecordButtonClicked() opens a modal dialog whose event loop
+            // consumes the button release (value=0). Return immediately so
+            // m_recordLatestValue stays at 0 (reset inside the slot) and the
+            // next press is accepted without requiring an extra cycle.
+            return;
         }
-        else if (m_recordLatestValue > HYSTERESIS && value == 0)
+        else if (m_recordLatestValue > 0 && value == 0)
         {
             m_recordLatestValue = 0;
         }
-
-        if (value > HYSTERESIS)
+        else if (value > 0)
+        {
             m_recordLatestValue = value;
+        }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), overwriteInputSourceId))
     {
-        // Use hysteresis to avoid triggering multiple times from a single
-        // value change. A zero value is accepted as input. And the non-zero values have to visit
-        // above $HYSTERESIS before a zero is accepted again.
         if (m_overwriteLatestValue == 0 && value > 0)
         {
             slotOverwriteButtonClicked();
-            m_overwriteLatestValue = value;
+            // Modal dialog consumes release event; reset handled inside slot
+            return;
         }
-        else if (m_overwriteLatestValue > HYSTERESIS && value == 0)
+        else if (m_overwriteLatestValue > 0 && value == 0)
         {
             m_overwriteLatestValue = 0;
         }
-
-        if (value > HYSTERESIS)
+        else if (value > 0)
+        {
             m_overwriteLatestValue = value;
+        }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), deleteInputSourceId))
     {
-        // Use hysteresis to avoid triggering multiple times from a single
-        // value change. A zero value is accepted as input. And the non-zero values have to visit
-        // above $HYSTERESIS before a zero is accepted again.
         if (m_deleteLatestValue == 0 && value > 0)
         {
             slotDeleteButtonClicked();
-            m_deleteLatestValue = value;
+            // Modal dialog consumes release event; reset handled inside slot
+            return;
         }
-        else if (m_deleteLatestValue > HYSTERESIS && value == 0)
+        else if (m_deleteLatestValue > 0 && value == 0)
         {
             m_deleteLatestValue = 0;
         }
-
-        if (value > HYSTERESIS)
+        else if (value > 0)
+        {
             m_deleteLatestValue = value;
+        }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
@@ -2490,7 +2507,21 @@ void VCCueList::slotRecordButtonClicked()
     if (func != NULL && func->type() == Function::SequenceType)
         return;
 
+    // Prevent re-entry: recordLiveCue() opens a modal dialog which
+    // runs its own event loop. External input events arriving during
+    // the dialog could trigger this slot again, opening stacked dialogs.
+    if (m_isRecordDialogOpen)
+        return;
+
+    m_isRecordDialogOpen = true;
     recordLiveCue();
+    m_isRecordDialogOpen = false;
+
+    // Force reset the hysteresis state so the next external input press
+    // is immediately accepted. Without this, the modal dialog may have
+    // consumed the release event (value=0), leaving m_recordLatestValue
+    // stuck at a non-zero value and requiring an extra press to reset.
+    m_recordLatestValue = 0;
 }
 
 void VCCueList::slotOverwriteButtonClicked()
@@ -2532,6 +2563,9 @@ void VCCueList::slotOverwriteButtonClicked()
     {
         overwriteSelectedCue();
     }
+
+    // Modal dialog consumed button release; reset so next press works
+    m_overwriteLatestValue = 0;
 }
 
 void VCCueList::slotDeleteButtonClicked()
@@ -2575,6 +2609,9 @@ void VCCueList::slotDeleteButtonClicked()
     {
         deleteSelectedCue();
     }
+
+    // Modal dialog consumed button release; reset so next press works
+    m_deleteLatestValue = 0;
 }
 
 void VCCueList::deleteSelectedCue()
