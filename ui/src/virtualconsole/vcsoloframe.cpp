@@ -171,8 +171,14 @@ void VCSoloFrame::slotWidgetFunctionStarting(quint32 fid, qreal intensity)
         while (it.hasNext() == true)
         {
             VCWidget* widget = it.next();
-            if (widget != NULL && widget != senderWidget)
-                widget->notifyFunctionStarting(fid, soloframeMixing() ? intensity : 1.0);
+            if (widget == NULL || widget == senderWidget)
+                continue;
+            /* Skip hidden/disabled widgets (e.g. on a different page).
+             * Stopping their functions would release channels and let
+             * Cue List values flood back despite user overrides. */
+            if (!widget->isEnabled() || !widget->isVisible())
+                continue;
+            widget->notifyFunctionStarting(fid, soloframeMixing() ? intensity : 1.0);
         }
     }
 }
