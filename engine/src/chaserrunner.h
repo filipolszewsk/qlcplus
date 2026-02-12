@@ -166,6 +166,11 @@ public:
     /** Adjust the intensities of chaser steps */
     void adjustStepIntensity(qreal fraction, int stepIndex = -1, int fadeControl = 0);
 
+    /** Force a running step's function to re-create its faders.
+     *  This causes the faders to be re-added at the end of the Universe fader list,
+     *  making them write last and win LTP priority over other functions' faders. */
+    void reapplyStepValues(int stepIndex);
+
     /************************************************************************
      * Running
      ************************************************************************/

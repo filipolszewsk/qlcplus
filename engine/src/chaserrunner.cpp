@@ -457,6 +457,23 @@ void ChaserRunner::adjustStepIntensity(qreal fraction, int requestedStepIndex, i
     startNewStep(stepIndex, m_doc->masterTimer(), m_pendingAction.m_masterIntensity, fraction, fadeControl);
 }
 
+void ChaserRunner::reapplyStepValues(int stepIndex)
+{
+    foreach (ChaserRunnerStep *step, m_runnerSteps)
+    {
+        if (stepIndex == step->m_index && step->m_function != NULL)
+        {
+            // Dismiss all faders so they are re-created on the next write() tick.
+            // New faders will be appended at the end of the Universe fader list,
+            // making them write last and win LTP priority over other functions.
+            step->m_function->requestFadersReset();
+            qDebug() << "[ChaserRunner] Reapply step" << stepIndex
+                     << "- faders dismissed for re-creation";
+            return;
+        }
+    }
+}
+
 /****************************************************************************
  * Running
  ****************************************************************************/

@@ -726,3 +726,10 @@ void Chaser::adjustStepIntensity(qreal fraction, int stepIndex, FadeControlMode 
         m_startupAction.m_stepIntensity = fraction;
     }
 }
+
+void Chaser::reapplyStepValues(int stepIndex)
+{
+    QMutexLocker runnerLocker(&m_runnerMutex);
+    if (m_runner != NULL)
+        m_runner->reapplyStepValues(stepIndex);
+}

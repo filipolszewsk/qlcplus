@@ -817,6 +817,14 @@ public:
     bool stopped() const;
 
     /**
+     * Dismiss all current faders and clear the faders map.
+     * On the next write() tick, the function will re-create its faders
+     * at the end of the Universe fader list, winning LTP priority
+     * over older faders from other functions (e.g. buttons).
+     */
+    void requestFadersReset();
+
+    /**
      * Mark the function to be stopped and block the calling thread until it is
      * actually stopped. To prevent deadlocks the function only waits for 2s.
      *

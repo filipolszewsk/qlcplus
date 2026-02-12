@@ -1877,10 +1877,10 @@ void VCCueList::slotSideFaderValueChanged(int value)
                     m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_secondaryIndex + 1 : m_primaryIndex + 1));
                     m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
                 }
-                // Re-assert the step intensity so the scene's values are actively re-applied.
-                // This is needed when external buttons have overridden the same channels.
-                ch->adjustStepIntensity(1.0, m_primaryIndex,
-                                        Chaser::FadeControlMode(getFadeMode()));
+                // Force the step's scene to re-create its faders at the end of the
+                // Universe fader list, so LTP channels win over other functions (e.g. buttons).
+                // This mimics the effect of stop+play but without interrupting playback.
+                ch->reapplyStepValues(m_primaryIndex);
                 updateFeedback();
                 return;
             }

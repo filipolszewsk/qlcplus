@@ -1045,6 +1045,11 @@ void Function::dismissAllFaders()
     m_fadersMap.clear();
 }
 
+void Function::requestFadersReset()
+{
+    dismissAllFaders();
+}
+
 bool Function::isRunning() const
 {
     return m_running;
