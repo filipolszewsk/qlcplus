@@ -1863,7 +1863,7 @@ void VCCueList::slotSideFaderValueChanged(int value)
         {
             if (m_secondaryIndex == m_primaryIndex)
             {
-                // "Virtual" crossfade - secondary equals primary, so no actual intensity change needed
+                // "Virtual" crossfade - secondary equals primary
                 // But we still need to flip m_primaryTop when slider reaches the end for bidirectional operation
                 int primaryValue = m_primaryTop ? value : 100 - value;
                 if (primaryValue == 0)
@@ -1877,6 +1877,10 @@ void VCCueList::slotSideFaderValueChanged(int value)
                     m_bottomStepLabel->setText(QString("#%1").arg(m_primaryTop ? m_secondaryIndex + 1 : m_primaryIndex + 1));
                     m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
                 }
+                // Re-assert the step intensity so the scene's values are actively re-applied.
+                // This is needed when external buttons have overridden the same channels.
+                ch->adjustStepIntensity(1.0, m_primaryIndex,
+                                        Chaser::FadeControlMode(getFadeMode()));
                 updateFeedback();
                 return;
             }
