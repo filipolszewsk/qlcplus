@@ -119,7 +119,6 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_prevPageBtn(NULL)
     , m_pageCombo(NULL)
     , m_pagesLoop(false)
-    , m_perPageSize(false)
 {
     /* Set the class name "VCFrame" as the object name as well */
     setObjectName(VCFrame::staticMetaObject.className());
@@ -341,6 +340,8 @@ void VCFrame::slotCollapseButtonToggled(bool toggle)
     {
         m_width = this->width();
         m_height = this->height();
+        if (m_perPageSize)
+            m_pageSizes[m_currentPage] = QSize(m_width, m_height);
         if (m_multiPageMode == true)
         {
             if (m_prevPageBtn) m_prevPageBtn->hide();
@@ -351,7 +352,17 @@ void VCFrame::slotCollapseButtonToggled(bool toggle)
     }
     else
     {
-        resize(QSize(m_width, m_height));
+        if (m_perPageSize)
+        {
+            QSize ps = pageSize(m_currentPage);
+            resize(ps);
+            m_width = ps.width();
+            m_height = ps.height();
+        }
+        else
+        {
+            resize(QSize(m_width, m_height));
+        }
         if (m_multiPageMode == true)
         {
             if (m_prevPageBtn) m_prevPageBtn->show();
@@ -763,12 +774,20 @@ void VCFrame::setTotalPagesNumber(int num)
             m_pageShortcuts.removeLast();
             if (m_pageCombo)
                 m_pageCombo->removeItem(m_pageCombo->count() - 1);
+            /* Remove per-page size for the removed page */
+            if (m_perPageSize)
+                m_pageSizes.remove(m_totalPagesNumber - 1 - i);
         }
     }
     else
     {
         for (int i = 0; i < (num - m_totalPagesNumber); i++)
+        {
             addShortcut();
+            /* Initialize per-page size for the new page with current frame size */
+            if (m_perPageSize)
+                m_pageSizes[m_totalPagesNumber + i] = QSize(m_width, m_height);
+        }
     }
     m_totalPagesNumber = num;
 }
@@ -849,6 +868,33 @@ bool VCFrame::pagesLoop() const
     return m_pagesLoop;
 }
 
+void VCFrame::setPerPageSize(bool enable)
+{
+    m_perPageSize = enable;
+    if (enable && m_pageSizes.isEmpty())
+    {
+        /* Initialize all pages with the current frame size */
+        QSize currentSize(m_width, m_height);
+        for (int i = 0; i < m_totalPagesNumber; i++)
+            m_pageSizes[i] = currentSize;
+    }
+}
+
+bool VCFrame::isPerPageSize() const
+{
+    return m_perPageSize;
+}
+
+void VCFrame::setPageSize(int page, const QSize &size)
+{
+    m_pageSizes[page] = size;
+}
+
+QSize VCFrame::pageSize(int page) const
+{
+    return m_pageSizes.value(page, QSize(m_width, m_height));
+}
+
 void VCFrame::addWidgetToPageMap(VCWidget *widget)
 {
     m_pagesMap.insert(widget, widget->page());
@@ -889,6 +935,10 @@ void VCFrame::slotSetPage(int pageNum)
 {
     if (m_pageCombo)
     {
+        /* Save the current page size before switching */
+        if (m_perPageSize && !isCollapsed())
+            m_pageSizes[m_currentPage] = QSize(width(), height());
+
         if (pageNum >= 0 && pageNum < m_totalPagesNumber)
             m_currentPage = pageNum;
 
@@ -915,6 +965,16 @@ void VCFrame::slotSetPage(int pageNum)
                 widget->hide();
             }
         }
+
+        /* Restore the target page size */
+        if (m_perPageSize && !isCollapsed())
+        {
+            QSize newSize = pageSize(m_currentPage);
+            resize(newSize);
+            m_width = newSize.width();
+            m_height = newSize.height();
+        }
+
         m_doc->setModified();
         emit pageChanged(m_currentPage);
     }
@@ -1168,6 +1228,9 @@ bool VCFrame::copyFrom(const VCWidget* widget)
     setTotalPagesNumber(frame->m_totalPagesNumber);
 
     setPagesLoop(frame->m_pagesLoop);
+
+    setPerPageSize(frame->m_perPageSize);
+    m_pageSizes = frame->m_pageSizes;
 
     setEnableKeySequence(frame->m_enableKeySequence);
     setNextPageKeySequence(frame->m_nextPageKeySequence);
@@ -1463,6 +1526,19 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
                 setPagesLoop(true);
             else
                 setPagesLoop(false);
+        }
+        else if (root.name() == KXMLQLCVCFramePerPageSize)
+        {
+            setPerPageSize(root.readElementText() == KXMLQLCTrue);
+        }
+        else if (root.name() == KXMLQLCVCFramePageSize)
+        {
+            QXmlStreamAttributes attrs = root.attributes();
+            int page = attrs.value(QStringLiteral("Page")).toInt();
+            int w = attrs.value(QStringLiteral("Width")).toInt();
+            int h = attrs.value(QStringLiteral("Height")).toInt();
+            m_pageSizes[page] = QSize(w, h);
+            root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCVCFramePageShortcut)
         {
@@ -1772,6 +1848,23 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
 
             /* Pages Loop */
             doc->writeTextElement(KXMLQLCVCFramePagesLoop, m_pagesLoop ? KXMLQLCTrue : KXMLQLCFalse);
+
+            /* Per-page size */
+            doc->writeTextElement(KXMLQLCVCFramePerPageSize, m_perPageSize ? KXMLQLCTrue : KXMLQLCFalse);
+
+            if (m_perPageSize)
+            {
+                QMapIterator<int, QSize> sizeIt(m_pageSizes);
+                while (sizeIt.hasNext())
+                {
+                    sizeIt.next();
+                    doc->writeStartElement(KXMLQLCVCFramePageSize);
+                    doc->writeAttribute(QStringLiteral("Page"), QString::number(sizeIt.key()));
+                    doc->writeAttribute(QStringLiteral("Width"), QString::number(sizeIt.value().width()));
+                    doc->writeAttribute(QStringLiteral("Height"), QString::number(sizeIt.value().height()));
+                    doc->writeEndElement();
+                }
+            }
         }
     }
 
@@ -1930,5 +2023,8 @@ void VCFrame::mouseMoveEvent(QMouseEvent* e)
     {
         m_width = this->width();
         m_height = this->height();
+
+        if (m_perPageSize)
+            m_pageSizes[m_currentPage] = QSize(m_width, m_height);
     }
 }
