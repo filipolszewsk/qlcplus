@@ -78,6 +78,8 @@ private:
 #define KXMLQLCVCFrameNext        QStringLiteral("Next")
 #define KXMLQLCVCFramePrevious    QStringLiteral("Previous")
 #define KXMLQLCVCFramePagesLoop   QStringLiteral("PagesLoop")
+#define KXMLQLCVCFramePerPageSize QStringLiteral("PerPageSize")
+#define KXMLQLCVCFramePageSize    QStringLiteral("PageSize")
 
 #define KXMLQLCVCFrameDetached         QStringLiteral("Detached")
 #define KXMLQLCVCFrameDetachedGeometry QStringLiteral("DetachedGeometry")
@@ -235,6 +237,11 @@ public:
     void setPagesLoop(bool pagesLoop);
     bool pagesLoop() const;
 
+    void setPerPageSize(bool enable);
+    bool isPerPageSize() const;
+    void setPageSize(int page, const QSize &size);
+    QSize pageSize(int page) const;
+
     virtual void addWidgetToPageMap(VCWidget *widget);
     virtual void removeWidgetFromPageMap(VCWidget *widget);
 
@@ -261,6 +268,8 @@ protected:
     QToolButton *m_nextPageBtn, *m_prevPageBtn;
     QComboBox *m_pageCombo;
     bool m_pagesLoop;
+    bool m_perPageSize;
+    QMap<int, QSize> m_pageSizes;
     QList<VCFramePageShortcut*> m_pageShortcuts;
 
     /** Here's where the magic takes place. This holds a map
