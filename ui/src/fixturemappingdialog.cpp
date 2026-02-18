@@ -314,7 +314,7 @@ void FixtureMappingDialog::updateTargetWidget(int row)
                     targetCombo->setCurrentIndex(bestIndex);
 
                 connect(targetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                        this, [this, row](int idx) {
+                        this, [this, row](int) {
                     if (row < m_entries.count())
                     {
                         QComboBox *combo = qobject_cast<QComboBox *>(m_table->cellWidget(row, COL_TARGET));

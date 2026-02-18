@@ -702,6 +702,7 @@ void ImportFunctionsDialog::slotBrowseClicked()
 
 void ImportFunctionsDialog::slotItemChanged(QTreeWidgetItem *item, int column)
 {
+    Q_UNUSED(item);
     if (m_updatingTree || column != COL_NAME)
         return;
 
