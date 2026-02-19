@@ -502,6 +502,100 @@ QString RGBMatrix::property(QString propName)
 }
 
 /****************************************************************************
+ * JSON Settings Import/Export
+ ****************************************************************************/
+
+bool RGBMatrix::applySettingsFromJson(const QJsonObject &root, Doc *doc)
+{
+    bool applied = false;
+
+    /* Pattern */
+    if (root.contains("pattern"))
+    {
+        QJsonObject pattern = root["pattern"].toObject();
+        QString algoName = pattern["algorithmName"].toString();
+        RGBAlgorithm *algo = RGBAlgorithm::algorithm(doc, algoName);
+        if (algo != NULL)
+        {
+            setAlgorithm(algo);
+            applied = true;
+        }
+        if (pattern.contains("controlMode"))
+        {
+            setControlMode(static_cast<ControlMode>(pattern["controlMode"].toInt()));
+            applied = true;
+        }
+    }
+
+    /* Properties (script parameters) */
+    if (root.contains("properties") && algorithm() != NULL &&
+        algorithm()->type() == RGBAlgorithm::Script)
+    {
+        QJsonObject props = root["properties"].toObject();
+        for (auto it = props.constBegin(); it != props.constEnd(); ++it)
+        {
+            setProperty(it.key(), it.value().toString());
+        }
+        applied = true;
+    }
+
+    /* Run Order */
+    if (root.contains("runOrder"))
+    {
+        setRunOrder(static_cast<Function::RunOrder>(root["runOrder"].toInt()));
+        applied = true;
+    }
+
+    /* Direction */
+    if (root.contains("direction"))
+    {
+        setDirection(static_cast<Function::Direction>(root["direction"].toInt()));
+        applied = true;
+    }
+
+    /* Row Filter */
+    if (root.contains("rowFilter"))
+    {
+        QJsonArray rows = root["rowFilter"].toArray();
+        QList<int> selectedRows;
+        foreach (const QJsonValue &v, rows)
+            selectedRows.append(v.toInt());
+        setSelectedRows(selectedRows);
+        applied = true;
+    }
+
+    /* Multi-Value Mapping */
+    if (root.contains("multiValueMapping"))
+    {
+        QJsonObject mv = root["multiValueMapping"].toObject();
+        setEnablePerFixtureMapping(mv["enabled"].toBool());
+
+        if (mv.contains("fixtureMappings"))
+        {
+            QJsonObject fixtureMappings = mv["fixtureMappings"].toObject();
+            for (auto it = fixtureMappings.constBegin(); it != fixtureMappings.constEnd(); ++it)
+            {
+                QString defKey = it.key();
+                QJsonArray mappingArr = it.value().toArray();
+                QList<ChannelMapping> mappings;
+                foreach (const QJsonValue &val, mappingArr)
+                {
+                    QJsonObject obj = val.toObject();
+                    ChannelMapping cm;
+                    cm.channelName = obj["channelName"].toString();
+                    cm.valueIndex = obj["valueIndex"].toInt();
+                    mappings.append(cm);
+                }
+                setFixtureDefChannelMappings(defKey, mappings);
+            }
+        }
+        applied = true;
+    }
+
+    return applied;
+}
+
+/****************************************************************************
  * Load & Save
  ****************************************************************************/
 

@@ -22,6 +22,8 @@
 #define RGBMATRIX_H
 
 #include <QElapsedTimer>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QVector>
 #include <QColor>
 #include <QList>
@@ -223,6 +225,15 @@ public:
 private:
     /** A map of the custom properties for this matrix */
     QMap<QString, QString>m_properties;
+
+    /************************************************************************
+     * JSON Settings Import/Export
+     ************************************************************************/
+public:
+    /** Apply settings from a JSON object (used by copy/paste).
+     *  Only sections present in the JSON are applied.
+     *  Returns true if any settings were applied. */
+    bool applySettingsFromJson(const QJsonObject &root, Doc *doc);
 
     /************************************************************************
      * Load & Save

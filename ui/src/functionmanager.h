@@ -133,6 +133,7 @@ protected slots:
     void slotDelete();
     void slotSelectAll();
     void slotImportFunctions();
+    void slotPasteSettings();
 
 protected:
     void updateActionStatus();
@@ -157,6 +158,7 @@ protected:
     QAction* m_deleteAction;
     QAction* m_selectAllAction;
     QAction* m_importAction;
+    QAction* m_pasteSettingsAction;
 
     /*********************************************************************
      * Helpers

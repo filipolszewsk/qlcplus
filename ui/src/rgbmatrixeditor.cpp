@@ -1713,6 +1713,10 @@ void RGBMatrixEditor::slotPasteClicked()
         return;
     }
 
+    m_matrix->applySettingsFromJson(root, m_doc);
+
+    /* Refresh UI to match the new model state */
+
     /* Pattern */
     if (root.contains("pattern"))
     {
@@ -1722,25 +1726,17 @@ void RGBMatrixEditor::slotPasteClicked()
         if (index >= 0)
         {
             m_patternCombo->setCurrentIndex(index);
-            slotPatternActivated(index);
+            updateExtraOptions();
+            updateChannelMappingUI();
         }
         if (pattern.contains("controlMode"))
-        {
-            int cm = pattern["controlMode"].toInt();
-            m_matrix->setControlMode(static_cast<RGBMatrix::ControlMode>(cm));
-            m_controlModeCombo->setCurrentIndex(cm);
-        }
+            m_controlModeCombo->setCurrentIndex(pattern["controlMode"].toInt());
     }
 
-    /* Properties (script parameters) */
+    /* Properties */
     if (root.contains("properties") && m_matrix->algorithm() != NULL &&
         m_matrix->algorithm()->type() == RGBAlgorithm::Script)
     {
-        QJsonObject props = root["properties"].toObject();
-        for (auto it = props.constBegin(); it != props.constEnd(); ++it)
-        {
-            m_matrix->setProperty(it.key(), it.value().toString());
-        }
         RGBScript *script = static_cast<RGBScript*>(m_matrix->algorithm());
         resetProperties(m_propertiesLayout->layout());
         displayProperties(script);
@@ -1749,13 +1745,11 @@ void RGBMatrixEditor::slotPasteClicked()
     /* Run Order */
     if (root.contains("runOrder"))
     {
-        Function::RunOrder ro = static_cast<Function::RunOrder>(root["runOrder"].toInt());
-        m_matrix->setRunOrder(ro);
-        switch (ro)
+        switch (m_matrix->runOrder())
         {
             default:
-            case Function::Loop:     m_loop->setChecked(true); break;
-            case Function::PingPong: m_pingPong->setChecked(true); break;
+            case Function::Loop:       m_loop->setChecked(true); break;
+            case Function::PingPong:   m_pingPong->setChecked(true); break;
             case Function::SingleShot: m_singleShot->setChecked(true); break;
         }
     }
@@ -1763,9 +1757,7 @@ void RGBMatrixEditor::slotPasteClicked()
     /* Direction */
     if (root.contains("direction"))
     {
-        Function::Direction dir = static_cast<Function::Direction>(root["direction"].toInt());
-        m_matrix->setDirection(dir);
-        switch (dir)
+        switch (m_matrix->direction())
         {
             default:
             case Function::Forward:  m_forward->setChecked(true); break;
@@ -1775,43 +1767,12 @@ void RGBMatrixEditor::slotPasteClicked()
 
     /* Row Filter */
     if (root.contains("rowFilter"))
-    {
-        QJsonArray rows = root["rowFilter"].toArray();
-        QList<int> selectedRows;
-        foreach (const QJsonValue &v, rows)
-            selectedRows.append(v.toInt());
-        m_matrix->setSelectedRows(selectedRows);
         updateRowSelection();
-    }
 
     /* Multi-Value Mapping */
     if (root.contains("multiValueMapping"))
     {
-        QJsonObject mv = root["multiValueMapping"].toObject();
-
-        bool enabled = mv["enabled"].toBool();
-        m_matrix->setEnablePerFixtureMapping(enabled);
-        m_enablePerFixtureMappingCheck->setChecked(enabled);
-
-        if (mv.contains("fixtureMappings"))
-        {
-            QJsonObject fixtureMappings = mv["fixtureMappings"].toObject();
-            for (auto it = fixtureMappings.constBegin(); it != fixtureMappings.constEnd(); ++it)
-            {
-                QString defKey = it.key();
-                QJsonArray mappingArr = it.value().toArray();
-                QList<RGBMatrix::ChannelMapping> mappings;
-                foreach (const QJsonValue &val, mappingArr)
-                {
-                    QJsonObject obj = val.toObject();
-                    RGBMatrix::ChannelMapping cm;
-                    cm.channelName = obj["channelName"].toString();
-                    cm.valueIndex = obj["valueIndex"].toInt();
-                    mappings.append(cm);
-                }
-                m_matrix->setFixtureDefChannelMappings(defKey, mappings);
-            }
-        }
+        m_enablePerFixtureMappingCheck->setChecked(m_matrix->enablePerFixtureMapping());
         updateChannelMappingUI();
     }
 

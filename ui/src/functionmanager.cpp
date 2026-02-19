@@ -23,6 +23,11 @@
 #include <QInputDialog>
 #include <QTreeWidget>
 #include <QHeaderView>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QApplication>
+#include <QClipboard>
 #include <QMessageBox>
 #include <QVBoxLayout>
 #include <QFileDialog>
@@ -98,6 +103,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_deleteAction(NULL)
     , m_selectAllAction(NULL)
     , m_importAction(NULL)
+    , m_pasteSettingsAction(NULL)
     , m_editor(NULL)
     , m_scene_editor(NULL)
 {
@@ -294,6 +300,12 @@ void FunctionManager::initActions()
     m_importAction->setShortcut(QKeySequence("CTRL+I"));
     connect(m_importAction, SIGNAL(triggered(bool)),
             this, SLOT(slotImportFunctions()));
+
+    m_pasteSettingsAction = new QAction(QIcon(":/editpaste.png"),
+                                        tr("&Paste settings to selected"), this);
+    m_pasteSettingsAction->setShortcut(QKeySequence(QKeySequence::Paste));
+    connect(m_pasteSettingsAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotPasteSettings()));
 }
 
 void FunctionManager::initToolbar()
@@ -319,6 +331,7 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_wizardAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_cloneAction);
+    m_toolbar->addAction(m_pasteSettingsAction);
     m_toolbar->addAction(m_importAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_deleteAction);
@@ -649,6 +662,59 @@ void FunctionManager::slotImportFunctions()
     }
 }
 
+void FunctionManager::slotPasteSettings()
+{
+    QString clipboardText = QApplication::clipboard()->text();
+    if (clipboardText.isEmpty())
+        return;
+
+    QJsonParseError error;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(clipboardText.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError)
+        return;
+
+    QJsonObject root = jsonDoc.object();
+    if (root["type"].toString() != "qlc_rgb_matrix_settings")
+        return;
+
+    int count = 0;
+    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+    foreach (QTreeWidgetItem *item, selected)
+    {
+        quint32 fid = m_tree->itemFunctionId(item);
+        if (fid == Function::invalidId())
+            continue;
+
+        Function *func = m_doc->function(fid);
+        if (func == NULL || func->type() != Function::RGBMatrixType)
+            continue;
+
+        RGBMatrix *matrix = qobject_cast<RGBMatrix*>(func);
+        if (matrix != NULL && matrix->applySettingsFromJson(root, m_doc))
+            count++;
+    }
+
+    if (count > 0)
+    {
+        m_doc->setModified();
+
+        /* If the current editor is an RGBMatrixEditor for one of the pasted
+           functions, close and reopen it to refresh the UI */
+        if (m_editor != NULL && selected.size() == 1)
+        {
+            quint32 fid = m_tree->itemFunctionId(selected.first());
+            Function *func = m_doc->function(fid);
+            if (func != NULL && func->type() == Function::RGBMatrixType)
+                editFunction(func);
+        }
+    }
+    else
+    {
+        QMessageBox::information(this, tr("Paste Settings"),
+                                 tr("No RGB Matrix functions were selected."));
+    }
+}
+
 void FunctionManager::updateActionStatus()
 {
     bool validSelection = false;
@@ -831,6 +897,7 @@ void FunctionManager::slotTreeContextMenuRequested()
 {
     QMenu menu(this);
     menu.addAction(m_cloneAction);
+    menu.addAction(m_pasteSettingsAction);
     menu.addAction(m_selectAllAction);
     menu.addSeparator();
     menu.addAction(m_deleteAction);
