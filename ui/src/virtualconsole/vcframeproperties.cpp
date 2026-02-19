@@ -49,6 +49,7 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
     m_showBorderCheck->setChecked(frame->isShowBorder());
     m_enablePaging->setChecked(frame->multipageMode());
     m_pagesLoopCheck->setChecked(frame->pagesLoop());
+    m_perPageSizeCheck->setChecked(frame->isPerPageSize());
     m_totalPagesSpin->setValue(frame->totalPagesNumber());
     if (frame->totalPagesNumber() != 1)
         m_cloneFirstPageCheck->setEnabled(false);
@@ -279,6 +280,7 @@ void VCFrameProperties::accept()
     m_frame->setMultipageMode(m_enablePaging->isChecked());
     m_frame->setTotalPagesNumber(m_totalPagesSpin->value());
     m_frame->setPagesLoop(m_pagesLoopCheck->isChecked());
+    m_frame->setPerPageSize(m_perPageSizeCheck->isChecked());
 
     /* Key sequences */
     m_frame->setEnableKeySequence(m_inputEnableWidget->keySequence());
