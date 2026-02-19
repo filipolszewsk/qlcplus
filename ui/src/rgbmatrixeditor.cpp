@@ -35,6 +35,17 @@
 #include <QDebug>
 #include <QMutex>
 
+#include <QApplication>
+#include <QClipboard>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QMessageBox>
+#include <QDialogButtonBox>
+#include <QCheckBox>
+#include <QDialog>
+#include <QVBoxLayout>
+
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
 #include "rgbmatrixeditor.h"
@@ -346,6 +357,10 @@ void RGBMatrixEditor::init()
     // Test slots
     connect(m_testButton, SIGNAL(clicked(bool)),
             this, SLOT(slotTestClicked()));
+
+    // Copy/Paste
+    connect(m_copyButton, SIGNAL(clicked()), this, SLOT(slotCopyClicked()));
+    connect(m_pasteButton, SIGNAL(clicked()), this, SLOT(slotPasteClicked()));
 
     m_preview->setScene(m_scene);
     if (createPreviewItems() == true)
@@ -1552,6 +1567,257 @@ void RGBMatrixEditor::slotShapeToggle(bool)
     createPreviewItems();
 }
 
+void RGBMatrixEditor::slotCopyClicked()
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Copy RGB Matrix Settings"));
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    QCheckBox *chkPattern = new QCheckBox(tr("Pattern"), &dlg);
+    QCheckBox *chkProperties = new QCheckBox(tr("Properties"), &dlg);
+    QCheckBox *chkRunOrder = new QCheckBox(tr("Run Order"), &dlg);
+    QCheckBox *chkDirection = new QCheckBox(tr("Direction"), &dlg);
+    QCheckBox *chkRowFilter = new QCheckBox(tr("Row Filter"), &dlg);
+    QCheckBox *chkMultiValue = new QCheckBox(tr("Multi-Value Mapping"), &dlg);
+
+    chkPattern->setChecked(true);
+    chkProperties->setChecked(true);
+    chkRunOrder->setChecked(true);
+    chkDirection->setChecked(true);
+    chkRowFilter->setChecked(true);
+    chkMultiValue->setChecked(true);
+
+    layout->addWidget(chkPattern);
+    layout->addWidget(chkProperties);
+    layout->addWidget(chkRunOrder);
+    layout->addWidget(chkDirection);
+    layout->addWidget(chkRowFilter);
+    layout->addWidget(chkMultiValue);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, SIGNAL(accepted()), &dlg, SLOT(accept()));
+    connect(buttons, SIGNAL(rejected()), &dlg, SLOT(reject()));
+    layout->addWidget(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    QJsonObject root;
+    root["type"] = QString("qlc_rgb_matrix_settings");
+    root["version"] = 1;
+
+    if (chkPattern->isChecked() && m_matrix->algorithm() != NULL)
+    {
+        QJsonObject pattern;
+        pattern["algorithmName"] = m_matrix->algorithm()->name();
+        pattern["algorithmType"] = static_cast<int>(m_matrix->algorithm()->type());
+        pattern["controlMode"] = static_cast<int>(m_matrix->controlMode());
+        root["pattern"] = pattern;
+    }
+
+    if (chkProperties->isChecked() && m_matrix->algorithm() != NULL &&
+        m_matrix->algorithm()->type() == RGBAlgorithm::Script)
+    {
+        RGBScript *script = static_cast<RGBScript*>(m_matrix->algorithm());
+        QJsonObject props;
+        foreach (RGBScriptProperty prop, script->properties())
+        {
+            QString val = m_matrix->property(prop.m_name);
+            if (!val.isEmpty())
+                props[prop.m_name] = val;
+        }
+        root["properties"] = props;
+    }
+
+    if (chkRunOrder->isChecked())
+    {
+        root["runOrder"] = static_cast<int>(m_matrix->runOrder());
+    }
+
+    if (chkDirection->isChecked())
+    {
+        root["direction"] = static_cast<int>(m_matrix->direction());
+    }
+
+    if (chkRowFilter->isChecked())
+    {
+        QJsonArray rows;
+        foreach (int r, m_matrix->selectedRows())
+            rows.append(r);
+        root["rowFilter"] = rows;
+    }
+
+    if (chkMultiValue->isChecked())
+    {
+        QJsonObject mv;
+        mv["enabled"] = m_matrix->enablePerFixtureMapping();
+
+        QJsonObject fixtureMappings;
+        FixtureGroup *grp = m_doc->fixtureGroup(m_matrix->fixtureGroup());
+        if (grp != NULL)
+        {
+            QSet<QString> processedKeys;
+            foreach (const GroupHead &head, grp->headList())
+            {
+                Fixture *fxi = m_doc->fixture(head.fxi);
+                if (fxi == NULL || fxi->fixtureDef() == NULL)
+                    continue;
+                QString key = RGBMatrix::getFixtureDefKey(fxi->fixtureDef());
+                if (processedKeys.contains(key))
+                    continue;
+                processedKeys.insert(key);
+
+                QList<RGBMatrix::ChannelMapping> mappings = m_matrix->fixtureDefChannelMappings(key);
+                QJsonArray mappingArr;
+                foreach (const RGBMatrix::ChannelMapping &cm, mappings)
+                {
+                    QJsonObject obj;
+                    obj["channelName"] = cm.channelName;
+                    obj["valueIndex"] = cm.valueIndex;
+                    mappingArr.append(obj);
+                }
+                fixtureMappings[key] = mappingArr;
+            }
+        }
+        mv["fixtureMappings"] = fixtureMappings;
+        root["multiValueMapping"] = mv;
+    }
+
+    QJsonDocument doc(root);
+    QApplication::clipboard()->setText(doc.toJson(QJsonDocument::Compact));
+}
+
+void RGBMatrixEditor::slotPasteClicked()
+{
+    QString clipboardText = QApplication::clipboard()->text();
+    if (clipboardText.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Paste Error"), tr("Clipboard is empty."));
+        return;
+    }
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError)
+    {
+        QMessageBox::warning(this, tr("Paste Error"),
+                             tr("Invalid clipboard data: %1").arg(error.errorString()));
+        return;
+    }
+
+    QJsonObject root = doc.object();
+    if (root["type"].toString() != "qlc_rgb_matrix_settings")
+    {
+        QMessageBox::warning(this, tr("Paste Error"),
+                             tr("Clipboard does not contain RGB Matrix settings."));
+        return;
+    }
+
+    /* Pattern */
+    if (root.contains("pattern"))
+    {
+        QJsonObject pattern = root["pattern"].toObject();
+        QString algoName = pattern["algorithmName"].toString();
+        int index = m_patternCombo->findText(algoName);
+        if (index >= 0)
+        {
+            m_patternCombo->setCurrentIndex(index);
+            slotPatternActivated(index);
+        }
+        if (pattern.contains("controlMode"))
+        {
+            int cm = pattern["controlMode"].toInt();
+            m_matrix->setControlMode(static_cast<RGBMatrix::ControlMode>(cm));
+            m_controlModeCombo->setCurrentIndex(cm);
+        }
+    }
+
+    /* Properties (script parameters) */
+    if (root.contains("properties") && m_matrix->algorithm() != NULL &&
+        m_matrix->algorithm()->type() == RGBAlgorithm::Script)
+    {
+        QJsonObject props = root["properties"].toObject();
+        for (auto it = props.constBegin(); it != props.constEnd(); ++it)
+        {
+            m_matrix->setProperty(it.key(), it.value().toString());
+        }
+        RGBScript *script = static_cast<RGBScript*>(m_matrix->algorithm());
+        resetProperties(m_propertiesLayout->layout());
+        displayProperties(script);
+    }
+
+    /* Run Order */
+    if (root.contains("runOrder"))
+    {
+        Function::RunOrder ro = static_cast<Function::RunOrder>(root["runOrder"].toInt());
+        m_matrix->setRunOrder(ro);
+        switch (ro)
+        {
+            default:
+            case Function::Loop:     m_loop->setChecked(true); break;
+            case Function::PingPong: m_pingPong->setChecked(true); break;
+            case Function::SingleShot: m_singleShot->setChecked(true); break;
+        }
+    }
+
+    /* Direction */
+    if (root.contains("direction"))
+    {
+        Function::Direction dir = static_cast<Function::Direction>(root["direction"].toInt());
+        m_matrix->setDirection(dir);
+        switch (dir)
+        {
+            default:
+            case Function::Forward:  m_forward->setChecked(true); break;
+            case Function::Backward: m_backward->setChecked(true); break;
+        }
+    }
+
+    /* Row Filter */
+    if (root.contains("rowFilter"))
+    {
+        QJsonArray rows = root["rowFilter"].toArray();
+        QList<int> selectedRows;
+        foreach (const QJsonValue &v, rows)
+            selectedRows.append(v.toInt());
+        m_matrix->setSelectedRows(selectedRows);
+        updateRowSelection();
+    }
+
+    /* Multi-Value Mapping */
+    if (root.contains("multiValueMapping"))
+    {
+        QJsonObject mv = root["multiValueMapping"].toObject();
+
+        bool enabled = mv["enabled"].toBool();
+        m_matrix->setEnablePerFixtureMapping(enabled);
+        m_enablePerFixtureMappingCheck->setChecked(enabled);
+
+        if (mv.contains("fixtureMappings"))
+        {
+            QJsonObject fixtureMappings = mv["fixtureMappings"].toObject();
+            for (auto it = fixtureMappings.constBegin(); it != fixtureMappings.constEnd(); ++it)
+            {
+                QString defKey = it.key();
+                QJsonArray mappingArr = it.value().toArray();
+                QList<RGBMatrix::ChannelMapping> mappings;
+                foreach (const QJsonValue &val, mappingArr)
+                {
+                    QJsonObject obj = val.toObject();
+                    RGBMatrix::ChannelMapping cm;
+                    cm.channelName = obj["channelName"].toString();
+                    cm.valueIndex = obj["valueIndex"].toInt();
+                    mappings.append(cm);
+                }
+                m_matrix->setFixtureDefChannelMappings(defKey, mappings);
+            }
+        }
+        updateChannelMappingUI();
+    }
+
+    slotRestartTest();
+}
+
 void RGBMatrixEditor::slotPropertyComboChanged(int index)
 {
     if (m_matrix->algorithm() == NULL ||
@@ -1689,7 +1955,7 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     
     for (int i = 0; i < maxOffset; i++)
     {
-        row.valueIndexCombo->addItem(QString::number(i), i);
+        row.valueIndexCombo->addItem(QString::number(i + 1), i);
     }
     row.valueIndexCombo->setCurrentIndex(mapping.valueIndex);
     

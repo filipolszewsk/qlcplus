@@ -189,6 +189,40 @@
       </widget>
      </item>
      <item>
+      <widget class="QToolButton" name="m_copyButton">
+       <property name="toolTip">
+        <string>Copy settings to clipboard</string>
+       </property>
+       <property name="icon">
+        <iconset resource="qlcui.qrc">
+         <normaloff>:/editcopy.png</normaloff>:/editcopy.png</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>28</width>
+         <height>28</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="m_pasteButton">
+       <property name="toolTip">
+        <string>Paste settings from clipboard</string>
+       </property>
+       <property name="icon">
+        <iconset resource="qlcui.qrc">
+         <normaloff>:/editpaste.png</normaloff>:/editpaste.png</iconset>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>28</width>
+         <height>28</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QLabel" name="m_fixtureGroupLabel">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Minimum" vsizetype="Preferred">

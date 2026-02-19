@@ -122,6 +122,9 @@ private slots:
     void slotSaveToSequenceClicked();
     void slotShapeToggle(bool);
 
+    void slotCopyClicked();
+    void slotPasteClicked();
+
     void slotPropertyComboChanged(int index);
     void slotPropertySpinChanged(int value);
     void slotPropertyDoubleSpinChanged(double value);
