@@ -112,6 +112,7 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_originalParent(NULL)
     , m_originalGeometry()
     , m_originalPage(0)
+    , m_scaleFactor(1.0)
     , m_multiPageMode(false)
     , m_currentPage(0)
     , m_totalPagesNumber(1)
@@ -119,7 +120,6 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_prevPageBtn(NULL)
     , m_pageCombo(NULL)
     , m_pagesLoop(false)
-    , m_scaleFactor(1.0)
 {
     /* Set the class name "VCFrame" as the object name as well */
     setObjectName(VCFrame::staticMetaObject.className());
