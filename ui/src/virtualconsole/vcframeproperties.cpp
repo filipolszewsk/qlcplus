@@ -42,6 +42,7 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
     setupUi(this);
 
     m_frameName->setText(frame->caption());
+    m_scaleSpinBox->setValue(frame->scaleFactor() * 100.0);
     m_allowChildrenCheck->setChecked(frame->allowChildren());
     m_allowResizeCheck->setChecked(frame->allowResize());
     m_showHeaderCheck->setChecked(frame->isHeaderVisible());
@@ -296,6 +297,10 @@ void VCFrameProperties::accept()
     m_frame->setShortcuts(m_shortcuts);
 
     m_frame->slotSetPage(m_frame->currentPage());
+
+    double newScale = m_scaleSpinBox->value() / 100.0;
+    if (qAbs(newScale - m_frame->scaleFactor()) > 0.001)
+        m_frame->setScaleFactor(newScale, m_scaleFrameCheck->isChecked());
 
     QDialog::accept();
 }

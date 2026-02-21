@@ -119,6 +119,7 @@ VCFrame::VCFrame(QWidget* parent, Doc* doc, bool canCollapse)
     , m_prevPageBtn(NULL)
     , m_pageCombo(NULL)
     , m_pagesLoop(false)
+    , m_scaleFactor(1.0)
 {
     /* Set the class name "VCFrame" as the object name as well */
     setObjectName(VCFrame::staticMetaObject.className());
@@ -1373,6 +1374,142 @@ void VCFrame::editProperties()
     }
 }
 
+void VCFrame::setScaleFactor(double factor, bool scaleFrame)
+{
+    int headerH = isHeaderVisible() ? 40 : 0;
+
+    QList<VCWidget*> children = findChildren<VCWidget*>(
+        QString(), Qt::FindDirectChildrenOnly);
+
+    // On first non-unity scaling: snapshot original states of all direct children
+    if (m_originalStates.isEmpty() && qAbs(factor - 1.0) > 0.001)
+    {
+        m_originalFrameSize = QSize(width(), height());
+        m_originalPageSizes = m_pageSizes;
+        for (VCWidget *child : children)
+        {
+            OriginalWidgetState state;
+            state.geometry = child->geometry();
+            state.fontPointSize = child->hasCustomFont() ? child->font().pointSize() : -1;
+            m_originalStates.insert(child->id(), state);
+        }
+    }
+
+    m_scaleFactor = factor;
+
+    // Helper: resize the frame itself
+    auto doScaleFrame = [&](double f) {
+        if (!scaleFrame)
+            return;
+        QSize base = m_originalFrameSize.isValid() ? m_originalFrameSize : QSize(width(), height());
+        int newW = qRound(base.width() * f);
+        int newH = headerH + qRound((base.height() - headerH) * f);
+        QWidget::resize(QSize(newW, newH));
+        m_width = this->width();
+        m_height = this->height();
+
+        if (m_perPageSize)
+        {
+            QMap<int, QSize> &origPS = m_originalPageSizes.isEmpty() ? m_pageSizes : m_originalPageSizes;
+            for (auto it = origPS.constBegin(); it != origPS.constEnd(); ++it)
+            {
+                QSize ps = it.value();
+                int scaledW = qRound(ps.width() * f);
+                int scaledH = headerH + qRound((ps.height() - headerH) * f);
+                m_pageSizes[it.key()] = QSize(scaledW, scaledH);
+            }
+        }
+    };
+
+    // Helper: resize/move/refont all direct children from their originals
+    auto doScaleChildren = [&](double f) {
+        for (VCWidget *child : children)
+        {
+            OriginalWidgetState orig;
+            if (m_originalStates.contains(child->id()))
+                orig = m_originalStates[child->id()];
+            else
+            {
+                orig.geometry = child->geometry();
+                orig.fontPointSize = -1;
+            }
+
+            int newW = qRound(orig.geometry.width() * f);
+            int newH = qRound(orig.geometry.height() * f);
+            int newX = qRound(orig.geometry.x() * f);
+            int newY = headerH + qRound((orig.geometry.y() - headerH) * f);
+
+            child->resize(QSize(newW, newH));
+            child->move(QPoint(newX, newY));
+
+            // Scale font
+            if (orig.fontPointSize > 0)
+            {
+                QFont fnt = child->font();
+                fnt.setPointSize(qMax(6, qRound(orig.fontPointSize * f)));
+                child->setFont(fnt);
+            }
+
+            // Recurse into nested frames
+            VCFrame *childFrame = qobject_cast<VCFrame*>(child);
+            if (childFrame)
+                childFrame->setScaleFactor(f, false);
+        }
+    };
+
+    // Restoring to 100%: apply originals and clear stored snapshots
+    if (qAbs(factor - 1.0) < 0.001 && !m_originalStates.isEmpty())
+    {
+        // Restore frame size first so move() doesn't clamp
+        if (scaleFrame && m_originalFrameSize.isValid())
+        {
+            QWidget::resize(m_originalFrameSize);
+            m_width = m_originalFrameSize.width();
+            m_height = m_originalFrameSize.height();
+            if (m_perPageSize)
+                m_pageSizes = m_originalPageSizes;
+        }
+
+        for (VCWidget *child : children)
+        {
+            if (!m_originalStates.contains(child->id()))
+                continue;
+            const OriginalWidgetState &orig = m_originalStates[child->id()];
+            child->resize(orig.geometry.size());
+            child->move(orig.geometry.topLeft());
+            if (orig.fontPointSize > 0)
+            {
+                QFont fnt = child->font();
+                fnt.setPointSize(orig.fontPointSize);
+                child->setFont(fnt);
+            }
+            VCFrame *childFrame = qobject_cast<VCFrame*>(child);
+            if (childFrame)
+                childFrame->setScaleFactor(1.0, false);
+        }
+
+        m_originalStates.clear();
+        m_originalFrameSize = QSize();
+        m_originalPageSizes.clear();
+        m_doc->setModified();
+        return;
+    }
+
+    // Apply scale with correct ordering to avoid move() clamping
+    if (factor > 1.0)
+    {
+        doScaleFrame(factor);
+        doScaleChildren(factor);
+    }
+    else
+    {
+        doScaleChildren(factor);
+        doScaleFrame(factor);
+    }
+
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Load & Save
  *****************************************************************************/
@@ -1689,6 +1826,38 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
                 matrix->show();
             }
         }
+        else if (root.name() == KXMLQLCVCFrameScaleFactor)
+        {
+            QXmlStreamAttributes attrs = root.attributes();
+            if (attrs.hasAttribute(QStringLiteral("OriginalW")) &&
+                attrs.hasAttribute(QStringLiteral("OriginalH")))
+            {
+                m_originalFrameSize = QSize(
+                    attrs.value(QStringLiteral("OriginalW")).toInt(),
+                    attrs.value(QStringLiteral("OriginalH")).toInt());
+            }
+            m_scaleFactor = root.readElementText().toDouble();
+        }
+        else if (root.name() == QStringLiteral("OriginalWidgetStates"))
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == QStringLiteral("Widget"))
+                {
+                    QXmlStreamAttributes attrs = root.attributes();
+                    quint32 wid = attrs.value(QStringLiteral("ID")).toUInt();
+                    OriginalWidgetState state;
+                    state.geometry = QRect(
+                        attrs.value(QStringLiteral("X")).toInt(),
+                        attrs.value(QStringLiteral("Y")).toInt(),
+                        attrs.value(QStringLiteral("W")).toInt(),
+                        attrs.value(QStringLiteral("H")).toInt());
+                    state.fontPointSize = attrs.value(QStringLiteral("FontSize")).toInt();
+                    m_originalStates.insert(wid, state);
+                }
+                root.skipCurrentElement();
+            }
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown frame tag:" << root.name().toString();
@@ -1889,6 +2058,33 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
     {
         qDebug() << "Saving detached child frame:" << detachedFrame->caption() << "ID:" << detachedFrame->id();
         detachedFrame->saveXML(doc);
+    }
+
+    /* Save scale factor and original widget states (must come after children) */
+    if (qAbs(m_scaleFactor - 1.0) > 0.001 && !m_originalStates.isEmpty())
+    {
+        doc->writeStartElement(KXMLQLCVCFrameScaleFactor);
+        if (m_originalFrameSize.isValid())
+        {
+            doc->writeAttribute(QStringLiteral("OriginalW"), QString::number(m_originalFrameSize.width()));
+            doc->writeAttribute(QStringLiteral("OriginalH"), QString::number(m_originalFrameSize.height()));
+        }
+        doc->writeCharacters(QString::number(m_scaleFactor));
+        doc->writeEndElement();
+
+        doc->writeStartElement(QStringLiteral("OriginalWidgetStates"));
+        for (auto it = m_originalStates.constBegin(); it != m_originalStates.constEnd(); ++it)
+        {
+            doc->writeStartElement(QStringLiteral("Widget"));
+            doc->writeAttribute(QStringLiteral("ID"),       QString::number(it.key()));
+            doc->writeAttribute(QStringLiteral("X"),        QString::number(it.value().geometry.x()));
+            doc->writeAttribute(QStringLiteral("Y"),        QString::number(it.value().geometry.y()));
+            doc->writeAttribute(QStringLiteral("W"),        QString::number(it.value().geometry.width()));
+            doc->writeAttribute(QStringLiteral("H"),        QString::number(it.value().geometry.height()));
+            doc->writeAttribute(QStringLiteral("FontSize"), QString::number(it.value().fontPointSize));
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
     }
 
     /* End the <Frame> tag */

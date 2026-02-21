@@ -83,6 +83,7 @@ private:
 
 #define KXMLQLCVCFrameDetached         QStringLiteral("Detached")
 #define KXMLQLCVCFrameDetachedGeometry QStringLiteral("DetachedGeometry")
+#define KXMLQLCVCFrameScaleFactor      QStringLiteral("ScaleFactor")
 
 class VCFrameProperties;
 class VCFramePageShortcut;
@@ -215,6 +216,34 @@ protected:
     
     /** List of child frames that are currently detached from this frame */
     QList<VCFrame*> m_detachedChildren;
+
+    /*********************************************************************
+     * Scale
+     *********************************************************************/
+public:
+    /**
+     * Apply a persistent scale factor to all direct child widgets.
+     * Positions, sizes and fonts are always computed from the saved
+     * original states, so any factor can be applied repeatedly without
+     * accumulating rounding errors.  Passing 1.0 restores originals exactly.
+     * @param factor  Desired scale (1.0 = 100 %)
+     * @param scaleFrame  Also resize this frame itself
+     */
+    void setScaleFactor(double factor, bool scaleFrame);
+
+    /** Current scale factor (1.0 = 100 %). */
+    double scaleFactor() const { return m_scaleFactor; }
+
+protected:
+    struct OriginalWidgetState {
+        QRect  geometry;
+        int    fontPointSize;  // -1 if no custom font
+    };
+
+    double m_scaleFactor;
+    QMap<quint32, OriginalWidgetState> m_originalStates;
+    QSize  m_originalFrameSize;
+    QMap<int, QSize> m_originalPageSizes;
 
     /*********************************************************************
      * Pages

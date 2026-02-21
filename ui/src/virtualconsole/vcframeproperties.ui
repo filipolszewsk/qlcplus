@@ -135,6 +135,78 @@
         <layout class="QVBoxLayout" name="m_extEnableLayout"/>
        </item>
        <item>
+        <widget class="QGroupBox" name="groupBox_scale">
+         <property name="title">
+          <string>Scale Contents</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_scale">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_scale">
+            <item>
+             <widget class="QLabel" name="label_scale">
+              <property name="text">
+               <string>Scale factor:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QDoubleSpinBox" name="m_scaleSpinBox">
+              <property name="suffix">
+               <string> %</string>
+              </property>
+              <property name="minimum">
+               <double>10.000000</double>
+              </property>
+              <property name="maximum">
+               <double>500.000000</double>
+              </property>
+              <property name="singleStep">
+               <double>5.000000</double>
+              </property>
+              <property name="value">
+               <double>100.000000</double>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_scale">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="m_scaleFrameCheck">
+            <property name="text">
+             <string>Also resize the frame</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_scaleNote">
+            <property name="text">
+             <string>Applied once on OK if value is not 100%. Cannot be undone.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
