@@ -43,6 +43,7 @@ class AudioCapture;
 class RGBScriptsCache;
 class AudioPluginCache;
 class MonitorProperties;
+class LicenseManager;
 
 /** @addtogroup engine Engine
  * @{
@@ -135,6 +136,9 @@ public:
     /** Get the RGB scripts cache object */
     RGBScriptsCache *rgbScriptsCache() const;
 
+    /** Get the license manager object */
+    LicenseManager *licenseManager() const;
+
     /** Get the I/O plugin cache object */
     IOPluginCache *ioPluginCache() const;
 
@@ -157,6 +161,7 @@ private:
     QLCFixtureDefCache *m_fixtureDefCache;
     QLCModifiersCache *m_modifiersCache;
     RGBScriptsCache *m_rgbScriptsCache;
+    LicenseManager *m_licenseManager;
     IOPluginCache *m_ioPluginCache;
     AudioPluginCache *m_audioPluginCache;
     MasterTimer *m_masterTimer;

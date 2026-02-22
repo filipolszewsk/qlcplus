@@ -54,6 +54,7 @@ public:
      * @return true, if the path could be accessed, otherwise false.
      */
     bool load(const QDir& dir);
+    bool loadPremium(const QDir& dir);
 
     /**
      * Get the default system RGB scripts directory that contains

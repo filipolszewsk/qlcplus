@@ -8,7 +8,7 @@ TEMPLATE = lib
 LANGUAGE = C++
 TARGET   = qlcplusengine
 
-QT += core gui
+QT += core gui network
 QT += multimedia
 macx:QT_CONFIG -= no-pkg-config
 win32:QT += widgets
@@ -23,7 +23,7 @@ CONFIG += link_pkgconfig
 
 #QTPLUGIN =
 
-INCLUDEPATH += ../audio/src ../../plugins/interfaces
+INCLUDEPATH += ../audio/src ../../plugins/interfaces ./
 win32:LIBS  += -lwinmm
 win32:QMAKE_LFLAGS += -shared
 win32:INCLUDEPATH += ./
@@ -39,6 +39,10 @@ LIBS        += -L../audio/src -lqlcplusaudio
 #############################################################################
 # Sources
 #############################################################################
+
+# Crypto & License
+HEADERS += qlccrypto.h \
+           licensemanager.h
 
 # Fixture metadata
 HEADERS += avolitesd4parser.h \
@@ -120,6 +124,11 @@ qmlui|greaterThan(QT_MAJOR_VERSION, 5) {
 
 win32:HEADERS += mastertimer-win32.h
 unix:HEADERS  += mastertimer-unix.h
+
+# Crypto & License
+SOURCES += crypto/aes.c \
+           qlccrypto.cpp \
+           licensemanager.cpp
 
 # Fixture metadata
 SOURCES += avolitesd4parser.cpp \

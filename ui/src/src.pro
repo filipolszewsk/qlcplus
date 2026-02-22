@@ -46,7 +46,8 @@ HEADERS += ../../plugins/interfaces/rdmprotocol.h
 SOURCES += ../../plugins/interfaces/rdmprotocol.cpp
 
 # Headers
-HEADERS += aboutbox.h \
+HEADERS += licensedialog.h \
+           aboutbox.h \
            virtualconsole/addressdelegate.h \
            addchannelsgroup.h \
            addfixture.h \
@@ -234,7 +235,8 @@ FORMS += virtualconsole/addvcbuttonmatrix.ui \
          virtualconsole/vcxypadproperties.ui
 
 # Sources
-SOURCES += aboutbox.cpp \
+SOURCES += licensedialog.cpp \
+           aboutbox.cpp \
            addressdelegate.cpp \
            addchannelsgroup.cpp \
            addfixture.cpp \

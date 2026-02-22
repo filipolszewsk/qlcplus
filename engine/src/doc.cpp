@@ -38,6 +38,7 @@
 #include "monitorproperties.h"
 #include "audioplugincache.h"
 #include "rgbscriptscache.h"
+#include "licensemanager.h"
 #include "channelsgroup.h"
 #include "scriptwrapper.h"
 #include "collection.h"
@@ -65,6 +66,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_fixtureDefCache(new QLCFixtureDefCache)
     , m_modifiersCache(new QLCModifiersCache)
     , m_rgbScriptsCache(new RGBScriptsCache(this))
+    , m_licenseManager(new LicenseManager(this))
     , m_ioPluginCache(new IOPluginCache(this))
     , m_audioPluginCache(new AudioPluginCache(this))
     , m_masterTimer(new MasterTimer(this))
@@ -120,6 +122,9 @@ Doc::~Doc()
 
     delete m_rgbScriptsCache;
     m_rgbScriptsCache = NULL;
+
+    delete m_licenseManager;
+    m_licenseManager = NULL;
 }
 
 void Doc::clearContents()
@@ -253,6 +258,11 @@ QLCModifiersCache* Doc::modifiersCache() const
 RGBScriptsCache* Doc::rgbScriptsCache() const
 {
     return m_rgbScriptsCache;
+}
+
+LicenseManager* Doc::licenseManager() const
+{
+    return m_licenseManager;
 }
 
 IOPluginCache* Doc::ioPluginCache() const

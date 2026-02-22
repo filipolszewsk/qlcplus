@@ -110,6 +110,7 @@ add_library(${module_name}
     universeitemwidget.cpp universeitemwidget.h
     videoeditor.cpp videoeditor.h videoeditor.ui
     videoprovider.cpp videoprovider.h
+    licensedialog.cpp licensedialog.h
     virtualconsole/addvcbuttonmatrix.cpp virtualconsole/addvcbuttonmatrix.h virtualconsole/addvcbuttonmatrix.ui
     virtualconsole/addvcslidermatrix.cpp virtualconsole/addvcslidermatrix.h virtualconsole/addvcslidermatrix.ui
     virtualconsole/addressdelegate.cpp virtualconsole/addressdelegate.h

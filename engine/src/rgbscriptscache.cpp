@@ -26,8 +26,10 @@
 #else
   #include "rgbscript.h"
 #endif
+#include "licensemanager.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
+#include "doc.h"
 
 RGBScriptsCache::RGBScriptsCache(Doc* doc)
     : m_doc(doc)
@@ -63,9 +65,10 @@ bool RGBScriptsCache::load(const QDir& dir)
 
     foreach (QString file, dir.entryList())
     {
-        if (!file.endsWith(".js", Qt::CaseInsensitive))
+        if (!file.endsWith(".js", Qt::CaseInsensitive) &&
+            !file.endsWith(PREMIUM_SCRIPT_EXT, Qt::CaseInsensitive))
         {
-            qDebug() << "    " << file << " skipped (special file or does not end on *.js)";
+            qDebug() << "    " << file << " skipped (not a .js or .qlcscript file)";
             continue;
         }
         QFile absFile(dir.absoluteFilePath(file));
@@ -101,6 +104,65 @@ bool RGBScriptsCache::load(const QDir& dir)
     return true;
 }
 
+bool RGBScriptsCache::loadPremium(const QDir& dir)
+{
+    qDebug() << "Loading premium RGB scripts in " << dir.path() << "...";
+
+    if (!dir.exists() || !dir.isReadable())
+        return false;
+
+    LicenseManager *lm = m_doc ? m_doc->licenseManager() : nullptr;
+    if (!lm || !lm->isLicensed())
+    {
+        qDebug() << "    Skipping premium scripts (no license)";
+        return true;
+    }
+
+    foreach (QString file, dir.entryList())
+    {
+        if (!file.endsWith(PREMIUM_SCRIPT_EXT, Qt::CaseInsensitive))
+            continue;
+
+        QFile absFile(dir.absoluteFilePath(file));
+        QString absFilename = absFile.fileName();
+
+        if (!m_scriptsMap.value(absFilename).isEmpty())
+        {
+            qDebug() << "    " << file << " already known";
+            continue;
+        }
+
+        if (!absFile.open(QIODevice::ReadOnly))
+            continue;
+
+        QByteArray encData = absFile.readAll();
+        absFile.close();
+
+        QByteArray decrypted = lm->decryptPremiumFile(encData);
+        if (decrypted.isEmpty())
+        {
+            qWarning() << "    " << file << " failed to decrypt";
+            continue;
+        }
+
+        QString contents = QString::fromUtf8(decrypted);
+        QStringList lines = contents.split('\n');
+        for (const QString &line : lines)
+        {
+            QStringList tokens = line.split("=");
+            if (tokens.length() == 2 && tokens[0].simplified() == "algo.name")
+            {
+                QString algoName = tokens[1].simplified().remove('"');
+                algoName.remove(';');
+                m_scriptsMap.insert(algoName, absFilename);
+                qDebug() << "    " << algoName << "premium script loaded";
+                break;
+            }
+        }
+    }
+    return true;
+}
+
 QDir RGBScriptsCache::systemScriptsDirectory()
 {
     return QLCFile::systemDirectory(QString(RGBSCRIPTDIR), QString(".js"));
@@ -109,5 +171,5 @@ QDir RGBScriptsCache::systemScriptsDirectory()
 QDir RGBScriptsCache::userScriptsDirectory()
 {
     return QLCFile::userDirectory(QString(USERRGBSCRIPTDIR), QString(RGBSCRIPTDIR),
-            QStringList() << QString("*%1").arg(".js"));
+            QStringList() << QString("*%1").arg(".js") << QString("*%1").arg(PREMIUM_SCRIPT_EXT));
 }

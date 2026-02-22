@@ -72,6 +72,9 @@ add_library(${module_name} SHARED
     universe.cpp universe.h
     utils.h
     video.cpp video.h
+    qlccrypto.cpp qlccrypto.h
+    licensemanager.cpp licensemanager.h
+    crypto/aes.c
 )
 target_include_directories(${module_name} PUBLIC
     ../../plugins/interfaces
@@ -82,6 +85,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Core
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Multimedia
+    Qt${QT_MAJOR_VERSION}::Network
 )
 
 target_link_libraries(${module_name} PRIVATE

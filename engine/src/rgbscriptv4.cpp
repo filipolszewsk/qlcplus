@@ -32,8 +32,10 @@
 #include "rgbscriptv4.h"
 
 #include "rgbscriptscache.h"
+#include "licensemanager.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
+#include "doc.h"
 
 /****************************************************************************
  * Initialization
@@ -126,6 +128,34 @@ bool RGBScript::load(const QString& fileName)
     }
 
     m_fileName = fileName;
+
+    if (LicenseManager::isPremiumFile(m_fileName))
+    {
+        QFile file(m_fileName);
+        if (!file.open(QIODevice::ReadOnly))
+        {
+            qWarning() << "Unable to load premium RGB script" << m_fileName;
+            return false;
+        }
+        QByteArray encData = file.readAll();
+        file.close();
+
+        Doc *parentDoc = doc();
+        if (!parentDoc || !parentDoc->licenseManager() || !parentDoc->licenseManager()->isLicensed())
+        {
+            qWarning() << "Premium script requires license:" << m_fileName;
+            return false;
+        }
+        QByteArray decrypted = parentDoc->licenseManager()->decryptPremiumFile(encData);
+        if (decrypted.isEmpty())
+        {
+            qWarning() << "Failed to decrypt premium script:" << m_fileName;
+            return false;
+        }
+        m_contents = QString::fromUtf8(decrypted);
+        return evaluate();
+    }
+
     QFile file(m_fileName);
     if (file.open(QIODevice::ReadOnly) == false)
     {

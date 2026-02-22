@@ -40,6 +40,7 @@
 #include "mastertimer.h"
 #include "addresstool.h"
 #include "simpledesk.h"
+#include "licensedialog.h"
 #include "aboutbox.h"
 #include "monitor.h"
 #include "vcframe.h"
@@ -49,8 +50,10 @@
 #include "qlcfixturedefcache.h"
 #include "audioplugincache.h"
 #include "rgbscriptscache.h"
+#include "licensemanager.h"
 #include "videoprovider.h"
 #include "qlcconfig.h"
+#include "qlccrypto.h"
 #include "qlcfile.h"
 #include "apputil.h"
 
@@ -121,6 +124,7 @@ App::App()
 
     , m_helpIndexAction(NULL)
     , m_helpAboutAction(NULL)
+    , m_licenseAction(NULL)
     , m_quitAction(NULL)
     , m_fileOpenMenu(NULL)
     , m_fadeAndStopMenu(NULL)
@@ -191,6 +195,8 @@ void App::startup()
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     destroyProgressDialog();
 #endif
+
+    /* License info is shown in the window title via slotDocModified */
 
     // Activate FixtureManager
     setActiveWindow(FixtureManager::staticMetaObject.className());
@@ -512,9 +518,16 @@ void App::initDoc()
     m_doc->modifiersCache()->load(QLCModifiersCache::systemTemplateDirectory(), true);
     m_doc->modifiersCache()->load(QLCModifiersCache::userTemplateDirectory());
 
+    /* Load license */
+    m_doc->licenseManager()->loadLicense();
+
     /* Load RGB scripts */
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::systemScriptsDirectory());
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::userScriptsDirectory());
+
+    /* Load premium RGB scripts (requires license) */
+    m_doc->rgbScriptsCache()->loadPremium(RGBScriptsCache::systemScriptsDirectory());
+    m_doc->rgbScriptsCache()->loadPremium(RGBScriptsCache::userScriptsDirectory());
 
     /* Load plugins */
     connect(m_doc->ioPluginCache(), SIGNAL(pluginLoaded(const QString&)),
@@ -545,7 +558,13 @@ void App::initDoc()
 
 void App::slotDocModified(bool state)
 {
-    QString caption(APPNAME);
+    QString caption;
+
+    caption = QString(APPNAME);
+
+    LicenseManager *lm = m_doc ? m_doc->licenseManager() : nullptr;
+    if (lm && lm->isLicensed())
+        caption += QString(" [%1 - GRIDqlc]").arg(lm->customerName());
 
     if (fileName().isEmpty() == false)
         caption += QString(" - ") + QDir::toNativeSeparators(fileName());
@@ -766,6 +785,9 @@ void App::initActions()
     m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About QLC+"), this);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
 
+    m_licenseAction = new QAction(QIcon(":/qlcplus.png"), tr("Premium &License"), this);
+    connect(m_licenseAction, SIGNAL(triggered(bool)), this, SLOT(slotLicenseDialog()));
+
     if (QLCFile::hasWindowManager() == false)
     {
         m_quitAction = new QAction(QIcon(":/exit.png"), tr("Quit QLC+"), this);
@@ -793,6 +815,7 @@ void App::initToolBar()
     m_toolbar->addAction(m_controlFullScreenAction);
     m_toolbar->addAction(m_helpIndexAction);
     m_toolbar->addAction(m_helpAboutAction);
+    m_toolbar->addAction(m_licenseAction);
     if (QLCFile::hasWindowManager() == false)
         m_toolbar->addAction(m_quitAction);
 
@@ -1289,6 +1312,15 @@ void App::slotHelpAbout()
     ab.exec();
 }
 
+void App::slotLicenseDialog()
+{
+    LicenseDialog dlg(m_doc, this);
+    dlg.exec();
+
+    /* Refresh window title after license change */
+    slotDocModified(m_doc->isModified());
+}
+
 void App::slotRecentFileClicked(QAction *recent)
 {
     if (recent == NULL)
@@ -1534,6 +1566,9 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     doc.writeTextElement(KXMLQLCCreatorName, APPNAME);
     doc.writeTextElement(KXMLQLCCreatorVersion, APPVERSION);
     doc.writeTextElement(KXMLQLCCreatorAuthor, QLCFile::currentUserName());
+    LicenseManager *saveLm = m_doc->licenseManager();
+    if (saveLm && saveLm->isLicensed())
+        doc.writeTextElement("LicensedTo", saveLm->customerName());
     doc.writeEndElement(); // close KXMLQLCCreator
 
     /* Write engine components to the XML document */

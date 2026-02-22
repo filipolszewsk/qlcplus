@@ -36,6 +36,8 @@
 
 #include "rgbscript.h"
 #include "rgbscriptscache.h"
+#include "licensemanager.h"
+#include "doc.h"
 
 QScriptEngine* RGBScript::s_engine = NULL;
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
@@ -129,9 +131,32 @@ bool RGBScript::load(const QString& fileName)
         return false;
     }
 
-    QTextStream stream(&file);
-    m_contents = stream.readAll();
-    file.close();
+    if (LicenseManager::isPremiumFile(m_fileName))
+    {
+        QByteArray encData = file.readAll();
+        file.close();
+
+        Doc *parentDoc = doc();
+        if (!parentDoc || !parentDoc->licenseManager() ||
+            !parentDoc->licenseManager()->isLicensed())
+        {
+            qWarning() << "Premium script requires license:" << m_fileName;
+            return false;
+        }
+        QByteArray decrypted = parentDoc->licenseManager()->decryptPremiumFile(encData);
+        if (decrypted.isEmpty())
+        {
+            qWarning() << "Failed to decrypt premium script:" << m_fileName;
+            return false;
+        }
+        m_contents = QString::fromUtf8(decrypted);
+    }
+    else
+    {
+        QTextStream stream(&file);
+        m_contents = stream.readAll();
+        file.close();
+    }
 
     QScriptSyntaxCheckResult result = QScriptEngine::checkSyntax(m_contents);
     if (result.state() == QScriptSyntaxCheckResult::Valid)
