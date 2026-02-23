@@ -58,6 +58,7 @@
 #define KXMLQLCRGBMatrixControlModeDimmer   QStringLiteral("Dimmer")
 #define KXMLQLCRGBMatrixControlModeShutter  QStringLiteral("Shutter")
 #define KXMLQLCRGBMatrixControlModeDimmerFullRange  QStringLiteral("DimmerFullRange")
+#define KXMLQLCRGBMatrixControlModeNone             QStringLiteral("None")
 
 #define KXMLQLCRGBMatrixFixtureDefChannelMap        QStringLiteral("FixtureDefChannelMap")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapKey     QStringLiteral("FixtureDefKey")
@@ -1181,6 +1182,9 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
             }
         }
 
+        if (!usePerDefinitionMapping && m_controlMode == ControlModeNone)
+            continue;
+
         if (!usePerDefinitionMapping && m_controlMode == ControlModeRgb)
         {
             channelList = head.rgbChannels();
@@ -1382,6 +1386,8 @@ RGBMatrix::ControlMode RGBMatrix::stringToControlMode(QString mode)
         return ControlModeShutter;
     else if (mode == KXMLQLCRGBMatrixControlModeDimmerFullRange)
         return ControlModeDimmerFullRange;
+    else if (mode == KXMLQLCRGBMatrixControlModeNone)
+        return ControlModeNone;
 
     return ControlModeRgb;
 }
@@ -1411,6 +1417,9 @@ QString RGBMatrix::controlModeToString(RGBMatrix::ControlMode mode)
         break;
         case ControlModeDimmerFullRange:
             return QString(KXMLQLCRGBMatrixControlModeDimmerFullRange);
+        break;
+        case ControlModeNone:
+            return QString(KXMLQLCRGBMatrixControlModeNone);
         break;
     }
 }
