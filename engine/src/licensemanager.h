@@ -25,7 +25,7 @@
 #include <QString>
 
 #define QLCKEY_MAGIC "QLCPLUS_LICENSE"
-#define QLCKEY_FILENAME ".qlckey"
+#define QLCKEY_FILENAME "license.qlckey"
 
 #define PREMIUM_SCRIPT_EXT ".qlcscript"
 

@@ -61,7 +61,7 @@ LicenseDialog::LicenseDialog(Doc *doc, QWidget *parent)
 
     // "Buy now" link - shown only when not licensed
     m_buyLabel = new QLabel(
-        tr("<a href=\"https://gridqlc.com/buy\">Buy a premium license</a>"), this);
+        tr("<a href=\"https://gridqlc.com/#pricing\">Buy a premium license</a>"), this);
     m_buyLabel->setOpenExternalLinks(true);
     m_buyLabel->setTextFormat(Qt::RichText);
     statusLayout->addWidget(m_buyLabel);

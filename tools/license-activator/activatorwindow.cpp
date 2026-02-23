@@ -144,7 +144,7 @@ QString ActivatorWindow::keyFilePath() const
     QDir dir(path);
     if (!dir.exists())
         dir.mkpath(".");
-    return path + QDir::separator() + ".qlckey";
+    return path + QDir::separator() + "license.qlckey";
 }
 
 void ActivatorWindow::updateStatus()
