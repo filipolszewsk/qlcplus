@@ -73,6 +73,9 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     /* Show channel columns */
     m_showChannelColumnsCheck->setChecked(cueList->showChannelColumns());
 
+    /* Hide buttons */
+    m_hideButtonsCheck->setChecked(cueList->hideButtons());
+
     /* Connections */
     connect(m_chaserAttachButton, SIGNAL(clicked()), this, SLOT(slotChaserAttachClicked()));
     connect(m_chaserDetachButton, SIGNAL(clicked()), this, SLOT(slotChaserDetachClicked()));
@@ -125,6 +128,15 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_deleteInputWidget->setWidgetPage(m_cueList->page());
     m_deleteInputWidget->show();
     m_deleteLayout->addWidget(m_deleteInputWidget);
+
+    m_renameInputWidget = new InputSelectionWidget(m_doc, this);
+    m_renameInputWidget->setTitle(tr("Rename control"));
+    m_renameInputWidget->setCustomFeedbackVisibility(true);
+    m_renameInputWidget->setKeySequence(m_cueList->renameKeySequence());
+    m_renameInputWidget->setInputSource(m_cueList->inputSource(VCCueList::renameInputSourceId));
+    m_renameInputWidget->setWidgetPage(m_cueList->page());
+    m_renameInputWidget->show();
+    m_renameLayout->addWidget(m_renameInputWidget);
 
     /************************************************************************
      * Next Cue page
@@ -271,6 +283,9 @@ void VCCueListProperties::accept()
     /* Show channel columns */
     m_cueList->setShowChannelColumns(m_showChannelColumnsCheck->isChecked());
 
+    /* Hide buttons */
+    m_cueList->setHideButtons(m_hideButtonsCheck->isChecked());
+
     /* Key sequences */
     m_cueList->setNextKeySequence(m_nextInputWidget->keySequence());
     m_cueList->setPreviousKeySequence(m_prevInputWidget->keySequence());
@@ -279,6 +294,7 @@ void VCCueListProperties::accept()
     m_cueList->setRecordKeySequence(m_recordInputWidget->keySequence());
     m_cueList->setOverwriteKeySequence(m_overwriteInputWidget->keySequence());
     m_cueList->setDeleteKeySequence(m_deleteInputWidget->keySequence());
+    m_cueList->setRenameKeySequence(m_renameInputWidget->keySequence());
 
     /* Input sources */
     m_cueList->setInputSource(m_nextInputWidget->inputSource(), VCCueList::nextInputSourceId);
@@ -288,6 +304,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_recordInputWidget->inputSource(), VCCueList::recordInputSourceId);
     m_cueList->setInputSource(m_overwriteInputWidget->inputSource(), VCCueList::overwriteInputSourceId);
     m_cueList->setInputSource(m_deleteInputWidget->inputSource(), VCCueList::deleteInputSourceId);
+    m_cueList->setInputSource(m_renameInputWidget->inputSource(), VCCueList::renameInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
     m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
 
@@ -323,6 +340,7 @@ void VCCueListProperties::slotTabChanged()
     m_recordInputWidget->stopAutoDetection();
     m_overwriteInputWidget->stopAutoDetection();
     m_deleteInputWidget->stopAutoDetection();
+    m_renameInputWidget->stopAutoDetection();
     m_nextInputWidget->stopAutoDetection();
     m_prevInputWidget->stopAutoDetection();
 

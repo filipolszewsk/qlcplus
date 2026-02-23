@@ -38,6 +38,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QGridLayout>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QDialogButtonBox>
 
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
@@ -1245,74 +1248,178 @@ void EFXEditor::slotLowerFixtureClicked()
 
 void EFXEditor::slotCopyClicked()
 {
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Copy EFX Settings"));
+    QVBoxLayout *layout = new QVBoxLayout(&dlg);
+
+    QCheckBox *chkFixtures = new QCheckBox(tr("Fixtures"), &dlg);
+    QCheckBox *chkGroupMode = new QCheckBox(tr("Fixture Group Mode"), &dlg);
+    QCheckBox *chkRowSelection = new QCheckBox(tr("Row Selection"), &dlg);
+    QCheckBox *chkFixtureOrder = new QCheckBox(tr("Fixture Order"), &dlg);
+    QCheckBox *chkPattern = new QCheckBox(tr("Pattern"), &dlg);
+    QCheckBox *chkParameters = new QCheckBox(tr("Parameters"), &dlg);
+    QCheckBox *chkDirection = new QCheckBox(tr("Direction"), &dlg);
+    QCheckBox *chkRunOrder = new QCheckBox(tr("Run Order"), &dlg);
+
+    chkFixtures->setChecked(true);
+    chkGroupMode->setChecked(true);
+    chkRowSelection->setChecked(true);
+    chkFixtureOrder->setChecked(true);
+    chkPattern->setChecked(true);
+    chkParameters->setChecked(true);
+    chkDirection->setChecked(true);
+    chkRunOrder->setChecked(true);
+
+    layout->addWidget(chkFixtures);
+    layout->addWidget(chkGroupMode);
+    layout->addWidget(chkRowSelection);
+    layout->addWidget(chkFixtureOrder);
+    layout->addWidget(chkPattern);
+    layout->addWidget(chkParameters);
+    layout->addWidget(chkDirection);
+    layout->addWidget(chkRunOrder);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    connect(buttons, SIGNAL(accepted()), &dlg, SLOT(accept()));
+    connect(buttons, SIGNAL(rejected()), &dlg, SLOT(reject()));
+    layout->addWidget(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
     QJsonObject root;
-    root["type"] = "qlc_efx_settings";
-    root["version"] = 1;
-    
-    // Copy column offsets (fixture group mode)
-    QJsonObject columnOffsets;
-    for (auto it = m_efx->columnOffsets().constBegin(); it != m_efx->columnOffsets().constEnd(); ++it)
+    root["type"] = QString("qlc_efx_settings");
+    root["version"] = 2;
+
+    if (chkFixtures->isChecked())
     {
-        columnOffsets[QString::number(it.key())] = it.value();
+        QJsonArray fixtureSettings;
+        foreach (EFXFixture *ef, m_efx->fixtures())
+        {
+            QJsonObject fixture;
+            fixture["fixtureId"] = static_cast<int>(ef->head().fxi);
+            fixture["headIndex"] = ef->head().head;
+            fixture["startOffset"] = ef->startOffset();
+            fixture["direction"] = static_cast<int>(ef->direction());
+            fixture["mode"] = static_cast<int>(ef->mode());
+            fixtureSettings.append(fixture);
+        }
+        root["fixtures"] = fixtureSettings;
     }
-    root["columnOffsets"] = columnOffsets;
-    
-    // Copy column modes
-    QJsonObject columnModes;
-    for (auto it = m_efx->columnModes().constBegin(); it != m_efx->columnModes().constEnd(); ++it)
+
+    if (chkGroupMode->isChecked())
     {
-        columnModes[QString::number(it.key())] = it.value();
+        QJsonObject gm;
+        gm["offsetDirection"] = static_cast<int>(m_efx->offsetDirection());
+        gm["offsetStep"] = m_efx->offsetStep();
+        gm["wings"] = m_efx->wings();
+
+        QJsonObject columnOffsets;
+        QJsonObject columnModes;
+        QJsonObject columnDirections;
+
+        FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
+        if (group != nullptr)
+        {
+            int gridWidth = group->size().width();
+            int gridHeight = group->size().height();
+
+            for (int col = 0; col < gridWidth; col++)
+            {
+                EFXFixture *representative = nullptr;
+                for (int row = 0; row < gridHeight && representative == nullptr; row++)
+                {
+                    GroupHead head = group->head(QLCPoint(col, row));
+                    if (!head.isValid())
+                        continue;
+                    foreach (EFXFixture *ef, m_efx->fixtures())
+                    {
+                        if (ef->head().fxi == head.fxi && ef->head().head == head.head)
+                        {
+                            representative = ef;
+                            break;
+                        }
+                    }
+                }
+
+                if (representative != nullptr)
+                {
+                    int offset = m_efx->hasColumnOffset(col)
+                        ? m_efx->columnOffset(col)
+                        : representative->startOffset();
+                    columnOffsets[QString::number(col)] = offset;
+                    columnModes[QString::number(col)] = static_cast<int>(representative->mode());
+                    columnDirections[QString::number(col)] = static_cast<int>(representative->direction());
+                }
+                else
+                {
+                    columnOffsets[QString::number(col)] = m_efx->columnOffset(col) >= 0
+                        ? m_efx->columnOffset(col) : 0;
+                    columnModes[QString::number(col)] = m_efx->columnMode(col);
+                    columnDirections[QString::number(col)] = static_cast<int>(m_efx->columnDirection(col));
+                }
+            }
+        }
+
+        gm["columnOffsets"] = columnOffsets;
+        gm["columnModes"] = columnModes;
+        gm["columnDirections"] = columnDirections;
+
+        root["fixtureGroupMode"] = gm;
     }
-    root["columnModes"] = columnModes;
-    
-    // Copy column directions
-    QJsonObject columnDirections;
-    for (auto it = m_efx->columnDirections().constBegin(); it != m_efx->columnDirections().constEnd(); ++it)
+
+    if (chkRowSelection->isChecked())
     {
-        columnDirections[QString::number(it.key())] = static_cast<int>(it.value());
+        QJsonArray rows;
+        foreach (int r, m_efx->selectedRows())
+            rows.append(r);
+        root["rowSelection"] = rows;
     }
-    root["columnDirections"] = columnDirections;
-    
-    // Copy individual fixture settings (non-group mode)
-    QJsonArray fixtureSettings;
-    foreach (EFXFixture *ef, m_efx->fixtures())
+
+    if (chkFixtureOrder->isChecked())
     {
-        QJsonObject fixture;
-        fixture["fixtureId"] = static_cast<int>(ef->head().fxi);
-        fixture["headIndex"] = ef->head().head;
-        fixture["startOffset"] = ef->startOffset();
-        fixture["direction"] = static_cast<int>(ef->direction());
-        fixture["mode"] = static_cast<int>(ef->mode());
-        fixtureSettings.append(fixture);
+        root["fixtureOrder"] = EFX::propagationModeToString(m_efx->propagationMode());
     }
-    root["fixtures"] = fixtureSettings;
-    
-    // Copy movement parameters
-    QJsonObject movement;
-    movement["algorithm"] = EFX::algorithmToString(m_efx->algorithm());
-    movement["width"] = m_efx->width();
-    movement["height"] = m_efx->height();
-    movement["xOffset"] = m_efx->xOffset();
-    movement["yOffset"] = m_efx->yOffset();
-    movement["rotation"] = m_efx->rotation();
-    movement["startOffset"] = m_efx->startOffset();
-    movement["isRelative"] = m_efx->isRelative();
-    movement["xFrequency"] = m_efx->xFrequency();
-    movement["yFrequency"] = m_efx->yFrequency();
-    movement["xPhase"] = m_efx->xPhase();
-    movement["yPhase"] = m_efx->yPhase();
-    movement["waveWidth"] = m_efx->waveWidth();
-    movement["waveLength"] = m_efx->waveLength();
-    movement["waveShape"] = m_efx->waveShape();
-    movement["waveFadeIn"] = m_efx->waveFadeIn();
-    movement["waveFadeOut"] = m_efx->waveFadeOut();
-    root["movement"] = movement;
-    
-    // Copy to clipboard
+
+    if (chkPattern->isChecked())
+    {
+        root["pattern"] = EFX::algorithmToString(m_efx->algorithm());
+    }
+
+    if (chkParameters->isChecked())
+    {
+        QJsonObject params;
+        params["width"] = m_efx->width();
+        params["height"] = m_efx->height();
+        params["xOffset"] = m_efx->xOffset();
+        params["yOffset"] = m_efx->yOffset();
+        params["rotation"] = m_efx->rotation();
+        params["startOffset"] = m_efx->startOffset();
+        params["isRelative"] = m_efx->isRelative();
+        params["xFrequency"] = m_efx->xFrequency();
+        params["yFrequency"] = m_efx->yFrequency();
+        params["xPhase"] = m_efx->xPhase();
+        params["yPhase"] = m_efx->yPhase();
+        params["waveWidth"] = m_efx->waveWidth();
+        params["waveLength"] = m_efx->waveLength();
+        params["waveShape"] = m_efx->waveShape();
+        params["waveFadeIn"] = m_efx->waveFadeIn();
+        params["waveFadeOut"] = m_efx->waveFadeOut();
+        root["parameters"] = params;
+    }
+
+    if (chkDirection->isChecked())
+    {
+        root["direction"] = static_cast<int>(m_efx->direction());
+    }
+
+    if (chkRunOrder->isChecked())
+    {
+        root["runOrder"] = static_cast<int>(m_efx->runOrder());
+    }
+
     QJsonDocument doc(root);
     QApplication::clipboard()->setText(doc.toJson(QJsonDocument::Compact));
-    
-    qDebug() << "EFX settings copied to clipboard";
 }
 
 void EFXEditor::slotPasteClicked()
@@ -1320,228 +1427,87 @@ void EFXEditor::slotPasteClicked()
     QString clipboardText = QApplication::clipboard()->text();
     if (clipboardText.isEmpty())
     {
-        QMessageBox::warning(this, tr("Paste Error"), 
+        QMessageBox::warning(this, tr("Paste Error"),
                              tr("Clipboard is empty."));
         return;
     }
-    
+
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8(), &error);
     if (error.error != QJsonParseError::NoError)
     {
-        QMessageBox::warning(this, tr("Paste Error"), 
+        QMessageBox::warning(this, tr("Paste Error"),
                              tr("Invalid clipboard data: %1").arg(error.errorString()));
         return;
     }
-    
+
     QJsonObject root = doc.object();
     if (root["type"].toString() != "qlc_efx_settings")
     {
-        QMessageBox::warning(this, tr("Paste Error"), 
+        QMessageBox::warning(this, tr("Paste Error"),
                              tr("Clipboard does not contain EFX settings."));
         return;
     }
-    
+
     bool running = interruptRunning();
-    
-    // Paste movement parameters
-    if (root.contains("movement"))
+
+    m_efx->applySettingsFromJson(root, m_doc);
+
+    /* Refresh UI from model state */
+
+    /* Pattern */
+    m_algorithmCombo->setCurrentIndex(static_cast<int>(m_efx->algorithm()));
+
+    /* Parameters */
+    m_widthSpin->setValue(m_efx->width());
+    m_heightSpin->setValue(m_efx->height());
+    m_xOffsetSpin->setValue(m_efx->xOffset());
+    m_yOffsetSpin->setValue(m_efx->yOffset());
+    m_rotationSpin->setValue(m_efx->rotation());
+    m_startOffsetSpin->setValue(m_efx->startOffset());
+    m_isRelativeCheckbox->setChecked(m_efx->isRelative());
+    m_xFrequencySpin->setValue(m_efx->xFrequency());
+    m_yFrequencySpin->setValue(m_efx->yFrequency());
+    m_xPhaseSpin->setValue(m_efx->xPhase());
+    m_yPhaseSpin->setValue(m_efx->yPhase());
+    m_waveWidthSpin->setValue(m_efx->waveWidth());
+    m_waveLengthSpin->setValue(m_efx->waveLength());
+    m_waveShapeCombo->setCurrentIndex(m_efx->waveShape());
+    m_waveFadeInSpin->setValue(m_efx->waveFadeIn());
+    m_waveFadeOutSpin->setValue(m_efx->waveFadeOut());
+
+    /* Fixture Order */
+    switch (m_efx->propagationMode())
     {
-        QJsonObject movement = root["movement"].toObject();
-        
-        if (movement.contains("algorithm"))
-        {
-            EFX::Algorithm algo = EFX::stringToAlgorithm(movement["algorithm"].toString());
-            m_efx->setAlgorithm(algo);
-            m_algorithmCombo->setCurrentIndex(static_cast<int>(algo));
-        }
-        if (movement.contains("width"))
-        {
-            m_efx->setWidth(movement["width"].toInt());
-            m_widthSpin->setValue(movement["width"].toInt());
-        }
-        if (movement.contains("height"))
-        {
-            m_efx->setHeight(movement["height"].toInt());
-            m_heightSpin->setValue(movement["height"].toInt());
-        }
-        if (movement.contains("xOffset"))
-        {
-            m_efx->setXOffset(movement["xOffset"].toInt());
-            m_xOffsetSpin->setValue(movement["xOffset"].toInt());
-        }
-        if (movement.contains("yOffset"))
-        {
-            m_efx->setYOffset(movement["yOffset"].toInt());
-            m_yOffsetSpin->setValue(movement["yOffset"].toInt());
-        }
-        if (movement.contains("rotation"))
-        {
-            m_efx->setRotation(movement["rotation"].toInt());
-            m_rotationSpin->setValue(movement["rotation"].toInt());
-        }
-        if (movement.contains("startOffset"))
-        {
-            m_efx->setStartOffset(movement["startOffset"].toInt());
-            m_startOffsetSpin->setValue(movement["startOffset"].toInt());
-        }
-        if (movement.contains("isRelative"))
-        {
-            m_efx->setIsRelative(movement["isRelative"].toBool());
-            m_isRelativeCheckbox->setChecked(movement["isRelative"].toBool());
-        }
-        if (movement.contains("xFrequency"))
-        {
-            m_efx->setXFrequency(movement["xFrequency"].toInt());
-            m_xFrequencySpin->setValue(movement["xFrequency"].toInt());
-        }
-        if (movement.contains("yFrequency"))
-        {
-            m_efx->setYFrequency(movement["yFrequency"].toInt());
-            m_yFrequencySpin->setValue(movement["yFrequency"].toInt());
-        }
-        if (movement.contains("xPhase"))
-        {
-            m_efx->setXPhase(movement["xPhase"].toInt());
-            m_xPhaseSpin->setValue(movement["xPhase"].toInt());
-        }
-        if (movement.contains("yPhase"))
-        {
-            m_efx->setYPhase(movement["yPhase"].toInt());
-            m_yPhaseSpin->setValue(movement["yPhase"].toInt());
-        }
-        if (movement.contains("waveWidth"))
-        {
-            m_efx->setWaveWidth(movement["waveWidth"].toInt());
-            m_waveWidthSpin->setValue(movement["waveWidth"].toInt());
-        }
-        if (movement.contains("waveLength"))
-        {
-            m_efx->setWaveLength(movement["waveLength"].toInt());
-            m_waveLengthSpin->setValue(movement["waveLength"].toInt());
-        }
-        if (movement.contains("waveShape"))
-        {
-            m_efx->setWaveShape(movement["waveShape"].toInt());
-            m_waveShapeCombo->setCurrentIndex(movement["waveShape"].toInt());
-        }
-        if (movement.contains("waveFadeIn"))
-        {
-            m_efx->setWaveFadeIn(movement["waveFadeIn"].toInt());
-            m_waveFadeInSpin->setValue(movement["waveFadeIn"].toInt());
-        }
-        if (movement.contains("waveFadeOut"))
-        {
-            m_efx->setWaveFadeOut(movement["waveFadeOut"].toInt());
-            m_waveFadeOutSpin->setValue(movement["waveFadeOut"].toInt());
-        }
+        default:
+        case EFX::Parallel:   m_parallelRadio->setChecked(true); break;
+        case EFX::Serial:     m_serialRadio->setChecked(true); break;
+        case EFX::Asymmetric: m_asymmetricRadio->setChecked(true); break;
     }
-    
-    // Paste column settings (fixture group mode)
-    if (m_efx->isFixtureGroupMode())
+
+    /* Run Order */
+    switch (m_efx->runOrder())
     {
-        // Paste column offsets
-        if (root.contains("columnOffsets"))
-        {
-            QJsonObject columnOffsets = root["columnOffsets"].toObject();
-            for (auto it = columnOffsets.constBegin(); it != columnOffsets.constEnd(); ++it)
-            {
-                int col = it.key().toInt();
-                int offset = it.value().toInt();
-                m_efx->setColumnOffset(col, offset);
-            }
-        }
-        
-        // Paste column modes
-        if (root.contains("columnModes"))
-        {
-            QJsonObject columnModes = root["columnModes"].toObject();
-            for (auto it = columnModes.constBegin(); it != columnModes.constEnd(); ++it)
-            {
-                int col = it.key().toInt();
-                int mode = it.value().toInt();
-                m_efx->setColumnMode(col, mode);
-            }
-        }
-        
-        // Paste column directions
-        if (root.contains("columnDirections"))
-        {
-            QJsonObject columnDirections = root["columnDirections"].toObject();
-            for (auto it = columnDirections.constBegin(); it != columnDirections.constEnd(); ++it)
-            {
-                int col = it.key().toInt();
-                Function::Direction dir = static_cast<Function::Direction>(it.value().toInt());
-                m_efx->setColumnDirection(col, dir);
-            }
-        }
-        
-        // Apply to actual fixtures
-        FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
-        if (group != nullptr)
-        {
-            int gridWidth = group->size().width();
-            int gridHeight = group->size().height();
-            
-            for (int col = 0; col < gridWidth; col++)
-            {
-                int offset = m_efx->columnOffset(col);
-                EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(m_efx->columnMode(col));
-                Function::Direction dir = m_efx->columnDirection(col);
-                
-                foreach (EFXFixture *ef, m_efx->fixtures())
-                {
-                    for (int row = 0; row < gridHeight; row++)
-                    {
-                        GroupHead head = group->head(QLCPoint(col, row));
-                        if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
-                        {
-                            if (offset >= 0)
-                                ef->setStartOffset(offset);
-                            ef->forceMode(mode);
-                            ef->setDirection(dir);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        default:
+        case Function::Loop:       m_loop->setChecked(true); break;
+        case Function::PingPong:   m_pingPong->setChecked(true); break;
+        case Function::SingleShot: m_singleShot->setChecked(true); break;
     }
-    else
+
+    /* Direction */
+    switch (m_efx->direction())
     {
-        // Non-group mode: paste fixture settings by matching fixture ID and head
-        if (root.contains("fixtures"))
-        {
-            QJsonArray fixtureSettings = root["fixtures"].toArray();
-            foreach (const QJsonValue &val, fixtureSettings)
-            {
-                QJsonObject fixture = val.toObject();
-                quint32 fxiId = static_cast<quint32>(fixture["fixtureId"].toInt());
-                int headIndex = fixture["headIndex"].toInt();
-                
-                // Find matching EFXFixture
-                foreach (EFXFixture *ef, m_efx->fixtures())
-                {
-                    if (ef->head().fxi == fxiId && ef->head().head == headIndex)
-                    {
-                        if (fixture.contains("startOffset"))
-                            ef->setStartOffset(fixture["startOffset"].toInt());
-                        if (fixture.contains("direction"))
-                            ef->setDirection(static_cast<Function::Direction>(fixture["direction"].toInt()));
-                        if (fixture.contains("mode"))
-                            ef->setMode(static_cast<EFXFixture::Mode>(fixture["mode"].toInt()));
-                        break;
-                    }
-                }
-            }
-        }
+        default:
+        case Function::Forward:  m_forward->setChecked(true); break;
+        case Function::Backward: m_backward->setChecked(true); break;
     }
-    
+
+    /* Row selection */
+    updateRowSelection();
+
     updateFixtureTree();
     redrawPreview();
     continueRunning(running);
-    
-    qDebug() << "EFX settings pasted from clipboard";
 }
 
 void EFXEditor::slotParallelRadioToggled(bool state)

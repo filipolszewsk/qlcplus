@@ -179,6 +179,16 @@
         </widget>
        </item>
        <item row="6" column="0" colspan="4">
+        <widget class="QCheckBox" name="m_hideButtonsCheck">
+         <property name="text">
+          <string>Hide control buttons and faders</string>
+         </property>
+         <property name="toolTip">
+          <string>Hide the playback buttons, progress bar and side fader. Buttons remain functional via external input mappings.</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0" colspan="4">
         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -532,6 +542,9 @@
          </item>
          <item>
           <layout class="QHBoxLayout" name="m_deleteLayout"/>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="m_renameLayout"/>
          </item>
         </layout>
        </item>

@@ -674,44 +674,79 @@ void FunctionManager::slotPasteSettings()
         return;
 
     QJsonObject root = jsonDoc.object();
-    if (root["type"].toString() != "qlc_rgb_matrix_settings")
-        return;
+    QString clipType = root["type"].toString();
 
-    int count = 0;
-    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
-    foreach (QTreeWidgetItem *item, selected)
+    if (clipType == "qlc_rgb_matrix_settings")
     {
-        quint32 fid = m_tree->itemFunctionId(item);
-        if (fid == Function::invalidId())
-            continue;
-
-        Function *func = m_doc->function(fid);
-        if (func == NULL || func->type() != Function::RGBMatrixType)
-            continue;
-
-        RGBMatrix *matrix = qobject_cast<RGBMatrix*>(func);
-        if (matrix != NULL && matrix->applySettingsFromJson(root, m_doc))
-            count++;
-    }
-
-    if (count > 0)
-    {
-        m_doc->setModified();
-
-        /* If the current editor is an RGBMatrixEditor for one of the pasted
-           functions, close and reopen it to refresh the UI */
-        if (m_editor != NULL && selected.size() == 1)
+        int count = 0;
+        QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+        foreach (QTreeWidgetItem *item, selected)
         {
-            quint32 fid = m_tree->itemFunctionId(selected.first());
+            quint32 fid = m_tree->itemFunctionId(item);
+            if (fid == Function::invalidId())
+                continue;
+
             Function *func = m_doc->function(fid);
-            if (func != NULL && func->type() == Function::RGBMatrixType)
-                editFunction(func);
+            if (func == NULL || func->type() != Function::RGBMatrixType)
+                continue;
+
+            RGBMatrix *matrix = qobject_cast<RGBMatrix*>(func);
+            if (matrix != NULL && matrix->applySettingsFromJson(root, m_doc))
+                count++;
+        }
+
+        if (count > 0)
+        {
+            m_doc->setModified();
+            if (m_editor != NULL && selected.size() == 1)
+            {
+                quint32 fid = m_tree->itemFunctionId(selected.first());
+                Function *func = m_doc->function(fid);
+                if (func != NULL && func->type() == Function::RGBMatrixType)
+                    editFunction(func);
+            }
+        }
+        else
+        {
+            QMessageBox::information(this, tr("Paste Settings"),
+                                     tr("No RGB Matrix functions were selected."));
         }
     }
-    else
+    else if (clipType == "qlc_efx_settings")
     {
-        QMessageBox::information(this, tr("Paste Settings"),
-                                 tr("No RGB Matrix functions were selected."));
+        int count = 0;
+        QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+        foreach (QTreeWidgetItem *item, selected)
+        {
+            quint32 fid = m_tree->itemFunctionId(item);
+            if (fid == Function::invalidId())
+                continue;
+
+            Function *func = m_doc->function(fid);
+            if (func == NULL || func->type() != Function::EFXType)
+                continue;
+
+            EFX *efx = qobject_cast<EFX*>(func);
+            if (efx != NULL && efx->applySettingsFromJson(root, m_doc))
+                count++;
+        }
+
+        if (count > 0)
+        {
+            m_doc->setModified();
+            if (m_editor != NULL && selected.size() == 1)
+            {
+                quint32 fid = m_tree->itemFunctionId(selected.first());
+                Function *func = m_doc->function(fid);
+                if (func != NULL && func->type() == Function::EFXType)
+                    editFunction(func);
+            }
+        }
+        else
+        {
+            QMessageBox::information(this, tr("Paste Settings"),
+                                     tr("No EFX functions were selected."));
+        }
     }
 }
 

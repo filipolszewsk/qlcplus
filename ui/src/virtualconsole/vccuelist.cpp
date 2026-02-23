@@ -257,6 +257,7 @@ const quint8 VCCueList::recordInputSourceId = 5;
 const quint8 VCCueList::overwriteInputSourceId = 6;
 const quint8 VCCueList::deleteInputSourceId = 7;
 const quint8 VCCueList::secondarySelectInputSourceId = 8;
+const quint8 VCCueList::renameInputSourceId = 9;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -290,6 +291,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_recordCuePrefix("cue")
     , m_isRecordDialogOpen(false)
     , m_showChannelColumns(false)
+    , m_hideButtons(false)
+    , m_bottomControlsWidget(nullptr)
     , m_stepIndexOutputEnabled(false)
     , m_stepIndexOutputFixture(Function::invalidId())
     , m_stepIndexOutputChannel(0)
@@ -477,7 +480,19 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_deleteButton, SIGNAL(clicked()), this, SLOT(slotDeleteButtonClicked()));
     hbox->addWidget(m_deleteButton);
 
-    vbox->addItem(hbox);
+    m_renameButton = new QToolButton(this);
+    m_renameButton->setIcon(QIcon(":/editclear.png"));
+    m_renameButton->setIconSize(QSize(24, 24));
+    m_renameButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_renameButton->setFixedHeight(32);
+    m_renameButton->setToolTip(tr("Rename selected cue"));
+    m_renameButton->setEnabled(false);
+    connect(m_renameButton, SIGNAL(clicked()), this, SLOT(slotRenameButtonClicked()));
+    hbox->addWidget(m_renameButton);
+
+    m_bottomControlsWidget = new QWidget(this);
+    m_bottomControlsWidget->setLayout(hbox);
+    vbox->addWidget(m_bottomControlsWidget);
     grid->addItem(vbox, 0, 1, 6);
 
     setFrameStyle(KVCFrameStyleSunken);
@@ -508,6 +523,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_recordLatestValue = 0;
     m_overwriteLatestValue = 0;
     m_deleteLatestValue = 0;
+    m_renameLatestValue = 0;
 }
 
 VCCueList::~VCCueList()
@@ -555,6 +571,7 @@ void VCCueList::enableWidgetUI(bool enable)
     }
     m_overwriteButton->setEnabled(overwriteEnabled);
     m_deleteButton->setEnabled(deleteEnabled);
+    m_renameButton->setEnabled(deleteEnabled);
 
     m_topPercentageLabel->setEnabled(enable);
     m_sideFader->setEnabled(enable);
@@ -1627,6 +1644,7 @@ void VCCueList::setSideFaderMode(VCCueList::FaderMode mode)
     m_slidersMode = mode;
 
     bool show = (mode == None) ? false : true;
+    if (m_hideButtons) show = false;
     m_crossfadeButton->setVisible(show);
     m_topPercentageLabel->setVisible(show);
     m_topStepLabel->setVisible(mode == Steps ? false : show);
@@ -1755,11 +1773,12 @@ void VCCueList::setSecondaryIndex(int index)
 
 void VCCueList::slotShowCrossfadePanel(bool enable)
 {
-    m_topPercentageLabel->setVisible(enable);
-    m_topStepLabel->setVisible(enable);
-    m_sideFader->setVisible(enable);
-    m_bottomStepLabel->setVisible(enable);
-    m_bottomPercentageLabel->setVisible(enable);
+    bool show = enable && !m_hideButtons;
+    m_topPercentageLabel->setVisible(show);
+    m_topStepLabel->setVisible(show);
+    m_sideFader->setVisible(show);
+    m_bottomStepLabel->setVisible(show);
+    m_bottomPercentageLabel->setVisible(show);
 
     emit sideFaderButtonToggled();
 }
@@ -2023,6 +2042,16 @@ QKeySequence VCCueList::deleteKeySequence() const
     return m_deleteKeySequence;
 }
 
+void VCCueList::setRenameKeySequence(const QKeySequence& keySequence)
+{
+    m_renameKeySequence = QKeySequence(keySequence);
+}
+
+QKeySequence VCCueList::renameKeySequence() const
+{
+    return m_renameKeySequence;
+}
+
 void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
 {
     if (acceptsInput() == false)
@@ -2042,6 +2071,8 @@ void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
         slotOverwriteButtonClicked();
     else if (m_deleteKeySequence == keySequence)
         slotDeleteButtonClicked();
+    else if (m_renameKeySequence == keySequence)
+        slotRenameButtonClicked();
 }
 
 void VCCueList::updateFeedback()
@@ -2202,6 +2233,23 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
         else if (value > 0)
         {
             m_deleteLatestValue = value;
+        }
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), renameInputSourceId))
+    {
+        if (m_renameLatestValue == 0 && value > 0)
+        {
+            slotRenameButtonClicked();
+            // Modal dialog consumes release event; reset handled inside slot
+            return;
+        }
+        else if (m_renameLatestValue > 0 && value == 0)
+        {
+            m_renameLatestValue = 0;
+        }
+        else if (value > 0)
+        {
+            m_renameLatestValue = value;
         }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
@@ -2454,12 +2502,14 @@ void VCCueList::updateDeleteButtonState()
     if (m_doc->mode() != Doc::Operate)
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
     if (m_chaserID == Function::invalidId())
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
@@ -2467,6 +2517,7 @@ void VCCueList::updateDeleteButtonState()
     if (func == NULL || func->type() == Function::SequenceType)
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
@@ -2474,6 +2525,7 @@ void VCCueList::updateDeleteButtonState()
     if (ch == NULL || !ch->stopped())
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
@@ -2481,6 +2533,7 @@ void VCCueList::updateDeleteButtonState()
     if (selectedItem == NULL)
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
@@ -2488,10 +2541,12 @@ void VCCueList::updateDeleteButtonState()
     if (stepIndex < 0 || stepIndex >= ch->steps().count())
     {
         m_deleteButton->setEnabled(false);
+        m_renameButton->setEnabled(false);
         return;
     }
 
     m_deleteButton->setEnabled(true);
+    m_renameButton->setEnabled(true);
 }
 
 /*****************************************************************************
@@ -2616,6 +2671,41 @@ void VCCueList::slotDeleteButtonClicked()
 
     // Modal dialog consumed button release; reset so next press works
     m_deleteLatestValue = 0;
+}
+
+void VCCueList::slotRenameButtonClicked()
+{
+    if (m_doc->mode() != Doc::Operate)
+        return;
+
+    Chaser *ch = chaser();
+    if (ch == NULL)
+        return;
+
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return;
+
+    int idx = m_tree->indexOfTopLevelItem(item);
+    if (idx < 0 || idx >= ch->steps().count())
+        return;
+
+    Function *func = m_doc->function(ch->steps().at(idx).fid);
+    if (func == NULL)
+        return;
+
+    bool ok;
+    QString newName = QInputDialog::getText(this,
+                                            tr("Rename Cue"),
+                                            tr("Enter new cue name:"),
+                                            QLineEdit::Normal,
+                                            func->name(),
+                                            &ok);
+    if (ok && !newName.isEmpty())
+        func->setName(newName);
+
+    // Modal dialog consumed button release; reset so next press works
+    m_renameLatestValue = 0;
 }
 
 void VCCueList::deleteSelectedCue()
@@ -3212,6 +3302,34 @@ void VCCueList::updateTreeHeader()
 }
 
 /*****************************************************************************
+ * Hide Buttons
+ *****************************************************************************/
+
+void VCCueList::setHideButtons(bool hide)
+{
+    m_hideButtons = hide;
+    m_bottomControlsWidget->setVisible(!hide);
+    m_progress->setVisible(!hide);
+    if (hide)
+    {
+        m_topPercentageLabel->setVisible(false);
+        m_topStepLabel->setVisible(false);
+        m_sideFader->setVisible(false);
+        m_bottomPercentageLabel->setVisible(false);
+        m_bottomStepLabel->setVisible(false);
+    }
+    else
+    {
+        setSideFaderMode(m_slidersMode);
+    }
+}
+
+bool VCCueList::hideButtons() const
+{
+    return m_hideButtons;
+}
+
+/*****************************************************************************
  * Step Index Output
  *****************************************************************************/
 
@@ -3390,6 +3508,12 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
             if (str.isEmpty() == false)
                 m_deleteKeySequence = stripKeySequence(QKeySequence(str));
         }
+        else if (root.name() == KXMLQLCVCCueListRename)
+        {
+            QString str = loadXMLSources(root, renameInputSourceId);
+            if (str.isEmpty() == false)
+                m_renameKeySequence = stripKeySequence(QKeySequence(str));
+        }
         else if (root.name() == KXMLQLCVCCueListSlidersMode)
         {
             setSideFaderMode(stringToFaderMode(root.readElementText()));
@@ -3486,6 +3610,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         else if (root.name() == KXMLQLCVCCueListAutoStart)
         {
             setAutoStartInOperate(root.readElementText() == "1");
+        }
+        else if (root.name() == KXMLQLCVCCueListHideButtons)
+        {
+            setHideButtons(root.readElementText().toInt() != 0);
         }
         else if (root.name() == KXMLQLCVCCueListChannelColumns)
         {
@@ -3677,6 +3805,13 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     saveXMLInput(doc, inputSource(deleteInputSourceId));
     doc->writeEndElement();
 
+    /* Cue list rename */
+    doc->writeStartElement(KXMLQLCVCCueListRename);
+    if (m_renameKeySequence.toString().isEmpty() == false)
+        doc->writeTextElement(KXMLQLCVCWidgetKey, m_renameKeySequence.toString());
+    saveXMLInput(doc, inputSource(renameInputSourceId));
+    doc->writeEndElement();
+
     /* Crossfade cue list */
     if (sideFaderMode() != None)
         doc->writeTextElement(KXMLQLCVCCueListSlidersMode, faderModeToString(sideFaderMode()));
@@ -3730,6 +3865,10 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     /* Auto start in operate mode */
     if (m_autoStartInOperate)
         doc->writeTextElement(KXMLQLCVCCueListAutoStart, QString::number(1));
+
+    /* Hide buttons */
+    if (m_hideButtons)
+        doc->writeTextElement(KXMLQLCVCCueListHideButtons, QString::number(1));
 
     /* Channel columns */
     if (m_showChannelColumns || !m_channelColumns.isEmpty())

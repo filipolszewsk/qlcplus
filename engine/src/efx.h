@@ -21,6 +21,8 @@
 #ifndef EFX_H
 #define EFX_H
 
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QMap>
 #include <QVector>
 #include <QPoint>
@@ -793,6 +795,15 @@ public:
 
 private:
     PropagationMode m_propagationMode;
+
+    /*********************************************************************
+     * JSON Settings Import/Export
+     *********************************************************************/
+public:
+    /** Apply settings from a JSON object (used by copy/paste).
+     *  Only sections present in the JSON are applied.
+     *  Returns true if any settings were applied. */
+    bool applySettingsFromJson(const QJsonObject &root, Doc *doc);
 
     /*********************************************************************
      * Load & Save

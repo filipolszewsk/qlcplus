@@ -58,6 +58,7 @@ protected:
     InputSelectionWidget *m_recordInputWidget;
     InputSelectionWidget *m_overwriteInputWidget;
     InputSelectionWidget *m_deleteInputWidget;
+    InputSelectionWidget *m_renameInputWidget;
     InputSelectionWidget *m_nextInputWidget;
     InputSelectionWidget *m_prevInputWidget;
 

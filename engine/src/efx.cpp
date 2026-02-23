@@ -1821,6 +1821,240 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
     return true;
 }
 
+bool EFX::applySettingsFromJson(const QJsonObject &root, Doc *doc)
+{
+    bool applied = false;
+
+    /* Fixtures (individual fixture settings, matched by position) */
+    if (root.contains("fixtures"))
+    {
+        QJsonArray fixtureArr = root["fixtures"].toArray();
+        int count = qMin(fixtureArr.size(), m_fixtures.size());
+        for (int i = 0; i < count; i++)
+        {
+            QJsonObject fObj = fixtureArr[i].toObject();
+            EFXFixture *ef = m_fixtures[i];
+            if (fObj.contains("startOffset"))
+                ef->setStartOffset(fObj["startOffset"].toInt());
+            if (fObj.contains("direction"))
+                ef->setDirection(static_cast<Function::Direction>(fObj["direction"].toInt()));
+            if (fObj.contains("mode"))
+                ef->setMode(static_cast<EFXFixture::Mode>(fObj["mode"].toInt()));
+        }
+        applied = true;
+    }
+
+    /* Fixture Group Mode */
+    if (root.contains("fixtureGroupMode"))
+    {
+        QJsonObject gm = root["fixtureGroupMode"].toObject();
+
+        if (gm.contains("columnOffsets"))
+        {
+            QJsonObject co = gm["columnOffsets"].toObject();
+            for (auto it = co.constBegin(); it != co.constEnd(); ++it)
+                setColumnOffset(it.key().toInt(), it.value().toInt());
+        }
+        if (gm.contains("columnModes"))
+        {
+            QJsonObject cm = gm["columnModes"].toObject();
+            for (auto it = cm.constBegin(); it != cm.constEnd(); ++it)
+                setColumnMode(it.key().toInt(), it.value().toInt());
+        }
+        if (gm.contains("columnDirections"))
+        {
+            QJsonObject cd = gm["columnDirections"].toObject();
+            for (auto it = cd.constBegin(); it != cd.constEnd(); ++it)
+                setColumnDirection(it.key().toInt(), static_cast<Function::Direction>(it.value().toInt()));
+        }
+        if (gm.contains("offsetDirection"))
+            setOffsetDirection(static_cast<OffsetDirection>(gm["offsetDirection"].toInt()));
+        if (gm.contains("offsetStep"))
+            setOffsetStep(gm["offsetStep"].toInt());
+        if (gm.contains("wings"))
+            setWings(gm["wings"].toInt());
+
+        if (isFixtureGroupMode())
+        {
+            FixtureGroup *group = doc->fixtureGroup(fixtureGroupID());
+            if (group != nullptr)
+            {
+                int gridWidth = group->size().width();
+                int gridHeight = group->size().height();
+                for (int col = 0; col < gridWidth; col++)
+                {
+                    int offset = columnOffset(col);
+                    EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(columnMode(col));
+                    Function::Direction dir = columnDirection(col);
+                    foreach (EFXFixture *ef, m_fixtures)
+                    {
+                        for (int row = 0; row < gridHeight; row++)
+                        {
+                            GroupHead head = group->head(QLCPoint(col, row));
+                            if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
+                            {
+                                if (offset >= 0)
+                                    ef->setStartOffset(offset);
+                                ef->forceMode(mode);
+                                ef->setDirection(dir);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        applied = true;
+    }
+
+    /* v1 backward compatibility: column data at root level */
+    if (!root.contains("fixtureGroupMode") && isFixtureGroupMode())
+    {
+        bool hadColumns = false;
+        if (root.contains("columnOffsets"))
+        {
+            QJsonObject co = root["columnOffsets"].toObject();
+            for (auto it = co.constBegin(); it != co.constEnd(); ++it)
+                setColumnOffset(it.key().toInt(), it.value().toInt());
+            hadColumns = true;
+        }
+        if (root.contains("columnModes"))
+        {
+            QJsonObject cm = root["columnModes"].toObject();
+            for (auto it = cm.constBegin(); it != cm.constEnd(); ++it)
+                setColumnMode(it.key().toInt(), it.value().toInt());
+            hadColumns = true;
+        }
+        if (root.contains("columnDirections"))
+        {
+            QJsonObject cd = root["columnDirections"].toObject();
+            for (auto it = cd.constBegin(); it != cd.constEnd(); ++it)
+                setColumnDirection(it.key().toInt(), static_cast<Function::Direction>(it.value().toInt()));
+            hadColumns = true;
+        }
+        if (hadColumns)
+        {
+            FixtureGroup *group = doc->fixtureGroup(fixtureGroupID());
+            if (group != nullptr)
+            {
+                int gridWidth = group->size().width();
+                int gridHeight = group->size().height();
+                for (int col = 0; col < gridWidth; col++)
+                {
+                    int offset = columnOffset(col);
+                    EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(columnMode(col));
+                    Function::Direction dir = columnDirection(col);
+                    foreach (EFXFixture *ef, m_fixtures)
+                    {
+                        for (int row = 0; row < gridHeight; row++)
+                        {
+                            GroupHead head = group->head(QLCPoint(col, row));
+                            if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
+                            {
+                                if (offset >= 0)
+                                    ef->setStartOffset(offset);
+                                ef->forceMode(mode);
+                                ef->setDirection(dir);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            applied = true;
+        }
+    }
+
+    /* Row Selection */
+    if (root.contains("rowSelection"))
+    {
+        QJsonArray rows = root["rowSelection"].toArray();
+        QList<int> selectedRows;
+        foreach (const QJsonValue &v, rows)
+            selectedRows.append(v.toInt());
+        setSelectedRows(selectedRows);
+        applied = true;
+    }
+
+    /* Fixture Order (Propagation Mode) */
+    if (root.contains("fixtureOrder"))
+    {
+        setPropagationMode(stringToPropagationMode(root["fixtureOrder"].toString()));
+        applied = true;
+    }
+
+    /* Pattern (algorithm only) */
+    if (root.contains("pattern"))
+    {
+        setAlgorithm(stringToAlgorithm(root["pattern"].toString()));
+        applied = true;
+    }
+
+    /* Parameters (movement numbers) */
+    if (root.contains("parameters"))
+    {
+        QJsonObject p = root["parameters"].toObject();
+        if (p.contains("width")) setWidth(p["width"].toInt());
+        if (p.contains("height")) setHeight(p["height"].toInt());
+        if (p.contains("xOffset")) setXOffset(p["xOffset"].toInt());
+        if (p.contains("yOffset")) setYOffset(p["yOffset"].toInt());
+        if (p.contains("rotation")) setRotation(p["rotation"].toInt());
+        if (p.contains("startOffset")) setStartOffset(p["startOffset"].toInt());
+        if (p.contains("isRelative")) setIsRelative(p["isRelative"].toBool());
+        if (p.contains("xFrequency")) setXFrequency(p["xFrequency"].toInt());
+        if (p.contains("yFrequency")) setYFrequency(p["yFrequency"].toInt());
+        if (p.contains("xPhase")) setXPhase(p["xPhase"].toInt());
+        if (p.contains("yPhase")) setYPhase(p["yPhase"].toInt());
+        if (p.contains("waveWidth")) setWaveWidth(p["waveWidth"].toInt());
+        if (p.contains("waveLength")) setWaveLength(p["waveLength"].toInt());
+        if (p.contains("waveShape")) setWaveShape(p["waveShape"].toInt());
+        if (p.contains("waveFadeIn")) setWaveFadeIn(p["waveFadeIn"].toInt());
+        if (p.contains("waveFadeOut")) setWaveFadeOut(p["waveFadeOut"].toInt());
+        applied = true;
+    }
+
+    /* v1 backward compatibility: "movement" key contains both pattern + parameters */
+    if (root.contains("movement") && !root.contains("pattern") && !root.contains("parameters"))
+    {
+        QJsonObject m = root["movement"].toObject();
+        if (m.contains("algorithm"))
+            setAlgorithm(stringToAlgorithm(m["algorithm"].toString()));
+        if (m.contains("width")) setWidth(m["width"].toInt());
+        if (m.contains("height")) setHeight(m["height"].toInt());
+        if (m.contains("xOffset")) setXOffset(m["xOffset"].toInt());
+        if (m.contains("yOffset")) setYOffset(m["yOffset"].toInt());
+        if (m.contains("rotation")) setRotation(m["rotation"].toInt());
+        if (m.contains("startOffset")) setStartOffset(m["startOffset"].toInt());
+        if (m.contains("isRelative")) setIsRelative(m["isRelative"].toBool());
+        if (m.contains("xFrequency")) setXFrequency(m["xFrequency"].toInt());
+        if (m.contains("yFrequency")) setYFrequency(m["yFrequency"].toInt());
+        if (m.contains("xPhase")) setXPhase(m["xPhase"].toInt());
+        if (m.contains("yPhase")) setYPhase(m["yPhase"].toInt());
+        if (m.contains("waveWidth")) setWaveWidth(m["waveWidth"].toInt());
+        if (m.contains("waveLength")) setWaveLength(m["waveLength"].toInt());
+        if (m.contains("waveShape")) setWaveShape(m["waveShape"].toInt());
+        if (m.contains("waveFadeIn")) setWaveFadeIn(m["waveFadeIn"].toInt());
+        if (m.contains("waveFadeOut")) setWaveFadeOut(m["waveFadeOut"].toInt());
+        applied = true;
+    }
+
+    /* Direction */
+    if (root.contains("direction"))
+    {
+        setDirection(static_cast<Function::Direction>(root["direction"].toInt()));
+        applied = true;
+    }
+
+    /* Run Order */
+    if (root.contains("runOrder"))
+    {
+        setRunOrder(static_cast<Function::RunOrder>(root["runOrder"].toInt()));
+        applied = true;
+    }
+
+    return applied;
+}
+
 bool EFX::loadXML(QXmlStreamReader &root)
 {
     if (root.name() != KXMLQLCFunction)

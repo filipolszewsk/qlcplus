@@ -64,6 +64,7 @@ class Doc;
 #define KXMLQLCVCCueListRecord          QStringLiteral("Record")
 #define KXMLQLCVCCueListOverwrite       QStringLiteral("Overwrite")
 #define KXMLQLCVCCueListDelete          QStringLiteral("Delete")
+#define KXMLQLCVCCueListRename          QStringLiteral("Rename")
 #define KXMLQLCVCCueListCrossfadeLeft   QStringLiteral("CrossLeft")
 #define KXMLQLCVCCueListCrossfadeRight  QStringLiteral("CrossRight")
 #define KXMLQLCVCCueListSlidersMode     QStringLiteral("SlidersMode")
@@ -83,6 +84,7 @@ class Doc;
 #define KXMLQLCVCCueListChannelColumnAddress QStringLiteral("Address")
 #define KXMLQLCVCCueListChannelColumnName QStringLiteral("CustomName")
 #define KXMLQLCVCCueListShowChannelColumns QStringLiteral("ShowColumns")
+#define KXMLQLCVCCueListHideButtons     QStringLiteral("HideButtons")
 #define KXMLQLCVCCueListChannelColumnDisplayMode QStringLiteral("DisplayMode")
 #define KXMLQLCVCCueListChannelColumnScaleMin QStringLiteral("ScaleMin")
 #define KXMLQLCVCCueListChannelColumnScaleMax QStringLiteral("ScaleMax")
@@ -162,6 +164,7 @@ public:
     static const quint8 recordInputSourceId;
     static const quint8 overwriteInputSourceId;
     static const quint8 deleteInputSourceId;
+    static const quint8 renameInputSourceId;
     static const quint8 secondarySelectInputSourceId;
 
     /*************************************************************************
@@ -363,6 +366,7 @@ private:
     QToolButton *m_recordButton;
     QToolButton *m_overwriteButton;
     QToolButton *m_deleteButton;
+    QToolButton *m_renameButton;
     QProgressBar *m_progress;
     bool m_listIsUpdating;
 
@@ -481,6 +485,12 @@ public:
     /** Get the keyboard key combination for deleting selected cue */
     QKeySequence deleteKeySequence() const;
 
+    /** Set the keyboard key combination for renaming selected cue */
+    void setRenameKeySequence(const QKeySequence& keySequence);
+
+    /** Get the keyboard key combination for renaming selected cue */
+    QKeySequence renameKeySequence() const;
+
 protected slots:
     void slotKeyPressed(const QKeySequence& keySequence);
 
@@ -492,6 +502,7 @@ private:
     QKeySequence m_recordKeySequence;
     QKeySequence m_overwriteKeySequence;
     QKeySequence m_deleteKeySequence;
+    QKeySequence m_renameKeySequence;
 
     /*************************************************************************
      * External Input
@@ -510,6 +521,7 @@ private:
     quint32 m_recordLatestValue;
     quint32 m_overwriteLatestValue;
     quint32 m_deleteLatestValue;
+    quint32 m_renameLatestValue;
 
     /*************************************************************************
      * VCWidget-inherited
@@ -600,6 +612,9 @@ private slots:
     /** Slot called when delete button is clicked */
     void slotDeleteButtonClicked();
 
+    /** Slot called when rename button is clicked */
+    void slotRenameButtonClicked();
+
 private:
     /** Channel mask for recording (0 = excluded, 1 = included) */
     QByteArray m_recordChannelsMask;
@@ -660,6 +675,20 @@ private:
 
     /** List of channel columns to display */
     QList<ChannelColumnInfo> m_channelColumns;
+
+    /*************************************************************************
+     * Hide Buttons
+     *************************************************************************/
+public:
+    /** Set whether control buttons and faders should be hidden */
+    void setHideButtons(bool hide);
+
+    /** Get whether control buttons and faders are hidden */
+    bool hideButtons() const;
+
+private:
+    bool m_hideButtons;
+    QWidget *m_bottomControlsWidget;
 
     /*************************************************************************
      * Step Index Output
