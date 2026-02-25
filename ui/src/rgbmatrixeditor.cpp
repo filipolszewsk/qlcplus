@@ -848,7 +848,7 @@ bool RGBMatrixEditor::createPreviewItems()
                     item = new RGBItem(rectItem);
                 }
 
-                item->setColor(m_previewHandler->m_map[y][x]);
+                item->setColor(rgbwToPreviewColor(m_previewHandler->m_map[y][x]));
                 item->draw(0, 0);
                 m_scene->addItem(item->graphicsItem());
                 m_previewHash[pt] = item;
@@ -856,6 +856,19 @@ bool RGBMatrixEditor::createPreviewItems()
         }
     }
     return true;
+}
+
+uint RGBMatrixEditor::rgbwToPreviewColor(uint col) const
+{
+    if (m_controlModeCombo->currentIndex() != RGBMatrix::ControlModeRgbw)
+        return col;
+
+    // Additive blend: W adds equally to R, G, B (physical RGBW mixing)
+    uchar w = qAlpha(col);
+    uchar r = (uchar)qMin(255, (int)qRed(col)   + w);
+    uchar g = (uchar)qMin(255, (int)qGreen(col) + w);
+    uchar b = (uchar)qMin(255, (int)qBlue(col)  + w);
+    return qRgb(r, g, b);
 }
 
 void RGBMatrixEditor::slotPreviewTimeout()
@@ -883,8 +896,9 @@ void RGBMatrixEditor::slotPreviewTimeout()
             RGBItem* shape = m_previewHash.value(pt, NULL);
             if (shape)
             {
-                if (shape->color() != QColor(m_previewHandler->m_map[y][x]).rgb())
-                    shape->setColor(m_previewHandler->m_map[y][x]);
+                uint displayCol = rgbwToPreviewColor(m_previewHandler->m_map[y][x]);
+                if (shape->color() != QColor(displayCol).rgb())
+                    shape->setColor(displayCol);
 
                 if (shape->color() == QColor(Qt::black).rgb())
                     shape->draw(elapsed, m_matrix->fadeOutSpeed());

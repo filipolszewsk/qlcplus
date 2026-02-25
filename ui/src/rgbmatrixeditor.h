@@ -70,6 +70,10 @@ private:
 
     bool createPreviewItems();
 
+    /** Convert packed 0xWWRRGGBB map value to a displayable RGB color.
+     *  In ControlModeRgbw the W channel (alpha bits) is blended additively into RGB. */
+    uint rgbwToPreviewColor(uint col) const;
+
 private slots:
     void slotPreviewTimeout();
     void slotNameEdited(const QString& text);
