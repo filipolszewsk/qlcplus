@@ -324,7 +324,8 @@ public:
         ControlModeDimmer,
         ControlModeShutter,
         ControlModeDimmerFullRange,
-        ControlModeNone
+        ControlModeNone,
+        ControlModeRgbw
     };
 
     /** Get/Set the control mode associated to this RGBMatrix */

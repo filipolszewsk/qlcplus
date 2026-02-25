@@ -112,6 +112,24 @@ QVector <quint32> QLCFixtureHead::rgbChannels() const
     return vector;
 }
 
+QVector <quint32> QLCFixtureHead::rgbwChannels() const
+{
+    QVector <quint32> vector;
+    quint32 r = channelNumber(QLCChannel::Red, QLCChannel::MSB);
+    quint32 g = channelNumber(QLCChannel::Green, QLCChannel::MSB);
+    quint32 b = channelNumber(QLCChannel::Blue, QLCChannel::MSB);
+    quint32 w = channelNumber(QLCChannel::White, QLCChannel::MSB);
+
+    if (r != QLCChannel::invalid() && g != QLCChannel::invalid() && b != QLCChannel::invalid())
+    {
+        vector << r << g << b;
+        if (w != QLCChannel::invalid())
+            vector << w;
+    }
+
+    return vector;
+}
+
 QMap<int, quint32> QLCFixtureHead::channelsMap() const
 {
     return m_channelsMap;

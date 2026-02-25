@@ -59,6 +59,7 @@
 #define KXMLQLCRGBMatrixControlModeShutter  QStringLiteral("Shutter")
 #define KXMLQLCRGBMatrixControlModeDimmerFullRange  QStringLiteral("DimmerFullRange")
 #define KXMLQLCRGBMatrixControlModeNone             QStringLiteral("None")
+#define KXMLQLCRGBMatrixControlModeRgbw             QStringLiteral("RGBW")
 
 #define KXMLQLCRGBMatrixFixtureDefChannelMap        QStringLiteral("FixtureDefChannelMap")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapKey     QStringLiteral("FixtureDefKey")
@@ -1245,6 +1246,20 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
             }
         }
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeRgbw)
+        {
+            // RGBW mode: RGB from bits 0-23, White (W) from alpha bits 24-31
+            channelList = head.rgbwChannels();
+
+            if (channelList.size() >= 3)
+            {
+                valueList.append(qRed(col));
+                valueList.append(qGreen(col));
+                valueList.append(qBlue(col));
+                if (channelList.size() == 4)
+                    valueList.append(qAlpha(col));  // W channel packed in alpha bits by script
+            }
+        }
         else if (!usePerDefinitionMapping && m_controlMode == ControlModeShutter)
         {
             channelList = head.shutterChannels();
@@ -1424,6 +1439,8 @@ RGBMatrix::ControlMode RGBMatrix::stringToControlMode(QString mode)
         return ControlModeDimmerFullRange;
     else if (mode == KXMLQLCRGBMatrixControlModeNone)
         return ControlModeNone;
+    else if (mode == KXMLQLCRGBMatrixControlModeRgbw)
+        return ControlModeRgbw;
 
     return ControlModeRgb;
 }
@@ -1456,6 +1473,9 @@ QString RGBMatrix::controlModeToString(RGBMatrix::ControlMode mode)
         break;
         case ControlModeNone:
             return QString(KXMLQLCRGBMatrixControlModeNone);
+        break;
+        case ControlModeRgbw:
+            return QString(KXMLQLCRGBMatrixControlModeRgbw);
         break;
     }
 }

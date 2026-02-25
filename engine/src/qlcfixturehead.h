@@ -86,6 +86,7 @@ public:
      * @return A list of three channels or an empty list
      */
     QVector <quint32> rgbChannels() const;
+    QVector <quint32> rgbwChannels() const;
 
     /**
      * Return a copy of the cached channel map
