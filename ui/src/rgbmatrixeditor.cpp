@@ -863,11 +863,21 @@ uint RGBMatrixEditor::rgbwToPreviewColor(uint col) const
     if (m_controlModeCombo->currentIndex() != RGBMatrix::ControlModeRgbw)
         return col;
 
-    // Additive blend: W adds equally to R, G, B (physical RGBW mixing)
-    uchar w = qAlpha(col);
-    uchar r = (uchar)qMin(255, (int)qRed(col)   + w);
-    uchar g = (uchar)qMin(255, (int)qGreen(col) + w);
-    uchar b = (uchar)qMin(255, (int)qBlue(col)  + w);
+    // Normalized RGBW→RGB: add W to each channel, then scale so the
+    // brightest channel stays at 255.  This preserves hue while reducing
+    // saturation as W increases — e.g. G=255 W=255 → (127,255,127).
+    int w = qAlpha(col);
+    int r = qRed(col)   + w;
+    int g = qGreen(col) + w;
+    int b = qBlue(col)  + w;
+    int maxCh = qMax(qMax(r, g), b);
+    if (maxCh > 255)
+    {
+        double scale = 255.0 / maxCh;
+        r = qRound(r * scale);
+        g = qRound(g * scale);
+        b = qRound(b * scale);
+    }
     return qRgb(r, g, b);
 }
 
