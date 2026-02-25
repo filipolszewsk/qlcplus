@@ -27,6 +27,7 @@
 #include "vcmatrixproperties.h"
 #include "selectinputchannel.h"
 #include "functionselection.h"
+#include "function.h"
 #include "inputpatch.h"
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
  #include "rgbscript.h"
@@ -162,12 +163,16 @@ void VCMatrixProperties::slotSetFunction(quint32 fid)
     m_function = fid;
     Function* func = m_doc->function(m_function);
 
+    foreach (QAction *a, m_functionEdit->actions())
+        m_functionEdit->removeAction(a);
+
     if (func == NULL)
     {
         m_functionEdit->setText(tr("No function"));
     }
     else
     {
+        m_functionEdit->addAction(func->getIcon(), QLineEdit::LeadingPosition);
         m_functionEdit->setText(func->name());
         if (m_nameEdit->text().simplified().contains(QString::number(m_matrix->id())))
             m_nameEdit->setText(func->name());

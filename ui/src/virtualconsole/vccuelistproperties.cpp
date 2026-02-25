@@ -387,10 +387,17 @@ void VCCueListProperties::slotPlaybackLayoutChanged()
 void VCCueListProperties::updateChaserName()
 {
     Function* function = m_doc->function(m_chaserId);
+
+    foreach (QAction *a, m_chaserEdit->actions())
+        m_chaserEdit->removeAction(a);
+
     if (function == NULL)
         m_chaserEdit->setText(tr("No function"));
     else
+    {
+        m_chaserEdit->addAction(function->getIcon(), QLineEdit::LeadingPosition);
         m_chaserEdit->setText(function->name());
+    }
 }
 
 void VCCueListProperties::updateStepIndexOutputDisplay()

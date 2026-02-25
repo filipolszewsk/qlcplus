@@ -203,6 +203,9 @@ public:
     /** @reimp */
     virtual void notifyFunctionStarting(quint32 fid, qreal intensity);
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
 protected slots:
     /** Invalidates the button's function if the function is destroyed */
     void slotFunctionRemoved(quint32 fid);

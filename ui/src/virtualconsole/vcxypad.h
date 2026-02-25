@@ -138,6 +138,9 @@ public:
     /** @reimp */
     bool copyFrom(const VCWidget* widget);
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
     /*************************************************************************
      * Caption
      *************************************************************************/

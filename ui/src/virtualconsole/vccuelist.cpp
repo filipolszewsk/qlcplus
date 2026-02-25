@@ -58,6 +58,7 @@
 #include "fadechannel.h"
 #include "qlcchannel.h"
 #include "channelcolumneditor.h"
+#include "columnvisibilitydialog.h"
 
 #include <QSpinBox>
 #include <QDoubleSpinBox>
@@ -708,6 +709,13 @@ void VCCueList::setChaser(quint32 id)
 quint32 VCCueList::chaserID() const
 {
     return m_chaserID;
+}
+
+QList<quint32> VCCueList::referencedFunctions() const
+{
+    if (m_chaserID != Function::invalidId())
+        return QList<quint32>() << m_chaserID;
+    return QList<quint32>();
 }
 
 Chaser *VCCueList::chaser()
@@ -1374,27 +1382,48 @@ void VCCueList::slotStepNoteChanged(int idx, QString note)
 
 void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
 {
-    // Only allow editing channel columns (after COL_NOTES)
     int firstChannelCol = COL_NOTES + 1;
-    if (logicalIndex < firstChannelCol)
-        return;
 
+    if (logicalIndex < firstChannelCol)
+    {
+        // Fixed columns (0-5): open column visibility dialog
+        QStringList names;
+        names << "#" << caption() << tr("Fade In") << tr("Fade Out") << tr("Duration") << tr("Notes");
+
+        QList<QPair<QString, bool>> cols;
+        for (int i = 0; i < firstChannelCol; i++)
+            cols.append(qMakePair(names[i], m_tree->header()->isSectionHidden(i)));
+
+        ColumnVisibilityDialog dlg(cols, this);
+        if (dlg.exec() == QDialog::Accepted)
+        {
+            QList<bool> states = dlg.hiddenStates();
+            m_hiddenFixedColumns.clear();
+            for (int i = 0; i < states.size(); i++)
+            {
+                m_tree->header()->setSectionHidden(i, states[i]);
+                if (states[i])
+                    m_hiddenFixedColumns.append(i);
+            }
+            m_doc->setModified();
+        }
+        return;
+    }
+
+    // Dynamic channel columns (after COL_NOTES): open channel column editor
     int channelIdx = logicalIndex - firstChannelCol;
     if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
         return;
 
-    // Open channel column editor dialog
     ChannelColumnEditor editor(m_channelColumns[channelIdx], this);
     if (editor.exec() == QDialog::Accepted)
     {
         m_channelColumns[channelIdx] = editor.columnInfo();
 
-        // Update delegate for this column to reflect new settings
         ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
         delegate->setColumnInfo(&m_channelColumns[channelIdx]);
         m_tree->setItemDelegateForColumn(logicalIndex, delegate);
 
-        // Hide or show column based on hidden flag
         m_tree->header()->setSectionHidden(logicalIndex, m_channelColumns[channelIdx].hidden);
 
         updateTreeHeader();
@@ -3153,6 +3182,33 @@ void VCCueList::applyColumnHiddenState()
     }
 }
 
+void VCCueList::setFixedColumnHidden(int col, bool hidden)
+{
+    if (col < 0 || col > COL_NOTES)
+        return;
+    m_tree->header()->setSectionHidden(col, hidden);
+    if (hidden)
+    {
+        if (!m_hiddenFixedColumns.contains(col))
+            m_hiddenFixedColumns.append(col);
+    }
+    else
+    {
+        m_hiddenFixedColumns.removeAll(col);
+    }
+}
+
+bool VCCueList::isFixedColumnHidden(int col) const
+{
+    return m_hiddenFixedColumns.contains(col);
+}
+
+void VCCueList::applyFixedColumnHiddenState()
+{
+    for (int col : m_hiddenFixedColumns)
+        m_tree->header()->setSectionHidden(col, true);
+}
+
 bool VCCueList::showChannelColumns() const
 {
     return m_showChannelColumns;
@@ -3615,6 +3671,18 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             setHideButtons(root.readElementText().toInt() != 0);
         }
+        else if (root.name() == KXMLQLCVCCueListFixedColumnsHidden)
+        {
+            QString s = root.readElementText();
+            m_hiddenFixedColumns.clear();
+            for (const QString &v : s.split(",", Qt::SkipEmptyParts))
+            {
+                int col = v.trimmed().toInt();
+                if (col >= 0 && col <= COL_NOTES)
+                    m_hiddenFixedColumns.append(col);
+            }
+            applyFixedColumnHiddenState();
+        }
         else if (root.name() == KXMLQLCVCCueListChannelColumns)
         {
             QXmlStreamAttributes attrs = root.attributes();
@@ -3869,6 +3937,15 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     /* Hide buttons */
     if (m_hideButtons)
         doc->writeTextElement(KXMLQLCVCCueListHideButtons, QString::number(1));
+
+    /* Hidden fixed columns */
+    if (!m_hiddenFixedColumns.isEmpty())
+    {
+        QStringList vals;
+        for (int col : m_hiddenFixedColumns)
+            vals << QString::number(col);
+        doc->writeTextElement(KXMLQLCVCCueListFixedColumnsHidden, vals.join(","));
+    }
 
     /* Channel columns */
     if (m_showChannelColumns || !m_channelColumns.isEmpty())

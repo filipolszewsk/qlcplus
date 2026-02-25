@@ -129,6 +129,9 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
     m_function = fid;
     Function* func = m_doc->function(m_function);
 
+    foreach (QAction *a, m_functionEdit->actions())
+        m_functionEdit->removeAction(a);
+
     if (func == NULL)
     {
         m_functionEdit->setText(tr("No function"));
@@ -136,6 +139,7 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
     }
     else
     {
+        m_functionEdit->addAction(func->getIcon(), QLineEdit::LeadingPosition);
         m_functionEdit->setText(func->name());
         if (m_nameEdit->text().simplified().contains(QString::number(m_button->id())))
             m_nameEdit->setText(func->name());

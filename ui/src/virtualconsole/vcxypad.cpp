@@ -278,6 +278,17 @@ bool VCXYPad::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<quint32> VCXYPad::referencedFunctions() const
+{
+    QList<quint32> ids;
+    foreach (const VCXYPadPreset *preset, m_presets)
+    {
+        if (preset->m_funcID != Function::invalidId())
+            ids.append(preset->m_funcID);
+    }
+    return ids;
+}
+
 /*****************************************************************************
  * Caption
  *****************************************************************************/

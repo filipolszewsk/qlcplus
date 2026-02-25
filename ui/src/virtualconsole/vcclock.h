@@ -104,6 +104,9 @@ public:
     void removeAllSchedule();
     QList<VCClockSchedule> schedules();
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
 private:
     ClockType m_clocktype;
     QList<VCClockSchedule>m_scheduleList;

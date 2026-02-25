@@ -199,6 +199,9 @@ public:
     /** @reimp */
     virtual void notifyFunctionStarting(quint32 fid, qreal intensity);
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
 private slots:
     /** Update slider when function stops. */
     void slotFunctionStopped();

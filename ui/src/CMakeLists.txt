@@ -122,6 +122,7 @@ add_library(${module_name}
     virtualconsole/vcclock.cpp virtualconsole/vcclock.h
     virtualconsole/vcclockproperties.cpp virtualconsole/vcclockproperties.h virtualconsole/vcclockproperties.ui
     virtualconsole/channelcolumneditor.cpp virtualconsole/channelcolumneditor.h
+    virtualconsole/columnvisibilitydialog.cpp virtualconsole/columnvisibilitydialog.h
     virtualconsole/vccuelist.cpp virtualconsole/vccuelist.h
     virtualconsole/vccuelistproperties.cpp virtualconsole/vccuelistproperties.h virtualconsole/vccuelistproperties.ui
     virtualconsole/vcdockarea.cpp virtualconsole/vcdockarea.h
@@ -172,6 +173,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Multimedia
     Qt${QT_MAJOR_VERSION}::MultimediaWidgets
+    Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
 )

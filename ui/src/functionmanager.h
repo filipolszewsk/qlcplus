@@ -102,6 +102,12 @@ private slots:
     /** Right mouse button was clicked on function tree */
     void slotTreeContextMenuRequested();
 
+    /** Refresh VC-usage indicators (called after VirtualConsole::loaded()) */
+    void updateVCUsageIndicators();
+
+    /** Toggle "show only functions not used in VC" filter */
+    void slotFilterUnusedVC(bool checked);
+
 private:
     QSplitter* m_hsplitter;
     QSplitter* m_vsplitter;
@@ -159,6 +165,7 @@ protected:
     QAction* m_selectAllAction;
     QAction* m_importAction;
     QAction* m_pasteSettingsAction;
+    QAction* m_filterUnusedVCAction;
 
     /*********************************************************************
      * Helpers

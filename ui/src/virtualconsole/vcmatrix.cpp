@@ -631,6 +631,13 @@ quint32 VCMatrix::function() const
     return m_matrixID;
 }
 
+QList<quint32> VCMatrix::referencedFunctions() const
+{
+    if (m_matrixID != Function::invalidId())
+        return QList<quint32>() << m_matrixID;
+    return QList<quint32>();
+}
+
 void VCMatrix::notifyFunctionStarting(quint32 fid, qreal functionIntensity)
 {
     if (mode() == Doc::Design)

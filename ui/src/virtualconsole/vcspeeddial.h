@@ -144,6 +144,9 @@ public:
     /** @reimp */
     void editProperties();
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
      /************************************************************************
      * Speed Type
      ************************************************************************/

@@ -21,9 +21,12 @@
 #define LICENSEDIALOG_H
 
 #include <QDialog>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 
 class QLabel;
 class QPushButton;
+class QLineEdit;
 class Doc;
 
 class LicenseDialog : public QDialog
@@ -36,17 +39,32 @@ public:
 private slots:
     void slotRefresh();
     void slotCopyHwId();
+    void slotActivate();
+    void slotActivateReply(QNetworkReply *reply);
+    void slotDeactivate();
 
 private:
     void updateDisplay();
+    void setActivationStatus(const QString &msg, bool isError);
 
     Doc *m_doc;
     QString m_fullHwId;
+
+    // License status display
     QLabel *m_statusLabel;
     QLabel *m_nameLabel;
     QLabel *m_emailLabel;
     QLabel *m_hwIdLabel;
     QLabel *m_buyLabel;
+
+    // In-app activation
+    QLineEdit *m_keyInput;
+    QPushButton *m_activateBtn;
+    QLabel *m_activationStatus;
+    QNetworkAccessManager *m_nam;
+
+    // Deactivation
+    QPushButton *m_deactivateBtn;
 };
 
 #endif // LICENSEDIALOG_H

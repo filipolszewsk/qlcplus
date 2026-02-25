@@ -344,6 +344,17 @@ QList <VCSpeedDialFunction> VCSpeedDial::functions() const
     return m_functions;
 }
 
+QList<quint32> VCSpeedDial::referencedFunctions() const
+{
+    QList<quint32> ids;
+    foreach (const VCSpeedDialFunction &sdf, m_functions)
+    {
+        if (sdf.functionId != Function::invalidId())
+            ids.append(sdf.functionId);
+    }
+    return ids;
+}
+
 void VCSpeedDial::tap()
 {
     m_dial->tap();

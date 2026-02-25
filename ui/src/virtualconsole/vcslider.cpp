@@ -993,6 +993,13 @@ quint32 VCSlider::playbackFunction() const
     return m_playbackFunction;
 }
 
+QList<quint32> VCSlider::referencedFunctions() const
+{
+    if (m_playbackFunction != Function::invalidId())
+        return QList<quint32>() << m_playbackFunction;
+    return QList<quint32>();
+}
+
 void VCSlider::setPlaybackValue(uchar value)
 {
     if (m_externalMovement == true || value == m_playbackValue)

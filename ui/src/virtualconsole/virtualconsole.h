@@ -24,7 +24,9 @@
 #include <QKeySequence>
 #include <QWidget>
 #include <QFrame>
+#include <QHash>
 #include <QList>
+#include <QSet>
 
 #include "vcproperties.h"
 #include "doc.h"
@@ -331,6 +333,9 @@ public:
     void setupWidget(VCWidget *widget, VCWidget *parent);
 
     VCWidget *widget(quint32 id);
+
+    /** Returns the set of all function IDs referenced by any VC widget */
+    QSet<quint32> usedFunctionIDs() const;
 
 protected:
     /** Place the contents area to the VC view */

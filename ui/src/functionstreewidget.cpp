@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QTreeWidgetItemIterator>
 #include <QContextMenuEvent>
 #include <QDebug>
 
@@ -26,6 +27,7 @@
 
 #define COL_NAME 0
 #define COL_PATH 1
+#define COL_VC   2
 
 FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
     QTreeWidget(parent)
@@ -107,6 +109,76 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
     item->setData(COL_NAME, Qt::UserRole, function->id());
     item->setData(COL_NAME, Qt::UserRole + 1, function->type());
     item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
+
+    if (m_usedFunctionIDs.contains(function->id()))
+    {
+        item->setIcon(COL_VC, QIcon(":/virtualconsole.png"));
+        item->setToolTip(COL_VC, tr("Used in Virtual Console"));
+    }
+    else
+    {
+        item->setIcon(COL_VC, QIcon());
+        item->setToolTip(COL_VC, QString());
+    }
+}
+
+void FunctionsTreeWidget::setUsedFunctionIDs(const QSet<quint32>& ids)
+{
+    m_usedFunctionIDs = ids;
+    updateTree();
+}
+
+void FunctionsTreeWidget::filterByVCUsage(bool showOnlyUnused)
+{
+    // First pass: reset all items to visible, then hide used functions
+    QTreeWidgetItemIterator it(this);
+    while (*it)
+    {
+        QTreeWidgetItem *item = *it;
+        item->setHidden(false);
+
+        QVariant var = item->data(COL_NAME, Qt::UserRole);
+        quint32 fid = var.isValid() ? var.toUInt() : Function::invalidId();
+        // Only hide function items (not category/folder items - handled in second pass)
+        if (fid != Function::invalidId() && item->parent() != NULL && showOnlyUnused)
+        {
+            bool usedInVC = m_usedFunctionIDs.contains(fid);
+            item->setHidden(usedInVC);
+        }
+        ++it;
+    }
+
+    // Second pass: recursively hide folders/categories whose all descendants are hidden
+    if (showOnlyUnused)
+    {
+        for (int i = 0; i < topLevelItemCount(); ++i)
+            updateFolderVisibility(topLevelItem(i));
+    }
+}
+
+bool FunctionsTreeWidget::updateFolderVisibility(QTreeWidgetItem *item)
+{
+    // Function item: return its current hidden state (set in first pass)
+    QVariant var = item->data(COL_NAME, Qt::UserRole);
+    quint32 fid = var.isValid() ? var.toUInt() : Function::invalidId();
+    if (fid != Function::invalidId() && item->parent() != NULL)
+        return item->isHidden();
+
+    // Folder/category item: recurse into children
+    if (item->childCount() == 0)
+    {
+        item->setHidden(true);
+        return true;
+    }
+
+    bool allHidden = true;
+    for (int i = 0; i < item->childCount(); ++i)
+    {
+        if (!updateFolderVisibility(item->child(i)))
+            allHidden = false;
+    }
+    item->setHidden(allHidden);
+    return allHidden;
 }
 
 QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)

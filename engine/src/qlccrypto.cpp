@@ -27,6 +27,11 @@
 #include <QRandomGenerator>
 #endif
 
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+#include <IOKit/IOKitLib.h>
+#include <CoreFoundation/CoreFoundation.h>
+#endif
+
 #include "qlccrypto.h"
 
 extern "C" {
@@ -42,18 +47,53 @@ QString QLCCrypto::generateHardwareFingerprint()
 {
     QString data;
 
-    QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-    for (const QNetworkInterface &iface : interfaces)
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    // Use IOPlatformUUID - a stable, unique per-board identifier that never changes
+    // even across OS reinstalls, VPN connections, or Wi-Fi MAC randomization.
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                       IOServiceMatching("IOPlatformExpertDevice"));
+    if (service)
     {
-        if (iface.flags().testFlag(QNetworkInterface::IsLoopBack))
-            continue;
-        if (iface.hardwareAddress().isEmpty())
-            continue;
-        data += iface.hardwareAddress();
+        CFStringRef uuidRef = (CFStringRef)IORegistryEntryCreateCFProperty(
+            service, CFSTR("IOPlatformUUID"), kCFAllocatorDefault, 0);
+        if (uuidRef)
+        {
+            char buf[64];
+            if (CFStringGetCString(uuidRef, buf, sizeof(buf), kCFStringEncodingUTF8))
+                data += QString::fromUtf8(buf);
+            CFRelease(uuidRef);
+        }
+        IOObjectRelease(service);
     }
+#endif
 
+    // Cross-platform stable components (hostname + root disk device serial)
     data += QHostInfo::localHostName();
     data += QString::fromUtf8(QStorageInfo::root().device());
+
+    // Fallback: if somehow data is still empty, use sorted physical interface MACs
+    // (skip virtual interfaces: utun/VPN, bridge, vmnet, docker, tun, tap)
+    if (data.isEmpty())
+    {
+        QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+        QStringList macs;
+        for (const QNetworkInterface &iface : interfaces)
+        {
+            if (iface.flags().testFlag(QNetworkInterface::IsLoopBack))
+                continue;
+            if (iface.hardwareAddress().isEmpty())
+                continue;
+            const QString name = iface.name();
+            if (name.startsWith("utun") || name.startsWith("bridge") ||
+                name.startsWith("vmnet") || name.startsWith("docker") ||
+                name.startsWith("tun") || name.startsWith("tap") ||
+                name.startsWith("veth") || name.startsWith("lo"))
+                continue;
+            macs.append(iface.hardwareAddress());
+        }
+        macs.sort();
+        data += macs.join(QString());
+    }
 
     return QString(QCryptographicHash::hash(data.toUtf8(), QCryptographicHash::Sha256).toHex());
 }

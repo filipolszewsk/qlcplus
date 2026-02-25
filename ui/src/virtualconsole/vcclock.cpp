@@ -24,6 +24,7 @@
 #include <QtGui>
 
 #include "vcclockproperties.h"
+#include "function.h"
 #include "vcclock.h"
 #include "doc.h"
 
@@ -167,6 +168,17 @@ void VCClock::removeAllSchedule()
 QList<VCClockSchedule> VCClock::schedules()
 {
     return m_scheduleList;
+}
+
+QList<quint32> VCClock::referencedFunctions() const
+{
+    QList<quint32> ids;
+    foreach (const VCClockSchedule &sch, m_scheduleList)
+    {
+        if (sch.function() != Function::invalidId())
+            ids.append(sch.function());
+    }
+    return ids;
 }
 
 FunctionParent VCClock::functionParent() const

@@ -377,6 +377,9 @@ public:
      */
     quint32 playbackFunction() const;
 
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
+
     /**
      * Get the level of the currently selected playback function.
      *

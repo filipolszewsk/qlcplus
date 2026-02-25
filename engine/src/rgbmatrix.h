@@ -407,6 +407,10 @@ private:
     
     /** List of selected row indices (empty = all rows selected) */
     QList<int> m_selectedRows;
+
+    /** Name of a premium script that failed to load (e.g. no active license).
+     *  Preserved so the reference survives save/load cycles even without a license. */
+    QString m_pendingScriptName;
 };
 
 /** @} */

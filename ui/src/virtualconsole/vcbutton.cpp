@@ -443,6 +443,13 @@ quint32 VCButton::function() const
     return m_function;
 }
 
+QList<quint32> VCButton::referencedFunctions() const
+{
+    if (m_function != Function::invalidId())
+        return QList<quint32>() << m_function;
+    return QList<quint32>();
+}
+
 void VCButton::adjustFunctionIntensity(Function *f, qreal value)
 {
     qreal finalValue = isStartupIntensityEnabled() ? startupIntensity() * value : value;

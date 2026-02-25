@@ -51,6 +51,7 @@ bool LicenseManager::loadLicense()
     m_customerName.clear();
     m_customerEmail.clear();
     m_licenseKey.clear();
+    m_instanceId.clear();
     m_contentKey.clear();
 
     QString keyPath = licenseFilePath();
@@ -104,6 +105,7 @@ bool LicenseManager::loadLicense()
     m_customerName = obj.value("customer_name").toString();
     m_customerEmail = obj.value("customer_email").toString();
     m_licenseKey = obj.value("license_key").toString();
+    m_instanceId = obj.value("instance_id").toString();
 
     QString contentKeyHex = obj.value("content_key").toString();
     m_contentKey = QByteArray::fromHex(contentKeyHex.toUtf8());
@@ -139,6 +141,11 @@ QString LicenseManager::customerEmail() const
 QString LicenseManager::licenseKey() const
 {
     return m_licenseKey;
+}
+
+QString LicenseManager::instanceId() const
+{
+    return m_instanceId;
 }
 
 QByteArray LicenseManager::contentKey() const

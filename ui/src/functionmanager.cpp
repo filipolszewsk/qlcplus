@@ -21,6 +21,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QTreeWidgetItem>
 #include <QInputDialog>
+#include <QSet>
 #include <QTreeWidget>
 #include <QHeaderView>
 #include <QJsonDocument>
@@ -44,6 +45,7 @@
 
 #include "importfunctionsdialog.h"
 #include "functionstreewidget.h"
+#include "virtualconsole.h"
 #include "functionselection.h"
 #include "collectioneditor.h"
 #include "audioplugincache.h"
@@ -104,6 +106,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_selectAllAction(NULL)
     , m_importAction(NULL)
     , m_pasteSettingsAction(NULL)
+    , m_filterUnusedVCAction(NULL)
     , m_editor(NULL)
     , m_scene_editor(NULL)
 {
@@ -123,6 +126,7 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
 
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
     m_tree->updateTree();
+    updateVCUsageIndicators();
 
     connect(m_doc, SIGNAL(clearing()), this, SLOT(slotDocClearing()));
     connect(m_doc, SIGNAL(loading()), this, SLOT(slotDocLoading()));
@@ -172,6 +176,32 @@ void FunctionManager::slotDocLoaded()
     connect(m_doc, SIGNAL(functionAdded(quint32)), this, SLOT(slotFunctionAdded(quint32)));
 
     m_tree->updateTree();
+
+    // VirtualConsole is not yet fully loaded at this point (postLoad hasn't run).
+    // Connect to VirtualConsole::loaded() so indicators are refreshed after widgets
+    // are registered in m_widgetsMap.
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc != NULL)
+        connect(vc, SIGNAL(loaded()), this, SLOT(updateVCUsageIndicators()),
+                Qt::UniqueConnection);
+}
+
+void FunctionManager::updateVCUsageIndicators()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc != NULL)
+        m_tree->setUsedFunctionIDs(vc->usedFunctionIDs());
+    else
+        m_tree->setUsedFunctionIDs(QSet<quint32>());
+
+    // Re-apply the active filter after refreshing indicators
+    if (m_filterUnusedVCAction != NULL && m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
+}
+
+void FunctionManager::slotFilterUnusedVC(bool checked)
+{
+    m_tree->filterByVCUsage(checked);
 }
 
 void FunctionManager::slotFunctionNameChanged(quint32 id)
@@ -188,6 +218,7 @@ void FunctionManager::showEvent(QShowEvent* ev)
 {
     qDebug() << Q_FUNC_INFO;
     emit functionManagerActive(true);
+    updateVCUsageIndicators();
     QWidget::showEvent(ev);
 }
 
@@ -306,6 +337,13 @@ void FunctionManager::initActions()
     m_pasteSettingsAction->setShortcut(QKeySequence(QKeySequence::Paste));
     connect(m_pasteSettingsAction, SIGNAL(triggered(bool)),
             this, SLOT(slotPasteSettings()));
+
+    m_filterUnusedVCAction = new QAction(QIcon(":/virtualconsole.png"),
+                                         tr("Show only functions &not used in VC"), this);
+    m_filterUnusedVCAction->setCheckable(true);
+    m_filterUnusedVCAction->setChecked(false);
+    connect(m_filterUnusedVCAction, SIGNAL(toggled(bool)),
+            this, SLOT(slotFilterUnusedVC(bool)));
 }
 
 void FunctionManager::initToolbar()
@@ -335,6 +373,8 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_importAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_deleteAction);
+    m_toolbar->addSeparator();
+    m_toolbar->addAction(m_filterUnusedVCAction);
 }
 
 void FunctionManager::slotAddScene()
@@ -832,8 +872,12 @@ void FunctionManager::initTree()
     m_hsplitter->addWidget(m_tree);
 
     QStringList labels;
-    labels << tr("Function"); // << "Path";
+    labels << tr("Function") << QString() << tr("VC");
     m_tree->setHeaderLabels(labels);
+    m_tree->hideColumn(1);                                              // column 1 (COL_PATH) holds folder paths internally - not for display
+    m_tree->setColumnWidth(2, 28);                                      // column 2 (COL_VC) - narrow icon-only column
+    m_tree->header()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);    // Function name stretches to fill available space
     m_tree->setRootIsDecorated(true);
     m_tree->setAllColumnsShowFocus(true);
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);

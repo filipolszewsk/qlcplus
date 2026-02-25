@@ -92,6 +92,7 @@ class Doc;
 #define KXMLQLCVCCueListChannelColumnMapping QStringLiteral("Mapping")
 #define KXMLQLCVCCueListChannelColumnMappingValue QStringLiteral("Value")
 #define KXMLQLCVCCueListChannelColumnHidden QStringLiteral("Hidden")
+#define KXMLQLCVCCueListFixedColumnsHidden QStringLiteral("FixedColumnsHidden")
 
 /**
  * Display mode for channel columns
@@ -203,6 +204,9 @@ public:
 
     /** Get the chaser function that is used as cue list steps */
     Chaser *chaser();
+
+    /** @reimp */
+    QList<quint32> referencedFunctions() const override;
 
 public:
     /** Get the currently selected item index, otherwise 0 */
@@ -669,12 +673,24 @@ private:
     /** Apply hidden state to channel columns */
     void applyColumnHiddenState();
 
+    /** Set or clear hidden state for a fixed column (0=NUM … 5=NOTES) */
+    void setFixedColumnHidden(int col, bool hidden);
+
+    /** Return true if the fixed column is currently hidden */
+    bool isFixedColumnHidden(int col) const;
+
+    /** Apply saved hidden state to all fixed columns */
+    void applyFixedColumnHiddenState();
+
 private:
     /** Whether to show channel columns */
     bool m_showChannelColumns;
 
     /** List of channel columns to display */
     QList<ChannelColumnInfo> m_channelColumns;
+
+    /** Indices of fixed columns that are hidden */
+    QList<int> m_hiddenFixedColumns;
 
     /*************************************************************************
      * Hide Buttons

@@ -58,6 +58,10 @@
 #include "vcxypad.h"
 #include "vcclock.h"
 #include "functionwizard.h"
+#include "collection.h"
+#include "chaserstep.h"
+#include "function.h"
+#include "chaser.h"
 #include "doc.h"
 
 #define SETTINGS_VC_SIZE "virtualconsole/size"
@@ -1615,6 +1619,63 @@ VCWidget *VirtualConsole::widget(quint32 id)
         return NULL;
 
     return m_widgetsMap.value(id, NULL);
+}
+
+QSet<quint32> VirtualConsole::usedFunctionIDs() const
+{
+    QSet<quint32> result;
+
+    // Collect directly referenced function IDs from all VC widgets
+    QList<quint32> toVisit;
+    for (VCWidget *w : m_widgetsMap)
+    {
+        for (quint32 fid : w->referencedFunctions())
+        {
+            if (!result.contains(fid))
+            {
+                result.insert(fid);
+                toVisit.append(fid);
+            }
+        }
+    }
+
+    // BFS: expand into functions contained by Chasers/Sequences and Collections
+    while (!toVisit.isEmpty())
+    {
+        quint32 fid = toVisit.takeFirst();
+        Function *func = m_doc->function(fid);
+        if (func == NULL)
+            continue;
+
+        QList<quint32> children;
+
+        if (func->type() == Function::ChaserType || func->type() == Function::SequenceType)
+        {
+            Chaser *chaser = qobject_cast<Chaser *>(func);
+            if (chaser)
+            {
+                foreach (const ChaserStep &step, chaser->steps())
+                    children.append(step.fid);
+            }
+        }
+        else if (func->type() == Function::CollectionType)
+        {
+            Collection *col = qobject_cast<Collection *>(func);
+            if (col)
+                children = col->functions();
+        }
+
+        foreach (quint32 childFid, children)
+        {
+            if (childFid != Function::invalidId() && !result.contains(childFid))
+            {
+                result.insert(childFid);
+                toVisit.append(childFid);
+            }
+        }
+    }
+
+    return result;
 }
 
 void VirtualConsole::initContents()

@@ -22,6 +22,7 @@
 #define FUNCTIONSTREEWIDGET_H
 
 #include <QTreeWidget>
+#include <QSet>
 
 class Function;
 class Doc;
@@ -78,12 +79,34 @@ public:
     /** Get the item that represents the given function. */
     QTreeWidgetItem* functionItem(const Function* function);
 
+    /**
+     * Provide the set of function IDs that are used by VC widgets.
+     * When set, each matching function item will show a VC indicator icon.
+     * Pass an empty set to clear the indicators.
+     */
+    void setUsedFunctionIDs(const QSet<quint32>& ids);
+
+    /**
+     * Filter the tree to show only functions that are NOT used in VC
+     * (showOnlyUnused = true) or show all functions (false).
+     * Category and folder items are hidden recursively when all their
+     * descendants are used in VC.
+     */
+    void filterByVCUsage(bool showOnlyUnused);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
 
+    /**
+     * Recursively determines folder/category visibility based on children.
+     * Returns true if the item (and all its descendants) are hidden.
+     */
+    bool updateFolderVisibility(QTreeWidgetItem *item);
+
 private:
     Doc* m_doc;
+    QSet<quint32> m_usedFunctionIDs;
 
     /*********************************************************************
      * Tree folders

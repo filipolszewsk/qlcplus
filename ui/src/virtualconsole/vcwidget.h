@@ -146,6 +146,12 @@ public:
     static QString typeToString(int type);
     static QIcon typeToIcon(int type);
 
+    /**
+     * Returns the IDs of all QLC+ functions directly referenced by this widget.
+     * Subclasses that control functions must override this method.
+     */
+    virtual QList<quint32> referencedFunctions() const { return QList<quint32>(); }
+
 protected:
     int m_type;
 

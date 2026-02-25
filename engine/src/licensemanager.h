@@ -45,6 +45,7 @@ public:
     QString customerName() const;
     QString customerEmail() const;
     QString licenseKey() const;
+    QString instanceId() const;
     QByteArray contentKey() const;
 
     QByteArray decryptPremiumFile(const QByteArray &fileData) const;
@@ -60,6 +61,7 @@ private:
     QString m_customerName;
     QString m_customerEmail;
     QString m_licenseKey;
+    QString m_instanceId;
     QByteArray m_contentKey;
 };
 

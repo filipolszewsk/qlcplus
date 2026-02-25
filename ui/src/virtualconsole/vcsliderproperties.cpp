@@ -713,8 +713,13 @@ void VCSliderProperties::slotFlashCheckClicked(bool checked)
 void VCSliderProperties::updatePlaybackFunctionName()
 {
     Function* function = m_doc->function(m_playbackFunctionId);
+
+    foreach (QAction *a, m_playbackFunctionEdit->actions())
+        m_playbackFunctionEdit->removeAction(a);
+
     if (function != NULL)
     {
+        m_playbackFunctionEdit->addAction(function->getIcon(), QLineEdit::LeadingPosition);
         m_playbackFunctionEdit->setText(function->name());
         if (m_nameEdit->text().simplified().isEmpty() == true)
             m_nameEdit->setText(function->name());

@@ -263,6 +263,10 @@ void RGBMatrix::setAlgorithm(RGBAlgorithm *algo)
         delete m_algorithm;
         m_algorithm = algo;
 
+        // Clear pending name whenever a real algorithm is assigned
+        if (algo != NULL)
+            m_pendingScriptName.clear();
+
         m_requestEngineCreation = true;
 
         /** If there's been a change of Script algorithm "on the fly",
@@ -623,7 +627,31 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         }
         else if (root.name() == KXMLQLCRGBAlgorithm)
         {
-            setAlgorithm(RGBAlgorithm::loader(doc(), root));
+            // For Script-type algorithms, read the name first so we can preserve
+            // the reference even when the script cannot be loaded (e.g. no active license).
+            QString algoType = root.attributes().value(KXMLQLCRGBAlgorithmType).toString();
+            if (algoType == KXMLQLCRGBScript)
+            {
+                QString scriptName = root.readElementText();
+                RGBScript *scr = doc()->rgbScriptsCache()->script(scriptName);
+                if (scr != nullptr && scr->apiVersion() > 0 && !scr->name().isEmpty())
+                {
+                    m_pendingScriptName.clear();
+                    setAlgorithm(scr);
+                }
+                else
+                {
+                    delete scr;
+                    // Keep reference alive - will be written back on saveXML
+                    m_pendingScriptName = scriptName;
+                    setAlgorithm(NULL);
+                }
+            }
+            else
+            {
+                m_pendingScriptName.clear();
+                setAlgorithm(RGBAlgorithm::loader(doc(), root));
+            }
         }
         else if (root.name() == KXMLQLCRGBMatrixFixtureGroup)
         {
@@ -760,6 +788,14 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
     /* Algorithm */
     if (m_algorithm != NULL)
         m_algorithm->saveXML(doc);
+    else if (!m_pendingScriptName.isEmpty())
+    {
+        // Premium script reference preserved when license is inactive
+        doc->writeStartElement(KXMLQLCRGBAlgorithm);
+        doc->writeAttribute(KXMLQLCRGBAlgorithmType, KXMLQLCRGBScript);
+        doc->writeCharacters(m_pendingScriptName);
+        doc->writeEndElement();
+    }
 
     /* LEGACY - Dimmer Control */
     if (dimmerControl())
