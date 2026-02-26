@@ -637,6 +637,33 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     /* Auto start */
     setAutoStartInOperate(cuelist->autoStartInOperate());
 
+    /* Key sequence - rename */
+    setRenameKeySequence(cuelist->renameKeySequence());
+
+    /* Hide buttons */
+    setHideButtons(cuelist->hideButtons());
+
+    /* Channel columns - copy directly to preserve custom names/modes/mappings */
+    m_channelColumns = cuelist->m_channelColumns;
+    m_showChannelColumns = cuelist->m_showChannelColumns;
+    if (m_showChannelColumns)
+    {
+        int colOffset = COL_NOTES + 1;
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+            delegate->setColumnInfo(&m_channelColumns[i]);
+            m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+        }
+        updateTreeHeader();
+        updateStepList();
+        applyColumnHiddenState();
+    }
+
+    /* Hidden fixed columns */
+    m_hiddenFixedColumns = cuelist->m_hiddenFixedColumns;
+    applyFixedColumnHiddenState();
+
     /* Common stuff */
     return VCWidget::copyFrom(widget);
 }
@@ -1415,10 +1442,22 @@ void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
     if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
         return;
 
-    ChannelColumnEditor editor(m_channelColumns[channelIdx], this);
+    ChannelColumnEditor editor(m_channelColumns[channelIdx], m_doc, this);
     if (editor.exec() == QDialog::Accepted)
     {
+        quint32 oldAddr = m_channelColumns[channelIdx].absoluteAddress;
         m_channelColumns[channelIdx] = editor.columnInfo();
+        quint32 newAddr = m_channelColumns[channelIdx].absoluteAddress;
+
+        // If channel was reassigned, update the recording mask
+        if (oldAddr != newAddr)
+        {
+            if ((int)oldAddr < m_recordChannelsMask.size())
+                m_recordChannelsMask[oldAddr] = 0;
+            if ((int)newAddr >= m_recordChannelsMask.size())
+                m_recordChannelsMask.resize(newAddr + 1, 0);
+            m_recordChannelsMask[newAddr] = 1;
+        }
 
         ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
         delegate->setColumnInfo(&m_channelColumns[channelIdx]);

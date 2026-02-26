@@ -21,23 +21,34 @@
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QTableWidget>
 #include <QDoubleSpinBox>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QPushButton>
 #include <QHeaderView>
 #include <QDialogButtonBox>
 #include <QCheckBox>
-#include <QLabel>
 
 #include "channelcolumneditor.h"
+#include "channelsselection.h"
+#include "qlcchannel.h"
+#include "fixture.h"
+#include "scenevalue.h"
+#include "doc.h"
 #include "vccuelist.h"
 
-ChannelColumnEditor::ChannelColumnEditor(ChannelColumnInfo &info, QWidget *parent)
+ChannelColumnEditor::ChannelColumnEditor(ChannelColumnInfo &info, Doc *doc, QWidget *parent)
     : QDialog(parent)
     , m_info(info)
+    , m_doc(doc)
+    , m_newFixtureId(info.fixtureId)
+    , m_newFixtureChannel(info.fixtureChannel)
+    , m_newAbsAddress(info.absoluteAddress)
+    , m_channelChanged(false)
 {
     setupUi();
     loadFromInfo();
@@ -47,16 +58,47 @@ ChannelColumnEditor::~ChannelColumnEditor()
 {
 }
 
+QString ChannelColumnEditor::channelDisplayString(quint32 fixtureId, quint32 fixtureChannel, quint32 absAddress) const
+{
+    if (m_doc && fixtureId != UINT_MAX)
+    {
+        Fixture *fxi = m_doc->fixture(fixtureId);
+        if (fxi)
+        {
+            QString fxiName = fxi->name();
+            const QLCChannel *ch = fxi->channel(fixtureChannel);
+            QString chName = ch ? ch->name() : tr("Ch %1").arg(fixtureChannel + 1);
+            return QString("%1: %2  (DMX %3)").arg(fxiName).arg(chName).arg(absAddress + 1);
+        }
+    }
+    return tr("DMX channel %1").arg(absAddress + 1);
+}
+
 void ChannelColumnEditor::setupUi()
 {
     setWindowTitle(tr("Channel Column Settings"));
-    setMinimumWidth(400);
+    setMinimumWidth(420);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
+
+    // Channel assignment section
+    QGroupBox *channelGroup = new QGroupBox(tr("Assigned Channel"), this);
+    QHBoxLayout *channelLayout = new QHBoxLayout(channelGroup);
+
+    m_channelLabel = new QLabel(this);
+    m_channelLabel->setWordWrap(true);
+    channelLayout->addWidget(m_channelLabel, 1);
+
+    m_changeChannelBtn = new QPushButton(tr("Change..."), this);
+    m_changeChannelBtn->setToolTip(tr("Assign this column to a different fixture channel"));
+    channelLayout->addWidget(m_changeChannelBtn);
+
+    mainLayout->addWidget(channelGroup);
 
     // Name section
     QFormLayout *nameLayout = new QFormLayout();
     m_nameEdit = new QLineEdit(this);
+    m_nameEdit->setPlaceholderText(tr("Leave empty to use default channel name"));
     nameLayout->addRow(tr("Name:"), m_nameEdit);
     mainLayout->addLayout(nameLayout);
 
@@ -167,6 +209,7 @@ void ChannelColumnEditor::setupUi()
     mainLayout->addWidget(buttonBox);
 
     // Connections
+    connect(m_changeChannelBtn, SIGNAL(clicked()), this, SLOT(slotChangeChannel()));
     connect(m_modeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotDisplayModeChanged(int)));
     connect(m_addMappingBtn, SIGNAL(clicked()), this, SLOT(slotAddMapping()));
     connect(m_removeMappingBtn, SIGNAL(clicked()), this, SLOT(slotRemoveMapping()));
@@ -176,6 +219,8 @@ void ChannelColumnEditor::setupUi()
 
 void ChannelColumnEditor::loadFromInfo()
 {
+    m_channelLabel->setText(channelDisplayString(m_newFixtureId, m_newFixtureChannel, m_newAbsAddress));
+
     m_nameEdit->setText(m_info.customName);
     m_hiddenCheck->setChecked(m_info.hidden);
 
@@ -208,8 +253,50 @@ void ChannelColumnEditor::loadFromInfo()
     slotDisplayModeChanged(m_modeCombo->currentIndex());
 }
 
+void ChannelColumnEditor::slotChangeChannel()
+{
+    if (!m_doc)
+        return;
+
+    // Pre-select the currently assigned channel
+    QList<SceneValue> current;
+    if (m_newFixtureId != UINT_MAX)
+        current.append(SceneValue(m_newFixtureId, m_newFixtureChannel, 0));
+
+    ChannelsSelection cs(m_doc, this, ChannelsSelection::NormalMode);
+    cs.setChannelsList(current);
+
+    if (cs.exec() == QDialog::Accepted)
+    {
+        QList<SceneValue> sel = cs.channelsList();
+        if (!sel.isEmpty())
+        {
+            Fixture *fxi = m_doc->fixture(sel[0].fxi);
+            if (fxi)
+            {
+                m_newFixtureId = sel[0].fxi;
+                m_newFixtureChannel = sel[0].channel;
+                m_newAbsAddress = fxi->universeAddress() + sel[0].channel;
+                m_channelChanged = true;
+                m_channelLabel->setText(channelDisplayString(m_newFixtureId, m_newFixtureChannel, m_newAbsAddress));
+
+                // Clear custom name so the new default channel name will be used
+                if (m_nameEdit->text().isEmpty())
+                    m_nameEdit->setPlaceholderText(tr("Leave empty to use default channel name"));
+            }
+        }
+    }
+}
+
 void ChannelColumnEditor::saveToInfo()
 {
+    if (m_channelChanged)
+    {
+        m_info.fixtureId = m_newFixtureId;
+        m_info.fixtureChannel = m_newFixtureChannel;
+        m_info.absoluteAddress = m_newAbsAddress;
+    }
+
     m_info.customName = m_nameEdit->text();
     m_info.hidden = m_hiddenCheck->isChecked();
     m_info.displayMode = static_cast<ChannelDisplayMode>(m_modeCombo->currentData().toInt());

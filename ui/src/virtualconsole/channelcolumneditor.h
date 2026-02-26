@@ -22,6 +22,7 @@
 
 #include <QDialog>
 
+class QLabel;
 class QLineEdit;
 class QComboBox;
 class QTableWidget;
@@ -29,6 +30,8 @@ class QDoubleSpinBox;
 class QStackedWidget;
 class QToolButton;
 class QCheckBox;
+class QPushButton;
+class Doc;
 
 struct ChannelColumnInfo;
 
@@ -40,7 +43,7 @@ class ChannelColumnEditor : public QDialog
     Q_OBJECT
 
 public:
-    ChannelColumnEditor(ChannelColumnInfo &info, QWidget *parent = nullptr);
+    ChannelColumnEditor(ChannelColumnInfo &info, Doc *doc, QWidget *parent = nullptr);
     ~ChannelColumnEditor();
 
     /** Get the edited column info */
@@ -50,6 +53,7 @@ public slots:
     void accept() override;
 
 private slots:
+    void slotChangeChannel();
     void slotDisplayModeChanged(int index);
     void slotAddMapping();
     void slotRemoveMapping();
@@ -58,9 +62,21 @@ private:
     void setupUi();
     void loadFromInfo();
     void saveToInfo();
+    QString channelDisplayString(quint32 fixtureId, quint32 fixtureChannel, quint32 absAddress) const;
 
 private:
     ChannelColumnInfo &m_info;
+    Doc *m_doc;
+
+    // Pending new channel assignment (applied on accept only)
+    quint32 m_newFixtureId;
+    quint32 m_newFixtureChannel;
+    quint32 m_newAbsAddress;
+    bool m_channelChanged;
+
+    // Channel assignment section
+    QLabel *m_channelLabel;
+    QPushButton *m_changeChannelBtn;
 
     QLineEdit *m_nameEdit;
     QComboBox *m_modeCombo;
