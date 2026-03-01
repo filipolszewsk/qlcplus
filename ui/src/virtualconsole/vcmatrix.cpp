@@ -1563,7 +1563,10 @@ void VCMatrix::updateFeedback()
             if (control->widgetType() == VCMatrixControl::Knob)
             {
                 KnobWidget* knob = reinterpret_cast<KnobWidget*>(it.key());
-                sendFeedback(knob->value(), control->m_inputSource);
+                int feedbackValue = (int)SCALE((double)knob->value(),
+                                               (double)knob->minimum(), (double)knob->maximum(),
+                                               0.0, 255.0);
+                sendFeedback(feedbackValue, control->m_inputSource);
             }
             else // if (control->widgetType() == VCMatrixControl::Button)
             {
@@ -1602,7 +1605,9 @@ void VCMatrix::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             if (control->widgetType() == VCMatrixControl::Knob)
             {
                 KnobWidget* knob = reinterpret_cast<KnobWidget*>(it.key());
-                knob->setValue(value);
+                int scaledValue = (int)SCALE((double)value, 0.0, 255.0,
+                                             (double)knob->minimum(), (double)knob->maximum());
+                knob->setValue(scaledValue);
             }
             else
             {
