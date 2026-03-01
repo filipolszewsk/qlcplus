@@ -59,6 +59,7 @@ class RGBMatrix;
 #define KXMLQLCVCMatrixColor5       QStringLiteral("Color 5")
 
 #define KXMLQLCVCMatrixVisibilityMask QStringLiteral("Visibility")
+#define KXMLQLCVCMatrixResetParamsOnOperate QStringLiteral("ResetParamsOnOperate")
 
 class VCMatrix : public VCWidget
 {
@@ -249,6 +250,17 @@ public:
 
 private:
     quint32 m_visibilityMask;
+
+    /*********************************************************************
+     * Reset parameters on Operate
+     *********************************************************************/
+public:
+    void setResetParamsOnOperate(bool reset);
+    bool resetParamsOnOperate() const;
+
+private:
+    void resetAnimationKnobsToMinimum();
+    bool m_resetParamsOnOperate;
 
     /*********************************************************************
      * Custom controls

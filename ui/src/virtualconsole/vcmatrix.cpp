@@ -58,6 +58,7 @@ VCMatrix::VCMatrix(QWidget *parent, Doc *doc)
     , m_instantApply(true)
     , m_visibilityMask(VCMatrix::defaultVisibilityMask())
     , m_lastActivePresetID(0)
+    , m_resetParamsOnOperate(false)
 {
     /* Set the class name "VCMatrix" as the object name as well */
     setObjectName(VCMatrix::staticMetaObject.className());
@@ -572,6 +573,33 @@ quint32 VCMatrix::defaultVisibilityMask()
         | ShowColor4Button
         | ShowColor5Button
         ;
+}
+
+/*********************************************************************
+ * Reset parameters on Operate
+ *********************************************************************/
+void VCMatrix::setResetParamsOnOperate(bool reset)
+{
+    m_resetParamsOnOperate = reset;
+}
+
+bool VCMatrix::resetParamsOnOperate() const
+{
+    return m_resetParamsOnOperate;
+}
+
+void VCMatrix::resetAnimationKnobsToMinimum()
+{
+    for (QHash<QWidget *, VCMatrixControl *>::iterator it = m_controls.begin();
+            it != m_controls.end(); ++it)
+    {
+        VCMatrixControl *control = it.value();
+        if (control->m_type == VCMatrixControl::AnimationKnob)
+        {
+            KnobWidget *knob = reinterpret_cast<KnobWidget*>(it.key());
+            knob->setValue(knob->minimum());
+        }
+    }
 }
 
 /*********************************************************************
@@ -1521,7 +1549,11 @@ void VCMatrix::slotMatrixControlPushButtonClicked(int controlID)
 void VCMatrix::slotModeChanged(Doc::Mode mode)
 {
     if (mode == Doc::Operate)
+    {
         enableWidgetUI(true);
+        if (m_resetParamsOnOperate)
+            resetAnimationKnobsToMinimum();
+    }
     else
         enableWidgetUI(false);
 
@@ -1563,10 +1595,7 @@ void VCMatrix::updateFeedback()
             if (control->widgetType() == VCMatrixControl::Knob)
             {
                 KnobWidget* knob = reinterpret_cast<KnobWidget*>(it.key());
-                int feedbackValue = (int)SCALE((double)knob->value(),
-                                               (double)knob->minimum(), (double)knob->maximum(),
-                                               0.0, 255.0);
-                sendFeedback(feedbackValue, control->m_inputSource);
+                sendFeedback(knob->value(), control->m_inputSource);
             }
             else // if (control->widgetType() == VCMatrixControl::Button)
             {
@@ -1605,9 +1634,7 @@ void VCMatrix::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             if (control->widgetType() == VCMatrixControl::Knob)
             {
                 KnobWidget* knob = reinterpret_cast<KnobWidget*>(it.key());
-                int scaledValue = (int)SCALE((double)value, 0.0, 255.0,
-                                             (double)knob->minimum(), (double)knob->maximum());
-                knob->setValue(scaledValue);
+                knob->setValue(value);
             }
             else
             {
@@ -1678,6 +1705,11 @@ bool VCMatrix::loadXML(QXmlStreamReader &root)
         {
             setVisibilityMask(root.readElementText().toUInt());
         }
+        else if (root.name() == KXMLQLCVCMatrixResetParamsOnOperate)
+        {
+            setResetParamsOnOperate(true);
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown VCMatrix tag:" << root.name().toString();
@@ -1717,6 +1749,10 @@ bool VCMatrix::saveXML(QXmlStreamWriter *doc)
     /* Default controls visibility  */
     if (m_visibilityMask != VCMatrix::defaultVisibilityMask())
         doc->writeTextElement(KXMLQLCVCMatrixVisibilityMask, QString::number(m_visibilityMask));
+
+    /* Reset params on Operate */
+    if (m_resetParamsOnOperate)
+        doc->writeTextElement(KXMLQLCVCMatrixResetParamsOnOperate, "true");
 
     /* Slider External input */
     saveXMLInput(doc);

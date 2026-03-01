@@ -77,6 +77,7 @@ VCMatrixProperties::VCMatrixProperties(VCMatrix* matrix, Doc* doc)
     if (visibilityMask & VCMatrix::ShowColor4Button) m_mtxColor4ButtonCheck->setChecked(true);
     if (visibilityMask & VCMatrix::ShowColor5Button) m_mtxColor5ButtonCheck->setChecked(true);
     if (visibilityMask & VCMatrix::ShowPresetCombo) m_presetComboCheck->setChecked(true);
+    if (m_matrix->resetParamsOnOperate()) m_resetParamsCheck->setChecked(true);
 
     /* Custom controls */
     foreach (const VCMatrixControl *control, m_matrix->customControls())
@@ -709,6 +710,7 @@ void VCMatrixProperties::accept()
     if (m_mtxColor5ButtonCheck->isChecked()) visibilityMask |= VCMatrix::ShowColor5Button;
     if (m_presetComboCheck->isChecked()) visibilityMask |= VCMatrix::ShowPresetCombo;
     m_matrix->setVisibilityMask(visibilityMask);
+    m_matrix->setResetParamsOnOperate(m_resetParamsCheck->isChecked());
 
     /* Controls */
     m_matrix->resetCustomControls();
