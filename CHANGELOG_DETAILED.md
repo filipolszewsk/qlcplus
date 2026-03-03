@@ -22,7 +22,7 @@
 - **Fix: Synchronize VC Animation parameter controls when function starts** - Synchronizacja kontrolek parametrów VC Animation przy starcie funkcji
 - **Fix: Make VC Animation knob controls override function properties** - Kontrolki knob nadpisują właściwości funkcji
 
-### `fix/vcxypad-efx-background-running` (aktualny branch)
+### `fix/vcxypad-efx-background-running`
 - **Fix: VCXYPad EFX/Scene running in background after mode change** - Naprawiono działanie EFX/Scene w tle po zmianie trybu
 
 ### `fix/vcxypad-efx-qpointer-crash`
@@ -40,6 +40,26 @@
 ### `fix_rgbmatrix_sync_on_speed_change`
 - **Fix: Eliminate cumulative rounding errors in RGBMatrix phase scaling** - Eliminacja kumulacyjnych błędów zaokrągleń w skalowaniu fazy RGBMatrix
 - **Fix: Preserve phase when changing RGBMatrix speed in runtime** - Zachowanie fazy przy zmianie prędkości RGBMatrix w runtime
+
+### `fix/animationknob-midi-scaling` (aktualny branch)
+- **Fix: Scale MIDI/DMX input to AnimationKnob range in VCMatrix** - Skalowanie wejść MIDI/DMX do zakresu AnimationKnob w VCMatrix
+- **Fix: Revert MIDI scaling, add ResetParamsOnOperate option to VCMatrix** - Cofnięto skalowanie MIDI; dodano opcję ResetParamsOnOperate do VCMatrix
+
+### `fix/mastertimer-universe-threading-crash`
+- **Fix threading race conditions causing SIGSEGV at 0x10 on file reload** - Naprawiono wyścigi wątków powodujące crash SIGSEGV przy przeładowaniu pliku
+
+### `fix/soloframe-page-aware-stopping`
+- **VCSoloFrame: do not stop functions on hidden/disabled pages** - VCSoloFrame nie zatrzymuje funkcji na ukrytych/wyłączonych stronach
+
+### `fix/crossfade-initial-start`
+- **VCCueList: crossfade start fix + Record/Overwrite/Delete external input fix** - Naprawiono start crossfade oraz obsługę zewnętrznych wejść Record/Overwrite/Delete
+
+### `fix/cuelist-crossfade-reapply`
+- **VCCueList: reapply step values in virtual crossfade for LTP priority** - Ponowne aplikowanie wartości kroków w wirtualnym crossfade dla priorytetu LTP
+- **VCCueList: call adjustStepIntensity in virtual crossfade case** - Wywołanie adjustStepIntensity w przypadku wirtualnego crossfade
+
+### `fix/vcbutton-monitoring-stability`
+- **VCButton: stabilize channel monitoring with function ownership tracking** - Stabilizacja monitorowania kanałów VCButton ze śledzeniem własności funkcji
 
 ---
 
@@ -206,6 +226,78 @@ Tryb One-Shot dla VC Slider:
 - **Fix Windows installer workflow - add QTDIR export and NSIS script path handling** - Naprawiono workflow instalatora
 - **Add comprehensive Windows build instructions and lessons learned** - Dodano instrukcje budowania
 
+### `feature/license-protection`
+System licencji premium GRIDqlc:
+- **Add GRIDqlc premium license system with RGB script encryption** - Dodano system licencji premium z szyfrowaniem skryptów RGB
+- **Rename license file from .qlckey to license.qlckey and polish license UI** - Zmieniono nazwę pliku licencji; poprawki UI
+- **Add EFX JSON settings copy/paste, VCCueList rename action, and hide buttons option** - Kopiowanie ustawień EFX przez JSON, zmiana nazwy kroku CueList, opcja ukrywania przycisków
+- **Update macOS installation guide for GRIDqlc fork** - Zaktualizowano instrukcję instalacji macOS
+
+### `feature/rgbw-engine-support`
+Wsparcie silnika RGBW w RGB Matrix:
+- **Add ControlModeRgbw to RGB Matrix engine for RGBW fixture support** - Dodano tryb ControlModeRgbw do silnika RGB Matrix
+- **Fix RGBW preview: blend W channel additively into RGB display color** - Naprawiono podgląd RGBW: kanał W blendowany addytywnie
+- **Improve RGBW preview: normalize instead of clamp for perceptual accuracy** - Normalizacja zamiast clamp dla perceptualnej dokładności podglądu
+- **VCCueList: column settings copy and channel assignment** - Kopiowanie ustawień kolumn i zmiana kanału kolumny w VCCueList
+
+### `feature/rgbmatrix-control-mode-none`
+- **Add ControlModeNone to RGBMatrix for disabling channel output** - Dodano tryb ControlModeNone wyłączający wyjście kanałów RGB Matrix
+
+### `feature/rgbmatrix-copy-paste`
+- **RGBMatrixEditor: add copy/paste for settings with selection dialog** - Dodano kopiowanie/wklejanie ustawień RGB Matrix z dialogiem wyboru
+- **Add batch paste of RGB Matrix settings via Ctrl+V in Function Manager** - Wsadowe wklejanie ustawień RGB Matrix przez Ctrl+V w Function Manager
+
+### `feature/efx-copy-paste-dialog`
+- **Add batch paste of RGB Matrix settings via Ctrl+V in Function Manager** - Wsadowe wklejanie ustawień przez dialog (wersja CI z workflow)
+
+### `feature/vc-frame-scale-contents`
+- **VCFrame: add persistent scale-contents feature with font scaling** - Dodano trwałe skalowanie zawartości VCFrame ze skalowaniem czcionek
+
+### `feature/vccuelist-channel-columns`
+Kolumny wartości kanałów w VCCueList:
+- **Add channel value columns to VCCueList widget** - Dodano kolumny z wartościami kanałów do widgetu VCCueList
+- **Add channel column editor dialog** - Dodano dialog edytora kolumn kanałów
+- **Add double-click header rename for channel columns** - Zmiana nazwy kolumny przez dwuklik w nagłówku
+- **Add hide option for channel columns** - Opcja ukrywania kolumn kanałów
+- **Add scaled display mode and scene change detection** - Skalowany tryb wyświetlania i wykrywanie zmiany sceny
+
+### `feature/vcframe-detach-window`
+Odłączanie VCFrame do osobnego okna:
+- **Add detach button to VCFrame for separating frames into floating windows** - Dodano przycisk odłączania VCFrame do pływającego okna
+- **Fix VCFrame reattachment and add persistence for detached state** - Naprawiono ponowne dołączanie; persystencja stanu odłączenia
+- **Fix save/load of detached VCFrame windows** - Naprawiono zapis/odczyt stanu odłączonych okien
+
+### `feature/universe-grid-view`
+Widok siatki universum z drag & drop:
+- **Add Universe Grid View with drag-drop address changing and UX improvements** - Dodano widok siatki universum ze zmianą adresów przez drag & drop
+- **Fix right panel width stability using QStackedWidget** - Stabilizacja szerokości prawego panelu
+- **Fix drag-drop address change for all universes and add VC input remap** - Naprawiono zmianę adresów drag & drop dla wszystkich universów
+
+### `feature/vc_input_remap`
+- **Feature: Automatically remap VC input sources when fixture address changes** - Automatyczne przemapowanie wejść VC przy zmianie adresu urządzenia (standalone branch)
+
+### `feature/vccuelist-autostart-operate`
+- **Enable VCCueList overwrite during active playback** - Umożliwiono nadpisywanie VCCueList podczas aktywnego odtwarzania
+
+### `feature/vcbutton-channel-monitoring`
+- **VCButton: optional Monitor Channel Values and deactivate when overridden** - Opcjonalne monitorowanie wartości kanałów; dezaktywacja gdy kanał nadpisany
+
+### `feature/per-page-frame-size`
+- **VCFrame: wire per-page size checkbox in properties dialog** - Konfiguracja rozmiaru VCFrame per strona w dialogu właściwości
+- **VCButton: only setState(Inactive) on channel override, don't stop scene** - VCButton ustawia tylko stan Inactive przy nadpisaniu kanału, nie zatrzymuje sceny
+
+### `feature/vcframe-pages-hide-header`
+- **WIP: hide header option for VCFrame pages** - (w trakcie) Opcja ukrywania nagłówka stron VCFrame
+
+### `feature/scribble-enhancements`
+- **VCButton: only setState(Inactive) on channel override, don't stop scene** - Ulepszenia zachowania VCButton przy nadpisaniu kanału
+
+### `feature/import-functions-dialog`
+- **Fix Fixture Mapping dialog UI: column layout and widget overlap** - Naprawiono UI dialogu mapowania urządzeń: układ kolumn i nakładanie widgetów
+
+### `feature/universe-address-editor`
+- **feat: Auto-remap VC external inputs when changing fixture DMX address** - Automatyczne przemapowanie wejść zewnętrznych VC przy zmianie adresu DMX
+
 ---
 
 ## 🔬 BRANCHY EKSPERYMENTALNE
@@ -232,6 +324,32 @@ Zakresy Pan/Tilt:
 ### `vcxypad-preset-softpatch`
 - **Add Soft Patch support for XY Pad Presets** - Dodano wsparcie Soft Patch dla presetów XY Pad
 - **Enable multi-selection for EFX and Scene presets in XY Pad** - Wielokrotny wybór dla presetów EFX i Scene
+
+### `multi_value_thru_multiply`
+Alternatywne podejście do Multi-Value Mapping:
+- **Implement multiply-height approach for Multi-Value Mapping** - Implementacja podejścia multiply-height dla mapowania wielu wartości
+- **Add Multi-Value Mapping toggle and Row Filter for RGB Matrix** - Przełącznik Multi-Value Mapping i filtr wierszy dla RGB Matrix
+
+### `multipatch-level-parameter`
+- **Add LEVEL parameter to multipatch editor for slider widgets** - Dodano parametr LEVEL do edytora multipatch dla sliderów
+- **Fix LEVEL parameter conversion between Fixture and display formats** - Naprawiono konwersję parametru LEVEL między formatami Fixture a wyświetlania
+- **Fix LEVEL parameter handling in multipatch editor** - Naprawiono obsługę parametru LEVEL
+
+### `rgbscprit_widget_exlude_and_edit`
+Edycja i wykluczanie presetów w widgecie RGB Script:
+- **Add preset editing and improve animation preset behavior** - Dodano edycję presetów i poprawiono zachowanie presetów animacji
+- **Fix: Make VC Animation knob controls override function properties** - Kontrolki knob nadpisują właściwości funkcji animacji
+- **Fix: Synchronize VC Animation parameter controls when function starts** - Synchronizacja kontrolek parametrów przy starcie funkcji
+
+### `optimize-parameter-matrix-reduced-channels`
+Optymalizacja logiki flash/restore w Parameter Matrix:
+- **Handle flash press during restore before first-press logic** - Obsługa ponownego wciśnięcia flash podczas restore
+- **Fix: restore ALL params from backup, not just changed ones** - Przywracanie wszystkich parametrów z backupu
+- **Fix flash re-press during restore: restore to backup before starting new flash** - Naprawiono ponowny flash podczas restore
+- **Remove problematic backup recalculation on Release during restore** - Usunięto problematyczne przeliczanie backupu przy Release
+
+### `optimize-parameter-matrix-staging-buffer`
+- Optymalizacja bufora staging w Parameter Matrix (buduje na `multipatch-level-parameter`)
 
 ### `dimmer-full-range-control-mode`
 - **Add ControlModeDimmerFullRange to RGB Matrix** - Dodano tryb ControlModeDimmerFullRange do RGB Matrix
@@ -267,11 +385,11 @@ Zakresy Pan/Tilt:
 
 ## 📊 Statystyki
 
-- **Łączna liczba branchy lokalnych:** 64
-- **Branchy bugfix:** 7
-- **Branchy feature:** 35+
-- **Branchy eksperymentalne:** 10+
+- **Łączna liczba branchy lokalnych:** ~85
+- **Branchy bugfix:** 13
+- **Branchy feature:** 53+
+- **Branchy eksperymentalne:** 15+
 
 ---
 
-*Wygenerowano: 2026-01-17*
+*Wygenerowano: 2026-01-17 | Zaktualizowano: 2026-03-03*
