@@ -88,6 +88,8 @@ public:
 signals:
     void lockChanged(bool locked);
     void timeCodeUpdated(QString smpte);
+    /** Emitted when capture is explicitly stopped (user pressed Stop). */
+    void captureStopped();
 
 private slots:
     void slotAudioDataReady();

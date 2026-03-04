@@ -173,6 +173,7 @@ void LTCTimecodeEngine::stopCapture()
     }
 
     updateLock(false);
+    emit captureStopped();
 }
 
 bool LTCTimecodeEngine::isCapturing() const

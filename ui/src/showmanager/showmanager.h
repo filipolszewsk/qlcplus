@@ -70,6 +70,20 @@ public:
      */
     void setTimecodePosition(quint32 ms);
 
+    /**
+     * Called by LTCTimecodeEngine when external timecode locks.
+     * Starts the current show from the current cursor position so that
+     * ShowRunner exists and fires scene functions as the timeline progresses.
+     * Safe to call from the UI thread.
+     */
+    void ltcTransportPlay();
+
+    /**
+     * Called by LTCTimecodeEngine when capture is explicitly stopped.
+     * Stops the current show and rewinds to position 0.
+     */
+    void ltcTransportStop();
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);

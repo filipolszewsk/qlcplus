@@ -299,6 +299,20 @@ void App::init()
         m_ltcWidget->activateWindow();
     });
 
+    // LTC transport integration: when LTC locks → auto-start the show so
+    // ShowRunner exists and fires scene functions. When capture stops → stop show.
+    connect(m_ltcEngine, &LTCTimecodeEngine::lockChanged, this, [this](bool locked) {
+        ShowManager *sm = ShowManager::instance();
+        if (!sm) return;
+        if (locked)
+            sm->ltcTransportPlay();
+        // Unlock (signal dropout): ShowRunner freezes automatically — no stop needed.
+    });
+    connect(m_ltcEngine, &LTCTimecodeEngine::captureStopped, this, [this]() {
+        ShowManager *sm = ShowManager::instance();
+        if (sm) sm->ltcTransportStop();
+    });
+
     quint32 universes = m_doc->inputOutputMap()->universesCount();
     if (universes == 0)
         universes = 1;

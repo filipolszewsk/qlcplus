@@ -1363,6 +1363,34 @@ void ShowManager::setTimecodePosition(quint32 ms)
     slotUpdateTimeAndCursor(ms);
 }
 
+void ShowManager::ltcTransportPlay()
+{
+    if (m_show == nullptr || m_showsCombo->count() == 0)
+        return;
+
+    if (!m_show->isRunning())
+    {
+        // Start the show from the current cursor position (set by slotCursorTimer).
+        // ShowRunner will immediately snap m_elapsedTime to LTC on the first tick.
+        cursorMovedDuringPause = false;
+        m_show->start(m_doc->masterTimer(), functionParent(),
+                      m_showview->getTimeFromCursor());
+        m_playAction->setIcon(QIcon(":/player_pause.png"));
+    }
+    // If already running (e.g. LTC relocked after brief dropout): ShowRunner
+    // will snap back to LTC time automatically — no restart needed.
+}
+
+void ShowManager::ltcTransportStop()
+{
+    if (m_show != nullptr && m_show->isRunning())
+        m_show->stop(functionParent());
+
+    m_playAction->setIcon(QIcon(":/player_play.png"));
+    m_showview->rewindCursor();
+    m_timeLabel->setText("00:00:00.00");
+}
+
 void ShowManager::slotUpdateTime(quint32 msec_time)
 {
     uint h, m, s;

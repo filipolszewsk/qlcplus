@@ -153,7 +153,38 @@ void ShowRunner::write(MasterTimer *timer)
     if (tcs)
     {
         if (tcs->isLocked())
-            m_elapsedTime = tcs->currentTimeMs();
+        {
+            quint32 newTime = tcs->currentTimeMs();
+
+            // Detect backwards LTC jump (e.g. timecode loop/rewind).
+            // If time jumped back by more than 500ms, stop all running functions
+            // and reset the function index to the correct position for newTime.
+            if (newTime + 500 < m_elapsedTime)
+            {
+                // Stop currently playing functions
+                for (int i = m_runningQueue.count() - 1; i >= 0; i--)
+                {
+                    m_runningQueue.at(i).first->stop(functionParent());
+                    m_runningQueue.removeAt(i);
+                }
+
+                // Rewind index: skip functions that fully ended before newTime,
+                // but let Phase 1 re-start anything that overlaps or is after newTime.
+                m_currentTimeFunctionIndex = 0;
+                for (int i = 0; i < m_timeFunctions.count(); i++)
+                {
+                    ShowFunction *sf = m_timeFunctions.at(i);
+                    quint32 endTime = sf->startTime() + sf->duration(m_doc);
+                    if (endTime <= newTime)
+                        m_currentTimeFunctionIndex = i + 1; // fully in the past
+                    else
+                        break;
+                }
+                m_currentBeatFunctionIndex = 0;
+            }
+
+            m_elapsedTime = newTime;
+        }
         // else: source exists but not locked → freeze, no-op
     }
     else
