@@ -2,6 +2,32 @@ set(module_name "qlcplusui")
 
 include(../../variables.cmake)
 
+# Find libltc for LTC Timecode decoding
+find_path(LIBLTC_INCLUDE_DIRS ltc.h
+    PATHS /usr/local/include /opt/homebrew/include
+    PATH_SUFFIXES ltc
+)
+find_library(LIBLTC_LIBRARIES NAMES ltc
+    PATHS /usr/local/lib /opt/homebrew/lib
+    PATH_SUFFIXES lib
+)
+if(NOT LIBLTC_INCLUDE_DIRS OR NOT LIBLTC_LIBRARIES)
+    # Try pkg-config as fallback
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(LIBLTC QUIET ltc)
+        if(LIBLTC_FOUND)
+            set(LIBLTC_INCLUDE_DIRS ${LIBLTC_INCLUDE_DIRS})
+            set(LIBLTC_LIBRARIES ${LIBLTC_LINK_LIBRARIES})
+        endif()
+    endif()
+endif()
+if(LIBLTC_INCLUDE_DIRS AND LIBLTC_LIBRARIES)
+    message(STATUS "Found libltc: ${LIBLTC_LIBRARIES}")
+else()
+    message(FATAL_ERROR "libltc not found. Install it with: brew install libltc")
+endif()
+
 set(TS_FILES
     qlcplus_fi_FI.ts
     qlcplus_fr_FR.ts
@@ -99,6 +125,8 @@ add_library(${module_name}
     showmanager/showeditor.cpp showmanager/showeditor.h showmanager/showeditor.ui
     showmanager/showitem.cpp showmanager/showitem.h
     showmanager/showmanager.cpp showmanager/showmanager.h
+    showmanager/ltctimecodeengine.cpp showmanager/ltctimecodeengine.h
+    showmanager/ltctimecodewidget.cpp showmanager/ltctimecodewidget.h
     showmanager/timingstool.cpp showmanager/timingstool.h
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
@@ -166,6 +194,7 @@ target_include_directories(${module_name} PUBLIC
     monitor
     showmanager
     virtualconsole
+    ${LIBLTC_INCLUDE_DIRS}
 )
 
 target_link_libraries(${module_name} PUBLIC
@@ -176,6 +205,7 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
+    ${LIBLTC_LIBRARIES}
 )
 
 # Add resources and RGB Script deps

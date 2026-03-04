@@ -62,6 +62,14 @@ public:
     /** Start from scratch; clear everything */
     void clearContents();
 
+    /**
+     * Move the playhead cursor to the given position (in milliseconds) without
+     * starting playback. Used by the LTC timecode engine to update the cursor
+     * position while the show is in Design/Pause mode.
+     * Safe to call from the UI thread only.
+     */
+    void setTimecodePosition(quint32 ms);
+
 signals:
     /** Emitted when the FunctionManager's tab is de/activated */
     void functionManagerActive(bool active);

@@ -21,9 +21,11 @@
 #include <QDebug>
 
 #include "showrunner.h"
+#include "timecodesource.h"
 #include "function.h"
 #include "track.h"
 #include "show.h"
+#include "doc.h"
 
 #define TIMER_INTERVAL 50
 
@@ -143,7 +145,22 @@ FunctionParent ShowRunner::functionParent() const
 
 void ShowRunner::write(MasterTimer *timer)
 {
-    //qDebug() << Q_FUNC_INFO << "elapsed:" << m_elapsedTime << ", total:" << m_totalRunTime;
+    // Advance timeline FIRST so all phases below operate on the current position.
+    //   - Source registered + locked   → follow external timecode exactly
+    //   - Source registered + unlocked → FREEZE (avoids drift/jump on reconnect)
+    //   - No source registered         → normal internal clock behaviour
+    TimeCodeSource *tcs = m_doc->timeCodeSource();
+    if (tcs)
+    {
+        if (tcs->isLocked())
+            m_elapsedTime = tcs->currentTimeMs();
+        // else: source exists but not locked → freeze, no-op
+    }
+    else
+    {
+        m_elapsedTime += MasterTimer::tick();
+    }
+    emit timeChanged(m_elapsedTime);
 
     // Phase 1. Check all the Functions that need to be started
     // m_timeFunctions is ordered by startup time, so when we found an entry
@@ -277,8 +294,6 @@ void ShowRunner::write(MasterTimer *timer)
         return;
     }
 
-    m_elapsedTime += MasterTimer::tick();
-    emit timeChanged(m_elapsedTime);
 }
 
 /************************************************************************

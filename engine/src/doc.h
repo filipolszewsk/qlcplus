@@ -26,7 +26,9 @@
 #include <QList>
 #include <QFile>
 #include <QMap>
+#include <QMutex>
 
+#include "timecodesource.h"
 #include "qlcfixturedefcache.h"
 #include "qlcmodifierscache.h"
 #include "inputoutputmap.h"
@@ -157,6 +159,20 @@ public:
     /** Destroy a previously created audio capture instance */
     void destroyAudioCapture();
 
+    /**
+     * Register an external timecode source (e.g. LTC engine).
+     * ShowRunner will use this source to drive the Show timeline when isLocked().
+     * Pass nullptr to unregister and revert to internal clock.
+     * Thread-safe: may be called from UI thread; ShowRunner reads from render thread.
+     */
+    void setTimeCodeSource(TimeCodeSource *source);
+
+    /**
+     * Returns the currently registered timecode source, or nullptr.
+     * Thread-safe (protected by mutex).
+     */
+    TimeCodeSource *timeCodeSource() const;
+
 private:
     QLCFixtureDefCache *m_fixtureDefCache;
     QLCModifiersCache *m_modifiersCache;
@@ -167,6 +183,8 @@ private:
     MasterTimer *m_masterTimer;
     InputOutputMap *m_ioMap;
     QSharedPointer<AudioCapture> m_inputCapture;
+    TimeCodeSource *m_timeCodeSource;
+    mutable QMutex m_timeCodeMutex;
     MonitorProperties *m_monitorProps;
 
     /*********************************************************************

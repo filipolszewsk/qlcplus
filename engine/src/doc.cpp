@@ -72,6 +72,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_masterTimer(new MasterTimer(this))
     , m_ioMap(new InputOutputMap(this, universes))
     , m_monitorProps(NULL)
+    , m_timeCodeSource(nullptr)
     , m_mode(Design)
     , m_kiosk(false)
     , m_loadStatus(Cleared)
@@ -308,6 +309,18 @@ void Doc::destroyAudioCapture()
         qDebug() << "Destroying audio capture";
         m_inputCapture.clear();
     }
+}
+
+void Doc::setTimeCodeSource(TimeCodeSource *source)
+{
+    QMutexLocker locker(&m_timeCodeMutex);
+    m_timeCodeSource = source;
+}
+
+TimeCodeSource *Doc::timeCodeSource() const
+{
+    QMutexLocker locker(&m_timeCodeMutex);
+    return m_timeCodeSource;
 }
 
 /*****************************************************************************

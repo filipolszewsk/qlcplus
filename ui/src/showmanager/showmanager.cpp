@@ -1358,6 +1358,11 @@ void ShowManager::slotUpdateTimeAndCursor(quint32 msec_time)
     m_showview->moveCursor(msec_time);
 }
 
+void ShowManager::setTimecodePosition(quint32 ms)
+{
+    slotUpdateTimeAndCursor(ms);
+}
+
 void ShowManager::slotUpdateTime(quint32 msec_time)
 {
     uint h, m, s;

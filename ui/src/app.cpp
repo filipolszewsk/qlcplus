@@ -46,6 +46,8 @@
 #include "vcframe.h"
 #include "app.h"
 #include "doc.h"
+#include "ltctimecodeengine.h"
+#include "ltctimecodewidget.h"
 
 #include "qlcfixturedefcache.h"
 #include "audioplugincache.h"
@@ -130,6 +132,10 @@ App::App()
     , m_fadeAndStopMenu(NULL)
 
     , m_toolbar(NULL)
+
+    , m_ltcEngine(nullptr)
+    , m_ltcWidget(nullptr)
+    , m_ltcAction(nullptr)
 
     , m_dumpProperties(NULL)
     , m_videoProvider(NULL)
@@ -282,6 +288,16 @@ void App::init()
     initActions();
     // Main tool bar
     initToolBar();
+
+    // LTC Timecode engine (created after Doc so it can register with Doc)
+    m_ltcEngine = new LTCTimecodeEngine(m_doc, this);
+    connect(m_ltcAction, &QAction::triggered, this, [this]() {
+        if (!m_ltcWidget)
+            m_ltcWidget = new LTCTimecodeWidget(m_ltcEngine, this);
+        m_ltcWidget->show();
+        m_ltcWidget->raise();
+        m_ltcWidget->activateWindow();
+    });
 
     quint32 universes = m_doc->inputOutputMap()->universesCount();
     if (universes == 0)
@@ -822,7 +838,15 @@ void App::initToolBar()
     /* Create an empty widget between help items to flush them to the right */
     QWidget* widget = new QWidget(this);
     widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolbar->addWidget(widget);
+    QAction *spacerAction = m_toolbar->addWidget(widget);
+
+    // LTC Timecode button — placed on the LEFT side of the toolbar (before spacer).
+    // m_ltcEngine is created just after initToolBar() returns, so we set up the
+    // action here and wire the slot after the engine exists.
+    m_ltcAction = new QAction(QIcon(":/clock.png"), tr("LTC Timecode"), this);
+    m_ltcAction->setToolTip(tr("Open LTC Timecode synchronization panel"));
+    m_toolbar->insertAction(spacerAction, m_ltcAction);
+
     m_toolbar->addAction(m_dumpDmxAction);
     m_toolbar->addAction(m_liveEditAction);
     m_toolbar->addAction(m_liveEditVirtualConsoleAction);

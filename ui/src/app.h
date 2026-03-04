@@ -42,6 +42,8 @@ class QPixmap;
 class QAction;
 class QLabel;
 class App;
+class LTCTimecodeEngine;
+class LTCTimecodeWidget;
 
 /** @addtogroup ui UI
  * @{
@@ -207,6 +209,9 @@ private:
 
 private:
     QToolBar* m_toolbar;
+    LTCTimecodeEngine  *m_ltcEngine;
+    LTCTimecodeWidget  *m_ltcWidget;
+    QAction            *m_ltcAction;
 
     /*********************************************************************
      * Utilities
