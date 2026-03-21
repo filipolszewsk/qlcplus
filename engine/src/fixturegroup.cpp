@@ -150,6 +150,8 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
     if (pt.isNull() == false)
     {
         m_heads[pt] = head;
+        if (pt.y() >= m_size.height())
+            m_size.setHeight(pt.y() + 1);
     }
     else
     {
@@ -168,6 +170,9 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
                     if (m_heads.contains(tmp) == false)
                     {
                         m_heads[tmp] = head;
+                        if (tmp.y() >= m_size.height())
+                            m_size.setHeight(tmp.y() + 1);
+                        locker.unlock();
                         emit changed(this->id());
                         return true;
                     }
@@ -178,6 +183,7 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
         }
     }
 
+    locker.unlock();
     emit changed(this->id());
     return true;
 }
@@ -195,6 +201,7 @@ void FixtureGroup::resignFixture(quint32 id)
             it++;
     }
 
+    locker.unlock();
     emit changed(this->id());
 }
 
@@ -203,6 +210,7 @@ bool FixtureGroup::resignHead(const QLCPoint& pt)
     QMutexLocker locker(&m_headsMutex);
     
     const int removed = m_heads.remove(pt);
+    locker.unlock();
     if (removed)
         emit changed(this->id());
 
@@ -226,6 +234,7 @@ void FixtureGroup::swap(const QLCPoint& a, const QLCPoint& b)
     else
         m_heads.remove(a);
 
+    locker.unlock();
     emit changed(this->id());
 }
 
@@ -234,26 +243,31 @@ void FixtureGroup::reset()
     QMutexLocker locker(&m_headsMutex);
     
     m_heads.clear();
+    locker.unlock();
     emit changed(this->id());
 }
 
 GroupHead FixtureGroup::head(const QLCPoint& pt) const
 {
+    QMutexLocker locker(&m_headsMutex);
     return m_heads.value(pt);
 }
 
 QList <GroupHead> FixtureGroup::headList() const
 {
+    QMutexLocker locker(&m_headsMutex);
     return m_heads.values();
 }
 
 QMap<QLCPoint, GroupHead> FixtureGroup::headsMap() const
 {
+    QMutexLocker locker(&m_headsMutex);
     return m_heads;
 }
 
 QList <quint32> FixtureGroup::fixtureList() const
 {
+    QMutexLocker locker(&m_headsMutex);
     QList <quint32> list;
 
     foreach (GroupHead head, m_heads)

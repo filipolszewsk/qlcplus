@@ -303,6 +303,13 @@ void FixtureGroupEditor::updateTable()
     m_table->setRowCount(m_grp->size().height());
     m_table->setColumnCount(m_grp->size().width());
 
+    m_ySpin->blockSignals(true);
+    m_xSpin->blockSignals(true);
+    m_ySpin->setValue(m_grp->size().height());
+    m_xSpin->setValue(m_grp->size().width());
+    m_ySpin->blockSignals(false);
+    m_xSpin->blockSignals(false);
+
     QMapIterator <QLCPoint,GroupHead> it(m_grp->headsMap());
     while (it.hasNext() == true)
     {
@@ -498,13 +505,41 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
         {
             m_grp->assignHead(QLCPoint(col, row), gh);
             if (direction == Qt::RightArrow)
+            {
                 col++;
+                if (col >= m_grp->size().width())
+                {
+                    col = 0;
+                    row++;
+                }
+            }
             else if (direction == Qt::DownArrow)
+            {
                 row++;
+                if (row >= m_grp->size().height())
+                {
+                    row = 0;
+                    col++;
+                }
+            }
             else if (direction == Qt::LeftArrow)
+            {
                 col--;
+                if (col < 0)
+                {
+                    col = m_grp->size().width() - 1;
+                    row--;
+                }
+            }
             else if (direction == Qt::UpArrow)
+            {
                 row--;
+                if (row < 0)
+                {
+                    row = m_grp->size().height() - 1;
+                    col--;
+                }
+            }
         }
 
         updateTable();

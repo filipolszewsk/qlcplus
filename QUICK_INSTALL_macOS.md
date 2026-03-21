@@ -14,7 +14,7 @@ Build musi być już zrobiony (`make` skończył się sukcesem w katalogu `build
 Uruchom z katalogu projektu (`qlcplus/`):
 
 ```bash
-cd build_cmake && make install/fast && cd .. && \
+cd build_cmake && LIBRARY_PATH=/opt/homebrew/lib:$LIBRARY_PATH make install/fast && cd .. && \
 rm -rf ~/QLC+.app/Contents/Frameworks/Qt*.framework ~/QLC+.app/Contents/PlugIns && \
 cat > ~/QLC+.app/Contents/Resources/qt.conf << 'EOF'
 [Paths]
@@ -62,12 +62,13 @@ open ~/QLC+.app
 
 | Krok | Co się dzieje |
 |------|--------------|
+| `LIBRARY_PATH=...` | Wymagane przed `make` — linker musi widzieć `/opt/homebrew/lib` (m.in. `libltc`) |
 | `make install/fast` | Kopiuje skompilowane pliki do `~/QLC+.app` |
 | `rm Qt*.framework` | Usuwa zduplikowane frameworki Qt z bundle |
 | `rm PlugIns` | Czyści stare pluginy przed reinstalacją |
 | `qt.conf` | Kieruje Qt do Homebrew zamiast bundled (styl macOS, pluginy) |
 | `install_name_tool` | Naprawia ścieżki `.dylib` → `/opt/homebrew/lib/` |
-| `find plugins` | Kopiuje 12 pluginów QLC+ do bundle |
+| `find plugins` | Kopiuje 14 pluginów QLC+ do bundle |
 | `codesign` | Podpisuje aplikację (wymagane przez macOS) |
 | `open` | Uruchamia aplikację |
 
@@ -77,8 +78,8 @@ open ~/QLC+.app
 
 ```bash
 cd "/Users/filipolszewski/Documents/qlc projekty/qlcplus/build_cmake" && \
-make -j$(sysctl -n hw.ncpu) && \
-make install/fast && cd .. && \
+LIBRARY_PATH=/opt/homebrew/lib:$LIBRARY_PATH make -j$(sysctl -n hw.ncpu) && \
+LIBRARY_PATH=/opt/homebrew/lib:$LIBRARY_PATH make install/fast && cd .. && \
 rm -rf ~/QLC+.app/Contents/Frameworks/Qt*.framework ~/QLC+.app/Contents/PlugIns && \
 cat > ~/QLC+.app/Contents/Resources/qt.conf << 'EOF'
 [Paths]

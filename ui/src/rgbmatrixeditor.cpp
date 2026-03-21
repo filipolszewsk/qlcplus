@@ -982,6 +982,8 @@ void RGBMatrixEditor::slotFixtureGroupActivated(int index)
     {
         m_matrix->setFixtureGroup(FixtureGroup::invalidId());
         m_previewTimer->stop();
+        qDeleteAll(m_previewHash);
+        m_previewHash.clear();
         m_scene->clear();
     }
     
