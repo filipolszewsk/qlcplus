@@ -25,7 +25,7 @@
 #include "loopback.h"
 
 #define UNIVERSE_SIZE 512
-#define LOOPBACK_LINES 4
+#define LOOPBACK_LINES 8
 
 /*****************************************************************************
  * Initialization
