@@ -30,6 +30,7 @@ public:
     static QByteArray aesDecrypt(const QByteArray &ciphertext, const QByteArray &key);
     static QByteArray deriveKey(const QString &input);
     static QString generateHardwareFingerprint();
+    static QString generateLegacyHardwareFingerprint();
 
     static const int KEY_LEN = 32;
     static const int BLOCK_LEN = 16;

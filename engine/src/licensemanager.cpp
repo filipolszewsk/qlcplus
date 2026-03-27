@@ -83,6 +83,30 @@ bool LicenseManager::loadLicense()
 
     if (decrypted.isEmpty())
     {
+        // Fallback: try the legacy fingerprint (which included localHostName).
+        // If it works, re-encrypt with the new stable fingerprint so the user
+        // never hits this again, even after future hostname changes.
+        QString legacyFingerprint = QLCCrypto::generateLegacyHardwareFingerprint();
+        if (legacyFingerprint != hwFingerprint)
+        {
+            QByteArray legacyKey = QLCCrypto::deriveKey(legacyFingerprint);
+            decrypted = QLCCrypto::aesDecrypt(encrypted, legacyKey);
+            if (!decrypted.isEmpty())
+            {
+                qDebug() << "LicenseManager: migrating license file to stable fingerprint";
+                QByteArray reEncrypted = QLCCrypto::aesEncrypt(decrypted, decryptionKey);
+                QFile rewriteFile(keyPath);
+                if (rewriteFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                {
+                    rewriteFile.write(reEncrypted);
+                    rewriteFile.close();
+                }
+            }
+        }
+    }
+
+    if (decrypted.isEmpty())
+    {
         qWarning() << "LicenseManager: failed to decrypt license file (hardware mismatch?)";
         return false;
     }

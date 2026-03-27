@@ -299,6 +299,17 @@ QString ActivatorWindow::readInstanceIdFromKeyFile() const
     QString hwFingerprint = QLCCrypto::generateHardwareFingerprint();
     QByteArray decryptionKey = QLCCrypto::deriveKey(hwFingerprint);
     QByteArray decrypted = QLCCrypto::aesDecrypt(encrypted, decryptionKey);
+
+    if (decrypted.isEmpty())
+    {
+        QString legacyFingerprint = QLCCrypto::generateLegacyHardwareFingerprint();
+        if (legacyFingerprint != hwFingerprint)
+        {
+            QByteArray legacyKey = QLCCrypto::deriveKey(legacyFingerprint);
+            decrypted = QLCCrypto::aesDecrypt(encrypted, legacyKey);
+        }
+    }
+
     if (decrypted.isEmpty())
         return QString();
 

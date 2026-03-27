@@ -67,12 +67,66 @@ QString QLCCrypto::generateHardwareFingerprint()
     }
 #endif
 
-    // Cross-platform stable components (hostname + root disk device serial)
-    data += QHostInfo::localHostName();
+    // Stable cross-platform component (root disk device path)
+    // hostname intentionally excluded -- it changes with network/VPN and would
+    // invalidate the license file every time the user switches connections.
     data += QString::fromUtf8(QStorageInfo::root().device());
 
     // Fallback: if somehow data is still empty, use sorted physical interface MACs
     // (skip virtual interfaces: utun/VPN, bridge, vmnet, docker, tun, tap)
+    if (data.isEmpty())
+    {
+        QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+        QStringList macs;
+        for (const QNetworkInterface &iface : interfaces)
+        {
+            if (iface.flags().testFlag(QNetworkInterface::IsLoopBack))
+                continue;
+            if (iface.hardwareAddress().isEmpty())
+                continue;
+            const QString name = iface.name();
+            if (name.startsWith("utun") || name.startsWith("bridge") ||
+                name.startsWith("vmnet") || name.startsWith("docker") ||
+                name.startsWith("tun") || name.startsWith("tap") ||
+                name.startsWith("veth") || name.startsWith("lo"))
+                continue;
+            macs.append(iface.hardwareAddress());
+        }
+        macs.sort();
+        data += macs.join(QString());
+    }
+
+    return QString(QCryptographicHash::hash(data.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+QString QLCCrypto::generateLegacyHardwareFingerprint()
+{
+    // Preserved for migration only -- matches the old fingerprint that included
+    // localHostName(). Used to attempt decryption of license files created before
+    // the hostname was removed from the fingerprint.
+    QString data;
+
+#if defined(__APPLE__) || defined(Q_OS_MAC)
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                       IOServiceMatching("IOPlatformExpertDevice"));
+    if (service)
+    {
+        CFStringRef uuidRef = (CFStringRef)IORegistryEntryCreateCFProperty(
+            service, CFSTR("IOPlatformUUID"), kCFAllocatorDefault, 0);
+        if (uuidRef)
+        {
+            char buf[64];
+            if (CFStringGetCString(uuidRef, buf, sizeof(buf), kCFStringEncodingUTF8))
+                data += QString::fromUtf8(buf);
+            CFRelease(uuidRef);
+        }
+        IOObjectRelease(service);
+    }
+#endif
+
+    data += QHostInfo::localHostName();
+    data += QString::fromUtf8(QStorageInfo::root().device());
+
     if (data.isEmpty())
     {
         QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
