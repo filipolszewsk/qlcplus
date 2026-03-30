@@ -1116,7 +1116,11 @@ FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 
     QSharedPointer<GenericFader> fader = m_fadersMap.value(universe->id(), QSharedPointer<GenericFader>());
     if (fader.isNull())
     {
-        fader = universe->requestFader();
+        Universe::FaderPriority prio = (blendMode() == Universe::MaskBlend ||
+                                        blendMode() == Universe::SubtractiveBlend)
+                                       ? Universe::Override
+                                       : Universe::Auto;
+        fader = universe->requestFader(prio);
         fader->adjustIntensity(getAttributeValue(Intensity));
         fader->setBlendMode(blendMode());
         fader->setName(name());
