@@ -1973,6 +1973,8 @@ bool EFX::applySettingsFromJson(const QJsonObject &root, Doc *doc)
         foreach (const QJsonValue &v, rows)
             selectedRows.append(v.toInt());
         setSelectedRows(selectedRows);
+        if (isFixtureGroupMode())
+            rebuildFixtureGroup(!m_autoApplyOffsetTemplate);
         applied = true;
     }
 
