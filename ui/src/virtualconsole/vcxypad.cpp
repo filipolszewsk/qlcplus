@@ -766,8 +766,11 @@ void VCXYPad::slotUniverseWritten(quint32 idx, const QByteArray &universeData)
 
             qreal x(-1), y(-1);
             fixture.readDMX(universeData, x, y);
-            if (x != -1.0 && y != -1.0)
+            if (x != -1.0 || y != -1.0)
             {
+                if (x == -1.0) x = 0.5;
+                if (y == -1.0) y = 0.5;
+
                 if (invertedAppearance())
                     y = qreal(1) - y;
 

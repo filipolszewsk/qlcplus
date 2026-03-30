@@ -529,28 +529,36 @@ void VCXYPadFixture::updateChannel(FadeChannel *fc, uchar value)
 
 void VCXYPadFixture::writeDMX(qreal xmul, qreal ymul, QSharedPointer<GenericFader> fader, Universe *universe)
 {
-    if (m_xMSB == QLCChannel::invalid() || m_yMSB == QLCChannel::invalid())
+    if (m_xMSB == QLCChannel::invalid() && m_yMSB == QLCChannel::invalid())
         return;
 
     if (fader.isNull())
         return;
 
-    ushort x = floor(m_xRange * xmul + m_xOffset + 0.5);
-    ushort y = floor(m_yRange * ymul + m_yOffset + 0.5);
-
-    FadeChannel *fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xMSB);
-    updateChannel(fc, uchar(x >> 8));
-
-    fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yMSB);
-    updateChannel(fc, uchar(y >> 8));
-
-    if (m_xLSB != QLCChannel::invalid() && m_yLSB != QLCChannel::invalid())
+    if (m_xMSB != QLCChannel::invalid())
     {
-        fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xLSB);
-        updateChannel(fc, uchar(x & 0xFF));
+        ushort x = floor(m_xRange * xmul + m_xOffset + 0.5);
+        FadeChannel *fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xMSB);
+        updateChannel(fc, uchar(x >> 8));
 
-        fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yLSB);
-        updateChannel(fc, uchar(y & 0xFF));
+        if (m_xLSB != QLCChannel::invalid())
+        {
+            fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_xLSB);
+            updateChannel(fc, uchar(x & 0xFF));
+        }
+    }
+
+    if (m_yMSB != QLCChannel::invalid())
+    {
+        ushort y = floor(m_yRange * ymul + m_yOffset + 0.5);
+        FadeChannel *fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yMSB);
+        updateChannel(fc, uchar(y >> 8));
+
+        if (m_yLSB != QLCChannel::invalid())
+        {
+            fc = fader->getChannelFader(m_doc, universe, m_head.fxi, m_yLSB);
+            updateChannel(fc, uchar(y & 0xFF));
+        }
     }
 }
 
@@ -559,39 +567,31 @@ void VCXYPadFixture::readDMX(const QByteArray& universeData, qreal & xmul, qreal
     xmul = -1;
     ymul = -1;
 
-    if (m_xMSB == QLCChannel::invalid() || m_yMSB == QLCChannel::invalid())
+    if (m_xMSB == QLCChannel::invalid() && m_yMSB == QLCChannel::invalid())
         return;
 
-    qreal x = 0;
-    qreal y = 0;
-
-    if (m_xMSB + m_fixtureAddress < (quint32)universeData.size())
-        x = (uchar)universeData.at(m_xMSB + m_fixtureAddress) * 256;
-    if (m_yMSB + m_fixtureAddress < (quint32)universeData.size())
-        y = (uchar)universeData.at(m_yMSB + m_fixtureAddress) * 256;
-
-    if (m_xLSB != QLCChannel::invalid() && m_yLSB != QLCChannel::invalid())
+    if (m_xMSB != QLCChannel::invalid() && m_xRange != 0)
     {
-        if (m_xLSB + m_fixtureAddress < (quint32)universeData.size())
+        qreal x = 0;
+        if (m_xMSB + m_fixtureAddress < (quint32)universeData.size())
+            x = (uchar)universeData.at(m_xMSB + m_fixtureAddress) * 256;
+        if (m_xLSB != QLCChannel::invalid() &&
+            m_xLSB + m_fixtureAddress < (quint32)universeData.size())
             x += (uchar)universeData.at(m_xLSB + m_fixtureAddress);
-        if (m_yLSB + m_fixtureAddress < (quint32)universeData.size())
-            y += (uchar)universeData.at(m_yLSB + m_fixtureAddress);
+        x = (x - m_xOffset) / m_xRange;
+        xmul = CLAMP(x, qreal(0), qreal(1));
     }
 
-    if (m_xRange == 0 || m_yRange == 0)
+    if (m_yMSB != QLCChannel::invalid() && m_yRange != 0)
     {
-        Q_ASSERT(m_xRange != 0);
-        Q_ASSERT(m_yRange != 0);
-        return; // potential divide by zero!
+        qreal y = 0;
+        if (m_yMSB + m_fixtureAddress < (quint32)universeData.size())
+            y = (uchar)universeData.at(m_yMSB + m_fixtureAddress) * 256;
+        if (m_yLSB != QLCChannel::invalid() &&
+            m_yLSB + m_fixtureAddress < (quint32)universeData.size())
+            y += (uchar)universeData.at(m_yLSB + m_fixtureAddress);
+        y = (y - m_yOffset) / m_yRange;
+        ymul = CLAMP(y, qreal(0), qreal(1));
     }
-
-    x = (x - m_xOffset) / m_xRange;
-    y = (y - m_yOffset) / m_yRange;
-
-    x = CLAMP(x, qreal(0), qreal(1));
-    y = CLAMP(y, qreal(0), qreal(1));
-
-    xmul = x;
-    ymul = y;
 }
 
