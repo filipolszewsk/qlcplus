@@ -1505,6 +1505,9 @@ void EFXEditor::slotPasteClicked()
     /* Row selection */
     updateRowSelection();
 
+    if (m_useFixtureGroupCheck->isChecked())
+        rebuildFixturesForGroup(m_efx->fixtureGroupID(), !m_efx->autoApplyOffsetTemplate());
+
     updateFixtureTree();
     redrawPreview();
     continueRunning(running);
