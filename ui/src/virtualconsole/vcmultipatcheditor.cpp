@@ -344,7 +344,7 @@ void VCMultiPatchEditor::fillTree()
                 faderItem->setFlags(faderItem->flags() | Qt::ItemIsEditable);
             }
         }
-        else if (widget->type() == VCWidget::FrameWidget)
+        else if (widget->type() == VCWidget::FrameWidget || widget->type() == VCWidget::SoloFrameWidget)
         {
             VCFrame *frame = qobject_cast<VCFrame*>(widget);
             if (frame)
