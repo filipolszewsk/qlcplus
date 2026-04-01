@@ -1348,6 +1348,9 @@ void VCFrame::applyProperties(VCFrameProperties const& prop)
             if (page > 0)
             {
                 removeWidgetFromPageMap(widget);
+                VirtualConsole* vc = VirtualConsole::instance();
+                if (vc != NULL)
+                    vc->removeWidgetFromMap(widget);
                 delete widget;
             }
             else

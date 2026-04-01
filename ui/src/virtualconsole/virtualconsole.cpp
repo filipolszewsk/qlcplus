@@ -1600,6 +1600,15 @@ void VirtualConsole::addWidgetInMap(VCWidget* widget)
     m_widgetsMap.insert(wid, widget);
 }
 
+void VirtualConsole::removeWidgetFromMap(VCWidget* widget)
+{
+    if (widget == NULL)
+        return;
+    m_widgetsMap.remove(widget->id());
+    foreach (VCWidget* child, getChildren(widget))
+        m_widgetsMap.remove(child->id());
+}
+
 void VirtualConsole::setupWidget(VCWidget *widget, VCWidget *parent)
 {
     Q_ASSERT(widget != NULL);
@@ -1747,7 +1756,8 @@ void VirtualConsole::toggleLiveEdit()
     while (widgetIt != m_widgetsMap.end())
     {
         VCWidget* widget = widgetIt.value();
-        widget->setLiveEdit(m_liveEdit);
+        if (widget != NULL)
+            widget->setLiveEdit(m_liveEdit);
         ++widgetIt;
     }
     m_contents->setLiveEdit(m_liveEdit);
@@ -1887,7 +1897,8 @@ void VirtualConsole::slotModeChanged(Doc::Mode mode)
             while (widgetIt != m_widgetsMap.end())
             {
                 VCWidget* widget = widgetIt.value();
-                widget->cancelLiveEdit();
+                if (widget != NULL)
+                    widget->cancelLiveEdit();
                 ++widgetIt;
             }
             m_contents->cancelLiveEdit();
