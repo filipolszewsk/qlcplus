@@ -223,13 +223,14 @@ void VCFrameProperties::slotPageComboChanged(int index)
         m_shortcutInputWidget->setKeySequence(m_shortcuts[index]->m_keySequence.toString(QKeySequence::NativeText));
         m_pageName->setText(m_shortcuts[index]->name());
 
-        bool hasValue = (m_shortcuts[index]->m_inputValue >= 0);
-        int inputVal = m_shortcuts[index]->m_inputValue;
         m_shortcutValueCheck->blockSignals(true);
         m_shortcutValueSpin->blockSignals(true);
+
+        bool hasValue = (m_shortcuts[index]->m_inputValue >= 0);
         m_shortcutValueCheck->setChecked(hasValue);
         m_shortcutValueSpin->setEnabled(hasValue);
-        m_shortcutValueSpin->setValue(hasValue ? inputVal : 0);
+        m_shortcutValueSpin->setValue(hasValue ? m_shortcuts[index]->m_inputValue : 0);
+
         m_shortcutValueCheck->blockSignals(false);
         m_shortcutValueSpin->blockSignals(false);
     }
