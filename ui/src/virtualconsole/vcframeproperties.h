@@ -63,6 +63,7 @@ protected slots:
 
     void slotShortcutValueCheckToggled(bool checked);
     void slotShortcutValueSpinChanged(int value);
+    void slotShortcutQuickAssign();
 
 protected:
     VCFrame *m_frame;
