@@ -31,6 +31,7 @@ Rectangle
 
     property VCFrame widgetRef: null
     property int gridItemsHeight: UISettings.listItemHeight
+    property bool updatingShortcut: false
 
     Column
     {
@@ -194,8 +195,12 @@ Rectangle
                     {
                         if (!widgetRef) return
                         var v = widgetRef.shortcutInputValue(currentIndex)
-                        shortcutValueCheck.checked = (v >= 0)
-                        shortcutValueSpin.value = (v >= 0) ? v : 0
+                        var hasVal = (v >= 0)
+                        var spinVal = hasVal ? v : 0
+                        updatingShortcut = true
+                        shortcutValueCheck.checked = hasVal
+                        shortcutValueSpin.value = spinVal
+                        updatingShortcut = false
                     }
                 }
 
@@ -237,10 +242,10 @@ Rectangle
                         id: shortcutValueCheck
                         implicitWidth: UISettings.iconSizeMedium
                         implicitHeight: implicitWidth
-                        checked: widgetRef ? (widgetRef.shortcutInputValue(shortcutList.currentIndex) >= 0) : false
+                        checked: false
                         onCheckedChanged:
                         {
-                            if (!widgetRef) return
+                            if (!widgetRef || updatingShortcut) return
                             if (checked)
                                 widgetRef.setShortcutInputValue(shortcutList.currentIndex, shortcutValueSpin.value)
                             else
@@ -256,16 +261,11 @@ Rectangle
                         enabled: shortcutValueCheck.checked
                         from: 0
                         to: 255
-                        value:
-                        {
-                            if (!widgetRef) return 0
-                            var v = widgetRef.shortcutInputValue(shortcutList.currentIndex)
-                            return v >= 0 ? v : 0
-                        }
+                        value: 0
                         onValueChanged:
                         {
-                            if (shortcutValueCheck.checked && widgetRef)
-                                widgetRef.setShortcutInputValue(shortcutList.currentIndex, value)
+                            if (!widgetRef || updatingShortcut || !shortcutValueCheck.checked) return
+                            widgetRef.setShortcutInputValue(shortcutList.currentIndex, value)
                         }
                     }
                 }
