@@ -21,7 +21,6 @@
 #include <QComboBox>
 #include <QDebug>
 #include <QHBoxLayout>
-#include <QInputDialog>
 #include <QLabel>
 #include <QSpinBox>
 #include <algorithm>
@@ -118,7 +117,6 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
     m_shortcutInputWidget = new InputSelectionWidget(m_doc, this);
     m_shortcutInputWidget->setCustomFeedbackVisibility(true);
     m_shortcutInputWidget->setWidgetPage(m_frame->page());
-    m_shortcutInputWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     m_shortcutInputWidget->show();
     m_pageShortcuts->addWidget(m_shortcutInputWidget);
 
@@ -146,9 +144,6 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
 
     connect(m_shortcutInputWidget, SIGNAL(keySequenceChanged(QKeySequence)),
             this, SLOT(slotKeySequenceChanged(QKeySequence)));
-
-    connect(m_shortcutInputWidget, SIGNAL(customContextMenuRequested(QPoint)),
-            this, SLOT(slotShortcutQuickAssign()));
 
     connect(m_shortcutValueCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotShortcutValueCheckToggled(bool)));
@@ -305,57 +300,6 @@ void VCFrameProperties::slotShortcutValueSpinChanged(int value)
     VCFramePageShortcut *shortcut = m_shortcuts[m_pageCombo->currentIndex()];
     if (shortcut != NULL)
         shortcut->m_inputValue = value;
-}
-
-void VCFrameProperties::slotShortcutQuickAssign()
-{
-    bool ok;
-    QString text = QInputDialog::getText(this,
-        tr("Quick Assign"),
-        tr("Enter Universe.Channel.Value\n(e.g. 3.100.25  —  value is optional)"),
-        QLineEdit::Normal, QString(), &ok);
-
-    if (!ok || text.trimmed().isEmpty())
-        return;
-
-    QStringList parts = text.trimmed().split('.');
-    if (parts.size() < 2)
-        return;
-
-    bool uOk, cOk;
-    int uni = parts[0].toInt(&uOk) - 1;
-    int ch  = parts[1].toInt(&cOk) - 1;
-    if (!uOk || !cOk || uni < 0 || ch < 0)
-        return;
-
-    quint32 pagedCh = (quint32(m_frame->page()) << 16) | quint32(ch);
-    QSharedPointer<QLCInputSource> src(new QLCInputSource(quint32(uni), pagedCh));
-    m_shortcutInputWidget->setInputSource(src);
-
-    VCFramePageShortcut *shortcut = m_shortcuts[m_pageCombo->currentIndex()];
-    if (shortcut)
-        shortcut->m_inputSource = src;
-
-    if (parts.size() >= 3)
-    {
-        bool vOk;
-        int val = parts[2].toInt(&vOk);
-        if (vOk && val >= 0 && val <= 255)
-        {
-            m_shortcutValueCheck->blockSignals(true);
-            m_shortcutValueSpin->blockSignals(true);
-
-            m_shortcutValueCheck->setChecked(true);
-            m_shortcutValueSpin->setEnabled(true);
-            m_shortcutValueSpin->setValue(val);
-
-            m_shortcutValueCheck->blockSignals(false);
-            m_shortcutValueSpin->blockSignals(false);
-
-            if (shortcut)
-                shortcut->m_inputValue = val;
-        }
-    }
 }
 
 void VCFrameProperties::accept()
