@@ -134,8 +134,9 @@ void VCMultiPatchEditor::accept()
                 }
             }
 
-            // For VCFrame page shortcuts: also write back the input value
-            if (widget->type() == VCWidget::FrameWidget && sourceId >= VCFrame::shortcutsBaseInputSourceId)
+            // For VCFrame page shortcuts: also update the shortcut's own m_inputSource and m_inputValue
+            if ((widget->type() == VCWidget::FrameWidget || widget->type() == VCWidget::SoloFrameWidget)
+                && sourceId >= VCFrame::shortcutsBaseInputSourceId)
             {
                 VCFrame *frame = qobject_cast<VCFrame*>(widget);
                 if (frame)
@@ -146,6 +147,7 @@ void VCMultiPatchEditor::accept()
                     {
                         if (shortcut->m_id == (quint8)sourceId)
                         {
+                            shortcut->m_inputSource = widget->inputSource(sourceId);
                             shortcut->m_inputValue = inputVal;
                             break;
                         }
