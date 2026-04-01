@@ -1162,7 +1162,8 @@ void VCFrame::slotInputValueChanged(quint32 universe, quint32 channel, uchar val
         {
             if (shortcut->m_inputSource != NULL &&
                     shortcut->m_inputSource->universe() == universe &&
-                    shortcut->m_inputSource->channel() == pagedCh)
+                    shortcut->m_inputSource->channel() == pagedCh &&
+                    (shortcut->m_inputValue < 0 || shortcut->m_inputValue == (int)value))
             {
                 slotSetPage(shortcut->m_page);
             }

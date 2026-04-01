@@ -33,9 +33,10 @@ class QXmlStreamWriter;
  * @{
  */
 
-#define KXMLQLCVCFramePageShortcut       QStringLiteral("Shortcut")
-#define KXMLQLCVCFramePageShortcutPage   QStringLiteral("Page")
-#define KXMLQLCVCFramePageShortcutName   QStringLiteral("Name")
+#define KXMLQLCVCFramePageShortcut            QStringLiteral("Shortcut")
+#define KXMLQLCVCFramePageShortcutPage        QStringLiteral("Page")
+#define KXMLQLCVCFramePageShortcutName        QStringLiteral("Name")
+#define KXMLQLCVCFramePageShortcutInputValue  QStringLiteral("InputValue")
 
 class VCFramePageShortcut
 {
@@ -71,6 +72,8 @@ public:
     QSharedPointer<QLCInputSource> m_inputSource;
     /** The key sequence to jump to this page */
     QKeySequence m_keySequence;
+    /** Required input value to trigger this page (-1 = any value) */
+    int m_inputValue;
 };
 
 /** @} */

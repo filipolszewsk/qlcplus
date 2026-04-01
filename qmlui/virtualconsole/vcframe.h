@@ -39,9 +39,10 @@
 #define KXMLQLCVCFrameNext          QStringLiteral("Next")
 #define KXMLQLCVCFramePrevious      QStringLiteral("Previous")
 #define KXMLQLCVCFramePagesLoop     QStringLiteral("PagesLoop")
-#define KXMLQLCVCFrameShortcut      QStringLiteral("Shortcut")
-#define KXMLQLCVCFrameShortcutPage  QStringLiteral("Page")
-#define KXMLQLCVCFrameShortcutName  QStringLiteral("Name")
+#define KXMLQLCVCFrameShortcut           QStringLiteral("Shortcut")
+#define KXMLQLCVCFrameShortcutPage       QStringLiteral("Page")
+#define KXMLQLCVCFrameShortcutName       QStringLiteral("Name")
+#define KXMLQLCVCFrameShortcutInputValue QStringLiteral("InputValue")
 
 class VirtualConsole;
 
@@ -224,6 +225,9 @@ public:
     QStringList pageLabels();
     Q_INVOKABLE void setShortcutName(int pageIndex, QString name);
 
+    Q_INVOKABLE int shortcutInputValue(int pageIndex) const;
+    Q_INVOKABLE void setShortcutInputValue(int pageIndex, int value);
+
     Q_INVOKABLE void gotoPreviousPage();
     Q_INVOKABLE void gotoNextPage();
     Q_INVOKABLE void gotoPage(int pageIndex);
@@ -247,6 +251,8 @@ protected:
     bool m_pagesLoop;
     /** Map of the page index/label */
     QMap<int, QString> m_pageLabels;
+    /** Map of the page index/required input value (-1 = any value) */
+    QMap<int, int> m_pageInputValues;
 
     /** This holds a map of pages/widgets to be
      *  shown/hidden when page is changed */

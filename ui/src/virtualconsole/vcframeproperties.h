@@ -20,8 +20,10 @@
 #ifndef VCFRAMEPROPERTIES_H
 #define VCFRAMEPROPERTIES_H
 
+#include <QCheckBox>
 #include <QDialog>
 #include <QComboBox>
+#include <QSpinBox>
 #include "ui_vcframeproperties.h"
 #include "vcframepageshortcut.h"
 
@@ -59,6 +61,9 @@ protected slots:
     void slotInputValueChanged(quint32 universe, quint32 channel);
     void slotKeySequenceChanged(QKeySequence key);
 
+    void slotShortcutValueCheckToggled(bool checked);
+    void slotShortcutValueSpinChanged(int value);
+
 protected:
     VCFrame *m_frame;
     Doc* m_doc;
@@ -67,6 +72,8 @@ protected:
     InputSelectionWidget *m_inputPrevPageWidget;
     QList<VCFramePageShortcut*> m_shortcuts;
     InputSelectionWidget *m_shortcutInputWidget;
+    QCheckBox *m_shortcutValueCheck;
+    QSpinBox *m_shortcutValueSpin;
 
 public slots:
     void accept();

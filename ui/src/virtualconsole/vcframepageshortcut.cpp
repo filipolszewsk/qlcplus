@@ -29,6 +29,7 @@ VCFramePageShortcut::VCFramePageShortcut(int pageIndex, quint8 inputID)
     : m_id(inputID)
     , m_page(pageIndex)
     , m_inputSource(QSharedPointer<QLCInputSource>())
+    , m_inputValue(-1)
 {
     setName();
 }
@@ -73,6 +74,11 @@ bool VCFramePageShortcut::loadXML(QXmlStreamReader &root)
     m_page = root.attributes().value(KXMLQLCVCFramePageShortcutPage).toString().toInt();
     setName(root.attributes().value(KXMLQLCVCFramePageShortcutName).toString());
 
+    if (root.attributes().hasAttribute(KXMLQLCVCFramePageShortcutInputValue))
+        m_inputValue = root.attributes().value(KXMLQLCVCFramePageShortcutInputValue).toString().toInt();
+    else
+        m_inputValue = -1;
+
     /* Children */
     while (root.readNextStartElement())
     {
@@ -102,6 +108,8 @@ bool VCFramePageShortcut::saveXML(QXmlStreamWriter *doc)
     doc->writeStartElement(KXMLQLCVCFramePageShortcut);
     doc->writeAttribute(KXMLQLCVCFramePageShortcutPage, QString::number(m_page));
     doc->writeAttribute(KXMLQLCVCFramePageShortcutName, m_name);
+    if (m_inputValue >= 0)
+        doc->writeAttribute(KXMLQLCVCFramePageShortcutInputValue, QString::number(m_inputValue));
 
     /* External input source */
     if (!m_inputSource.isNull() && m_inputSource->isValid())

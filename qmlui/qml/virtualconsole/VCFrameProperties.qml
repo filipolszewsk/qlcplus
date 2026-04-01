@@ -190,6 +190,13 @@ Rectangle
                     height: gridItemsHeight
                     textRole: ""
                     model: widgetRef ? widgetRef.pageLabels : null
+                    onCurrentIndexChanged:
+                    {
+                        if (!widgetRef) return
+                        var v = widgetRef.shortcutInputValue(currentIndex)
+                        shortcutValueCheck.checked = (v >= 0)
+                        shortcutValueSpin.value = (v >= 0) ? v : 0
+                    }
                 }
 
                 // row 2
@@ -211,6 +218,55 @@ Rectangle
                             widgetRef.setShortcutName(shortcutList.currentIndex, text)
                         // combo model has changed. Restore selected index
                         shortcutList.currentIndex = idx
+                    }
+                }
+
+                // row 3
+                RobotoText
+                {
+                    height: gridItemsHeight
+                    Layout.fillWidth: true
+                    label: qsTr("Match specific input value")
+                }
+                RowLayout
+                {
+                    Layout.fillWidth: true
+
+                    CustomCheckBox
+                    {
+                        id: shortcutValueCheck
+                        implicitWidth: UISettings.iconSizeMedium
+                        implicitHeight: implicitWidth
+                        checked: widgetRef ? (widgetRef.shortcutInputValue(shortcutList.currentIndex) >= 0) : false
+                        onCheckedChanged:
+                        {
+                            if (!widgetRef) return
+                            if (checked)
+                                widgetRef.setShortcutInputValue(shortcutList.currentIndex, shortcutValueSpin.value)
+                            else
+                                widgetRef.setShortcutInputValue(shortcutList.currentIndex, -1)
+                        }
+                    }
+
+                    CustomSpinBox
+                    {
+                        id: shortcutValueSpin
+                        Layout.fillWidth: true
+                        height: gridItemsHeight
+                        enabled: shortcutValueCheck.checked
+                        from: 0
+                        to: 255
+                        value:
+                        {
+                            if (!widgetRef) return 0
+                            var v = widgetRef.shortcutInputValue(shortcutList.currentIndex)
+                            return v >= 0 ? v : 0
+                        }
+                        onValueChanged:
+                        {
+                            if (shortcutValueCheck.checked && widgetRef)
+                                widgetRef.setShortcutInputValue(shortcutList.currentIndex, value)
+                        }
                     }
                 }
               }

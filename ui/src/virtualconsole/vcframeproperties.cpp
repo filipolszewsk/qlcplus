@@ -20,6 +20,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDebug>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSpinBox>
 #include <algorithm>
 #include <QSettings>
 
@@ -117,6 +120,22 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
     m_shortcutInputWidget->show();
     m_pageShortcuts->addWidget(m_shortcutInputWidget);
 
+    /* Input value filter row */
+    QWidget *valueRow = new QWidget(this);
+    QHBoxLayout *valueLayout = new QHBoxLayout(valueRow);
+    valueLayout->setContentsMargins(0, 0, 0, 0);
+
+    m_shortcutValueCheck = new QCheckBox(tr("Match specific input value:"), valueRow);
+    m_shortcutValueSpin = new QSpinBox(valueRow);
+    m_shortcutValueSpin->setRange(0, 255);
+    m_shortcutValueSpin->setEnabled(false);
+
+    valueLayout->addWidget(m_shortcutValueCheck);
+    valueLayout->addWidget(m_shortcutValueSpin);
+    valueLayout->addStretch();
+
+    m_pageShortcuts->addWidget(valueRow);
+
     connect(m_totalPagesSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotTotalPagesNumberChanged(int)));
 
@@ -125,6 +144,12 @@ VCFrameProperties::VCFrameProperties(QWidget* parent, VCFrame* frame, Doc *doc)
 
     connect(m_shortcutInputWidget, SIGNAL(keySequenceChanged(QKeySequence)),
             this, SLOT(slotKeySequenceChanged(QKeySequence)));
+
+    connect(m_shortcutValueCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotShortcutValueCheckToggled(bool)));
+
+    connect(m_shortcutValueSpin, SIGNAL(valueChanged(int)),
+            this, SLOT(slotShortcutValueSpinChanged(int)));
 
     connect(m_pageName, SIGNAL(editingFinished()),
             this, SLOT(slotPageNameEditingFinished()));
@@ -197,6 +222,11 @@ void VCFrameProperties::slotPageComboChanged(int index)
         m_shortcutInputWidget->setInputSource(m_shortcuts[index]->m_inputSource);
         m_shortcutInputWidget->setKeySequence(m_shortcuts[index]->m_keySequence.toString(QKeySequence::NativeText));
         m_pageName->setText(m_shortcuts[index]->name());
+
+        bool hasValue = (m_shortcuts[index]->m_inputValue >= 0);
+        m_shortcutValueCheck->setChecked(hasValue);
+        m_shortcutValueSpin->setEnabled(hasValue);
+        m_shortcutValueSpin->setValue(hasValue ? m_shortcuts[index]->m_inputValue : 0);
     }
 }
 
@@ -247,6 +277,24 @@ void VCFrameProperties::slotKeySequenceChanged(QKeySequence key)
         shortcut->m_keySequence = key;
 }
 
+void VCFrameProperties::slotShortcutValueCheckToggled(bool checked)
+{
+    m_shortcutValueSpin->setEnabled(checked);
+
+    VCFramePageShortcut *shortcut = m_shortcuts[m_pageCombo->currentIndex()];
+    if (shortcut != NULL)
+        shortcut->m_inputValue = checked ? m_shortcutValueSpin->value() : -1;
+}
+
+void VCFrameProperties::slotShortcutValueSpinChanged(int value)
+{
+    if (!m_shortcutValueCheck->isChecked())
+        return;
+
+    VCFramePageShortcut *shortcut = m_shortcuts[m_pageCombo->currentIndex()];
+    if (shortcut != NULL)
+        shortcut->m_inputValue = value;
+}
 
 void VCFrameProperties::accept()
 {

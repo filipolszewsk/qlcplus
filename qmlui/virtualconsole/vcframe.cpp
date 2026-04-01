@@ -742,6 +742,7 @@ void VCFrame::setTotalPagesNumber(int num)
         for (int i = m_totalPagesNumber - 1; i > num; i--)
         {
             m_pageLabels.remove(i);
+            m_pageInputValues.remove(i);
             unregisterExternalControl(INPUT_SHORTCUT_BASE_ID + i);
         }
     }
@@ -830,6 +831,20 @@ void VCFrame::setShortcutName(int pageIndex, QString name)
     setDocModified();
 
     emit pageLabelsChanged();
+}
+
+int VCFrame::shortcutInputValue(int pageIndex) const
+{
+    return m_pageInputValues.value(pageIndex, -1);
+}
+
+void VCFrame::setShortcutInputValue(int pageIndex, int value)
+{
+    if (value < 0)
+        m_pageInputValues.remove(pageIndex);
+    else
+        m_pageInputValues[pageIndex] = value;
+    setDocModified();
 }
 
 void VCFrame::gotoPreviousPage()
@@ -984,27 +999,40 @@ void VCFrame::updateFeedback()
 
 void VCFrame::slotInputValueChanged(quint8 id, uchar value)
 {
-    if (value != UCHAR_MAX)
-        return;
-
     switch(id)
     {
         case INPUT_NEXT_PAGE_ID:
+            if (value != UCHAR_MAX)
+                break;
             gotoNextPage();
         break;
         case INPUT_PREVIOUS_PAGE_ID:
+            if (value != UCHAR_MAX)
+                break;
             gotoPreviousPage();
         break;
         case INPUT_ENABLE_ID:
+            if (value != UCHAR_MAX)
+                break;
             setDisabled(isDisabled() ? false : true);
         break;
         case INPUT_COLLAPSE_ID:
+            if (value != UCHAR_MAX)
+                break;
             setCollapsed(!isCollapsed());
         break;
         default:
+        {
             if (id < INPUT_SHORTCUT_BASE_ID || id > INPUT_SHORTCUT_BASE_ID + m_totalPagesNumber)
                 break;
-            setCurrentPage(id - INPUT_SHORTCUT_BASE_ID);
+            int pageIndex = id - INPUT_SHORTCUT_BASE_ID;
+            int required = m_pageInputValues.value(pageIndex, -1);
+            if (required >= 0 && (int)value != required)
+                break;
+            if (required < 0 && value == 0)
+                break;
+            setCurrentPage(pageIndex);
+        }
         break;
     }
 }
@@ -1305,6 +1333,11 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
                 name = attrs.value(KXMLQLCVCFrameShortcutName).toString();
             m_pageLabels.insert(page, name);
 
+            if (attrs.hasAttribute(KXMLQLCVCFrameShortcutInputValue))
+                m_pageInputValues.insert(page, attrs.value(KXMLQLCVCFrameShortcutInputValue).toInt());
+            else
+                m_pageInputValues.remove(page);
+
             registerExternalControl(INPUT_SHORTCUT_BASE_ID + page, name, true);
             loadXMLSources(root, INPUT_SHORTCUT_BASE_ID + page);
 
@@ -1399,6 +1432,8 @@ bool VCFrame::saveXML(QXmlStreamWriter *doc)
             doc->writeStartElement(KXMLQLCVCFrameShortcut);
             doc->writeAttribute(KXMLQLCVCFrameShortcutPage, QString::number(it.key()));
             doc->writeAttribute(KXMLQLCVCFrameShortcutName, it.value());
+            if (m_pageInputValues.contains(it.key()))
+                doc->writeAttribute(KXMLQLCVCFrameShortcutInputValue, QString::number(m_pageInputValues.value(it.key())));
 
             saveXMLInputControl(doc, INPUT_SHORTCUT_BASE_ID + it.key());
 
