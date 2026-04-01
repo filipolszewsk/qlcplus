@@ -43,7 +43,11 @@ void AddressDelegate::setEditorData(QWidget *editor, const QModelIndex &index) c
     {
         quint32 universe = value >> 16;
         quint32 channel = value & 0xFFFF;
-        lineEdit->setText(QString("%1.%2").arg(universe + 1).arg(channel + 1));
+        QVariant inputVal = index.model()->data(index, Qt::UserRole + 1);
+        if (inputVal.isValid() && inputVal.toInt() >= 0)
+            lineEdit->setText(QString("%1.%2.%3").arg(universe + 1).arg(channel + 1).arg(inputVal.toInt()));
+        else
+            lineEdit->setText(QString("%1.%2").arg(universe + 1).arg(channel + 1));
     }
     else
     {
@@ -60,12 +64,25 @@ void AddressDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, c
     if (text.isEmpty() == false)
     {
         QStringList parts = text.split('.');
-        if (parts.length() == 2)
+        if (parts.length() >= 2)
         {
             quint32 universe = parts[0].toUInt();
             quint32 channel = parts[1].toUInt();
             if (universe > 0 && channel > 0)
                 address = ((universe - 1) << 16) | (channel - 1);
+        }
+        if (parts.length() >= 3)
+        {
+            bool ok = false;
+            int inputVal = parts[2].toInt(&ok);
+            if (ok && inputVal >= 0 && inputVal <= 255)
+                model->setData(index, inputVal, Qt::UserRole + 1);
+            else
+                model->setData(index, -1, Qt::UserRole + 1);
+        }
+        else
+        {
+            model->setData(index, -1, Qt::UserRole + 1);
         }
     }
 
@@ -89,4 +106,15 @@ QString AddressDelegate::displayText(const QVariant &value, const QLocale &local
         return QString("%1.%2").arg(universe + 1).arg(channel + 1);
     }
     return QString();
+}
+
+QString AddressDelegate::displayTextWithValue(quint32 address, int inputValue)
+{
+    if (address == QLCIOPlugin::invalidLine())
+        return QString();
+    quint32 universe = address >> 16;
+    quint32 channel = address & 0xFFFF;
+    if (inputValue >= 0)
+        return QString("%1.%2.%3").arg(universe + 1).arg(channel + 1).arg(inputValue);
+    return QString("%1.%2").arg(universe + 1).arg(channel + 1);
 }

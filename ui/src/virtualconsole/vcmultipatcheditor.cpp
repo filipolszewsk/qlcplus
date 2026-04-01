@@ -26,6 +26,7 @@
 #include "vcbutton.h"
 #include "vccuelist.h"
 #include "vcframe.h"
+#include "vcframepageshortcut.h"
 #include "vcxypad.h"
 #include "doc.h"
 #include "fixture.h"
@@ -132,6 +133,25 @@ void VCMultiPatchEditor::accept()
                     widget->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(universe, channel)), sourceId);
                 }
             }
+
+            // For VCFrame page shortcuts: also write back the input value
+            if (widget->type() == VCWidget::FrameWidget && sourceId >= VCFrame::shortcutsBaseInputSourceId)
+            {
+                VCFrame *frame = qobject_cast<VCFrame*>(widget);
+                if (frame)
+                {
+                    QVariant inputValData = item->data(1, Qt::UserRole + 1);
+                    int inputVal = inputValData.isValid() ? inputValData.toInt() : -1;
+                    foreach (VCFramePageShortcut *shortcut, frame->shortcuts())
+                    {
+                        if (shortcut->m_id == (quint8)sourceId)
+                        {
+                            shortcut->m_inputValue = inputVal;
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -154,6 +174,8 @@ void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
         disconnect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
                    this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
 
+        QVariant inputValData = item->data(1, Qt::UserRole + 1);
+
         if (m_incrementalCheck->isChecked())
         {
             quint32 startAddress = data.toUInt();
@@ -173,6 +195,8 @@ void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
                         currentUniverse++;
                     }
                     selectedItem->setData(1, Qt::EditRole, (currentUniverse << 16) | currentChannel);
+                    if (inputValData.isValid())
+                        selectedItem->setData(1, Qt::UserRole + 1, inputValData);
                 }
             }
         }
@@ -182,7 +206,11 @@ void VCMultiPatchEditor::slotItemChanged(QTreeWidgetItem *item, int column)
             {
                 QTreeWidgetItem *selectedItem = selection.at(i);
                 if (selectedItem->flags() & Qt::ItemIsEditable)
+                {
                     selectedItem->setData(1, Qt::EditRole, data);
+                    if (inputValData.isValid())
+                        selectedItem->setData(1, Qt::UserRole + 1, inputValData);
+                }
             }
         }
 
@@ -346,6 +374,20 @@ void VCMultiPatchEditor::fillTree()
                     if (src)
                         prevItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
                     prevItem->setFlags(prevItem->flags() | Qt::ItemIsEditable);
+
+                    foreach (VCFramePageShortcut *shortcut, frame->shortcuts())
+                    {
+                        QTreeWidgetItem *scItem = new QTreeWidgetItem(topItem);
+                        scItem->setText(0, shortcut->name());
+                        scItem->setData(0, Qt::UserRole, shortcut->m_id);
+                        if (!shortcut->m_inputSource.isNull() && shortcut->m_inputSource->isValid())
+                        {
+                            scItem->setData(1, Qt::EditRole,
+                                (shortcut->m_inputSource->universe() << 16) | shortcut->m_inputSource->channel());
+                        }
+                        scItem->setData(1, Qt::UserRole + 1, shortcut->m_inputValue);
+                        scItem->setFlags(scItem->flags() | Qt::ItemIsEditable);
+                    }
                 }
             }
         }

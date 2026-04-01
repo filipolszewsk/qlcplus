@@ -22,6 +22,8 @@ public:
                               const QModelIndex &index) const override;
 
     QString displayText(const QVariant &value, const QLocale &locale) const override;
+
+    static QString displayTextWithValue(quint32 address, int inputValue);
 };
 
 #endif // ADDRESSDELEGATE_H
