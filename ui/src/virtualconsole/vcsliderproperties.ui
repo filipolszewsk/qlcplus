@@ -439,6 +439,41 @@
         </widget>
        </item>
        <item>
+        <widget class="QWidget" name="m_cngPresetWidget">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_5">
+          <property name="leftMargin">
+           <number>20</number>
+          </property>
+          <property name="topMargin">
+           <number>0</number>
+          </property>
+          <property name="rightMargin">
+           <number>0</number>
+          </property>
+          <property name="bottomMargin">
+           <number>0</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="m_cngPresetLabel">
+            <property name="text">
+             <string>Source: (using first level channel)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="m_cngPresetChooseBtn">
+            <property name="text">
+             <string>Choose...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QCheckBox" name="m_monitorValuesCheck">
          <property name="text">
           <string>Monitor the selected channels and update the slider level</string>

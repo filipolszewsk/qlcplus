@@ -29,6 +29,8 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QAction>
+#include <QVBoxLayout>
+#include <QDialogButtonBox>
 
 #include "qlccapability.h"
 #include "qlcchannel.h"
@@ -53,6 +55,8 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     Q_ASSERT(slider != NULL);
     m_slider = slider;
     m_ovrResetSelWidget = NULL;
+    m_cngPresetFixtureId = Fixture::invalidId();
+    m_cngPresetChannelIdx = QLCChannel::invalid();
 
     setupUi(this);
     m_levelList->sortByColumn(0, Qt::AscendingOrder);
@@ -161,6 +165,10 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
             this, SLOT(slotItemExpanded()));
     connect(m_monitorValuesCheck, SIGNAL(clicked(bool)),
             this, SLOT(slotMonitorCheckClicked(bool)));
+    connect(m_cngPresetChooseBtn, SIGNAL(clicked()),
+            this, SLOT(slotChoosePresetChannel()));
+    connect(m_cngPresetCheck, SIGNAL(toggled(bool)),
+            m_cngPresetWidget, SLOT(setEnabled(bool)));
 
     m_ovrResetSelWidget = new InputSelectionWidget(m_doc, this);
     m_ovrResetSelWidget->setTitle(tr("Override reset control"));
@@ -263,6 +271,34 @@ void VCSliderProperties::slotModeLevelClicked()
         break;
 
     }
+
+    // Load preset source settings
+    m_cngPresetFixtureId = m_slider->clickAndGoPresetFixture();
+    m_cngPresetChannelIdx = m_slider->clickAndGoPresetChannel();
+    
+    // Update preset source label
+    if (m_cngPresetFixtureId != Fixture::invalidId())
+    {
+        Fixture* fixture = m_doc->fixture(m_cngPresetFixtureId);
+        if (fixture != NULL)
+        {
+            const QLCChannel* channel = fixture->channel(m_cngPresetChannelIdx);
+            if (channel != NULL)
+            {
+                m_cngPresetLabel->setText(tr("Source: %1 (#%2) - %3")
+                    .arg(fixture->name())
+                    .arg(fixture->id())
+                    .arg(channel->name()));
+            }
+        }
+    }
+    else
+    {
+        m_cngPresetLabel->setText(tr("Source: (using first level channel)"));
+    }
+    
+    // Enable/disable preset widget based on preset checkbox
+    m_cngPresetWidget->setEnabled(m_cngPresetCheck->isChecked());
 }
 
 void VCSliderProperties::slotModePlaybackClicked()
@@ -676,6 +712,122 @@ void VCSliderProperties::slotMonitorCheckClicked(bool checked)
         m_ovrResetSelWidget->hide();
 }
 
+void VCSliderProperties::slotChoosePresetChannel()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Choose Preset Source Channel"));
+    dialog.resize(400, 300);
+    
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setHeaderLabels(QStringList() << tr("Fixture") << tr("Channel"));
+    tree->setRootIsDecorated(true);
+    tree->setSelectionMode(QAbstractItemView::SingleSelection);
+    
+    // Populate tree with fixtures and channels
+    QList<Fixture*> fixtures = m_doc->fixtures();
+    foreach (Fixture* fixture, fixtures)
+    {
+        QTreeWidgetItem* fixtureItem = new QTreeWidgetItem(tree);
+        fixtureItem->setText(0, QString("%1 (#%2)").arg(fixture->name()).arg(fixture->id()));
+        fixtureItem->setData(0, Qt::UserRole, fixture->id());
+        fixtureItem->setData(1, Qt::UserRole, QLCChannel::invalid());
+        
+        for (quint32 ch = 0; ch < fixture->channels(); ch++)
+        {
+            const QLCChannel* channel = fixture->channel(ch);
+            if (channel != NULL)
+            {
+                QTreeWidgetItem* channelItem = new QTreeWidgetItem(fixtureItem);
+                channelItem->setText(0, channel->name());
+                channelItem->setText(1, QLCChannel::groupToString(channel->group()));
+                channelItem->setData(0, Qt::UserRole, fixture->id());
+                channelItem->setData(1, Qt::UserRole, ch);
+                
+                // Highlight channels with preset capabilities
+                if (channel->capabilities().size() > 0)
+                {
+                    bool hasPresets = false;
+                    foreach (QLCCapability* cap, channel->capabilities())
+                    {
+                        if (cap->presetType() != QLCCapability::None)
+                        {
+                            hasPresets = true;
+                            break;
+                        }
+                    }
+                    if (hasPresets)
+                    {
+                        QFont font = channelItem->font(0);
+                        font.setBold(true);
+                        channelItem->setFont(0, font);
+                        channelItem->setFont(1, font);
+                    }
+                }
+            }
+        }
+        
+        fixtureItem->setExpanded(false);
+    }
+    
+    // Select current preset source if set
+    if (m_cngPresetFixtureId != Fixture::invalidId())
+    {
+        for (int i = 0; i < tree->topLevelItemCount(); i++)
+        {
+            QTreeWidgetItem* fixtureItem = tree->topLevelItem(i);
+            if (fixtureItem->data(0, Qt::UserRole).toUInt() == m_cngPresetFixtureId)
+            {
+                for (int j = 0; j < fixtureItem->childCount(); j++)
+                {
+                    QTreeWidgetItem* channelItem = fixtureItem->child(j);
+                    if (channelItem->data(1, Qt::UserRole).toUInt() == m_cngPresetChannelIdx)
+                    {
+                        tree->setCurrentItem(channelItem);
+                        fixtureItem->setExpanded(true);
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    layout->addWidget(tree);
+    
+    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttonBox, SIGNAL(accepted()), &dialog, SLOT(accept()));
+    connect(buttonBox, SIGNAL(rejected()), &dialog, SLOT(reject()));
+    layout->addWidget(buttonBox);
+    
+    connect(tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)), &dialog, SLOT(accept()));
+    
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        QTreeWidgetItem* selected = tree->currentItem();
+        if (selected != NULL && selected->parent() != NULL) // Must be a channel item
+        {
+            m_cngPresetFixtureId = selected->data(0, Qt::UserRole).toUInt();
+            m_cngPresetChannelIdx = selected->data(1, Qt::UserRole).toUInt();
+            
+            // Update label
+            Fixture* fixture = m_doc->fixture(m_cngPresetFixtureId);
+            if (fixture != NULL)
+            {
+                const QLCChannel* channel = fixture->channel(m_cngPresetChannelIdx);
+                if (channel != NULL)
+                {
+                    m_cngPresetLabel->setText(tr("Source: %1 (#%2) - %3")
+                        .arg(fixture->name())
+                        .arg(fixture->id())
+                        .arg(channel->name()));
+                }
+            }
+        }
+    }
+}
+
 /*****************************************************************************
  * Playback page
  *****************************************************************************/
@@ -871,6 +1023,9 @@ void VCSliderProperties::accept()
         m_slider->setClickAndGoType(ClickAndGoWidget::CMY);
     else if (m_cngPresetCheck->isChecked())
         m_slider->setClickAndGoType(ClickAndGoWidget::Preset);
+
+    /* Click & Go preset source */
+    m_slider->setClickAndGoPresetSource(m_cngPresetFixtureId, m_cngPresetChannelIdx);
 
     /* Playback page */
     m_slider->setPlaybackFunction(m_playbackFunctionId);

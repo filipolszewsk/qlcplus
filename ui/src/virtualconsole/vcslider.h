@@ -52,6 +52,8 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderCatchValues                  QStringLiteral("CatchValues")
 
 #define KXMLQLCVCSliderClickAndGoType QStringLiteral("ClickAndGoType")
+#define KXMLQLCVCSliderCngPresetFixture QStringLiteral("CngPresetFixture")
+#define KXMLQLCVCSliderCngPresetChannel QStringLiteral("CngPresetChannel")
 
 #define KXMLQLCVCSliderInvertedAppearance QStringLiteral("InvertedAppearance")
 
@@ -556,6 +558,23 @@ public:
      */
     ClickAndGoWidget* getClickAndGoWidget();
 
+    /**
+     * Set the preset source fixture and channel for Click & Go Preset mode.
+     * When set, this channel's capabilities will be used for the preset grid
+     * instead of the first level channel.
+     */
+    void setClickAndGoPresetSource(quint32 fixture, quint32 channel);
+
+    /**
+     * Get the preset source fixture ID for Click & Go Preset mode
+     */
+    quint32 clickAndGoPresetFixture() const;
+
+    /**
+     * Get the preset source channel index for Click & Go Preset mode
+     */
+    quint32 clickAndGoPresetChannel() const;
+
 protected:
     void setClickAndGoWidgetFromLevel(uchar level);
 
@@ -571,6 +590,8 @@ protected:
     QMenu *m_menu;
     ClickAndGoWidget *m_cngWidget;
     QColor m_cngRGBvalue;
+    quint32 m_cngPresetFixture;
+    quint32 m_cngPresetChannel;
 
     /*********************************************************************
      * Override reset button

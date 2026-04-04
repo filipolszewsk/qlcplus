@@ -133,8 +133,13 @@ protected slots:
     /** Callback for monitoring enable */
     void slotMonitorCheckClicked(bool checked);
 
+    /** Callback for preset source channel choose button */
+    void slotChoosePresetChannel();
+
 protected:
     InputSelectionWidget *m_ovrResetSelWidget;
+    quint32 m_cngPresetFixtureId;
+    quint32 m_cngPresetChannelIdx;
 
     /*************************************************************************
      * Playback page

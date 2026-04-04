@@ -100,6 +100,8 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     , m_externalMovement(false)
     , m_widgetMode(WSlider)
     , m_cngType(ClickAndGoWidget::None)
+    , m_cngPresetFixture(Fixture::invalidId())
+    , m_cngPresetChannel(QLCChannel::invalid())
     , m_isOverriding(false)
     , m_lastInputValue(-1)
 {
@@ -274,6 +276,7 @@ bool VCSlider::copyFrom(const VCWidget* widget)
 
     /* Copy Click & Go feature */
     setClickAndGoType(slider->clickAndGoType());
+    setClickAndGoPresetSource(slider->clickAndGoPresetFixture(), slider->clickAndGoPresetChannel());
 
     /* Copy mode & current value */
     setSliderMode(slider->sliderMode());
@@ -665,6 +668,13 @@ void VCSlider::slotFixtureRemoved(quint32 fxi_id)
         if (it.value().fixture == fxi_id)
             it.remove();
     }
+
+    // Clear preset source if it references the removed fixture
+    if (m_cngPresetFixture == fxi_id)
+    {
+        m_cngPresetFixture = Fixture::invalidId();
+        m_cngPresetChannel = QLCChannel::invalid();
+    }
 }
 
 void VCSlider::slotMonitorDMXValueChanged(int value)
@@ -762,21 +772,56 @@ ClickAndGoWidget::ClickAndGo VCSlider::clickAndGoType() const
     return m_cngType;
 }
 
+void VCSlider::setClickAndGoPresetSource(quint32 fixture, quint32 channel)
+{
+    m_cngPresetFixture = fixture;
+    m_cngPresetChannel = channel;
+}
+
+quint32 VCSlider::clickAndGoPresetFixture() const
+{
+    return m_cngPresetFixture;
+}
+
+quint32 VCSlider::clickAndGoPresetChannel() const
+{
+    return m_cngPresetChannel;
+}
+
 void VCSlider::setupClickAndGoWidget()
 {
     if (m_cngWidget != NULL)
     {
         qDebug() << Q_FUNC_INFO << "Level channel: " << m_levelChannels.size() << "type: " << m_cngType;
-        if (m_cngType == ClickAndGoWidget::Preset && m_levelChannels.size() > 0)
+        if (m_cngType == ClickAndGoWidget::Preset)
         {
-            LevelChannel lChan = m_levelChannels.first();
-            Fixture *fxi = m_doc->fixture(lChan.fixture);
-            if (fxi != NULL)
+            const QLCChannel *chan = NULL;
+            
+            // Use preset source override if set
+            if (m_cngPresetFixture != Fixture::invalidId())
             {
-                const QLCChannel *chan = fxi->channel(lChan.channel);
+                Fixture *fxi = m_doc->fixture(m_cngPresetFixture);
+                if (fxi != NULL)
+                    chan = fxi->channel(m_cngPresetChannel);
+            }
+            // Fall back to first level channel if no preset source is set
+            else if (m_levelChannels.size() > 0)
+            {
+                LevelChannel lChan = m_levelChannels.first();
+                Fixture *fxi = m_doc->fixture(lChan.fixture);
+                if (fxi != NULL)
+                    chan = fxi->channel(lChan.channel);
+            }
+            
+            if (chan != NULL)
+            {
                 m_cngWidget->setType(m_cngType, chan);
                 m_cngWidget->setLevelLowLimit(this->levelLowLimit());
                 m_cngWidget->setLevelHighLimit(this->levelHighLimit());
+            }
+            else
+            {
+                m_cngWidget->setType(m_cngType, NULL);
             }
         }
         else
@@ -1700,6 +1745,13 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
                 setClickAndGoType(ClickAndGoWidget::stringToClickAndGoType(str));
             }
 
+            if (mAttrs.hasAttribute(KXMLQLCVCSliderCngPresetFixture))
+            {
+                quint32 fixture = mAttrs.value(KXMLQLCVCSliderCngPresetFixture).toUInt();
+                quint32 channel = mAttrs.value(KXMLQLCVCSliderCngPresetChannel).toUInt();
+                setClickAndGoPresetSource(fixture, channel);
+            }
+
             if (mAttrs.hasAttribute(KXMLQLCVCSliderLevelMonitor))
             {
                 if (mAttrs.value(KXMLQLCVCSliderLevelMonitor).toString() == "false")
@@ -1875,6 +1927,13 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
     /* Click And Go type */
     str = ClickAndGoWidget::clickAndGoTypeToString(m_cngType);
     doc->writeAttribute(KXMLQLCVCSliderClickAndGoType, str);
+
+    /* Click And Go preset source */
+    if (m_cngPresetFixture != Fixture::invalidId())
+    {
+        doc->writeAttribute(KXMLQLCVCSliderCngPresetFixture, QString::number(m_cngPresetFixture));
+        doc->writeAttribute(KXMLQLCVCSliderCngPresetChannel, QString::number(m_cngPresetChannel));
+    }
 
     /* Monitor channels */
     if (sliderMode() == Level)
