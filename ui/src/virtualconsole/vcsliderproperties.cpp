@@ -29,13 +29,12 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QAction>
-#include <QVBoxLayout>
-#include <QDialogButtonBox>
 
 #include "qlccapability.h"
 #include "qlcchannel.h"
 
 #include "inputselectionwidget.h"
+#include "channelsselection.h"
 #include "vcsliderproperties.h"
 #include "functionselection.h"
 #include "vcslider.h"
@@ -714,102 +713,22 @@ void VCSliderProperties::slotMonitorCheckClicked(bool checked)
 
 void VCSliderProperties::slotChoosePresetChannel()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Choose Preset Source Channel"));
-    dialog.resize(400, 300);
-    
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    
-    QTreeWidget *tree = new QTreeWidget(&dialog);
-    tree->setHeaderLabels(QStringList() << tr("Fixture") << tr("Channel"));
-    tree->setRootIsDecorated(true);
-    tree->setSelectionMode(QAbstractItemView::SingleSelection);
-    
-    // Populate tree with fixtures and channels
-    QList<Fixture*> fixtures = m_doc->fixtures();
-    foreach (Fixture* fixture, fixtures)
-    {
-        QTreeWidgetItem* fixtureItem = new QTreeWidgetItem(tree);
-        fixtureItem->setText(0, QString("%1 (#%2)").arg(fixture->name()).arg(fixture->id()));
-        fixtureItem->setData(0, Qt::UserRole, fixture->id());
-        fixtureItem->setData(1, Qt::UserRole, QLCChannel::invalid());
-        
-        for (quint32 ch = 0; ch < fixture->channels(); ch++)
-        {
-            const QLCChannel* channel = fixture->channel(ch);
-            if (channel != NULL)
-            {
-                QTreeWidgetItem* channelItem = new QTreeWidgetItem(fixtureItem);
-                channelItem->setText(0, channel->name());
-                channelItem->setText(1, QLCChannel::groupToString(channel->group()));
-                channelItem->setData(0, Qt::UserRole, fixture->id());
-                channelItem->setData(1, Qt::UserRole, ch);
-                
-                // Highlight channels with preset capabilities
-                if (channel->capabilities().size() > 0)
-                {
-                    bool hasPresets = false;
-                    foreach (QLCCapability* cap, channel->capabilities())
-                    {
-                        if (cap->presetType() != QLCCapability::None)
-                        {
-                            hasPresets = true;
-                            break;
-                        }
-                    }
-                    if (hasPresets)
-                    {
-                        QFont font = channelItem->font(0);
-                        font.setBold(true);
-                        channelItem->setFont(0, font);
-                        channelItem->setFont(1, font);
-                    }
-                }
-            }
-        }
-        
-        fixtureItem->setExpanded(false);
-    }
-    
-    // Select current preset source if set
+    // Pre-select the currently assigned preset source channel
+    QList<SceneValue> current;
     if (m_cngPresetFixtureId != Fixture::invalidId())
+        current.append(SceneValue(m_cngPresetFixtureId, m_cngPresetChannelIdx, 0));
+
+    ChannelsSelection cs(m_doc, this, ChannelsSelection::NormalMode);
+    cs.setChannelsList(current);
+
+    if (cs.exec() == QDialog::Accepted)
     {
-        for (int i = 0; i < tree->topLevelItemCount(); i++)
+        QList<SceneValue> sel = cs.channelsList();
+        if (!sel.isEmpty())
         {
-            QTreeWidgetItem* fixtureItem = tree->topLevelItem(i);
-            if (fixtureItem->data(0, Qt::UserRole).toUInt() == m_cngPresetFixtureId)
-            {
-                for (int j = 0; j < fixtureItem->childCount(); j++)
-                {
-                    QTreeWidgetItem* channelItem = fixtureItem->child(j);
-                    if (channelItem->data(1, Qt::UserRole).toUInt() == m_cngPresetChannelIdx)
-                    {
-                        tree->setCurrentItem(channelItem);
-                        fixtureItem->setExpanded(true);
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-    }
-    
-    layout->addWidget(tree);
-    
-    QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    connect(buttonBox, SIGNAL(accepted()), &dialog, SLOT(accept()));
-    connect(buttonBox, SIGNAL(rejected()), &dialog, SLOT(reject()));
-    layout->addWidget(buttonBox);
-    
-    connect(tree, SIGNAL(itemDoubleClicked(QTreeWidgetItem*,int)), &dialog, SLOT(accept()));
-    
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        QTreeWidgetItem* selected = tree->currentItem();
-        if (selected != NULL && selected->parent() != NULL) // Must be a channel item
-        {
-            m_cngPresetFixtureId = selected->data(0, Qt::UserRole).toUInt();
-            m_cngPresetChannelIdx = selected->data(1, Qt::UserRole).toUInt();
+            // Take the first selected channel (single selection behavior)
+            m_cngPresetFixtureId = sel[0].fxi;
+            m_cngPresetChannelIdx = sel[0].channel;
             
             // Update label
             Fixture* fixture = m_doc->fixture(m_cngPresetFixtureId);
