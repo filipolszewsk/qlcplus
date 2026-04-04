@@ -1215,39 +1215,49 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
         // Check if per-fixture mapping mode is ENABLED and there are mappings for this fixture
         bool usePerDefinitionMapping = false;
+        bool hasAutoMapping = false;
         if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL && m_runAlgorithm != NULL)
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
             QList<ChannelMapping> mappings = m_fixtureDefChannelMap.value(defKey);
-            
-            // Iterate through ALL channel mappings for this fixture type
+            int paramCount = m_runAlgorithm->paramCount();
+
             foreach (const ChannelMapping &mapping, mappings)
             {
                 if (mapping.channelName.isEmpty())
-                    continue; // Skip "Auto" mappings
-                
-                // Find the channel index by name
+                {
+                    // "Auto" entry: use its offset to select the source row for the
+                    // standard ControlMode path (RGB/RGBW/Dimmer/…) that runs below.
+                    // The last Auto entry wins if there are multiple.
+                    int sourceRow = scriptRow * paramCount + mapping.valueIndex;
+                    if (sourceRow >= 0 && sourceRow < map.count() && pt.x() < map[sourceRow].count())
+                        col = map[sourceRow][pt.x()];
+                    hasAutoMapping = true;
+                    continue;
+                }
+
+                // Named channel: append it with its own offset value
                 quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx != QLCChannel::invalid())
                 {
-                    // MULTIPLY APPROACH: scriptRow = physicalRow × paramCount + offset
-                    int paramCount = m_runAlgorithm->paramCount();
-                    int offset = mapping.valueIndex; // Parameter offset (0,1,2...)
+                    int offset = mapping.valueIndex;
                     int sourceRow = scriptRow * paramCount + offset;
-                    
-                    uint sourceCol = col; // Default to current position's color
-                    
-                    // Read from calculated row
+
+                    uint sourceCol = col;
                     if (sourceRow >= 0 && sourceRow < map.count() && pt.x() < map[sourceRow].count())
-                    {
                         sourceCol = map[sourceRow][pt.x()];
-                    }
-                    
+
                     channelList.append(channelIdx);
                     valueList.append(rgbToGrey(sourceCol));
                     usePerDefinitionMapping = true;
                 }
             }
+
+            // If there was an Auto entry, let the standard ControlMode path below
+            // handle the RGB/RGBW/Dimmer channels using the updated col.
+            // Named channels (e.g. a separate Dimmer offset) are already in channelList.
+            if (hasAutoMapping)
+                usePerDefinitionMapping = false;
         }
 
         if (!usePerDefinitionMapping && m_controlMode == ControlModeNone)
