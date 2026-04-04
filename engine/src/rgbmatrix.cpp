@@ -69,6 +69,7 @@
 
 #define KXMLQLCRGBMatrixEnablePerFixtureMapping     QStringLiteral("EnablePerFixtureMapping")
 #define KXMLQLCRGBMatrixSelectedRows                QStringLiteral("SelectedRows")
+#define KXMLQLCRGBMatrixOverrideHTP                 QStringLiteral("OverrideHTP")
 
 /****************************************************************************
  * Initialization
@@ -77,6 +78,7 @@
 RGBMatrix::RGBMatrix(Doc *doc)
     : Function(doc, Function::RGBMatrixType)
     , m_dimmerControl(false)
+    , m_overrideHTP(false)
     , m_fixtureGroupID(FixtureGroup::invalidId())
     , m_group(NULL)
     , m_requestEngineCreation(true)
@@ -154,6 +156,16 @@ bool RGBMatrix::dimmerControl() const
     return m_dimmerControl;
 }
 
+void RGBMatrix::setOverrideHTP(bool enable)
+{
+    m_overrideHTP = enable;
+}
+
+bool RGBMatrix::overrideHTP() const
+{
+    return m_overrideHTP;
+}
+
 /****************************************************************************
  * Copying
  ****************************************************************************/
@@ -184,6 +196,7 @@ bool RGBMatrix::copyFrom(const Function* function)
         return false;
 
     setDimmerControl(mtx->dimmerControl());
+    setOverrideHTP(mtx->overrideHTP());
     setFixtureGroup(mtx->fixtureGroup());
 
     m_rgbColors.clear();
@@ -695,6 +708,10 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             setDimmerControl(root.readElementText().toInt());
         }
+        else if (root.name() == KXMLQLCRGBMatrixOverrideHTP)
+        {
+            setOverrideHTP(root.readElementText().toInt() != 0);
+        }
         else if (root.name() == KXMLQLCRGBMatrixEnablePerFixtureMapping)
         {
             setEnablePerFixtureMapping(root.readElementText().toInt() != 0);
@@ -801,6 +818,10 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
     /* LEGACY - Dimmer Control */
     if (dimmerControl())
         doc->writeTextElement(KXMLQLCRGBMatrixDimmerControl, QString::number(dimmerControl()));
+
+    /* Override HTP */
+    if (m_overrideHTP)
+        doc->writeTextElement(KXMLQLCRGBMatrixOverrideHTP, QString::number(1));
 
     /* Colors */
     for (int i = 0; i < m_rgbColors.count(); i++)
@@ -1117,7 +1138,8 @@ FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 
     if (fader.isNull())
     {
         Universe::FaderPriority prio = (blendMode() == Universe::MaskBlend ||
-                                        blendMode() == Universe::SubtractiveBlend)
+                                        blendMode() == Universe::SubtractiveBlend ||
+                                        m_overrideHTP)
                                        ? Universe::Override
                                        : Universe::Auto;
         fader = universe->requestFader(prio);
@@ -1133,6 +1155,11 @@ FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 
 
 void RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
 {
+    if (m_overrideHTP)
+        fc->addFlag(FadeChannel::Override);
+    else
+        fc->removeFlag(FadeChannel::Override);
+
     fc->setStart(fc->current());
     fc->setTarget(value);
     fc->setElapsed(0);

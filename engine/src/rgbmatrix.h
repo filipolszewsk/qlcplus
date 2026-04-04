@@ -127,9 +127,15 @@ public:
     /** Get the matrix ability to control the dimmer channel */
     bool dimmerControl() const;
 
+    /** When enabled, the matrix writes all channels with forceLTP=true,
+     *  overriding even HTP channels regardless of their current value. */
+    void setOverrideHTP(bool enable);
+    bool overrideHTP() const;
+
 private:
     // LEGACY: replaced by ControlModeDimmer
     bool m_dimmerControl;
+    bool m_overrideHTP;
 
     /*********************************************************************
      * Copying

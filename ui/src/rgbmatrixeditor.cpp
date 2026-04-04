@@ -269,6 +269,11 @@ void RGBMatrixEditor::init()
     m_enablePerFixtureMappingCheck = new QCheckBox(tr("Enable Multi-Value Mapping"));
     m_enablePerFixtureMappingCheck->setChecked(m_matrix->enablePerFixtureMapping());
     m_enablePerFixtureMappingCheck->setToolTip(tr("Enable per-fixture-type parameter mapping (for scripts with multiple rows/parameters)"));
+
+    // Create Override HTP checkbox
+    m_overrideHTPCb = new QCheckBox(tr("Override HTP"));
+    m_overrideHTPCb->setChecked(m_matrix->overrideHTP());
+    m_overrideHTPCb->setToolTip(tr("Force this RGB Matrix to override HTP channels – the script value always wins, even if the channel is set to a higher value from another source"));
     
     // Create per-definition channel mapping UI
     m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
@@ -284,14 +289,18 @@ void RGBMatrixEditor::init()
         // Row 0: Run Order (col 0) + Direction (col 1)
         // Row 1: Row Filter (col 0-1, span 2)
         // Row 2: Enable Multi-Value checkbox (col 0-1, span 2)
-        // Row 3: Per-Fixture Channel Mapping (col 0-1, span 2)
+        // Row 3: Override HTP checkbox (col 0-1, span 2)
+        // Row 4: Per-Fixture Channel Mapping (col 0-1, span 2)
         bottomGrid->addWidget(m_rowSelectionGroup, 1, 0, 1, 2);
         bottomGrid->addWidget(m_enablePerFixtureMappingCheck, 2, 0, 1, 2);
-        bottomGrid->addWidget(m_channelMappingGroup, 3, 0, 1, 2);
+        bottomGrid->addWidget(m_overrideHTPCb, 3, 0, 1, 2);
+        bottomGrid->addWidget(m_channelMappingGroup, 4, 0, 1, 2);
     }
     
     connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotEnablePerFixtureMappingToggled(bool)));
+    connect(m_overrideHTPCb, SIGNAL(clicked()),
+            this, SLOT(slotOverrideHTPClicked()));
     
     updateChannelMappingUI();
     updateRowSelection();
@@ -1276,6 +1285,11 @@ void RGBMatrixEditor::slotDimmerControlClicked()
     m_matrix->setDimmerControl(m_dimmerControlCb->isChecked());
     if (m_dimmerControlCb->isChecked() == false)
         m_dimmerControlCb->setEnabled(false);
+}
+
+void RGBMatrixEditor::slotOverrideHTPClicked()
+{
+    m_matrix->setOverrideHTP(m_overrideHTPCb->isChecked());
 }
 
 void RGBMatrixEditor::slotFadeInChanged(int ms)
