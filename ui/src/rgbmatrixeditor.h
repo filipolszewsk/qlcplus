@@ -143,6 +143,7 @@ private:
         QHBoxLayout *layout;
         QComboBox *channelCombo;
         QComboBox *valueIndexCombo;
+        QComboBox *headModeCombo;   // "All Heads" / "Individual Heads" (NULL if fixture has 1 head)
         QPushButton *removeButton;  // NULL for first row (cannot remove last row)
     };
     
@@ -165,6 +166,7 @@ private:
                                const RGBMatrix::ChannelMapping &mapping, bool isFirstRow);
     void saveAllChannelMappings(const QString &fixtureDefKey);
     QString getFixtureDefKey(const QLCFixtureDef *def);
+    int getFixtureHeadCount(const QString &fixtureDefKey);
 
 private:
 

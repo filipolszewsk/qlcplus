@@ -1882,6 +1882,32 @@ QString RGBMatrixEditor::getFixtureDefKey(const QLCFixtureDef *def)
     return QString("%1|%2").arg(def->manufacturer()).arg(def->model());
 }
 
+int RGBMatrixEditor::getFixtureHeadCount(const QString &fixtureDefKey)
+{
+    // Parse fixtureDefKey to get manufacturer and model
+    QStringList parts = fixtureDefKey.split("|");
+    if (parts.size() != 2)
+        return 1;  // Default to single head
+    
+    QString manufacturer = parts[0];
+    QString model = parts[1];
+    
+    // Find the fixture definition
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef(manufacturer, model);
+    if (def == NULL)
+        return 1;
+    
+    // Find the fixture mode (use the first mode as representative)
+    if (def->modes().isEmpty())
+        return 1;
+        
+    QLCFixtureMode *mode = def->modes().first();
+    if (mode == NULL)
+        return 1;
+    
+    return mode->heads().size();
+}
+
 void RGBMatrixEditor::clearChannelMappingUI()
 {
     // NAJPROSTSZE ROZWIĄZANIE: Usuń CAŁY groupbox i utwórz nowy!
@@ -1959,6 +1985,29 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     }
     row.valueIndexCombo->setCurrentIndex(mapping.valueIndex);
     
+    // Head Mode combo (only if fixture has multiple heads)
+    int headCount = getFixtureHeadCount(widget.fixtureDefKey);
+    if (headCount > 1)
+    {
+        row.headModeCombo = new QComboBox();
+        row.headModeCombo->setProperty("fixtureDefKey", widget.fixtureDefKey);
+        row.headModeCombo->setProperty("rowIndex", widget.rows.size());
+        row.headModeCombo->addItem(tr("Individual Heads"), "Individual");
+        row.headModeCombo->addItem(tr("All Heads"), "All");
+        
+        // Set current value
+        QString currentMode = mapping.headMode.isEmpty() ? "Individual" : mapping.headMode;
+        int modeIdx = row.headModeCombo->findData(currentMode);
+        if (modeIdx >= 0)
+            row.headModeCombo->setCurrentIndex(modeIdx);
+            
+        connect(row.headModeCombo, SIGNAL(activated(int)), this, SLOT(slotChannelMappingChanged(int)));
+    }
+    else
+    {
+        row.headModeCombo = NULL;  // Single head fixture - no choice needed
+    }
+    
     // Remove button (ONLY for non-first rows)
     if (!isFirstRow)
     {
@@ -1991,6 +2040,15 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
         row.layout->addWidget(new QLabel(tr("Offset:")));
     }
     row.layout->addWidget(row.valueIndexCombo);
+    
+    if (row.headModeCombo)
+    {
+        if (!isFirstRow)
+        {
+            row.layout->addWidget(new QLabel(tr("Head Mode:")));
+        }
+        row.layout->addWidget(row.headModeCombo);
+    }
     
     if (row.removeButton)
     {
@@ -2221,6 +2279,7 @@ void RGBMatrixEditor::saveAllChannelMappings(const QString &fixtureDefKey)
         RGBMatrix::ChannelMapping m;
         m.channelName = row.channelCombo->currentData().toString();
         m.valueIndex = row.valueIndexCombo->currentData().toInt();
+        m.headMode = row.headModeCombo ? row.headModeCombo->currentData().toString() : "Individual";
         mappings.append(m);
     }
     

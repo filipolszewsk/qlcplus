@@ -15,6 +15,7 @@
 #include "EWIEGA46WW/moc_inputoutputmap.cpp"
 #include "EWIEGA46WW/moc_inputpatch.cpp"
 #include "EWIEGA46WW/moc_ioplugincache.cpp"
+#include "EWIEGA46WW/moc_licensemanager.cpp"
 #include "EWIEGA46WW/moc_mastertimer.cpp"
 #include "EWIEGA46WW/moc_monitorproperties.cpp"
 #include "EWIEGA46WW/moc_outputpatch.cpp"

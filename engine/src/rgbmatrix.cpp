@@ -66,6 +66,7 @@
 #define KXMLQLCRGBMatrixChannelMapping              QStringLiteral("ChannelMapping")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapName    QStringLiteral("ChannelName")
 #define KXMLQLCRGBMatrixFixtureDefChannelMapIndex   QStringLiteral("ValueIndex")
+#define KXMLQLCRGBMatrixFixtureDefChannelMapHeadMode QStringLiteral("HeadMode")
 
 #define KXMLQLCRGBMatrixEnablePerFixtureMapping     QStringLiteral("EnablePerFixtureMapping")
 #define KXMLQLCRGBMatrixSelectedRows                QStringLiteral("SelectedRows")
@@ -603,6 +604,7 @@ bool RGBMatrix::applySettingsFromJson(const QJsonObject &root, Doc *doc)
                     ChannelMapping cm;
                     cm.channelName = obj["channelName"].toString();
                     cm.valueIndex = obj["valueIndex"].toInt();
+                    cm.headMode = obj["headMode"].toString("Individual");
                     mappings.append(cm);
                 }
                 setFixtureDefChannelMappings(defKey, mappings);
@@ -730,7 +732,8 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
             // If old format (has ChannelName attribute), convert to new format
             if (!oldChannelName.isEmpty())
             {
-                mappings.append(ChannelMapping(oldChannelName, oldValueIndex));
+                QString oldHeadMode = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapHeadMode, "Individual").toString();
+                mappings.append(ChannelMapping(oldChannelName, oldValueIndex, oldHeadMode));
                 root.skipCurrentElement();
             }
             else
@@ -742,9 +745,10 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
                     {
                         QString channelName = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapName).toString();
                         int valueIndex = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapIndex).toInt();
+                        QString headMode = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapHeadMode, "Individual").toString();
                         
                         if (!channelName.isEmpty())
-                            mappings.append(ChannelMapping(channelName, valueIndex));
+                            mappings.append(ChannelMapping(channelName, valueIndex, headMode));
                         
                         root.skipCurrentElement();
                     }
@@ -876,6 +880,7 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
             doc->writeStartElement(KXMLQLCRGBMatrixChannelMapping);
             doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapName, mapping.channelName);
             doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapIndex, QString::number(mapping.valueIndex));
+            doc->writeAttribute(KXMLQLCRGBMatrixFixtureDefChannelMapHeadMode, mapping.headMode);
             doc->writeEndElement(); // </ChannelMapping>
         }
         
@@ -1171,6 +1176,29 @@ void RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
         fc->setFadeTime(fadeTime);
 }
 
+QLCPoint RGBMatrix::findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const
+{
+    QMapIterator<QLCPoint, GroupHead> it(grp->headsMap());
+    QLCPoint firstPos;
+    bool found = false;
+    
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.value().fxi == fixtureId)
+        {
+            if (!found || it.key().y() < firstPos.y() || 
+                (it.key().y() == firstPos.y() && it.key().x() < firstPos.x()))
+            {
+                firstPos = it.key();
+                found = true;
+            }
+        }
+    }
+    
+    return found ? firstPos : QLCPoint();
+}
+
 void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QList<Universe *> universes)
 {
     uint fadeTime = (overrideFadeInSpeed() == defaultSpeed()) ? fadeInSpeed() : overrideFadeInSpeed();
@@ -1209,7 +1237,25 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         if (map.isEmpty() || pt.x() >= map[0].count())
             continue;
 
-        uint col = map[scriptRow < map.count() ? scriptRow : 0][pt.x()];
+        // Check if this fixture should use "All Heads" mode
+        QLCPoint scriptPos = pt;  // Default: use individual head position
+        if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL)
+        {
+            QString defKey = getFixtureDefKey(fxi->fixtureDef());
+            QList<ChannelMapping> mappings = m_fixtureDefChannelMap.value(defKey);
+            
+            // Check if any mapping has headMode="All"
+            foreach (const ChannelMapping &mapping, mappings)
+            {
+                if (mapping.headMode == "All")
+                {
+                    scriptPos = findFirstHeadPosition(grp, grpHead.fxi);
+                    break;  // Use first head position for all heads of this fixture
+                }
+            }
+        }
+
+        uint col = map[scriptRow < map.count() ? scriptRow : 0][scriptPos.x()];
         QVector<quint32> channelList;
         QVector<uchar> valueList;
 
@@ -1230,8 +1276,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     // standard ControlMode path (RGB/RGBW/Dimmer/…) that runs below.
                     // The last Auto entry wins if there are multiple.
                     int sourceRow = scriptRow * paramCount + mapping.valueIndex;
-                    if (sourceRow >= 0 && sourceRow < map.count() && pt.x() < map[sourceRow].count())
-                        col = map[sourceRow][pt.x()];
+                    if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
+                        col = map[sourceRow][scriptPos.x()];
                     hasAutoMapping = true;
                     continue;
                 }
@@ -1244,8 +1290,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     int sourceRow = scriptRow * paramCount + offset;
 
                     uint sourceCol = col;
-                    if (sourceRow >= 0 && sourceRow < map.count() && pt.x() < map[sourceRow].count())
-                        sourceCol = map[sourceRow][pt.x()];
+                    if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
+                        sourceCol = map[sourceRow][scriptPos.x()];
 
                     channelList.append(channelIdx);
                     valueList.append(rgbToGrey(sourceCol));

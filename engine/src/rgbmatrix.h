@@ -38,6 +38,7 @@
   #include "rgbscript.h"
 #endif
 #include "function.h"
+#include "qlcpoint.h"
 
 class FixtureGroup;
 class GenericFader;
@@ -280,6 +281,9 @@ private:
     FadeChannel *getFader(Universe *universe, quint32 fixtureID, quint32 channel);
     void updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime);
 
+    /** Find the first (top-left) position of a fixture in the group */
+    QLCPoint findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const;
+
     /** Update FadeChannels when $map has changed since last time */
     void updateMapChannels(const RGBMap& map, const FixtureGroup* grp, QList<Universe *> universes);
 
@@ -351,14 +355,15 @@ private:
      * Per-Definition Channel Mapping (Multi-Channel Support)
      *************************************************************************/
 public:
-    /** Structure for a single channel mapping (channel + offset) */
+    /** Structure for a single channel mapping (channel + offset + head mode) */
     struct ChannelMapping {
         QString channelName;  // Which channel to use (empty = Auto)
         int valueIndex;       // Which offset from multi-value array to use
+        QString headMode;     // "All" or "Individual" (default: "Individual")
         
-        ChannelMapping() : valueIndex(0) {}
-        ChannelMapping(const QString &ch, int idx) 
-            : channelName(ch), valueIndex(idx) {}
+        ChannelMapping() : valueIndex(0), headMode("Individual") {}
+        ChannelMapping(const QString &ch, int idx, const QString &hm = "Individual") 
+            : channelName(ch), valueIndex(idx), headMode(hm) {}
     };
 
     /** Set all channel mappings for a specific fixture definition */
