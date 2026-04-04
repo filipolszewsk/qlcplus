@@ -1265,20 +1265,22 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
         if (!usePerDefinitionMapping && m_controlMode == ControlModeRgb)
         {
-            channelList = head.rgbChannels();
+            QVector<quint32> rgbCh = head.rgbChannels();
 
-            if (channelList.size() == 3)
+            if (rgbCh.size() == 3)
             {
+                channelList += rgbCh;
                 valueList.append(qRed(col));
                 valueList.append(qGreen(col));
                 valueList.append(qBlue(col));
             }
             else
             {
-                channelList = head.cmyChannels();
+                rgbCh = head.cmyChannels();
 
-                if (channelList.size() == 3)
+                if (rgbCh.size() == 3)
                 {
+                    channelList += rgbCh;
                     // CMY color mixing
                     QColor cmyCol(col);
                     valueList.append(cmyCol.cyan());
@@ -1290,25 +1292,27 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         else if (!usePerDefinitionMapping && m_controlMode == ControlModeRgbw)
         {
             // RGBW mode: RGB from bits 0-23, White (W) from alpha bits 24-31
-            channelList = head.rgbwChannels();
+            QVector<quint32> rgbwCh = head.rgbwChannels();
 
-            if (channelList.size() >= 3)
+            if (rgbwCh.size() >= 3)
             {
+                channelList += rgbwCh;
                 valueList.append(qRed(col));
                 valueList.append(qGreen(col));
                 valueList.append(qBlue(col));
-                if (channelList.size() == 4)
+                if (rgbwCh.size() == 4)
                     valueList.append(qAlpha(col));  // W channel packed in alpha bits by script
             }
         }
         else if (!usePerDefinitionMapping && m_controlMode == ControlModeShutter)
         {
-            channelList = head.shutterChannels();
+            QVector<quint32> shutterCh = head.shutterChannels();
 
-            if (channelList.size())
+            if (shutterCh.size())
             {
                 // make sure only one channel is in the list
-                channelList.resize(1);
+                shutterCh.resize(1);
+                channelList += shutterCh;
                 valueList.append(rgbToGrey(col));
             }
         }
