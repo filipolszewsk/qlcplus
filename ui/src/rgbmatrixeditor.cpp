@@ -288,13 +288,12 @@ void RGBMatrixEditor::init()
         // gridLayout_6 structure:
         // Row 0: Run Order (col 0) + Direction (col 1)
         // Row 1: Row Filter (col 0-1, span 2)
-        // Row 2: Enable Multi-Value checkbox (col 0-1, span 2)
-        // Row 3: Override HTP checkbox (col 0-1, span 2)
-        // Row 4: Per-Fixture Channel Mapping (col 0-1, span 2)
+        // Row 2: Enable Multi-Value (col 0) | Override HTP (col 1)
+        // Row 3: Per-Fixture Channel Mapping (col 0-1, span 2)
         bottomGrid->addWidget(m_rowSelectionGroup, 1, 0, 1, 2);
-        bottomGrid->addWidget(m_enablePerFixtureMappingCheck, 2, 0, 1, 2);
-        bottomGrid->addWidget(m_overrideHTPCb, 3, 0, 1, 2);
-        bottomGrid->addWidget(m_channelMappingGroup, 4, 0, 1, 2);
+        bottomGrid->addWidget(m_enablePerFixtureMappingCheck, 2, 0);
+        bottomGrid->addWidget(m_overrideHTPCb, 2, 1);
+        bottomGrid->addWidget(m_channelMappingGroup, 3, 0, 1, 2);
     }
     
     connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
