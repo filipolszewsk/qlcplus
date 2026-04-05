@@ -40,6 +40,7 @@
 #include <QSize>
 #include <QMenu>
 #include <QList>
+#include <QPair>
 
 #include "qlcinputsource.h"
 #include "qlcfile.h"
@@ -268,6 +269,84 @@ bool VCWidget::copyFrom(const VCWidget* widget)
     m_page = widget->m_page;
 
     return true;
+}
+
+/*****************************************************************************
+ * Selective paste
+ *****************************************************************************/
+
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCWidget::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups;
+    groups << qMakePair(PasteSize,         tr("Size"));
+    groups << qMakePair(PasteCaption,      tr("Caption"));
+    groups << qMakePair(PasteAppearance,   tr("Appearance (colors, font, style)"));
+    groups << qMakePair(PasteInputSources, tr("Input Sources"));
+    return groups;
+}
+
+void VCWidget::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    if (source == nullptr)
+        return;
+
+    if (flags & PasteSize)
+        resize(source->size());
+
+    if (flags & PasteCaption)
+        setCaption(source->caption());
+
+    if (flags & PasteAppearance)
+    {
+        setBackgroundImage(source->m_backgroundImage);
+
+        m_hasCustomBackgroundColor = source->m_hasCustomBackgroundColor;
+        if (m_hasCustomBackgroundColor)
+            setBackgroundColor(source->backgroundColor());
+        else
+            resetBackgroundColor();
+
+        m_hasCustomForegroundColor = source->m_hasCustomForegroundColor;
+        if (m_hasCustomForegroundColor)
+            setForegroundColor(source->foregroundColor());
+        else
+            resetForegroundColor();
+
+        m_hasCustomFont = source->m_hasCustomFont;
+        if (m_hasCustomFont)
+            setFont(source->font());
+        else
+            resetFont();
+
+        m_frameStyle = source->m_frameStyle;
+        update();
+    }
+
+    if (flags & PasteInputSources)
+    {
+        m_inputs.clear();
+        QHashIterator<quint8, QSharedPointer<QLCInputSource>> it(source->m_inputs);
+        while (it.hasNext())
+        {
+            it.next();
+            quint8 id = it.key();
+            QSharedPointer<QLCInputSource> src(new QLCInputSource(
+                it.value()->universe(), it.value()->channel()));
+            src->setFeedbackValue(QLCInputFeedback::LowerValue,
+                it.value()->feedbackValue(QLCInputFeedback::LowerValue));
+            src->setFeedbackValue(QLCInputFeedback::UpperValue,
+                it.value()->feedbackValue(QLCInputFeedback::UpperValue));
+            src->setFeedbackValue(QLCInputFeedback::MonitorValue,
+                it.value()->feedbackValue(QLCInputFeedback::MonitorValue));
+            src->setFeedbackExtraParams(QLCInputFeedback::LowerValue,
+                it.value()->feedbackExtraParams(QLCInputFeedback::LowerValue));
+            src->setFeedbackExtraParams(QLCInputFeedback::UpperValue,
+                it.value()->feedbackExtraParams(QLCInputFeedback::UpperValue));
+            src->setFeedbackExtraParams(QLCInputFeedback::MonitorValue,
+                it.value()->feedbackExtraParams(QLCInputFeedback::MonitorValue));
+            setInputSource(src, id);
+        }
+    }
 }
 
 /*****************************************************************************

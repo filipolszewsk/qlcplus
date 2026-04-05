@@ -668,6 +668,85 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCCueList::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Chaser Function"));
+    groups << qMakePair(PasteSpecific1, tr("Key Sequences"));
+    groups << qMakePair(PasteSpecific2, tr("Side Fader Mode"));
+    groups << qMakePair(PasteSpecific3, tr("Recording Settings"));
+    groups << qMakePair(PasteSpecific4, tr("Step Index Output"));
+    groups << qMakePair(PasteSpecific5, tr("Channel Columns"));
+    return groups;
+}
+
+void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCCueList* cuelist = qobject_cast<const VCCueList*>(source);
+    if (cuelist == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setChaser(cuelist->chaserID());
+
+    if (flags & PasteSpecific1)
+    {
+        setNextKeySequence(cuelist->nextKeySequence());
+        setPreviousKeySequence(cuelist->previousKeySequence());
+        setPlaybackKeySequence(cuelist->playbackKeySequence());
+        setStopKeySequence(cuelist->stopKeySequence());
+        setRecordKeySequence(cuelist->recordKeySequence());
+        setOverwriteKeySequence(cuelist->overwriteKeySequence());
+        setDeleteKeySequence(cuelist->deleteKeySequence());
+        setRenameKeySequence(cuelist->renameKeySequence());
+        setNextPrevControlsSecondary(cuelist->nextPrevControlsSecondary());
+    }
+
+    if (flags & PasteSpecific2)
+        setSideFaderMode(cuelist->sideFaderMode());
+
+    if (flags & PasteSpecific3)
+    {
+        setRecordAllChannels(cuelist->recordAllChannels());
+        setRecordNonZeroOnly(cuelist->recordNonZeroOnly());
+        setRecordChannelsMask(cuelist->recordChannelsMask());
+        setRecordCuePrefix(cuelist->recordCuePrefix());
+        setAutoStartInOperate(cuelist->autoStartInOperate());
+        setHideButtons(cuelist->hideButtons());
+    }
+
+    if (flags & PasteSpecific4)
+    {
+        setStepIndexOutputEnabled(cuelist->stepIndexOutputEnabled());
+        setStepIndexOutputFixture(cuelist->stepIndexOutputFixture());
+        setStepIndexOutputChannel(cuelist->stepIndexOutputChannel());
+    }
+
+    if (flags & PasteSpecific5)
+    {
+        m_channelColumns = cuelist->m_channelColumns;
+        m_showChannelColumns = cuelist->m_showChannelColumns;
+        if (m_showChannelColumns)
+        {
+            int colOffset = COL_NOTES + 1;
+            for (int i = 0; i < m_channelColumns.size(); i++)
+            {
+                ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+                delegate->setColumnInfo(&m_channelColumns[i]);
+                m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+            }
+            updateTreeHeader();
+            updateStepList();
+            applyColumnHiddenState();
+        }
+        m_hiddenFixedColumns = cuelist->m_hiddenFixedColumns;
+        applyFixedColumnHiddenState();
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Cue list
  *****************************************************************************/

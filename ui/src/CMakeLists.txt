@@ -160,6 +160,7 @@ add_library(${module_name}
     virtualconsole/vclabel.cpp virtualconsole/vclabel.h
     virtualconsole/vcmatrix.cpp virtualconsole/vcmatrix.h
     virtualconsole/vcmatrixcontrol.cpp virtualconsole/vcmatrixcontrol.h
+    virtualconsole/vcpastepropertiesdialog.cpp virtualconsole/vcpastepropertiesdialog.h
     virtualconsole/vcmatrixpresetselection.cpp virtualconsole/vcmatrixpresetselection.h virtualconsole/vcmatrixpresetselection.ui
     virtualconsole/vcmatrixproperties.cpp virtualconsole/vcmatrixproperties.h virtualconsole/vcmatrixproperties.ui
     virtualconsole/vcmultipatcheditor.cpp virtualconsole/vcmultipatcheditor.h virtualconsole/vcmultipatcheditor.ui

@@ -22,6 +22,7 @@
 #define VCWIDGET_H
 
 #include <QKeySequence>
+#include <QPair>
 #include <QWidget>
 #include "doc.h"
 
@@ -203,6 +204,33 @@ public:
 protected:
     /** Copy the contents for this widget from the given widget */
     virtual bool copyFrom(const VCWidget* widget);
+
+    /*********************************************************************
+     * Selective paste
+     *********************************************************************/
+public:
+    enum PastePropertyGroup
+    {
+        PasteSize         = (1 << 0),
+        PasteCaption      = (1 << 1),
+        PasteAppearance   = (1 << 2),
+        PasteInputSources = (1 << 3),
+        PasteSpecific0    = (1 << 8),
+        PasteSpecific1    = (1 << 9),
+        PasteSpecific2    = (1 << 10),
+        PasteSpecific3    = (1 << 11),
+        PasteSpecific4    = (1 << 12),
+        PasteSpecific5    = (1 << 13),
+        PasteSpecific6    = (1 << 14),
+        PasteSpecific7    = (1 << 15)
+    };
+    Q_DECLARE_FLAGS(PastePropertyGroups, PastePropertyGroup)
+
+    /** Return list of (flag, display-name) pairs for groups this widget supports */
+    virtual QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const;
+
+    /** Apply the property groups indicated by flags from source to this widget */
+    virtual void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags);
 
     /*********************************************************************
      * Background image
@@ -656,5 +684,7 @@ protected:
 };
 
 /** @} */
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(VCWidget::PastePropertyGroups)
 
 #endif

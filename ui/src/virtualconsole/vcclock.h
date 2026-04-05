@@ -186,6 +186,8 @@ private:
 public:
     VCWidget* createCopy(VCWidget* parent);
     bool copyFrom(const VCWidget *widget);
+    QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
+    void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
 
     /*********************************************************************
      * Properties

@@ -189,6 +189,54 @@ bool VCButton::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCButton::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Function"));
+    groups << qMakePair(PasteSpecific1, tr("Icon"));
+    groups << qMakePair(PasteSpecific2, tr("Key Sequence"));
+    groups << qMakePair(PasteSpecific3, tr("Action"));
+    groups << qMakePair(PasteSpecific4, tr("Startup Intensity"));
+    groups << qMakePair(PasteSpecific5, tr("Flash Settings"));
+    groups << qMakePair(PasteSpecific6, tr("Monitor Channels"));
+    return groups;
+}
+
+void VCButton::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCButton* button = qobject_cast<const VCButton*>(source);
+    if (button == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setFunction(button->function());
+    if (flags & PasteSpecific1)
+        setIconPath(button->iconPath());
+    if (flags & PasteSpecific2)
+        setKeySequence(button->keySequence());
+    if (flags & PasteSpecific3)
+    {
+        setAction(button->action());
+        setStopAllFadeOutTime(button->stopAllFadeTime());
+        m_state = button->m_state;
+    }
+    if (flags & PasteSpecific4)
+    {
+        enableStartupIntensity(button->isStartupIntensityEnabled());
+        setStartupIntensity(button->startupIntensity());
+    }
+    if (flags & PasteSpecific5)
+    {
+        m_flashForceLTP = button->flashForceLTP();
+        m_flashOverrides = button->flashOverrides();
+    }
+    if (flags & PasteSpecific6)
+        setMonitorChannelValues(button->monitorChannelValues());
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/

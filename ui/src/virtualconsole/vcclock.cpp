@@ -403,6 +403,32 @@ bool VCClock::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCClock::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Clock Type"));
+    groups << qMakePair(PasteSpecific1, tr("Key Sequences"));
+    return groups;
+}
+
+void VCClock::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCClock* clock = qobject_cast<const VCClock*>(source);
+    if (clock == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setClockType(clock->clockType());
+    if (flags & PasteSpecific1)
+    {
+        setPlayKeySequence(clock->playKeySequence());
+        setResetKeySequence(clock->resetKeySequence());
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/

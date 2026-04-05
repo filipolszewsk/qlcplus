@@ -292,6 +292,61 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCSlider::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Widget Style"));
+    groups << qMakePair(PasteSpecific1, tr("Level (limits & channels)"));
+    groups << qMakePair(PasteSpecific2, tr("Playback Function"));
+    groups << qMakePair(PasteSpecific3, tr("Appearance (display style, inverted)"));
+    groups << qMakePair(PasteSpecific4, tr("Click && Go"));
+    groups << qMakePair(PasteSpecific5, tr("Mode && Value"));
+    groups << qMakePair(PasteSpecific6, tr("Monitor Channels"));
+    groups << qMakePair(PasteSpecific7, tr("Flash Setting"));
+    return groups;
+}
+
+void VCSlider::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCSlider* slider = qobject_cast<const VCSlider*>(source);
+    if (slider == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setWidgetStyle(slider->widgetStyle());
+    if (flags & PasteSpecific1)
+    {
+        setLevelLowLimit(slider->levelLowLimit());
+        setLevelHighLimit(slider->levelHighLimit());
+        m_levelChannels = slider->m_levelChannels;
+    }
+    if (flags & PasteSpecific2)
+        m_playbackFunction = slider->m_playbackFunction;
+    if (flags & PasteSpecific3)
+    {
+        setValueDisplayStyle(slider->valueDisplayStyle());
+        setInvertedAppearance(slider->invertedAppearance());
+    }
+    if (flags & PasteSpecific4)
+    {
+        setClickAndGoType(slider->clickAndGoType());
+        setClickAndGoPresetSource(slider->clickAndGoPresetFixture(),
+                                  slider->clickAndGoPresetChannel());
+    }
+    if (flags & PasteSpecific5)
+    {
+        setSliderMode(slider->sliderMode());
+        setSliderValue(slider->sliderValue());
+    }
+    if (flags & PasteSpecific6)
+        setChannelsMonitorEnabled(slider->channelsMonitorEnabled());
+    if (flags & PasteSpecific7)
+        setPlaybackFlashEnable(slider->playbackFlashEnable());
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * GUI
  *****************************************************************************/

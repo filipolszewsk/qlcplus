@@ -278,6 +278,51 @@ bool VCXYPad::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCXYPad::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Fixtures && Groups"));
+    groups << qMakePair(PasteSpecific1, tr("Current Position"));
+    groups << qMakePair(PasteSpecific2, tr("Presets"));
+    return groups;
+}
+
+void VCXYPad::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCXYPad* xypad = qobject_cast<const VCXYPad*>(source);
+    if (xypad == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+    {
+        m_fixtures.clear();
+        m_fixtures = xypad->fixtures();
+        m_fixtureGroupID = xypad->m_fixtureGroupID;
+        m_selectedRows = xypad->m_selectedRows;
+        m_excludedColumns = xypad->m_excludedColumns;
+        m_columnRanges = xypad->m_columnRanges;
+    }
+
+    if (flags & PasteSpecific1)
+    {
+        m_area->setPosition(xypad->m_area->position());
+        m_vSlider->setValue(xypad->m_vSlider->value());
+        m_hSlider->setValue(xypad->m_hSlider->value());
+    }
+
+    if (flags & PasteSpecific2)
+    {
+        for (QHash<QWidget*, VCXYPadPreset*>::const_iterator it = xypad->m_presets.constBegin();
+             it != xypad->m_presets.constEnd(); ++it)
+        {
+            addPreset(*(it.value()));
+        }
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 QList<quint32> VCXYPad::referencedFunctions() const
 {
     QList<quint32> ids;

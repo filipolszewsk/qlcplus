@@ -1281,6 +1281,49 @@ bool VCFrame::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCFrame::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Header && Border"));
+    groups << qMakePair(PasteSpecific1, tr("Multipage Settings"));
+    groups << qMakePair(PasteSpecific2, tr("Key Sequences"));
+    return groups;
+}
+
+void VCFrame::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCFrame* frame = qobject_cast<const VCFrame*>(source);
+    if (frame == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+    {
+        setHeaderVisible(frame->m_showHeader);
+        setEnableButtonVisible(frame->m_showEnableButton);
+        setShowBorder(frame->m_showBorder);
+    }
+
+    if (flags & PasteSpecific1)
+    {
+        setMultipageMode(frame->m_multiPageMode);
+        setTotalPagesNumber(frame->m_totalPagesNumber);
+        setPagesLoop(frame->m_pagesLoop);
+        setPerPageSize(frame->m_perPageSize);
+        m_pageSizes = frame->m_pageSizes;
+    }
+
+    if (flags & PasteSpecific2)
+    {
+        setEnableKeySequence(frame->m_enableKeySequence);
+        setNextPageKeySequence(frame->m_nextPageKeySequence);
+        setPreviousPageKeySequence(frame->m_previousPageKeySequence);
+        setShortcuts(frame->shortcuts());
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/

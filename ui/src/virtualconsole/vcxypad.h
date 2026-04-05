@@ -138,6 +138,9 @@ public:
     /** @reimp */
     bool copyFrom(const VCWidget* widget);
 
+    QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
+    void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
+
     /** @reimp */
     QList<quint32> referencedFunctions() const override;
 

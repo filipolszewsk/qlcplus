@@ -103,6 +103,10 @@ protected:
     /** Copy the contents for this widget from another widget */
     bool copyFrom(const VCWidget* widget);
 
+public:
+    QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
+    void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
+
     /*********************************************************************
      * Properties
      *********************************************************************/

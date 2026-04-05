@@ -253,6 +253,51 @@ bool VCSpeedDial::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCSpeedDial::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Functions"));
+    groups << qMakePair(PasteSpecific1, tr("Absolute Value Range"));
+    groups << qMakePair(PasteSpecific2, tr("Visibility"));
+    groups << qMakePair(PasteSpecific3, tr("Key Sequences"));
+    groups << qMakePair(PasteSpecific4, tr("Presets"));
+    return groups;
+}
+
+void VCSpeedDial::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCSpeedDial* dial = qobject_cast<const VCSpeedDial*>(source);
+    if (dial == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setFunctions(dial->functions());
+    if (flags & PasteSpecific1)
+        setAbsoluteValueRange(dial->absoluteValueMin(), dial->absoluteValueMax());
+    if (flags & PasteSpecific2)
+    {
+        setVisibilityMask(dial->visibilityMask());
+        setResetFactorOnDialChange(dial->resetFactorOnDialChange());
+    }
+    if (flags & PasteSpecific3)
+    {
+        setTapKeySequence(dial->tapKeySequence());
+        setMultKeySequence(dial->multKeySequence());
+        setDivKeySequence(dial->divKeySequence());
+        setMultDivResetKeySequence(dial->multDivResetKeySequence());
+        setApplyKeySequence(dial->applyKeySequence());
+    }
+    if (flags & PasteSpecific4)
+    {
+        resetPresets();
+        foreach (VCSpeedDialPreset const* preset, dial->presets())
+            addPreset(*preset);
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 void VCSpeedDial::setFont(const QFont &font)
 {
     VCWidget::setFont(font);

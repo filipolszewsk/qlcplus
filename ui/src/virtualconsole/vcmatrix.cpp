@@ -269,6 +269,39 @@ bool VCMatrix::copyFrom(const VCWidget* widget)
     return VCWidget::copyFrom(widget);
 }
 
+QList<QPair<VCWidget::PastePropertyGroup, QString>> VCMatrix::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Function"));
+    groups << qMakePair(PasteSpecific1, tr("Instant Changes"));
+    groups << qMakePair(PasteSpecific2, tr("Visibility"));
+    groups << qMakePair(PasteSpecific3, tr("Custom Controls"));
+    return groups;
+}
+
+void VCMatrix::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const VCMatrix* matrix = qobject_cast<const VCMatrix*>(source);
+    if (matrix == nullptr)
+        return;
+
+    if (flags & PasteSpecific0)
+        setFunction(matrix->function());
+    if (flags & PasteSpecific1)
+        setInstantChanges(matrix->instantChanges());
+    if (flags & PasteSpecific2)
+        setVisibilityMask(matrix->visibilityMask());
+    if (flags & PasteSpecific3)
+    {
+        resetCustomControls();
+        foreach (VCMatrixControl const* control, matrix->customControls())
+            addCustomControl(*control);
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+}
+
 /*********************************************************************
  * GUI
  *********************************************************************/

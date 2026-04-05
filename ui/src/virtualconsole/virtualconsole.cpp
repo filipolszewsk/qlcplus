@@ -39,6 +39,7 @@
 #include <QMenu>
 #include <QList>
 
+#include "vcpastepropertiesdialog.h"
 #include "vcmultipatcheditor.h"
 #include "vcpropertieseditor.h"
 #include "addvcbuttonmatrix.h"
@@ -686,8 +687,11 @@ void VirtualConsole::updateActions()
         }
         else
         {
-            /* No pasted children possible */
-            m_editPasteAction->setEnabled(false);
+            /* Allow paste-as-properties when clipboard has a same-type widget */
+            bool samePasteAvailable = !m_clipboard.isEmpty()
+                && m_editAction == EditCopy
+                && m_clipboard.first()->type() == m_selectedWidgets.last()->type();
+            m_editPasteAction->setEnabled(samePasteAvailable);
         }
     }
 
@@ -1102,6 +1106,25 @@ void VirtualConsole::slotEditPaste()
         /* Invalidate the edit action if there's nothing to paste */
         m_editAction = EditNone;
         m_editPasteAction->setEnabled(false);
+        return;
+    }
+
+    /* Selective paste: single target selected, same type as clipboard, copy action */
+    if (m_editAction == EditCopy
+        && m_selectedWidgets.size() == 1
+        && !m_clipboard.isEmpty()
+        && m_clipboard.first()->type() == m_selectedWidgets.first()->type()
+        && !m_selectedWidgets.first()->allowChildren())
+    {
+        VCWidget* source = m_clipboard.first();
+        VCWidget* target = m_selectedWidgets.first();
+        VCPastePropertiesDialog dlg(source, target, this);
+        if (dlg.exec() == QDialog::Accepted)
+        {
+            VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
+            if (flags != 0)
+                target->applyPropertiesFrom(source, flags);
+        }
         return;
     }
 
