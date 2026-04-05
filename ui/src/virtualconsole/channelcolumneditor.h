@@ -49,6 +49,12 @@ public:
     /** Get the edited column info */
     ChannelColumnInfo columnInfo() const;
 
+    /**
+     * When true, the "Change Channel" button is hidden/disabled.
+     * The channel address is managed automatically by the recording mask.
+     */
+    void setAddressReadOnly(bool readOnly);
+
 public slots:
     void accept() override;
 

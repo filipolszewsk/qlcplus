@@ -58,6 +58,12 @@ ChannelColumnEditor::~ChannelColumnEditor()
 {
 }
 
+void ChannelColumnEditor::setAddressReadOnly(bool readOnly)
+{
+    if (m_changeChannelBtn)
+        m_changeChannelBtn->setVisible(!readOnly);
+}
+
 QString ChannelColumnEditor::channelDisplayString(quint32 fixtureId, quint32 fixtureChannel, quint32 absAddress) const
 {
     if (m_doc && fixtureId != UINT_MAX)

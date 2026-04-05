@@ -677,6 +677,7 @@ QList<QPair<VCWidget::PastePropertyGroup, QString>> VCCueList::pasteableProperty
     groups << qMakePair(PasteSpecific3, tr("Recording Settings"));
     groups << qMakePair(PasteSpecific4, tr("Step Index Output"));
     groups << qMakePair(PasteSpecific5, tr("Channel Columns"));
+    groups << qMakePair(PasteSpecific6, tr("Step Channel Values"));
     return groups;
 }
 
@@ -741,6 +742,57 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
         }
         m_hiddenFixedColumns = cuelist->m_hiddenFixedColumns;
         applyFixedColumnHiddenState();
+    }
+
+    if (flags & PasteSpecific6)
+    {
+        // Copy step channel values from source cuelist to this cuelist.
+        // Steps are matched by index; channels by absoluteAddress.
+        Chaser *srcChaser = qobject_cast<Chaser*>(m_doc->function(cuelist->chaserID()));
+        Chaser *dstChaser = chaser();
+
+        if (srcChaser != nullptr && dstChaser != nullptr)
+        {
+            int stepCount = qMin(srcChaser->steps().count(),
+                                 dstChaser->steps().count());
+
+            for (int stepIdx = 0; stepIdx < stepCount; stepIdx++)
+            {
+                quint32 srcFid = srcChaser->steps().at(stepIdx).fid;
+                quint32 dstFid = dstChaser->steps().at(stepIdx).fid;
+
+                Scene *srcScene = qobject_cast<Scene*>(m_doc->function(srcFid));
+                Scene *dstScene = qobject_cast<Scene*>(m_doc->function(dstFid));
+
+                if (srcScene == nullptr || dstScene == nullptr)
+                    continue;
+
+                // For each active source column, find matching column in target
+                for (const ChannelColumnInfo &srcCol : cuelist->m_channelColumns)
+                {
+                    if (!srcCol.activeInMask || srcCol.fixtureId == UINT_MAX)
+                        continue;
+
+                    // Find matching column in this cuelist by absoluteAddress
+                    for (const ChannelColumnInfo &dstCol : m_channelColumns)
+                    {
+                        if (dstCol.absoluteAddress == srcCol.absoluteAddress
+                            && dstCol.fixtureId != UINT_MAX
+                            && dstCol.activeInMask)
+                        {
+                            uchar val = srcScene->value(srcCol.fixtureId,
+                                                        srcCol.fixtureChannel);
+                            dstScene->setValue(
+                                SceneValue(dstCol.fixtureId,
+                                           dstCol.fixtureChannel, val));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            updateStepList();
+        }
     }
 
     VCWidget::applyPropertiesFrom(source, flags);
@@ -902,24 +954,31 @@ void VCCueList::updateStepList()
         if (m_showChannelColumns && !m_channelColumns.isEmpty())
         {
             Scene *scene = qobject_cast<Scene*>(function);
-            if (scene != NULL)
+            int colOffset = COL_NOTES + 1;
+            for (int i = 0; i < m_channelColumns.size(); i++)
             {
-                int colOffset = COL_NOTES + 1;
-                for (int i = 0; i < m_channelColumns.size(); i++)
+                const ChannelColumnInfo &col = m_channelColumns.at(i);
+                if (!col.activeInMask)
                 {
-                    const ChannelColumnInfo &col = m_channelColumns.at(i);
-                    if (col.fixtureId != UINT_MAX)
-                    {
-                        uchar value = scene->value(col.fixtureId, col.fixtureChannel);
-                        // Store raw DMX value in UserRole for delegate
-                        item->setData(colOffset + i, Qt::UserRole, value);
-                        // Display text is handled by delegate's displayText()
-                        item->setText(colOffset + i, QString::number(value));
-                    }
-                    else
-                    {
-                        item->setText(colOffset + i, "-");
-                    }
+                    // Channel no longer in recording mask — show grayed out, non-editable
+                    item->setText(colOffset + i, "-");
+                    item->setData(colOffset + i, Qt::ForegroundRole,
+                                  QColor(Qt::gray));
+                    Qt::ItemFlags flags = item->flags();
+                    flags &= ~Qt::ItemIsEditable;
+                    item->setFlags(flags);
+                }
+                else if (scene != nullptr && col.fixtureId != UINT_MAX)
+                {
+                    uchar value = scene->value(col.fixtureId, col.fixtureChannel);
+                    item->setData(colOffset + i, Qt::UserRole, value);
+                    item->setText(colOffset + i, QString::number(value));
+                    // Ensure foreground is reset to default in case it was grayed before
+                    item->setData(colOffset + i, Qt::ForegroundRole, QVariant());
+                }
+                else
+                {
+                    item->setText(colOffset + i, "-");
                 }
             }
         }
@@ -1516,31 +1575,31 @@ void VCCueList::slotHeaderDoubleClicked(int logicalIndex)
         return;
     }
 
-    // Dynamic channel columns (after COL_NOTES): open channel column editor
+    // Dynamic channel columns (after COL_NOTES): open display-only editor
+    // (channel address is controlled automatically by the recording mask)
     int channelIdx = logicalIndex - firstChannelCol;
     if (channelIdx < 0 || channelIdx >= m_channelColumns.size())
         return;
 
+    // Only allow editing display name/mode — not the channel address
     ChannelColumnEditor editor(m_channelColumns[channelIdx], m_doc, this);
+    editor.setAddressReadOnly(true);
     if (editor.exec() == QDialog::Accepted)
     {
-        quint32 oldAddr = m_channelColumns[channelIdx].absoluteAddress;
-        m_channelColumns[channelIdx] = editor.columnInfo();
-        quint32 newAddr = m_channelColumns[channelIdx].absoluteAddress;
+        ChannelColumnInfo updated = editor.columnInfo();
+        // Preserve address and activeInMask from the current column
+        updated.absoluteAddress = m_channelColumns[channelIdx].absoluteAddress;
+        updated.fixtureId = m_channelColumns[channelIdx].fixtureId;
+        updated.fixtureChannel = m_channelColumns[channelIdx].fixtureChannel;
+        updated.activeInMask = m_channelColumns[channelIdx].activeInMask;
+        m_channelColumns[channelIdx] = updated;
 
-        // If channel was reassigned, update the recording mask
-        if (oldAddr != newAddr)
+        if (m_channelColumns[channelIdx].activeInMask)
         {
-            if ((int)oldAddr < m_recordChannelsMask.size())
-                m_recordChannelsMask[oldAddr] = 0;
-            if ((int)newAddr >= m_recordChannelsMask.size())
-                m_recordChannelsMask.resize(newAddr + 1, 0);
-            m_recordChannelsMask[newAddr] = 1;
+            ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+            delegate->setColumnInfo(&m_channelColumns[channelIdx]);
+            m_tree->setItemDelegateForColumn(logicalIndex, delegate);
         }
-
-        ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
-        delegate->setColumnInfo(&m_channelColumns[channelIdx]);
-        m_tree->setItemDelegateForColumn(logicalIndex, delegate);
 
         m_tree->header()->setSectionHidden(logicalIndex, m_channelColumns[channelIdx].hidden);
 
@@ -3230,6 +3289,8 @@ void VCCueList::overwriteSelectedCue()
 void VCCueList::setRecordChannelsMask(const QByteArray &mask)
 {
     m_recordChannelsMask = mask;
+    if (m_showChannelColumns)
+        syncChannelColumnsWithMask();
 }
 
 QByteArray VCCueList::recordChannelsMask() const
@@ -3389,6 +3450,69 @@ void VCCueList::buildChannelColumns()
     }
 }
 
+void VCCueList::syncChannelColumnsWithMask()
+{
+    if (!m_showChannelColumns)
+        return;
+
+    // Step 1: mark all existing columns as inactive
+    for (int i = 0; i < m_channelColumns.size(); i++)
+        m_channelColumns[i].activeInMask = false;
+
+    // Step 2: iterate over new mask — activate existing or add new columns
+    for (int addr = 0; addr < m_recordChannelsMask.size(); addr++)
+    {
+        if (m_recordChannelsMask[addr] == 0)
+            continue;
+
+        quint32 absAddr = static_cast<quint32>(addr);
+
+        // Find existing column with this address
+        bool found = false;
+        for (int i = 0; i < m_channelColumns.size(); i++)
+        {
+            if (m_channelColumns[i].absoluteAddress == absAddr)
+            {
+                m_channelColumns[i].activeInMask = true;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            // New channel — add it
+            ChannelColumnInfo info = findFixtureForAddress(absAddr);
+            if (info.fixtureId != UINT_MAX)
+            {
+                info.activeInMask = true;
+                m_channelColumns.append(info);
+            }
+        }
+    }
+
+    // Step 3: rebuild delegates — active columns get ChannelValueDelegate,
+    //         inactive columns get null delegate (non-editable)
+    int colOffset = COL_NOTES + 1;
+    for (int i = 0; i < m_channelColumns.size(); i++)
+    {
+        if (m_channelColumns[i].activeInMask)
+        {
+            ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+            delegate->setColumnInfo(&m_channelColumns[i]);
+            m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+        }
+        else
+        {
+            m_tree->setItemDelegateForColumn(colOffset + i, nullptr);
+        }
+    }
+
+    updateTreeHeader();
+    updateStepList();
+    applyColumnHiddenState();
+}
+
 ChannelColumnInfo VCCueList::findFixtureForAddress(quint32 address) const
 {
     ChannelColumnInfo info;
@@ -3482,10 +3606,10 @@ void VCCueList::updateTreeHeader()
         for (int i = 0; i < m_channelColumns.size(); i++)
         {
             const ChannelColumnInfo &col = m_channelColumns.at(i);
-            if (!col.customName.isEmpty())
-                list << col.customName;
-            else
-                list << getDefaultChannelName(col);
+            QString name = col.customName.isEmpty() ? getDefaultChannelName(col) : col.customName;
+            if (!col.activeInMask)
+                name = QString("[%1]").arg(name);  // bracket indicates inactive
+            list << name;
         }
     }
 
@@ -3880,6 +4004,18 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                 }
             }
             
+            // Reconcile loaded columns with the recording mask
+            if (!m_recordChannelsMask.isEmpty())
+            {
+                for (int i = 0; i < m_channelColumns.size(); i++)
+                {
+                    quint32 addr = m_channelColumns[i].absoluteAddress;
+                    m_channelColumns[i].activeInMask =
+                        (addr < (quint32)m_recordChannelsMask.size()
+                         && m_recordChannelsMask[(int)addr] != 0);
+                }
+            }
+
             // Set up the show flag and delegates after loading all columns
             m_showChannelColumns = showColumns;
             if (showColumns && !m_channelColumns.isEmpty())
@@ -3887,9 +4023,12 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                 int colOffset = COL_NOTES + 1;
                 for (int i = 0; i < m_channelColumns.size(); i++)
                 {
-                    ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
-                    delegate->setColumnInfo(&m_channelColumns[i]);
-                    m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+                    if (m_channelColumns[i].activeInMask)
+                    {
+                        ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+                        delegate->setColumnInfo(&m_channelColumns[i]);
+                        m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+                    }
                 }
             }
             

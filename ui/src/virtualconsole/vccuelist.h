@@ -121,6 +121,8 @@ struct ChannelColumnInfo
     QString scaleSuffix;                 ///< Suffix for scaled display (e.g., "°", "%")
     bool hidden;                         ///< Whether this column is hidden
 
+    bool activeInMask;  ///< true = channel is currently in the recording mask
+
     ChannelColumnInfo()
         : absoluteAddress(0)
         , fixtureId(UINT_MAX)
@@ -129,6 +131,7 @@ struct ChannelColumnInfo
         , scaleMin(0.0)
         , scaleMax(255.0)
         , hidden(false)
+        , activeInMask(true)
     {}
 
     ChannelColumnInfo(quint32 addr, quint32 fxiId, quint32 fxiCh, const QString &name = QString())
@@ -140,6 +143,7 @@ struct ChannelColumnInfo
         , scaleMin(0.0)
         , scaleMax(255.0)
         , hidden(false)
+        , activeInMask(true)
     {}
 };
 
@@ -660,6 +664,14 @@ public:
 
     /** Rebuild channel columns based on recording mask */
     void buildChannelColumns();
+
+    /**
+     * Synchronize channel columns with the current recording mask:
+     * - Columns whose address is no longer in the mask are marked activeInMask=false (grayed out).
+     * - Addresses newly present in the mask that have no column yet are added.
+     * Updates tree header, step list, and delegates.
+     */
+    void syncChannelColumnsWithMask();
 
 private:
     /** Find fixture and channel for a given absolute DMX address */
