@@ -725,16 +725,36 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
 
     if (flags & PasteSpecific5)
     {
-        m_channelColumns = cuelist->m_channelColumns;
+        // Copy only display parameters by column index.
+        // Channel references (address/fixture) stay from this cuelist's recording mask.
+        int copyCount = qMin(cuelist->m_channelColumns.size(),
+                             m_channelColumns.size());
+        for (int i = 0; i < copyCount; i++)
+        {
+            const ChannelColumnInfo &src = cuelist->m_channelColumns.at(i);
+            ChannelColumnInfo &dst = m_channelColumns[i];
+            dst.customName       = src.customName;
+            dst.displayMode      = src.displayMode;
+            dst.dropdownMappings = src.dropdownMappings;
+            dst.scaleMin         = src.scaleMin;
+            dst.scaleMax         = src.scaleMax;
+            dst.scaleSuffix      = src.scaleSuffix;
+            dst.hidden           = src.hidden;
+            // absoluteAddress / fixtureId / fixtureChannel / activeInMask
+            // remain from this cuelist's own recording mask
+        }
         m_showChannelColumns = cuelist->m_showChannelColumns;
         if (m_showChannelColumns)
         {
             int colOffset = COL_NOTES + 1;
             for (int i = 0; i < m_channelColumns.size(); i++)
             {
-                ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
-                delegate->setColumnInfo(&m_channelColumns[i]);
-                m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+                if (m_channelColumns[i].activeInMask)
+                {
+                    ChannelValueDelegate *delegate = new ChannelValueDelegate(this);
+                    delegate->setColumnInfo(&m_channelColumns[i]);
+                    m_tree->setItemDelegateForColumn(colOffset + i, delegate);
+                }
             }
             updateTreeHeader();
             updateStepList();
@@ -746,8 +766,9 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
 
     if (flags & PasteSpecific6)
     {
-        // Copy step channel values from source cuelist to this cuelist.
-        // Steps are matched by index; channels by absoluteAddress.
+        // Copy step channel values by column index.
+        // Values from source column i go into target column i's fixture/channel —
+        // as if the user had manually typed them into those cells.
         Chaser *srcChaser = qobject_cast<Chaser*>(m_doc->function(cuelist->chaserID()));
         Chaser *dstChaser = chaser();
 
@@ -755,39 +776,35 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
         {
             int stepCount = qMin(srcChaser->steps().count(),
                                  dstChaser->steps().count());
+            int colCount  = qMin(cuelist->m_channelColumns.size(),
+                                 m_channelColumns.size());
 
             for (int stepIdx = 0; stepIdx < stepCount; stepIdx++)
             {
-                quint32 srcFid = srcChaser->steps().at(stepIdx).fid;
-                quint32 dstFid = dstChaser->steps().at(stepIdx).fid;
-
-                Scene *srcScene = qobject_cast<Scene*>(m_doc->function(srcFid));
-                Scene *dstScene = qobject_cast<Scene*>(m_doc->function(dstFid));
+                Scene *srcScene = qobject_cast<Scene*>(
+                    m_doc->function(srcChaser->steps().at(stepIdx).fid));
+                Scene *dstScene = qobject_cast<Scene*>(
+                    m_doc->function(dstChaser->steps().at(stepIdx).fid));
 
                 if (srcScene == nullptr || dstScene == nullptr)
                     continue;
 
-                // For each active source column, find matching column in target
-                for (const ChannelColumnInfo &srcCol : cuelist->m_channelColumns)
+                for (int colIdx = 0; colIdx < colCount; colIdx++)
                 {
+                    const ChannelColumnInfo &srcCol =
+                        cuelist->m_channelColumns.at(colIdx);
+                    const ChannelColumnInfo &dstCol =
+                        m_channelColumns.at(colIdx);
+
                     if (!srcCol.activeInMask || srcCol.fixtureId == UINT_MAX)
                         continue;
+                    if (!dstCol.activeInMask || dstCol.fixtureId == UINT_MAX)
+                        continue;
 
-                    // Find matching column in this cuelist by absoluteAddress
-                    for (const ChannelColumnInfo &dstCol : m_channelColumns)
-                    {
-                        if (dstCol.absoluteAddress == srcCol.absoluteAddress
-                            && dstCol.fixtureId != UINT_MAX
-                            && dstCol.activeInMask)
-                        {
-                            uchar val = srcScene->value(srcCol.fixtureId,
-                                                        srcCol.fixtureChannel);
-                            dstScene->setValue(
-                                SceneValue(dstCol.fixtureId,
-                                           dstCol.fixtureChannel, val));
-                            break;
-                        }
-                    }
+                    uchar val = srcScene->value(srcCol.fixtureId,
+                                                srcCol.fixtureChannel);
+                    dstScene->setValue(SceneValue(dstCol.fixtureId,
+                                                  dstCol.fixtureChannel, val));
                 }
             }
 
