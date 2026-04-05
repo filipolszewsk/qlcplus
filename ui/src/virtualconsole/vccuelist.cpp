@@ -2333,7 +2333,8 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
     else if (checkInputSource(universe, pagedCh, value, sender(), secondarySelectInputSourceId))
     {
         // Secondary select slider: 0 = nothing, 1 = first position, 2 = second, etc.
-        if (sideFaderMode() != Crossfade || !m_nextPrevControlsSecondary)
+        // Works in both Crossfade (sets secondary/target cue) and Steps (jumps directly to cue).
+        if (sideFaderMode() == None)
             return;
 
         if (value == 0)
@@ -2350,8 +2351,25 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
         if (targetIndex >= stepsCount)
             targetIndex = stepsCount - 1;
 
-        // Allow setting secondary to primary (secondary = primary is valid)
-        setSecondaryIndex(targetIndex);
+        if (sideFaderMode() == Steps)
+        {
+            // In Steps mode: jump directly to the selected cue index
+            Chaser *ch = chaser();
+            if (ch == NULL || ch->stopped())
+                return;
+            ChaserAction action;
+            action.m_action = ChaserSetStepIndex;
+            action.m_stepIndex = targetIndex;
+            action.m_masterIntensity = intensity();
+            action.m_stepIntensity = getPrimaryIntensity();
+            action.m_fadeMode = getFadeMode();
+            ch->setAction(action);
+        }
+        else if (sideFaderMode() == Crossfade && m_nextPrevControlsSecondary)
+        {
+            // In Crossfade mode: set the secondary (target) cue
+            setSecondaryIndex(targetIndex);
+        }
     }
 }
 

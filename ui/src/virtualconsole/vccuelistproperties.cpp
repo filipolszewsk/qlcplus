@@ -183,7 +183,7 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_crossFadeLayout->addWidget(m_crossfadeInputWidget);
 
     m_secondarySelectInputWidget = new InputSelectionWidget(m_doc, this);
-    m_secondarySelectInputWidget->setTitle(tr("Secondary Select Slider (1=first cue, 2=second, ...)"));
+    m_secondarySelectInputWidget->setTitle(tr("Index Select Slider (1=first cue, 2=second, ...) — Crossfade: sets target; Steps: jumps to cue"));
     m_secondarySelectInputWidget->setKeyInputVisibility(false);
     m_secondarySelectInputWidget->setInputSource(m_cueList->inputSource(VCCueList::secondarySelectInputSourceId));
     m_secondarySelectInputWidget->setWidgetPage(m_cueList->page());
