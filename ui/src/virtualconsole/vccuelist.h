@@ -673,6 +673,15 @@ public:
      */
     void syncChannelColumnsWithMask();
 
+    /** @reimp — returns true if any column references the given fixture */
+    bool hasCueListColumnsForFixture(quint32 fixtureId) const override;
+
+    /** @reimp — shifts absoluteAddress in columns and mask bits to the new address range */
+    void remapCueListFixtureChannels(quint32 fixtureId,
+                                     quint32 oldAbsBase,
+                                     quint32 newAbsBase,
+                                     quint32 channels) override;
+
 private:
     /** Find fixture and channel for a given absolute DMX address */
     ChannelColumnInfo findFixtureForAddress(quint32 address) const;

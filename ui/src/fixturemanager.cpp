@@ -937,6 +937,18 @@ void FixtureManager::slotFixtureAddressChangeRequested(quint32 fixtureID, quint3
                 oldUniverse, oldAddr, newUniverse, newAddr, channels);
         }
     }
+
+    // Update CueList recording mask and channel column addresses for the moved fixture
+    if ((oldUniverse != newUniverse || oldAddr != newAddr) &&
+        VirtualConsole::instance() != NULL &&
+        VirtualConsole::instance()->contents() != NULL &&
+        VirtualConsole::instance()->contents()->hasCueListColumnsForFixture(fixtureID))
+    {
+        quint32 oldAbsBase = oldUniverse * 512 + oldAddr;
+        quint32 newAbsBase = newUniverse * 512 + newAddr;
+        VirtualConsole::instance()->contents()->remapCueListFixtureChannels(
+            fixtureID, oldAbsBase, newAbsBase, channels);
+    }
 }
 
 QString FixtureManager::fixtureInfoStyleSheetHeader()

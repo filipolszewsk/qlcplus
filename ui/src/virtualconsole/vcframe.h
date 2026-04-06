@@ -282,6 +282,15 @@ public:
     /** @reimp */
     bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const override;
 
+    /** @reimp */
+    bool hasCueListColumnsForFixture(quint32 fixtureId) const override;
+
+    /** @reimp */
+    void remapCueListFixtureChannels(quint32 fixtureId,
+                                     quint32 oldAbsBase,
+                                     quint32 newAbsBase,
+                                     quint32 channels) override;
+
 public slots:
     void slotPreviousPage();
     void slotNextPage();

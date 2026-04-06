@@ -1198,6 +1198,25 @@ bool VCFrame::hasInputsInRange(quint32 universe, quint32 address, quint32 channe
     return false;
 }
 
+bool VCFrame::hasCueListColumnsForFixture(quint32 fixtureId) const
+{
+    foreach (VCWidget *child, m_pagesMap.keys())
+    {
+        if (child->hasCueListColumnsForFixture(fixtureId))
+            return true;
+    }
+    return false;
+}
+
+void VCFrame::remapCueListFixtureChannels(quint32 fixtureId,
+                                          quint32 oldAbsBase,
+                                          quint32 newAbsBase,
+                                          quint32 channels)
+{
+    foreach (VCWidget *child, m_pagesMap.keys())
+        child->remapCueListFixtureChannels(fixtureId, oldAbsBase, newAbsBase, channels);
+}
+
 /*****************************************************************************
  * Clipboard
  *****************************************************************************/

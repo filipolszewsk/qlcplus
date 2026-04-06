@@ -485,6 +485,22 @@ public:
     virtual bool hasInputsInRange(quint32 universe, quint32 address, quint32 channels) const;
 
     /**
+     * Check if this widget (or any child) has cue list channel columns
+     * referencing the given fixture. Used before calling remapCueListFixtureChannels.
+     */
+    virtual bool hasCueListColumnsForFixture(quint32 fixtureId) const;
+
+    /**
+     * Remap cue list channel column addresses and recording mask bits when
+     * a fixture's DMX address changes. fixtureId identifies the fixture;
+     * oldAbsBase / newAbsBase are absolute addresses (universe * 512 + channel).
+     */
+    virtual void remapCueListFixtureChannels(quint32 fixtureId,
+                                             quint32 oldAbsBase,
+                                             quint32 newAbsBase,
+                                             quint32 channels);
+
+    /**
      * Send feedback to an external controller.
      *
      * @param value value from 0 to 255 to be sent

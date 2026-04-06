@@ -3530,6 +3530,64 @@ void VCCueList::syncChannelColumnsWithMask()
     applyColumnHiddenState();
 }
 
+bool VCCueList::hasCueListColumnsForFixture(quint32 fixtureId) const
+{
+    foreach (const ChannelColumnInfo &col, m_channelColumns)
+    {
+        if (col.fixtureId == fixtureId)
+            return true;
+    }
+    return false;
+}
+
+void VCCueList::remapCueListFixtureChannels(quint32 fixtureId,
+                                             quint32 oldAbsBase,
+                                             quint32 newAbsBase,
+                                             quint32 channels)
+{
+    if (m_channelColumns.isEmpty())
+        return;
+
+    // Snapshot the old mask bits for the moved fixture's channels before clearing them,
+    // so that overlapping old/new ranges are handled correctly.
+    QVector<quint8> savedBits(channels, 0);
+    for (quint32 offset = 0; offset < channels; ++offset)
+    {
+        quint32 oldIdx = oldAbsBase + offset;
+        if (!m_recordChannelsMask.isEmpty() && oldIdx < (quint32)m_recordChannelsMask.size())
+            savedBits[offset] = (quint8)m_recordChannelsMask[(int)oldIdx];
+    }
+
+    // Extend mask if the new range goes beyond current size
+    quint32 requiredSize = newAbsBase + channels;
+    if (requiredSize > (quint32)m_recordChannelsMask.size())
+        m_recordChannelsMask.resize((int)requiredSize, 0);
+
+    // Clear old mask positions for this fixture
+    for (quint32 offset = 0; offset < channels; ++offset)
+    {
+        quint32 oldIdx = oldAbsBase + offset;
+        if (oldIdx < (quint32)m_recordChannelsMask.size())
+            m_recordChannelsMask[(int)oldIdx] = 0;
+    }
+
+    // Write saved bits to new positions
+    for (quint32 offset = 0; offset < channels; ++offset)
+    {
+        if (savedBits[offset] != 0)
+            m_recordChannelsMask[(int)(newAbsBase + offset)] = savedBits[offset];
+    }
+
+    // Update absoluteAddress in columns that belong to the moved fixture
+    for (int i = 0; i < m_channelColumns.size(); ++i)
+    {
+        if (m_channelColumns[i].fixtureId == fixtureId)
+            m_channelColumns[i].absoluteAddress = newAbsBase + m_channelColumns[i].fixtureChannel;
+    }
+
+    syncChannelColumnsWithMask();
+}
+
 ChannelColumnInfo VCCueList::findFixtureForAddress(quint32 address) const
 {
     ChannelColumnInfo info;

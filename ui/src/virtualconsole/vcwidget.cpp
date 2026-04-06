@@ -807,6 +807,18 @@ bool VCWidget::hasInputsInRange(quint32 universe, quint32 address, quint32 chann
     return false;
 }
 
+bool VCWidget::hasCueListColumnsForFixture(quint32 /*fixtureId*/) const
+{
+    return false;
+}
+
+void VCWidget::remapCueListFixtureChannels(quint32 /*fixtureId*/,
+                                           quint32 /*oldAbsBase*/,
+                                           quint32 /*newAbsBase*/,
+                                           quint32 /*channels*/)
+{
+}
+
 void VCWidget::sendFeedback(int value, quint8 id)
 {
     /* Send input feedback */
