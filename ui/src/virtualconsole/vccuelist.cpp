@@ -1507,7 +1507,12 @@ void VCCueList::slotItemClicked(QTreeWidgetItem *item)
         // Allow setting secondary to primary (secondary = primary is valid)
         setSecondaryIndex(clickedIndex);
     }
-    
+    else if (sideFaderMode() == Steps)
+    {
+        int clickedIndex = m_tree->indexOfTopLevelItem(item);
+        playCueAtIndex(clickedIndex);
+    }
+
     // Update overwrite and delete button states
     updateOverwriteButtonState();
     updateDeleteButtonState();
