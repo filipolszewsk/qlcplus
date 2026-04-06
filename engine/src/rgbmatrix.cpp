@@ -747,8 +747,7 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
                         int valueIndex = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapIndex).toInt();
                         QString headMode = root.attributes().value(KXMLQLCRGBMatrixFixtureDefChannelMapHeadMode, "Individual").toString();
                         
-                        if (!channelName.isEmpty())
-                            mappings.append(ChannelMapping(channelName, valueIndex, headMode));
+                        mappings.append(ChannelMapping(channelName, valueIndex, headMode));
                         
                         root.skipCurrentElement();
                     }
