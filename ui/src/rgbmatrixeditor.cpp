@@ -274,7 +274,13 @@ void RGBMatrixEditor::init()
     m_overrideHTPCb = new QCheckBox(tr("Override HTP"));
     m_overrideHTPCb->setChecked(m_matrix->overrideHTP());
     m_overrideHTPCb->setToolTip(tr("Force this RGB Matrix to override HTP channels – the script value always wins, even if the channel is set to a higher value from another source"));
-    
+
+    // Create Zero Is Transparent checkbox
+    m_zeroIsTransparentCb = new QCheckBox(tr("Zero Is Transparent"));
+    m_zeroIsTransparentCb->setChecked(m_matrix->zeroIsTransparent());
+    m_zeroIsTransparentCb->setToolTip(tr("When enabled, any value of 0 produced by the script releases the channel so other functions can take control. "
+                                          "Useful together with Override HTP for scripts that output 0 in idle state."));
+
     // Create per-definition channel mapping UI
     m_channelMappingGroup = new QGroupBox(tr("Per-Fixture Channel Mapping"));
     m_channelMappingLayout = new QVBoxLayout(m_channelMappingGroup);
@@ -289,17 +295,21 @@ void RGBMatrixEditor::init()
         // Row 0: Run Order (col 0) + Direction (col 1)
         // Row 1: Row Filter (col 0-1, span 2)
         // Row 2: Enable Multi-Value (col 0) | Override HTP (col 1)
-        // Row 3: Per-Fixture Channel Mapping (col 0-1, span 2)
+        // Row 3: Zero Is Transparent (col 0-1, span 2)
+        // Row 4: Per-Fixture Channel Mapping (col 0-1, span 2)
         bottomGrid->addWidget(m_rowSelectionGroup, 1, 0, 1, 2);
         bottomGrid->addWidget(m_enablePerFixtureMappingCheck, 2, 0);
         bottomGrid->addWidget(m_overrideHTPCb, 2, 1);
-        bottomGrid->addWidget(m_channelMappingGroup, 3, 0, 1, 2);
+        bottomGrid->addWidget(m_zeroIsTransparentCb, 3, 0, 1, 2);
+        bottomGrid->addWidget(m_channelMappingGroup, 4, 0, 1, 2);
     }
     
     connect(m_enablePerFixtureMappingCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotEnablePerFixtureMappingToggled(bool)));
     connect(m_overrideHTPCb, SIGNAL(clicked()),
             this, SLOT(slotOverrideHTPClicked()));
+    connect(m_zeroIsTransparentCb, SIGNAL(clicked()),
+            this, SLOT(slotZeroIsTransparentClicked()));
     
     updateChannelMappingUI();
     updateRowSelection();
@@ -1289,6 +1299,11 @@ void RGBMatrixEditor::slotDimmerControlClicked()
 void RGBMatrixEditor::slotOverrideHTPClicked()
 {
     m_matrix->setOverrideHTP(m_overrideHTPCb->isChecked());
+}
+
+void RGBMatrixEditor::slotZeroIsTransparentClicked()
+{
+    m_matrix->setZeroIsTransparent(m_zeroIsTransparentCb->isChecked());
 }
 
 void RGBMatrixEditor::slotFadeInChanged(int ms)

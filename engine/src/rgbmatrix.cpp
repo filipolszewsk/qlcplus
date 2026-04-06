@@ -71,6 +71,7 @@
 #define KXMLQLCRGBMatrixEnablePerFixtureMapping     QStringLiteral("EnablePerFixtureMapping")
 #define KXMLQLCRGBMatrixSelectedRows                QStringLiteral("SelectedRows")
 #define KXMLQLCRGBMatrixOverrideHTP                 QStringLiteral("OverrideHTP")
+#define KXMLQLCRGBMatrixZeroTransparent             QStringLiteral("ZeroIsTransparent")
 
 /****************************************************************************
  * Initialization
@@ -80,6 +81,7 @@ RGBMatrix::RGBMatrix(Doc *doc)
     : Function(doc, Function::RGBMatrixType)
     , m_dimmerControl(false)
     , m_overrideHTP(false)
+    , m_zeroIsTransparent(false)
     , m_fixtureGroupID(FixtureGroup::invalidId())
     , m_group(NULL)
     , m_requestEngineCreation(true)
@@ -167,6 +169,16 @@ bool RGBMatrix::overrideHTP() const
     return m_overrideHTP;
 }
 
+void RGBMatrix::setZeroIsTransparent(bool enable)
+{
+    m_zeroIsTransparent = enable;
+}
+
+bool RGBMatrix::zeroIsTransparent() const
+{
+    return m_zeroIsTransparent;
+}
+
 /****************************************************************************
  * Copying
  ****************************************************************************/
@@ -198,6 +210,7 @@ bool RGBMatrix::copyFrom(const Function* function)
 
     setDimmerControl(mtx->dimmerControl());
     setOverrideHTP(mtx->overrideHTP());
+    setZeroIsTransparent(mtx->zeroIsTransparent());
     setFixtureGroup(mtx->fixtureGroup());
 
     m_rgbColors.clear();
@@ -714,6 +727,10 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         {
             setOverrideHTP(root.readElementText().toInt() != 0);
         }
+        else if (root.name() == KXMLQLCRGBMatrixZeroTransparent)
+        {
+            setZeroIsTransparent(root.readElementText().toInt() != 0);
+        }
         else if (root.name() == KXMLQLCRGBMatrixEnablePerFixtureMapping)
         {
             setEnablePerFixtureMapping(root.readElementText().toInt() != 0);
@@ -825,6 +842,10 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc)
     /* Override HTP */
     if (m_overrideHTP)
         doc->writeTextElement(KXMLQLCRGBMatrixOverrideHTP, QString::number(1));
+
+    /* Zero Is Transparent */
+    if (m_zeroIsTransparent)
+        doc->writeTextElement(KXMLQLCRGBMatrixZeroTransparent, QString::number(1));
 
     /* Colors */
     for (int i = 0; i < m_rgbColors.count(); i++)
@@ -1159,6 +1180,19 @@ FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 
 
 void RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
 {
+    // Zero Is Transparent: release the channel when value is 0 so other
+    // functions can take control. The Override flag is cleared so the channel
+    // is no longer held by this fader.
+    if (m_zeroIsTransparent && value == 0)
+    {
+        fc->removeFlag(FadeChannel::Override);
+        fc->setStart(fc->current());
+        fc->setTarget(0);
+        fc->setElapsed(0);
+        fc->setFadeTime(fadeOutSpeed());
+        return;
+    }
+
     if (m_overrideHTP)
         fc->addFlag(FadeChannel::Override);
     else

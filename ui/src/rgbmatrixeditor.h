@@ -110,6 +110,7 @@ private slots:
 
     void slotDimmerControlClicked();
     void slotOverrideHTPClicked();
+    void slotZeroIsTransparentClicked();
 
     void slotFadeInChanged(int ms);
     void slotFadeOutChanged(int ms);
@@ -185,6 +186,7 @@ private:
     QHash<QLCPoint, RGBItem*> m_previewHash;
 
     QCheckBox *m_overrideHTPCb;
+    QCheckBox *m_zeroIsTransparentCb;
 
     // Per-definition channel mapping UI
     QCheckBox *m_enablePerFixtureMappingCheck;

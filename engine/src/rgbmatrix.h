@@ -133,10 +133,18 @@ public:
     void setOverrideHTP(bool enable);
     bool overrideHTP() const;
 
+    /** When enabled, any channel value of 0 produced by the script is treated
+     *  as transparent: the fader channel is released and other functions take
+     *  control. Useful with ForceHTP scripts that output 0 in idle state so the
+     *  function can be stopped externally without leaving DMX channels frozen. */
+    void setZeroIsTransparent(bool enable);
+    bool zeroIsTransparent() const;
+
 private:
     // LEGACY: replaced by ControlModeDimmer
     bool m_dimmerControl;
     bool m_overrideHTP;
+    bool m_zeroIsTransparent;
 
     /*********************************************************************
      * Copying
