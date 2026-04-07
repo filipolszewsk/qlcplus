@@ -305,6 +305,34 @@ quint32 Fixture::masterIntensityChannel() const
     return m_fixtureMode->masterIntensityChannel();
 }
 
+bool Fixture::hasVirtualDimmer() const
+{
+    if (m_fixtureMode == NULL)
+        return false;
+
+    return m_fixtureMode->virtualDimmer();
+}
+
+QVector<quint32> Fixture::virtualDimmerChannels() const
+{
+    QVector<quint32> result;
+    if (m_fixtureMode == NULL)
+        return result;
+
+    const QVector<QLCChannel*> chs = m_fixtureMode->channels();
+    for (quint32 i = 0; i < quint32(chs.size()); ++i)
+    {
+        const QLCChannel *ch = chs.at(i);
+        if (ch->group() == QLCChannel::Intensity &&
+            ch->controlByte() == QLCChannel::MSB &&
+            ch->colour() != QLCChannel::NoColour)
+        {
+            result.append(i);
+        }
+    }
+    return result;
+}
+
 QVector <quint32> Fixture::rgbChannels(int head) const
 {
     if (m_fixtureMode == NULL || head < 0 || head >= m_fixtureMode->heads().size())

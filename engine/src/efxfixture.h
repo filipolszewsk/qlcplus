@@ -21,6 +21,7 @@
 #ifndef EFXFIXTURE_H
 #define EFXFIXTURE_H
 
+#include <QVector>
 #include <QImage>
 #include "function.h"
 #include "grouphead.h"
@@ -214,6 +215,9 @@ private:
     quint32 m_firstLsbChannel;
     quint32 m_secondMsbChannel;
     quint32 m_secondLsbChannel;
+
+    /** Channel indices used when fixture has a virtual dimmer (no physical master dimmer) */
+    QVector<quint32> m_virtualDimmerChannels;
 
 private:
     static QImage m_rgbGradient;

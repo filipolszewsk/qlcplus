@@ -186,6 +186,16 @@
          </property>
         </spacer>
        </item>
+       <item row="5" column="0" colspan="2">
+        <widget class="QCheckBox" name="m_virtualDimmerCheck">
+         <property name="toolTip">
+          <string>Enable a software-only (virtual) master dimmer that scales all colour intensity channels. Use this for fixtures that have only colour channels (RGB, RGBW, Amber, UV, etc.) and no physical dimmer channel.</string>
+         </property>
+         <property name="text">
+          <string>Virtual Dimmer (software intensity for colour-only fixtures)</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="tab_heads">

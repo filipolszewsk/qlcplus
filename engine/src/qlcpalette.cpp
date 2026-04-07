@@ -297,6 +297,12 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     if (headDimmerChannel != QLCChannel::invalid())
                         list << SceneValue(id, headDimmerChannel, uchar(dValue));
                 }
+
+                if (masterIntensityChannel == QLCChannel::invalid() && fixture->hasVirtualDimmer())
+                {
+                    foreach (quint32 ch, fixture->virtualDimmerChannels())
+                        list << SceneValue(id, ch, uchar(dValue));
+                }
             }
             break;
             case Color:

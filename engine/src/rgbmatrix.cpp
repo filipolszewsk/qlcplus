@@ -1428,6 +1428,16 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 channelList.append(headDim);
                 valueList.append(rgbToGrey(col) == 0 ? 0 : 255);
             }
+
+            if (masterDim == QLCChannel::invalid() && headDim == QLCChannel::invalid() && fxi->hasVirtualDimmer())
+            {
+                uchar greyVal = rgbToGrey(col);
+                foreach (quint32 ch, fxi->virtualDimmerChannels())
+                {
+                    channelList.append(ch);
+                    valueList.append(greyVal);
+                }
+            }
         }
         else if (!usePerDefinitionMapping && m_controlMode == ControlModeDimmerFullRange)
         {
@@ -1446,6 +1456,16 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
             {
                 channelList.append(headDim);
                 valueList.append(rgbToGrey(col)); // Full range 0-255, not binary!
+            }
+
+            if (masterDim == QLCChannel::invalid() && headDim == QLCChannel::invalid() && fxi->hasVirtualDimmer())
+            {
+                uchar greyVal = rgbToGrey(col);
+                foreach (quint32 ch, fxi->virtualDimmerChannels())
+                {
+                    channelList.append(ch);
+                    valueList.append(greyVal);
+                }
             }
         }
         else if (!usePerDefinitionMapping)

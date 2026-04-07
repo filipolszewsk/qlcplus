@@ -42,11 +42,12 @@ class QLCChannel;
  * @{
  */
 
-#define KXMLQLCFixtureMode              QStringLiteral("Mode")
-#define KXMLQLCFixtureModeName          QStringLiteral("Name")
-#define KXMLQLCFixtureModeChannel       QStringLiteral("Channel")
-#define KXMLQLCFixtureModeChannelNumber QStringLiteral("Number")
-#define KXMLQLCFixtureModeChannelActsOn QStringLiteral("ActsOn")
+#define KXMLQLCFixtureMode                QStringLiteral("Mode")
+#define KXMLQLCFixtureModeName            QStringLiteral("Name")
+#define KXMLQLCFixtureModeChannel         QStringLiteral("Channel")
+#define KXMLQLCFixtureModeChannelNumber   QStringLiteral("Number")
+#define KXMLQLCFixtureModeChannelActsOn   QStringLiteral("ActsOn")
+#define KXMLQLCFixtureModeVirtualDimmer   QStringLiteral("VirtualDimmer")
 
 /**
  * QLCFixtureMode is essentially a collection of QLCChannels, arranged in such
@@ -209,6 +210,12 @@ public:
     /** Return the auto-detected channel index of the Fixture master dimmer for this mode */
     quint32 masterIntensityChannel() const;
 
+    /** Return true if this mode has a virtual (software-only) dimmer that scales all colour channels */
+    bool virtualDimmer() const;
+
+    /** Enable or disable the virtual dimmer for this mode */
+    void setVirtualDimmer(bool enable);
+
     /** Return the index of the primary channel $chIndex relates to.
      *  Return invalid if not present */
     quint32 primaryChannel(quint32 chIndex);
@@ -232,6 +239,7 @@ protected:
     QMap<quint32, quint32> m_secondaryMap;
 
     quint32 m_masterIntensityChannel;
+    bool m_virtualDimmer;
 
     /*********************************************************************
      * Heads

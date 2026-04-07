@@ -314,6 +314,13 @@ public:
     /** @see QLCFixtureMode */
     quint32 masterIntensityChannel() const;
 
+    /** Return true if this fixture mode has a virtual (software-only) dimmer */
+    bool hasVirtualDimmer() const;
+
+    /** Return channel indices (relative to fixture start) of all colour Intensity channels
+     *  that should be scaled by the virtual dimmer (MSB only, colour != NoColour) */
+    QVector<quint32> virtualDimmerChannels() const;
+
     /** @see QLCFixtureHead */
     QVector <quint32> rgbChannels(int head = 0) const;
 

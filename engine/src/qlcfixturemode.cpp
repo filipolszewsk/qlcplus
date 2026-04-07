@@ -33,6 +33,7 @@
 QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef)
     : m_fixtureDef(fixtureDef)
     , m_masterIntensityChannel(QLCChannel::invalid())
+    , m_virtualDimmer(false)
     , m_useGlobalPhysical(true)
 {
     Q_ASSERT(fixtureDef != NULL);
@@ -41,6 +42,7 @@ QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef)
 QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef, const QLCFixtureMode *mode)
     : m_fixtureDef(fixtureDef)
     , m_masterIntensityChannel(QLCChannel::invalid())
+    , m_virtualDimmer(false)
     , m_useGlobalPhysical(true)
 {
     Q_ASSERT(fixtureDef != NULL);
@@ -63,6 +65,7 @@ QLCFixtureMode& QLCFixtureMode::operator=(const QLCFixtureMode& mode)
         m_physical = mode.m_physical;
         m_heads = mode.m_heads;
         m_masterIntensityChannel = QLCChannel::invalid();
+        m_virtualDimmer = mode.m_virtualDimmer;
 
         m_actsOnMap = mode.m_actsOnMap;
 
@@ -244,6 +247,16 @@ quint32 QLCFixtureMode::channelNumber(QLCChannel::Group group, QLCChannel::Contr
 quint32 QLCFixtureMode::masterIntensityChannel() const
 {
     return m_masterIntensityChannel;
+}
+
+bool QLCFixtureMode::virtualDimmer() const
+{
+    return m_virtualDimmer;
+}
+
+void QLCFixtureMode::setVirtualDimmer(bool enable)
+{
+    m_virtualDimmer = enable;
 }
 
 quint32 QLCFixtureMode::primaryChannel(quint32 chIndex)
@@ -429,6 +442,10 @@ bool QLCFixtureMode::loadXML(QXmlStreamReader &doc)
             physical.loadXML(doc);
             setPhysical(physical);
         }
+        else if (doc.name() == KXMLQLCFixtureModeVirtualDimmer)
+        {
+            setVirtualDimmer(doc.readElementText() == QStringLiteral("true"));
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Fixture Mode tag:" << doc.name();
@@ -475,6 +492,13 @@ bool QLCFixtureMode::saveXML(QXmlStreamWriter *doc)
     QVectorIterator <QLCFixtureHead> hit(m_heads);
     while (hit.hasNext() == true)
         hit.next().saveXML(doc);
+
+    if (m_virtualDimmer)
+    {
+        doc->writeStartElement(KXMLQLCFixtureModeVirtualDimmer);
+        doc->writeCharacters(QStringLiteral("true"));
+        doc->writeEndElement();
+    }
 
     doc->writeEndElement();
 

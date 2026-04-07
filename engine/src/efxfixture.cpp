@@ -108,7 +108,8 @@ void EFXFixture::setHead(GroupHead const & head)
         modes << PanTilt;
 
     if (fxi->masterIntensityChannel() != QLCChannel::invalid() ||
-        fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head.head) != QLCChannel::invalid())
+        fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head.head) != QLCChannel::invalid() ||
+        fxi->hasVirtualDimmer())
         modes << Dimmer;
 
     if (fxi->rgbChannels(head.head).size() >= 3)
@@ -188,7 +189,8 @@ bool EFXFixture::isValid() const
         return false;
     else if (m_mode == Dimmer &&
              fxi->masterIntensityChannel() == QLCChannel::invalid() &&
-             fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head) == QLCChannel::invalid())
+             fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head) == QLCChannel::invalid() &&
+             !fxi->hasVirtualDimmer())
         return false;
     else if (m_mode == RGB && fxi->rgbChannels(head().head).size () == 0)
         return false;
@@ -231,7 +233,8 @@ QStringList EFXFixture::modeList()
         modes << KXMLQLCEFXFixtureModePanTilt;
 
     if (fxi->masterIntensityChannel() != QLCChannel::invalid() ||
-       fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head) != QLCChannel::invalid())
+       fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head) != QLCChannel::invalid() ||
+       fxi->hasVirtualDimmer())
         modes << KXMLQLCEFXFixtureModeDimmer;
 
     if (fxi->rgbChannels(head().head).size() >= 3)
@@ -431,6 +434,7 @@ void EFXFixture::start(QSharedPointer<GenericFader> fader)
 
         case Dimmer:
         {
+            m_virtualDimmerChannels.clear();
             m_firstMsbChannel = fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head);
             if (m_firstMsbChannel != QLCChannel::invalid())
             {
@@ -445,6 +449,8 @@ void EFXFixture::start(QSharedPointer<GenericFader> fader)
             else
             {
                 m_firstMsbChannel = fxi->masterIntensityChannel();
+                if (m_firstMsbChannel == QLCChannel::invalid() && fxi->hasVirtualDimmer())
+                    m_virtualDimmerChannels = fxi->virtualDimmerChannels();
             }
         }
         break;
@@ -623,6 +629,15 @@ void EFXFixture::setPointDimmer(QList<Universe *> universes, QSharedPointer<Gene
             }
         }
         updateFaderValues(fc, dimmerValue);
+    }
+    else if (!m_virtualDimmerChannels.isEmpty())
+    {
+        quint32 dimmerValue = quint32(dimmer);
+        foreach (quint32 ch, m_virtualDimmerChannels)
+        {
+            FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, ch);
+            updateFaderValues(fc, dimmerValue);
+        }
     }
 }
 

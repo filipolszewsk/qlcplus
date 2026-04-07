@@ -89,6 +89,9 @@ void EditMode::init()
     m_modeNameEdit->setValidator(CAPS_VALIDATOR(this));
     refreshChannelList();
 
+    m_virtualDimmerCheck->setChecked(m_mode->virtualDimmer());
+    connect(m_virtualDimmerCheck, SIGNAL(toggled(bool)), this, SLOT(slotVirtualDimmerToggled(bool)));
+
     /* Heads page */
     connect(m_addHeadButton, SIGNAL(clicked()), this, SLOT(slotAddHeadClicked()));
     connect(m_removeHeadButton, SIGNAL(clicked()), this, SLOT(slotRemoveHeadClicked()));
@@ -451,6 +454,15 @@ void EditMode::slotPhysicalModeChanged()
 }
 
 /*****************************************************************************
+ * Virtual Dimmer
+ *****************************************************************************/
+
+void EditMode::slotVirtualDimmerToggled(bool enabled)
+{
+    m_mode->setVirtualDimmer(enabled);
+}
+
+/*****************************************************************************
  * Accept
  *****************************************************************************/
 
@@ -459,6 +471,7 @@ void EditMode::accept()
     m_mode->setName(m_modeNameEdit->text());
     if (m_overridePhyCheck->isChecked())
         m_mode->setPhysical(m_phyEdit->physical());
+    m_mode->setVirtualDimmer(m_virtualDimmerCheck->isChecked());
 
     QDialog::accept();
 }
