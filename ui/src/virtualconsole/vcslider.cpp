@@ -45,6 +45,7 @@
 #include "mastertimer.h"
 #include "qlcmacros.h"
 #include "universe.h"
+#include "fixture.h"
 #include "vcslider.h"
 #include "apputil.h"
 #include "doc.h"
@@ -1319,6 +1320,26 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                     connect(fader.data(), SIGNAL(preWriteData(quint32,QByteArray)),
                             this, SLOT(slotUniverseWritten(quint32,QByteArray)));
                 }
+            }
+
+            if (lch.channel == VCSLIDER_VIRTUAL_DIMMER_CHANNEL)
+            {
+                foreach (quint32 colCh, fxi->virtualDimmerChannels())
+                {
+                    FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, colCh);
+                    if (fc->universe() == Universe::invalid())
+                    {
+                        fader->remove(fc);
+                        continue;
+                    }
+                    if (m_isOverriding)
+                        fc->addFlag(FadeChannel::Override);
+                    fc->setStart(fc->current());
+                    fc->setTarget(modLevel);
+                    fc->setReady(false);
+                    fc->setElapsed(0);
+                }
+                continue;
             }
 
             FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, lch.channel);

@@ -70,6 +70,11 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderChannel          QStringLiteral("Channel")
 #define KXMLQLCVCSliderChannelFixture   QStringLiteral("Fixture")
 
+/** Reserved channel index indicating the Virtual Dimmer entry for a fixture.
+ *  When stored as a LevelChannel, this causes writeDMXLevel() to scale all
+ *  colour-intensity channels of that fixture instead of a single DMX channel. */
+#define VCSLIDER_VIRTUAL_DIMMER_CHANNEL quint32(0xFFFE)
+
 #define KXMLQLCVCSliderPlayback         QStringLiteral("Playback")
 #define KXMLQLCVCSliderPlaybackFunction QStringLiteral("Function")
 #define KXMLQLCVCSliderPlaybackFlash    QStringLiteral("Flash")
