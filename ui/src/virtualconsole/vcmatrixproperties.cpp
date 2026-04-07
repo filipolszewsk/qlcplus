@@ -520,45 +520,48 @@ void VCMatrixProperties::slotRemoveClicked()
 {
     if (m_controlsTree->selectedItems().isEmpty())
         return;
-    QTreeWidgetItem *selItem = m_controlsTree->selectedItems().first();
-    quint8 ctlID = selItem->data(0, Qt::UserRole).toUInt();
 
+    QSet<quint8> idsToRemove;
+
+    foreach (QTreeWidgetItem *item, m_controlsTree->selectedItems())
     {
-        // For R/G/B Knobs:
-        // Remove the two others
-        VCMatrixControl *control = getSelectedControl();
-        if (control != NULL)
+        quint8 ctlID = item->data(0, Qt::UserRole).toUInt();
+        idsToRemove.insert(ctlID);
+
+        VCMatrixControl *control = NULL;
+        foreach (VCMatrixControl *c, m_controls)
         {
-            if (control->m_type == VCMatrixControl::Color1Knob
-                    || control->m_type == VCMatrixControl::Color2Knob
-                    || control->m_type == VCMatrixControl::Color3Knob
-                    || control->m_type == VCMatrixControl::Color4Knob
-                    || control->m_type == VCMatrixControl::Color5Knob)
+            if (c->m_id == ctlID) { control = c; break; }
+        }
+
+        if (control != NULL &&
+            (control->m_type == VCMatrixControl::Color1Knob
+             || control->m_type == VCMatrixControl::Color2Knob
+             || control->m_type == VCMatrixControl::Color3Knob
+             || control->m_type == VCMatrixControl::Color4Knob
+             || control->m_type == VCMatrixControl::Color5Knob))
+        {
+            if (control->m_color == Qt::red)
             {
-                if (control->m_color == Qt::red)
-                {
-                    removeControl(ctlID + 1);
-                    removeControl(ctlID + 2);
-                }
-                else if (control->m_color == Qt::green)
-                {
-                    removeControl(ctlID - 1);
-                    removeControl(ctlID + 1);
-                }
-                else if (control->m_color == Qt::blue)
-                {
-                    removeControl(ctlID - 2);
-                    removeControl(ctlID - 1);
-                }
-                else
-                {
-                    Q_ASSERT(false);
-                }
+                idsToRemove.insert(ctlID + 1);
+                idsToRemove.insert(ctlID + 2);
+            }
+            else if (control->m_color == Qt::green)
+            {
+                idsToRemove.insert(ctlID - 1);
+                idsToRemove.insert(ctlID + 1);
+            }
+            else if (control->m_color == Qt::blue)
+            {
+                idsToRemove.insert(ctlID - 2);
+                idsToRemove.insert(ctlID - 1);
             }
         }
     }
 
-    removeControl(ctlID);
+    foreach (quint8 id, idsToRemove)
+        removeControl(id);
+
     updateTree();
 }
 
