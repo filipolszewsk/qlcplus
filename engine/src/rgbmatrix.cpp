@@ -1178,19 +1178,17 @@ FadeChannel *RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 
     return fader->getChannelFader(doc(), universe, fixtureID, channel);
 }
 
-void RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
+bool RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
 {
-    // Zero Is Transparent: release the channel when value is 0 so other
-    // functions can take control. The Override flag is cleared so the channel
-    // is no longer held by this fader.
+    // Zero Is Transparent: completely release the channel so other functions
+    // can take control. Returning true signals the caller to remove this
+    // FadeChannel from the GenericFader entirely - this is correct for both
+    // HTP and LTP channels. LTP channels (e.g. color wheels) would otherwise
+    // receive value 0 as their "last LTP value" and stay there indefinitely.
     if (m_zeroIsTransparent && value == 0)
     {
         fc->removeFlag(FadeChannel::Override);
-        fc->setStart(fc->current());
-        fc->setTarget(0);
-        fc->setElapsed(0);
-        fc->setFadeTime(fadeOutSpeed());
-        return;
+        return true;
     }
 
     if (m_overrideHTP)
@@ -1207,6 +1205,8 @@ void RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
         fc->setFadeTime(fadeOutSpeed());
     else
         fc->setFadeTime(fadeTime);
+
+    return false;
 }
 
 QLCPoint RGBMatrix::findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const
@@ -1468,9 +1468,18 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 continue;
 
             quint32 universeIndex = floor((absAddress + channelList.at(i)) / 512);
+            Universe *uni = universes.at(universeIndex);
 
-            FadeChannel *fc = getFader(universes.at(universeIndex), grpHead.fxi, channelList.at(i));
-            updateFaderValues(fc, valueList.at(i), fadeTime);
+            FadeChannel *fc = getFader(uni, grpHead.fxi, channelList.at(i));
+            if (updateFaderValues(fc, valueList.at(i), fadeTime))
+            {
+                // ZeroIsTransparent: remove the channel entirely so it is
+                // released for other functions (critical for LTP channels like
+                // color wheels which would otherwise latch at 0).
+                QSharedPointer<GenericFader> fader = m_fadersMap.value(uni->id(), QSharedPointer<GenericFader>());
+                if (!fader.isNull())
+                    fader->remove(fc);
+            }
         }
     }
 }

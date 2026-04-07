@@ -287,7 +287,7 @@ private:
     void checkEngineCreation();
 
     FadeChannel *getFader(Universe *universe, quint32 fixtureID, quint32 channel);
-    void updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime);
+    bool updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime);
 
     /** Find the first (top-left) position of a fixture in the group */
     QLCPoint findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const;
