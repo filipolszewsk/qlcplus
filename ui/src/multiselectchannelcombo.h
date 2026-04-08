@@ -28,11 +28,13 @@
 class QPushButton;
 class QListWidget;
 class QListWidgetItem;
+class QFrame;
 
-/** 
+/**
  * A widget that allows selecting multiple channels from a dropdown list with checkboxes.
  * Displays selected channels as comma-separated text on a button.
  * When clicked, shows a popup with checkable list items.
+ * Uses application-level event filter to properly detect clicks outside and close the popup.
  */
 class MultiSelectChannelCombo : public QWidget
 {
@@ -44,28 +46,28 @@ public:
 
     /** Add an item to the list with display text and associated data */
     void addItem(const QString &text, const QVariant &userData = QVariant());
-    
+
     /** Clear all items */
     void clear();
-    
+
     /** Get list of selected item texts */
     QStringList selectedTexts() const;
-    
+
     /** Get list of selected item data */
     QVariantList selectedData() const;
-    
+
     /** Set selected items by their data values */
     void setSelectedData(const QVariantList &dataList);
-    
+
     /** Set selected items by their text values */
     void setSelectedTexts(const QStringList &textList);
-    
+
     /** Get count of total items */
     int count() const;
-    
+
     /** Get count of selected items */
     int selectedCount() const;
-    
+
     /** Check if any items are selected */
     bool hasSelection() const;
 
@@ -73,44 +75,36 @@ signals:
     /** Emitted when selection changes */
     void selectionChanged();
 
-private slots:
-    /** Handle button click to show/hide popup */
-    void slotButtonClicked();
-    
-    /** Handle item check state change */
-    void slotItemChanged(QListWidgetItem *item);
-
-private:
-    /** Update button text based on current selection */
-    void updateButtonText();
-    
-    /** Show the popup list */
-    void showPopup();
-    
-    /** Hide the popup list */
-    void hidePopup();
-
 protected:
-    /** Handle focus out events to hide popup */
-    void focusOutEvent(QFocusEvent *event) override;
-    
+    /** Event filter to catch mouse presses outside the popup */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
     /** Handle key press events */
     void keyPressEvent(QKeyEvent *event) override;
 
+private slots:
+    void slotButtonClicked();
+    void slotItemChanged(QListWidgetItem *item);
+
 private:
+    void updateButtonText();
+    void showPopup();
+    void hidePopup();
+
     QPushButton *m_button;
+    QFrame      *m_popupFrame;
     QListWidget *m_listWidget;
-    bool m_popupVisible;
-    
+    bool         m_popupVisible;
+
     struct ChannelItem {
-        QString text;
+        QString  text;
         QVariant data;
-        bool selected;
-        
+        bool     selected;
+
         ChannelItem() : selected(false) {}
         ChannelItem(const QString &t, const QVariant &d) : text(t), data(d), selected(false) {}
     };
-    
+
     QList<ChannelItem> m_items;
 };
 
