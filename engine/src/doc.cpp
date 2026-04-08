@@ -616,7 +616,17 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
             universes.at(targetUni)->registerPanTiltPair(tiltPair);
         }
     }
-    
+
+    // Register virtual dimmer channels so the Universe can apply submaster scaling
+    if (fixture->hasVirtualDimmer())
+    {
+        QList<ushort> absChannels;
+        quint32 start = fixture->address();
+        foreach (quint32 relCh, fixture->virtualDimmerChannels())
+            absChannels << ushort(start + relCh);
+        universes.at(fixture->universe())->registerVirtualDimmer(fixture->id(), absChannels);
+    }
+
     inputOutputMap()->releaseUniverses(true);
 
     emit fixtureAdded(id);
@@ -643,6 +653,14 @@ bool Doc::deleteFixture(quint32 id)
         }
         if (m_monitorProps != NULL)
             m_monitorProps->removeFixture(id);
+
+        // Unregister virtual dimmer before destroying the fixture object
+        if (fxi->hasVirtualDimmer())
+        {
+            QList<Universe *> universes = inputOutputMap()->claimUniverses();
+            universes.at(fxi->universe())->unregisterVirtualDimmer(id);
+            inputOutputMap()->releaseUniverses(false);
+        }
 
         emit fixtureRemoved(id);
         setModified();
@@ -852,6 +870,16 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
             
             universe->registerPanTiltPair(tiltPair);
         }
+    }
+
+    // Re-register virtual dimmer (channel addresses may have changed)
+    if (fixture->hasVirtualDimmer())
+    {
+        universe->unregisterVirtualDimmer(fixture->id());
+        QList<ushort> absChannels;
+        foreach (quint32 relCh, fixture->virtualDimmerChannels())
+            absChannels << ushort(fxAddress + relCh);
+        universe->registerVirtualDimmer(fixture->id(), absChannels);
     }
 
     inputOutputMap()->releaseUniverses(true);

@@ -687,10 +687,23 @@ void VirtualConsole::updateActions()
         }
         else
         {
-            /* Allow paste-as-properties when clipboard has a same-type widget */
-            bool samePasteAvailable = !m_clipboard.isEmpty()
-                && m_editAction == EditCopy
-                && m_clipboard.first()->type() == m_selectedWidgets.last()->type();
+            /* Allow paste-as-properties when clipboard has a same-type widget.
+               Also supports multi-selection: all selected widgets must be
+               the same type as the clipboard source and none may hold children. */
+            bool samePasteAvailable = false;
+            if (!m_clipboard.isEmpty() && m_editAction == EditCopy)
+            {
+                int sourceType = m_clipboard.first()->type();
+                samePasteAvailable = true;
+                foreach (VCWidget* w, m_selectedWidgets)
+                {
+                    if (w->type() != sourceType || w->allowChildren())
+                    {
+                        samePasteAvailable = false;
+                        break;
+                    }
+                }
+            }
             m_editPasteAction->setEnabled(samePasteAvailable);
         }
     }
@@ -1109,23 +1122,36 @@ void VirtualConsole::slotEditPaste()
         return;
     }
 
-    /* Selective paste: single target selected, same type as clipboard, copy action */
+    /* Selective paste: one or more targets selected, all the same type as the
+       clipboard source and none allowing children.  The dialog is shown once
+       and the chosen properties are applied to every selected widget. */
     if (m_editAction == EditCopy
-        && m_selectedWidgets.size() == 1
-        && !m_clipboard.isEmpty()
-        && m_clipboard.first()->type() == m_selectedWidgets.first()->type()
-        && !m_selectedWidgets.first()->allowChildren())
+        && !m_selectedWidgets.isEmpty()
+        && !m_clipboard.isEmpty())
     {
-        VCWidget* source = m_clipboard.first();
-        VCWidget* target = m_selectedWidgets.first();
-        VCPastePropertiesDialog dlg(source, target, this);
-        if (dlg.exec() == QDialog::Accepted)
+        int sourceType = m_clipboard.first()->type();
+        bool allSameType = true;
+        foreach (VCWidget* w, m_selectedWidgets)
         {
-            VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
-            if (flags != 0)
-                target->applyPropertiesFrom(source, flags);
+            if (w->type() != sourceType || w->allowChildren())
+            {
+                allSameType = false;
+                break;
+            }
         }
-        return;
+        if (allSameType)
+        {
+            VCWidget* source = m_clipboard.first();
+            VCPastePropertiesDialog dlg(source, m_selectedWidgets.first(), this);
+            if (dlg.exec() == QDialog::Accepted)
+            {
+                VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
+                if (flags != 0)
+                    foreach (VCWidget* w, m_selectedWidgets)
+                        w->applyPropertiesFrom(source, flags);
+            }
+            return;
+        }
     }
 
     VCWidget* parent;

@@ -1324,21 +1324,11 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
 
             if (lch.channel == VCSLIDER_VIRTUAL_DIMMER_CHANNEL)
             {
-                foreach (quint32 colCh, fxi->virtualDimmerChannels())
-                {
-                    FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, colCh);
-                    if (fc->universe() == Universe::invalid())
-                    {
-                        fader->remove(fc);
-                        continue;
-                    }
-                    if (m_isOverriding)
-                        fc->addFlag(FadeChannel::Override);
-                    fc->setStart(fc->current());
-                    fc->setTarget(modLevel);
-                    fc->setReady(false);
-                    fc->setElapsed(0);
-                }
+                // Virtual dimmer acts as a submaster: update the Universe scale factor,
+                // not individual FadeChannels. The Universe applies the scale in
+                // updatePostGMValue() after HTP/LTP and Grand Master, so it can only
+                // reduce values, never add them.
+                universes[universe]->setVirtualDimmerValue(lch.fixture, modLevel);
                 continue;
             }
 

@@ -62,6 +62,7 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     , m_totalChannels(0)
     , m_totalChannelsChanged(false)
     , m_intensityChannelsChanged(false)
+    , m_virtualDimmerScale(UNIVERSE_SIZE, char(255))
     , m_preGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_postGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_lastPostGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
@@ -583,7 +584,54 @@ void Universe::updatePostGMValue(int channel)
         value = applyGM(channel, value);
     value = applyModifiers(channel, value);
     value = applyPassthrough(channel, value);
+
+    // Apply virtual dimmer submaster scale (only reduces, never adds)
+    uchar vdScale = uchar(m_virtualDimmerScale.at(channel));
+    if (vdScale < 255 && value > 0)
+        value = uchar(qRound(value * vdScale / 255.0));
+
     (*m_postGMValues)[channel] = static_cast<char>(value);
+}
+
+/************************************************************************
+ * Virtual Dimmer
+ ************************************************************************/
+
+void Universe::registerVirtualDimmer(quint32 fxiId, const QList<ushort>& absChannels)
+{
+    m_virtualDimmerChannelsMap[fxiId] = absChannels;
+    foreach (ushort ch, absChannels)
+    {
+        if (ch < UNIVERSE_SIZE)
+            m_virtualDimmerScale[ch] = char(255);
+    }
+}
+
+void Universe::unregisterVirtualDimmer(quint32 fxiId)
+{
+    foreach (ushort ch, m_virtualDimmerChannelsMap.value(fxiId))
+    {
+        if (ch < UNIVERSE_SIZE)
+        {
+            m_virtualDimmerScale[ch] = char(255);
+            updatePostGMValue(ch);
+        }
+    }
+    m_virtualDimmerChannelsMap.remove(fxiId);
+}
+
+void Universe::setVirtualDimmerValue(quint32 fxiId, uchar value)
+{
+    if (!m_virtualDimmerChannelsMap.contains(fxiId))
+        return;
+    foreach (ushort ch, m_virtualDimmerChannelsMap[fxiId])
+    {
+        if (ch < UNIVERSE_SIZE)
+        {
+            m_virtualDimmerScale[ch] = char(value);
+            updatePostGMValue(ch);
+        }
+    }
 }
 
 /************************************************************************
