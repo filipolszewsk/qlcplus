@@ -632,12 +632,13 @@ void EFXFixture::setPointDimmer(QList<Universe *> universes, QSharedPointer<Gene
     }
     else if (!m_virtualDimmerChannels.isEmpty())
     {
-        quint32 dimmerValue = quint32(dimmer);
-        foreach (quint32 ch, m_virtualDimmerChannels)
-        {
-            FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, ch);
+        // Use Virtual Dimmer as normal FadeChannel (special channel 0xFFFE)
+        uchar dimmerValue = uchar(qBound(0.0f, dimmer, 255.0f));
+        
+        // Create FadeChannel for Virtual Dimmer (special channel 0xFFFE)
+        FadeChannel *fc = fader->getChannelFader(doc(), uni, head().fxi, VIRTUAL_DIMMER_CHANNEL);
+        if (fc != NULL)
             updateFaderValues(fc, dimmerValue);
-        }
     }
 }
 

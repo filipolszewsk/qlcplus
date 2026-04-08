@@ -1971,6 +1971,12 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
             row.channelCombo->addItem(ch->name(), ch->name());
     }
     
+    // Add Virtual Dimmer option for fixtures that support it
+    if (mode->virtualDimmer())
+    {
+        row.channelCombo->addItem(tr("Virtual Dimmer"), QString("__VIRTUAL_DIMMER__"));
+    }
+    
     // Set current selection from mappings (all mappings should have same valueIndex)
     QVariantList selectedChannels;
     for (const RGBMatrix::ChannelMapping &mapping : mappings)

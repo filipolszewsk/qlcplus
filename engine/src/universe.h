@@ -28,6 +28,10 @@
 #include <QSet>
 #include <atomic>
 
+/** Virtual Dimmer channel number used in FadeChannel.
+ *  This is a special channel number that identifies Virtual Dimmer FadeChannels. */
+#define VIRTUAL_DIMMER_CHANNEL quint32(0xFFFE)
+
 #include "inputpatch.h"
 #include "qlcchannel.h"
 
@@ -341,28 +345,47 @@ public:
     bool isPanTiltChannel(ushort channel) const;
 
     /************************************************************************
+     * Fader Priority (needed for Virtual Dimmer)
+     ************************************************************************/
+public:
+    enum FaderPriority
+    {
+        Auto = 0,
+        Override,
+        Flashing, /** Priority to override slider values and running chasers by flash scene */
+        SimpleDesk
+    };
+
+    /************************************************************************
      * Virtual Dimmer (software submaster for colour-only fixtures)
      ************************************************************************/
 public:
-    /** Register a fixture as having a virtual dimmer. absChannels is the list
-     *  of absolute DMX channel addresses (within this universe) that will be
-     *  scaled. Default scale is 255 (= full, no scaling). */
-    void registerVirtualDimmer(quint32 fxiId, const QList<ushort>& absChannels);
+    /** Reset all Virtual Dimmer values to 255 (no scaling). Called each cycle. */
+    void zeroVirtualDimmers();
 
-    /** Unregister a fixture's virtual dimmer and restore scale to 255. */
-    void unregisterVirtualDimmer(quint32 fxiId);
+    /** Write Virtual Dimmer value with HTP merging. Returns true if accepted.
+     *  forceLTP bypasses HTP check (for Override flag). */
+    bool writeVirtualDimmer(quint32 fixtureId, uchar value, bool forceLTP = false);
 
-    /** Set the virtual dimmer scale for a fixture (0 = fully off, 255 = no scaling).
-     *  Immediately re-triggers updatePostGMValue() for all affected channels. */
-    void setVirtualDimmerValue(quint32 fxiId, uchar value);
+    /** Register fixture's Virtual Dimmer channels for scaling lookup.
+     *  Called from Doc when fixture is added/updated. */
+    void registerVirtualDimmerChannels(quint32 fixtureId, const QList<ushort>& absChannels);
+
+    /** Unregister fixture's Virtual Dimmer channels.
+     *  Called from Doc when fixture is deleted. */
+    void unregisterVirtualDimmerChannels(quint32 fixtureId);
 
 protected:
-    /** Per-channel virtual dimmer scale factor (0-255, default 255 = pass-through).
-     *  Indexed by absolute channel address within this universe (0-511). */
-    QByteArray m_virtualDimmerScale;
+    /** Virtual Dimmer values (fixture ID -> dimmer value). Default 255 = no scaling.
+     *  Reset to empty each cycle, populated by writeVirtualDimmer(). */
+    QMap<quint32, uchar> m_virtualDimmerPreGM;
 
-    /** Maps fixture ID to its absolute colour channel addresses for virtual dimmer. */
-    QMap<quint32, QList<ushort>> m_virtualDimmerChannelsMap;
+    /** Maps DMX channel to fixture ID for Virtual Dimmer lookup.
+     *  Only contains channels that belong to fixtures with Virtual Dimmer. */
+    QMap<ushort, quint32> m_channelToFixtureMap;
+
+    /** Maps fixture ID to its DMX channels for efficient updatePostGMValue() calls. */
+    QMap<quint32, QList<ushort>> m_fixtureToChannelsMap;
 
 protected:
     /** An array of each channel's capabilities. This helps to optimize HTP/LTP/Relative checks */
@@ -389,13 +412,6 @@ protected:
      * Faders
      ************************************************************************/
 public:
-    enum FaderPriority
-    {
-        Auto = 0,
-        Override,
-        Flashing, /** Priority to override slider values and running chasers by flash scene */
-        SimpleDesk
-    };
 
     /** Request a new GenericFader used to compose the final values of
      *  this Universe. The caller is in charge of adding/removing

@@ -255,6 +255,19 @@ void GenericFader::write(Universe *universe)
         }
 
         //qDebug() << "[GenericFader] >>> uni:" << universe->id() << ", address:" << address << ", value:" << value << "int:" << compIntensity;
+        
+        // Handle Virtual Dimmer channels specially
+        if (flags & FadeChannel::VirtualDimmer)
+        {
+            bool isOverride = (flags & FadeChannel::Override) != 0;
+            universe->writeVirtualDimmer(fc.fixture(), value, isOverride);
+            
+            // Auto-remove at zero (same logic as normal intensity channels)
+            if (fc.current() == 0 && fc.target() == 0 && fc.isReady())
+                it.remove();
+            continue;
+        }
+        
         if (flags & FadeChannel::Override)
         {
             universe->write(address, value, true);

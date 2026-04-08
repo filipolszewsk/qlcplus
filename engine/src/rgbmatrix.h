@@ -40,6 +40,10 @@
 #include "function.h"
 #include "qlcpoint.h"
 
+/** Reserved channel index for Virtual Dimmer in RGB Matrix multi mapping.
+ *  This is not a physical channel - it targets Universe virtual dimmer scaling. */
+#define RGBMATRIX_VIRTUAL_DIMMER_CHANNEL quint32(0xFFFD)
+
 class FixtureGroup;
 class GenericFader;
 class FadeChannel;

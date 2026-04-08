@@ -150,6 +150,15 @@ void FadeChannel::autoDetect(const Doc *doc)
     }
     else
     {
+        // Special case: Virtual Dimmer channel
+        if (channel() == VIRTUAL_DIMMER_CHANNEL)
+        {
+            m_universe = fixture->universe();
+            m_address = QLCChannel::invalid();  // No DMX address
+            addFlag(FadeChannel::VirtualDimmer | FadeChannel::HTP | FadeChannel::Intensity | FadeChannel::CanFade);
+            return;
+        }
+
         QLCFixtureMode *mode = fixture->fixtureMode();
         m_universe = fixture->universe();
         m_address = fixture->address();

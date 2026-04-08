@@ -62,7 +62,6 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     , m_totalChannels(0)
     , m_totalChannelsChanged(false)
     , m_intensityChannelsChanged(false)
-    , m_virtualDimmerScale(UNIVERSE_SIZE, char(255))
     , m_preGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_postGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_lastPostGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
@@ -320,6 +319,7 @@ void Universe::processFaders()
 {
     flushInput();
     zeroIntensityChannels();
+    zeroVirtualDimmers();
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -586,7 +586,13 @@ void Universe::updatePostGMValue(int channel)
     value = applyPassthrough(channel, value);
 
     // Apply virtual dimmer submaster scale (only reduces, never adds)
-    uchar vdScale = uchar(m_virtualDimmerScale.at(channel));
+    uchar vdScale = 255;  // Default: no scaling
+    if (m_channelToFixtureMap.contains(channel))
+    {
+        quint32 fixtureId = m_channelToFixtureMap[channel];
+        vdScale = m_virtualDimmerPreGM.value(fixtureId, 255);  // Default 255 = no scaling
+    }
+    
     if (vdScale < 255 && value > 0)
         value = uchar(qRound(value * vdScale / 255.0));
 
@@ -597,41 +603,58 @@ void Universe::updatePostGMValue(int channel)
  * Virtual Dimmer
  ************************************************************************/
 
-void Universe::registerVirtualDimmer(quint32 fxiId, const QList<ushort>& absChannels)
+void Universe::zeroVirtualDimmers()
 {
-    m_virtualDimmerChannelsMap[fxiId] = absChannels;
-    foreach (ushort ch, absChannels)
-    {
-        if (ch < UNIVERSE_SIZE)
-            m_virtualDimmerScale[ch] = char(255);
-    }
+    m_virtualDimmerPreGM.clear();
 }
 
-void Universe::unregisterVirtualDimmer(quint32 fxiId)
+bool Universe::writeVirtualDimmer(quint32 fixtureId, uchar value, bool forceLTP)
 {
-    foreach (ushort ch, m_virtualDimmerChannelsMap.value(fxiId))
+    // HTP logic: only accept if higher value or forceLTP (Override flag)
+    uchar currentValue = m_virtualDimmerPreGM.value(fixtureId, 0);  // Default 0 when not set
+    if (!forceLTP && value < currentValue)
     {
-        if (ch < UNIVERSE_SIZE)
-        {
-            m_virtualDimmerScale[ch] = char(255);
-            updatePostGMValue(ch);
-        }
+        qDebug() << "[Universe] VirtualDimmer HTP check not passed for fixture" << fixtureId << "value:" << value << "current:" << currentValue;
+        return false;
     }
-    m_virtualDimmerChannelsMap.remove(fxiId);
+
+    // Accept the value
+    m_virtualDimmerPreGM[fixtureId] = value;
+    
+    // Trigger updatePostGMValue for all channels of this fixture
+    foreach (ushort channel, m_fixtureToChannelsMap.value(fixtureId))
+    {
+        if (channel < UNIVERSE_SIZE)
+            updatePostGMValue(channel);
+    }
+    
+    return true;
 }
 
-void Universe::setVirtualDimmerValue(quint32 fxiId, uchar value)
+void Universe::registerVirtualDimmerChannels(quint32 fixtureId, const QList<ushort>& absChannels)
 {
-    if (!m_virtualDimmerChannelsMap.contains(fxiId))
-        return;
-    foreach (ushort ch, m_virtualDimmerChannelsMap[fxiId])
+    foreach (ushort channel, absChannels)
     {
-        if (ch < UNIVERSE_SIZE)
-        {
-            m_virtualDimmerScale[ch] = char(value);
-            updatePostGMValue(ch);
-        }
+        if (channel < UNIVERSE_SIZE)
+            m_channelToFixtureMap[channel] = fixtureId;
     }
+    m_fixtureToChannelsMap[fixtureId] = absChannels;
+}
+
+void Universe::unregisterVirtualDimmerChannels(quint32 fixtureId)
+{
+    // Remove all channels that belong to this fixture
+    QMutableMapIterator<ushort, quint32> it(m_channelToFixtureMap);
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.value() == fixtureId)
+            it.remove();
+    }
+    
+    // Remove fixture's channel mapping and current VD value
+    m_fixtureToChannelsMap.remove(fixtureId);
+    m_virtualDimmerPreGM.remove(fixtureId);
 }
 
 /************************************************************************

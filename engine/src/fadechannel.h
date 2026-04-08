@@ -53,7 +53,8 @@ public:
         SetTarget   = (1 << 8),     /** Set target to current universe value */
         AutoRemove  = (1 << 9),     /** Automatically remove the channel once target is reached */
         CrossFade   = (1 << 10),    /** Channel subject to crossfade */
-        ForceLTP    = (1 << 11)     /** Force LTP for flashing scenes */
+        ForceLTP    = (1 << 11),    /** Force LTP for flashing scenes */
+        VirtualDimmer = (1 << 12)   /** Virtual Dimmer channel (0xFFFE) */
     };
 
     /** Create a new FadeChannel with empty/invalid values */

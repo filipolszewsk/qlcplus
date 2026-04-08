@@ -1317,7 +1317,38 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
                 // Named channel: append it with its own offset value
                 quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
-                if (channelIdx != QLCChannel::invalid())
+                if (channelIdx == RGBMATRIX_VIRTUAL_DIMMER_CHANNEL)
+                {
+                    // Use Virtual Dimmer as normal FadeChannel with special channel 0xFFFE
+                    int offset = mapping.valueIndex;
+                    int sourceRow = scriptRow * paramCount + offset;
+
+                    uint sourceCol = col;
+                    if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
+                        sourceCol = map[sourceRow][scriptPos.x()];
+
+                    uchar dimmerValue = rgbToGrey(sourceCol);
+                    
+                    // Get fixture's universe and use normal FadeChannel system
+                    quint32 universeIndex = floor(fxi->universeAddress() / 512);
+                    Universe *uni = universes.at(universeIndex);
+                    
+                    // Get FadeChannel for Virtual Dimmer (special channel 0xFFFE)
+                    FadeChannel *fc = getFader(uni, fxi->id(), VIRTUAL_DIMMER_CHANNEL);
+                    if (fc != NULL)
+                    {
+                        // Use updateFaderValues for Zero Transparent support
+                        if (updateFaderValues(fc, dimmerValue, fadeTime))
+                        {
+                            // Zero Transparent: remove the channel entirely
+                            QSharedPointer<GenericFader> fader = m_fadersMap.value(uni->id(), QSharedPointer<GenericFader>());
+                            if (!fader.isNull())
+                                fader->remove(fc);
+                        }
+                    }
+                    usePerDefinitionMapping = true;
+                }
+                else if (channelIdx != QLCChannel::invalid())
                 {
                     int offset = mapping.valueIndex;
                     int sourceRow = scriptRow * paramCount + offset;
@@ -1649,6 +1680,15 @@ quint32 RGBMatrix::findChannelByName(const QLCFixtureMode *mode, const QString &
 {
     if (mode == NULL || channelName.isEmpty())
         return QLCChannel::invalid();
+
+    // Special case: Virtual Dimmer
+    if (channelName == "__VIRTUAL_DIMMER__")
+    {
+        if (mode->virtualDimmer())
+            return RGBMATRIX_VIRTUAL_DIMMER_CHANNEL;
+        else
+            return QLCChannel::invalid();
+    }
 
     for (int i = 0; i < mode->channels().size(); i++)
     {
