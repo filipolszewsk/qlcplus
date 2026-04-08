@@ -113,6 +113,7 @@ add_library(${module_name}
     remapwidget.cpp remapwidget.h
     rgbitem.cpp rgbitem.h
     rgbmatrixeditor.cpp rgbmatrixeditor.h rgbmatrixeditor.ui
+    multiselectchannelcombo.cpp multiselectchannelcombo.h
     sceneeditor.cpp sceneeditor.h sceneeditor.ui
     scripteditor.cpp scripteditor.h scripteditor.ui
     selectinputchannel.cpp selectinputchannel.h selectinputchannel.ui

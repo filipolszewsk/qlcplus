@@ -27,6 +27,7 @@
 #include "rgbmatrix.h"
 #include "qlcpoint.h"
 #include "doc.h"
+#include "multiselectchannelcombo.h"
 
 class SpeedDialWidget;
 class QGraphicsScene;
@@ -142,7 +143,7 @@ private:
     // Forward declare structs before methods
     struct ChannelMappingRow {
         QHBoxLayout *layout;
-        QComboBox *channelCombo;
+        MultiSelectChannelCombo *channelCombo;
         QComboBox *valueIndexCombo;
         QComboBox *headModeCombo;   // "All Heads" / "Individual Heads" (NULL if fixture has 1 head)
         QPushButton *removeButton;  // NULL for first row (cannot remove last row)
@@ -164,7 +165,7 @@ private:
     void updateChannelMappingUI();
     void clearChannelMappingUI();
     void addChannelMappingRow(FixtureDefMappingWidget &widget, QLCFixtureMode *mode, 
-                               const RGBMatrix::ChannelMapping &mapping, bool isFirstRow);
+                               const QList<RGBMatrix::ChannelMapping> &mappings, bool isFirstRow);
     void saveAllChannelMappings(const QString &fixtureDefKey);
     QString getFixtureDefKey(const QLCFixtureDef *def);
     int getFixtureHeadCount(const QString &fixtureDefKey);
@@ -202,6 +203,7 @@ protected slots:
     void slotAddChannelMapping();
     void slotRemoveChannelMapping();
     void slotToggleCollapse(bool collapsed);
+    void slotChannelMappingChanged();
 
     /************************************************************************
      * Row filtering

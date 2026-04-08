@@ -1949,7 +1949,7 @@ void RGBMatrixEditor::clearChannelMappingUI()
 }
 
 void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCFixtureMode *mode,
-                                            const RGBMatrix::ChannelMapping &mapping, bool isFirstRow)
+                                            const QList<RGBMatrix::ChannelMapping> &mappings, bool isFirstRow)
 {
     ChannelMappingRow row;
     
@@ -1957,8 +1957,8 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     row.layout = new QHBoxLayout();
     row.layout->setSpacing(8);
     
-    // Channel combo
-    row.channelCombo = new QComboBox();
+    // Channel multi-select combo
+    row.channelCombo = new MultiSelectChannelCombo();
     row.channelCombo->setProperty("fixtureDefKey", widget.fixtureDefKey);
     row.channelCombo->setProperty("rowIndex", widget.rows.size());
     row.channelCombo->addItem(tr("Auto (use control mode)"), QString());
@@ -1971,13 +1971,14 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
             row.channelCombo->addItem(ch->name(), ch->name());
     }
     
-    // Set current value
-    if (!mapping.channelName.isEmpty())
+    // Set current selection from mappings (all mappings should have same valueIndex)
+    QVariantList selectedChannels;
+    for (const RGBMatrix::ChannelMapping &mapping : mappings)
     {
-        int idx = row.channelCombo->findData(mapping.channelName);
-        if (idx >= 0)
-            row.channelCombo->setCurrentIndex(idx);
+        if (!mapping.channelName.isEmpty())
+            selectedChannels.append(mapping.channelName);
     }
+    row.channelCombo->setSelectedData(selectedChannels);
     
     // Offset combo
     row.valueIndexCombo = new QComboBox();
@@ -1997,7 +1998,10 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     {
         row.valueIndexCombo->addItem(QString::number(i + 1), i);
     }
-    row.valueIndexCombo->setCurrentIndex(mapping.valueIndex);
+    
+    // Set current offset (all mappings should have same valueIndex)
+    int valueIndex = mappings.isEmpty() ? 0 : mappings.first().valueIndex;
+    row.valueIndexCombo->setCurrentIndex(valueIndex);
     
     // Head Mode combo (only if fixture has multiple heads)
     int headCount = getFixtureHeadCount(widget.fixtureDefKey);
@@ -2009,8 +2013,8 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
         row.headModeCombo->addItem(tr("Individual Heads"), "Individual");
         row.headModeCombo->addItem(tr("All Heads"), "All");
         
-        // Set current value
-        QString currentMode = mapping.headMode.isEmpty() ? "Individual" : mapping.headMode;
+        // Set current value (use first mapping's head mode)
+        QString currentMode = mappings.isEmpty() || mappings.first().headMode.isEmpty() ? "Individual" : mappings.first().headMode;
         int modeIdx = row.headModeCombo->findData(currentMode);
         if (modeIdx >= 0)
             row.headModeCombo->setCurrentIndex(modeIdx);
@@ -2038,7 +2042,7 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     }
     
     // Connect combo signals
-    connect(row.channelCombo, SIGNAL(activated(int)), this, SLOT(slotChannelMappingChanged(int)));
+    connect(row.channelCombo, SIGNAL(selectionChanged()), this, SLOT(slotChannelMappingChanged()));
     connect(row.valueIndexCombo, SIGNAL(activated(int)), this, SLOT(slotChannelMappingChanged(int)));
     
     // Build layout
@@ -2184,11 +2188,21 @@ void RGBMatrixEditor::updateChannelMappingUI()
         widget.containerLayout->setContentsMargins(20, 0, 0, 0);  // Indent rows
         widget.containerLayout->setSpacing(4);
 
-        // Create UI rows
-        bool isFirstRow = true;
+        // Group mappings by valueIndex (offset)
+        QMap<int, QList<RGBMatrix::ChannelMapping>> groupedMappings;
         foreach (const RGBMatrix::ChannelMapping &mapping, existingMappings)
         {
-            addChannelMappingRow(widget, mode, mapping, isFirstRow);
+            groupedMappings[mapping.valueIndex].append(mapping);
+        }
+        
+        // Create UI rows - one row per unique offset
+        bool isFirstRow = true;
+        QMapIterator<int, QList<RGBMatrix::ChannelMapping>> groupIt(groupedMappings);
+        while (groupIt.hasNext())
+        {
+            groupIt.next();
+            const QList<RGBMatrix::ChannelMapping> &mappingsForOffset = groupIt.value();
+            addChannelMappingRow(widget, mode, mappingsForOffset, isFirstRow);
             isFirstRow = false;
         }
 
@@ -2270,6 +2284,23 @@ void RGBMatrixEditor::slotChannelMappingChanged(int index)
     slotRestartTest();
 }
 
+void RGBMatrixEditor::slotChannelMappingChanged()
+{
+    MultiSelectChannelCombo *combo = qobject_cast<MultiSelectChannelCombo*>(sender());
+    if (combo == NULL)
+        return;
+
+    QString key = combo->property("fixtureDefKey").toString();
+    if (key.isEmpty())
+        return;
+
+    // Save all channel mappings for this fixture type
+    saveAllChannelMappings(key);
+    
+    // Restart preview if running
+    slotRestartTest();
+}
+
 void RGBMatrixEditor::saveAllChannelMappings(const QString &fixtureDefKey)
 {
     // Find the widget for this fixture type
@@ -2290,11 +2321,30 @@ void RGBMatrixEditor::saveAllChannelMappings(const QString &fixtureDefKey)
     QList<RGBMatrix::ChannelMapping> mappings;
     foreach (const ChannelMappingRow &row, widget->rows)
     {
-        RGBMatrix::ChannelMapping m;
-        m.channelName = row.channelCombo->currentData().toString();
-        m.valueIndex = row.valueIndexCombo->currentData().toInt();
-        m.headMode = row.headModeCombo ? row.headModeCombo->currentData().toString() : "Individual";
-        mappings.append(m);
+        // Get selected channels from multi-select combo
+        QVariantList selectedChannels = row.channelCombo->selectedData();
+        int valueIndex = row.valueIndexCombo->currentData().toInt();
+        QString headMode = row.headModeCombo ? row.headModeCombo->currentData().toString() : "Individual";
+        
+        // Create separate mapping for each selected channel
+        foreach (const QVariant &channelData, selectedChannels)
+        {
+            RGBMatrix::ChannelMapping m;
+            m.channelName = channelData.toString();
+            m.valueIndex = valueIndex;
+            m.headMode = headMode;
+            mappings.append(m);
+        }
+        
+        // If no channels selected, create an "Auto" mapping
+        if (selectedChannels.isEmpty())
+        {
+            RGBMatrix::ChannelMapping m;
+            m.channelName = "";  // Empty = Auto
+            m.valueIndex = valueIndex;
+            m.headMode = headMode;
+            mappings.append(m);
+        }
     }
     
     // Save to backend
