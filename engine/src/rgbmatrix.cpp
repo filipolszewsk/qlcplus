@@ -1747,6 +1747,21 @@ void RGBMatrix::removeChannelMapping(const QString &fixtureDefKey, int index)
     }
 }
 
+void RGBMatrix::removeChannelMappingsByOffset(const QString &fixtureDefKey, int valueIndex)
+{
+    if (fixtureDefKey.isEmpty() || !m_fixtureDefChannelMap.contains(fixtureDefKey))
+        return;
+
+    QList<ChannelMapping> mappings = m_fixtureDefChannelMap[fixtureDefKey];
+    for (int i = mappings.size() - 1; i >= 0; i--)
+    {
+        if (mappings[i].valueIndex == valueIndex)
+            mappings.removeAt(i);
+    }
+    m_fixtureDefChannelMap[fixtureDefKey] = mappings;
+    emit changed(id());
+}
+
 void RGBMatrix::clearChannelMappings(const QString &fixtureDefKey)
 {
     if (!fixtureDefKey.isEmpty())

@@ -390,6 +390,9 @@ public:
     /** Remove a channel mapping at specific index */
     void removeChannelMapping(const QString &fixtureDefKey, int index);
     
+    /** Remove all channel mappings with a given valueIndex (offset) */
+    void removeChannelMappingsByOffset(const QString &fixtureDefKey, int valueIndex);
+    
     /** Clear all channel mappings for a fixture definition */
     void clearChannelMappings(const QString &fixtureDefKey);
 

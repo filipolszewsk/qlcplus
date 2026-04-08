@@ -2367,8 +2367,14 @@ void RGBMatrixEditor::slotAddChannelMapping()
     if (key.isEmpty())
         return;
     
-    // Add new empty mapping to backend (Auto, offset 0)
-    m_matrix->addChannelMapping(key, QString(), 0);
+    // Find next unused offset so the new row gets its own UI row
+    QList<RGBMatrix::ChannelMapping> existing = m_matrix->fixtureDefChannelMappings(key);
+    int nextOffset = 0;
+    foreach (const RGBMatrix::ChannelMapping &m, existing)
+        if (m.valueIndex >= nextOffset)
+            nextOffset = m.valueIndex + 1;
+    
+    m_matrix->addChannelMapping(key, QString(), nextOffset);
     
     // Refresh UI (will switch to multi-row mode if this is second mapping)
     updateChannelMappingUI();
@@ -2387,8 +2393,19 @@ void RGBMatrixEditor::slotRemoveChannelMapping()
     if (key.isEmpty())
         return;
     
-    // Remove from backend
-    m_matrix->removeChannelMapping(key, rowIndex);
+    // Find the offset (valueIndex) of the UI row being removed
+    for (int i = 0; i < m_mappingWidgets.size(); i++)
+    {
+        if (m_mappingWidgets[i].fixtureDefKey == key)
+        {
+            if (rowIndex >= 0 && rowIndex < m_mappingWidgets[i].rows.size())
+            {
+                int offset = m_mappingWidgets[i].rows[rowIndex].valueIndexCombo->currentData().toInt();
+                m_matrix->removeChannelMappingsByOffset(key, offset);
+            }
+            break;
+        }
+    }
     
     // Refresh UI
     updateChannelMappingUI();
