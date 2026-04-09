@@ -1633,12 +1633,15 @@ void RGBMatrixEditor::slotCopyClicked()
     QCheckBox *chkRowFilter = new QCheckBox(tr("Row Filter"), &dlg);
     QCheckBox *chkMultiValue = new QCheckBox(tr("Multi-Value Mapping"), &dlg);
 
-    chkPattern->setChecked(true);
-    chkProperties->setChecked(true);
-    chkRunOrder->setChecked(true);
-    chkDirection->setChecked(true);
-    chkRowFilter->setChecked(true);
-    chkMultiValue->setChecked(true);
+    {
+        QSettings settings;
+        chkPattern->setChecked(settings.value("RGBMatrixEditor/copyPattern", true).toBool());
+        chkProperties->setChecked(settings.value("RGBMatrixEditor/copyProperties", true).toBool());
+        chkRunOrder->setChecked(settings.value("RGBMatrixEditor/copyRunOrder", true).toBool());
+        chkDirection->setChecked(settings.value("RGBMatrixEditor/copyDirection", true).toBool());
+        chkRowFilter->setChecked(settings.value("RGBMatrixEditor/copyRowFilter", true).toBool());
+        chkMultiValue->setChecked(settings.value("RGBMatrixEditor/copyMultiValue", true).toBool());
+    }
 
     layout->addWidget(chkPattern);
     layout->addWidget(chkProperties);
@@ -1654,6 +1657,16 @@ void RGBMatrixEditor::slotCopyClicked()
 
     if (dlg.exec() != QDialog::Accepted)
         return;
+
+    {
+        QSettings settings;
+        settings.setValue("RGBMatrixEditor/copyPattern", chkPattern->isChecked());
+        settings.setValue("RGBMatrixEditor/copyProperties", chkProperties->isChecked());
+        settings.setValue("RGBMatrixEditor/copyRunOrder", chkRunOrder->isChecked());
+        settings.setValue("RGBMatrixEditor/copyDirection", chkDirection->isChecked());
+        settings.setValue("RGBMatrixEditor/copyRowFilter", chkRowFilter->isChecked());
+        settings.setValue("RGBMatrixEditor/copyMultiValue", chkMultiValue->isChecked());
+    }
 
     QJsonObject root;
     root["type"] = QString("qlc_rgb_matrix_settings");

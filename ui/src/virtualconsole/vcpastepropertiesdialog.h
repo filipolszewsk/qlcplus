@@ -53,6 +53,9 @@ public:
     /** Returns the OR-combination of all checked property group flags. */
     VCWidget::PastePropertyGroups selectedFlags() const;
 
+    /** Saves selected flags and closes the dialog. */
+    void accept() override;
+
 private slots:
     void slotSelectAllToggled(bool checked);
     void slotCheckBoxToggled(bool checked);
@@ -64,6 +67,7 @@ private:
     QCheckBox* m_selectAllBox;
     QList<QPair<VCWidget::PastePropertyGroup, QCheckBox*>> m_entries;
     bool m_blockSignals;
+    int m_widgetType;
 };
 
 /** @} */

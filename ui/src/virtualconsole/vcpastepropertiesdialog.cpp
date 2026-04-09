@@ -21,6 +21,7 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QFrame>
+#include <QSettings>
 
 #include "vcpastepropertiesdialog.h"
 
@@ -30,6 +31,7 @@ VCPastePropertiesDialog::VCPastePropertiesDialog(VCWidget* source,
     : QDialog(parent)
     , m_selectAllBox(nullptr)
     , m_blockSignals(false)
+    , m_widgetType(source->type())
 {
     buildUI(source, target);
 }
@@ -112,6 +114,23 @@ void VCPastePropertiesDialog::buildUI(VCWidget* source, VCWidget* target)
         }
     }
 
+    // Restore last selection for this widget type
+    {
+        QSettings settings;
+        QString key = QString("VCPastePropertiesDialog/%1/lastFlags").arg(source->type());
+        QVariant saved = settings.value(key);
+        if (saved.isValid())
+        {
+            VCWidget::PastePropertyGroups lastFlags =
+                static_cast<VCWidget::PastePropertyGroups>(saved.toInt());
+            m_blockSignals = true;
+            for (auto& entry : m_entries)
+                entry.second->setChecked(lastFlags & entry.first);
+            m_blockSignals = false;
+            slotCheckBoxToggled(false);
+        }
+    }
+
     // OK / Cancel buttons
     QDialogButtonBox* buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, this);
@@ -144,6 +163,14 @@ QFrame* VCPastePropertiesDialog::makeSeparator(const QString& title)
     lay->addWidget(line2);
 
     return frame;
+}
+
+void VCPastePropertiesDialog::accept()
+{
+    QSettings settings;
+    QString key = QString("VCPastePropertiesDialog/%1/lastFlags").arg(m_widgetType);
+    settings.setValue(key, static_cast<int>(selectedFlags()));
+    QDialog::accept();
 }
 
 VCWidget::PastePropertyGroups VCPastePropertiesDialog::selectedFlags() const
