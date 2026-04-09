@@ -217,11 +217,10 @@ void FixtureManager::slotFixtureRemoved(quint32 id)
     foreach (QTreeWidgetItem* groupToDelete, groupsToDelete)
     {
         QVariant var = groupToDelete->data(KColumnName, PROP_GROUP);
-        // If the group is a fixture group, delete it from doc.
-        // If not, it is a universe, just "hide" it from the ui.
-        if (var.isValid() == true)
-            m_doc->deleteFixtureGroup(groupToDelete->data(KColumnName, PROP_GROUP).toUInt());
-        else
+        // If the group is a fixture group, keep it in the doc so that
+        // empty groups are preserved on save (project references remain valid).
+        // If it is a universe node, just "hide" it from the ui.
+        if (var.isValid() == false)
             delete groupToDelete;
     }
 }
