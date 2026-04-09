@@ -37,9 +37,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QScrollArea>
 #include <QGridLayout>
 #include <QDialog>
 #include <QVBoxLayout>
+#include <QFrame>
 #include <QDialogButtonBox>
 
 #include "fixtureselection.h"
@@ -1627,17 +1629,17 @@ void EFXEditor::updateRowSelection()
     // Block signals to prevent recursion
     bool wasBlocked = m_rowSelectionGroup->signalsBlocked();
     m_rowSelectionGroup->blockSignals(true);
-    
-    // Clear existing checkboxes
+
+    // Disconnect checkboxes — they live inside the scroll area's child widget,
+    // which gets deleted by the takeAt loop below (cascade via Qt parent ownership)
     foreach (QCheckBox *cb, m_rowCheckboxes)
     {
         cb->blockSignals(true);
-        m_rowSelectionLayout->removeWidget(cb);
-        delete cb;
+        cb->disconnect();
     }
     m_rowCheckboxes.clear();
-    
-    // Clear placeholder if exists
+
+    // Remove and delete all items from the layout (scroll area or placeholder label)
     QLayoutItem *child;
     while ((child = m_rowSelectionLayout->takeAt(0)) != nullptr)
     {
@@ -1645,7 +1647,7 @@ void EFXEditor::updateRowSelection()
             child->widget()->deleteLater();
         delete child;
     }
-    
+
     if (!m_efx->isFixtureGroupMode())
     {
         m_rowSelectionGroup->setEnabled(false);
@@ -1654,7 +1656,7 @@ void EFXEditor::updateRowSelection()
         m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
-    
+
     FixtureGroup *group = m_doc->fixtureGroup(m_efx->fixtureGroupID());
     if (group == nullptr)
     {
@@ -1664,7 +1666,7 @@ void EFXEditor::updateRowSelection()
         m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
-    
+
     int gridHeight = group->size().height();
     if (gridHeight <= 0)
     {
@@ -1674,27 +1676,42 @@ void EFXEditor::updateRowSelection()
         m_rowSelectionGroup->blockSignals(wasBlocked);
         return;
     }
-    
+
     m_rowSelectionGroup->setEnabled(true);
-    
-    // Create checkbox for each row
+
+    // Build checkboxes in a multi-column grid inside a scroll area so the
+    // window height does not grow when many rows are present
+    const int NUM_COLS = 3;
+
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setMaximumHeight(120);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    QWidget *container = new QWidget();
+    QGridLayout *grid = new QGridLayout(container);
+    grid->setSpacing(4);
+    grid->setContentsMargins(2, 2, 2, 2);
+
     QList<int> currentSelection = m_efx->selectedRows();
     for (int row = 0; row < gridHeight; row++)
     {
         QCheckBox *cb = new QCheckBox(QString("Row %1").arg(row + 1));
         cb->blockSignals(true);
-        // If no selection saved, select all by default
         cb->setChecked(currentSelection.isEmpty() || currentSelection.contains(row));
         cb->setProperty("row_index", row);
-        
-        m_rowSelectionLayout->addWidget(cb);
+
+        grid->addWidget(cb, row / NUM_COLS, row % NUM_COLS);
         m_rowCheckboxes.append(cb);
-        
-        // Now connect signal after setting initial state
+
         cb->blockSignals(false);
         connect(cb, SIGNAL(toggled(bool)), this, SLOT(slotRowSelectionChanged()));
     }
-    
+
+    scrollArea->setWidget(container);
+    m_rowSelectionLayout->addWidget(scrollArea);
+
     m_rowSelectionGroup->blockSignals(wasBlocked);
 }
 
