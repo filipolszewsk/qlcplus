@@ -281,6 +281,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_nextPrevBehavior(DefaultRunFirst)
     , m_playbackLayout(PlayPauseStop)
     , m_autoStartInOperate(false)
+    , m_autoStartOffset(0)
     , m_timer(NULL)
     , m_primaryIndex(0)
     , m_secondaryIndex(0)
@@ -636,6 +637,7 @@ bool VCCueList::copyFrom(const VCWidget *widget)
 
     /* Auto start */
     setAutoStartInOperate(cuelist->autoStartInOperate());
+    setAutoStartOffset(cuelist->autoStartOffset());
 
     /* Key sequence - rename */
     setRenameKeySequence(cuelist->renameKeySequence());
@@ -713,6 +715,7 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
         setRecordChannelsMask(cuelist->recordChannelsMask());
         setRecordCuePrefix(cuelist->recordCuePrefix());
         setAutoStartInOperate(cuelist->autoStartInOperate());
+        setAutoStartOffset(cuelist->autoStartOffset());
         setHideButtons(cuelist->hideButtons());
     }
 
@@ -1862,6 +1865,16 @@ bool VCCueList::autoStartInOperate() const
     return m_autoStartInOperate;
 }
 
+void VCCueList::setAutoStartOffset(int ms)
+{
+    m_autoStartOffset = qBound(0, ms, 2000);
+}
+
+int VCCueList::autoStartOffset() const
+{
+    return m_autoStartOffset;
+}
+
 VCCueList::FaderMode VCCueList::sideFaderMode() const
 {
     return m_slidersMode;
@@ -2598,7 +2611,12 @@ void VCCueList::slotModeChanged(Doc::Mode mode)
         {
             Chaser *ch = chaser();
             if (ch != NULL && !ch->isRunning())
-                slotPlayback();
+            {
+                if (m_autoStartOffset > 0)
+                    QTimer::singleShot(m_autoStartOffset, this, SLOT(slotPlayback()));
+                else
+                    slotPlayback();
+            }
         }
     }
     else
@@ -4007,6 +4025,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             setAutoStartInOperate(root.readElementText() == "1");
         }
+        else if (root.name() == KXMLQLCVCCueListAutoStartOffset)
+        {
+            setAutoStartOffset(root.readElementText().toInt());
+        }
         else if (root.name() == KXMLQLCVCCueListHideButtons)
         {
             setHideButtons(root.readElementText().toInt() != 0);
@@ -4287,7 +4309,11 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
 
     /* Auto start in operate mode */
     if (m_autoStartInOperate)
+    {
         doc->writeTextElement(KXMLQLCVCCueListAutoStart, QString::number(1));
+        if (m_autoStartOffset > 0)
+            doc->writeTextElement(KXMLQLCVCCueListAutoStartOffset, QString::number(m_autoStartOffset));
+    }
 
     /* Hide buttons */
     if (m_hideButtons)

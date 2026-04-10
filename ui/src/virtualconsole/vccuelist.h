@@ -79,6 +79,7 @@ class Doc;
 #define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
 #define KXMLQLCVCCueListStepIndexOutputChannel QStringLiteral("Channel")
 #define KXMLQLCVCCueListAutoStart       QStringLiteral("AutoStart")
+#define KXMLQLCVCCueListAutoStartOffset QStringLiteral("AutoStartOffset")
 #define KXMLQLCVCCueListChannelColumns  QStringLiteral("ChannelColumns")
 #define KXMLQLCVCCueListChannelColumn   QStringLiteral("Column")
 #define KXMLQLCVCCueListChannelColumnAddress QStringLiteral("Address")
@@ -357,6 +358,12 @@ public:
 
     /** Get whether the cue list should auto-start when entering Operate mode */
     bool autoStartInOperate() const;
+
+    /** Set the delay in milliseconds before auto-starting (0 = immediate) */
+    void setAutoStartOffset(int ms);
+
+    /** Get the delay in milliseconds before auto-starting */
+    int autoStartOffset() const;
 signals:
     void playbackButtonClicked();
     void stopButtonClicked();
@@ -369,6 +376,7 @@ private:
     NextPrevBehavior m_nextPrevBehavior;
     PlaybackLayout m_playbackLayout;
     bool m_autoStartInOperate;
+    int m_autoStartOffset;
     QTreeWidget *m_tree;
     QToolButton *m_crossfadeButton;
     QToolButton *m_playbackButton;
