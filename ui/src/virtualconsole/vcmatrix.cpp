@@ -1588,7 +1588,16 @@ void VCMatrix::slotModeChanged(Doc::Mode mode)
             resetAnimationKnobsToMinimum();
     }
     else
+    {
+        Function *function = m_doc->function(m_matrixID);
+        if (function != NULL && function->stopped() == false)
+        {
+            adjustFunctionIntensity(function, 0);
+            function->stop(functionParent());
+            resetIntensityOverrideAttribute();
+        }
         enableWidgetUI(false);
+    }
 
     VCWidget::slotModeChanged(mode);
 }

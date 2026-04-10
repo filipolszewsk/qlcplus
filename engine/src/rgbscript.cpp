@@ -373,6 +373,14 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
     }
 }
 
+void RGBScript::postRun()
+{
+    QMutexLocker engineLocker(s_engineMutex);
+
+    if (m_script.isValid())
+        m_script.setProperty("initialized", QScriptValue(false));
+}
+
 QString RGBScript::name() const
 {
     QMutexLocker engineLocker(s_engineMutex);
