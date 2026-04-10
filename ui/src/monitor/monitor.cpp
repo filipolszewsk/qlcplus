@@ -39,6 +39,7 @@
 #include "monitorfixturepropertieseditor.h"
 #include "monitorbackgroundselection.h"
 #include "monitorgraphicsview.h"
+#include "multiselectchannelcombo.h"
 #include "fixtureselection.h"
 #include "monitorfixture.h"
 #include "monitorlayout.h"
@@ -67,6 +68,8 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     , m_monitorWidget(NULL)
     , m_monitorLayout(NULL)
     , m_currentUniverse(Universe::invalid())
+    , m_filterCombo(NULL)
+    , m_alwaysOnTopAction(NULL)
     , m_graphicsToolBar(NULL)
     , m_splitter(NULL)
     , m_graphicsView(NULL)
@@ -155,13 +158,47 @@ void Monitor::fillDMXView()
 
     m_monitorWidget->setFont(m_props->font());
 
-    /* Create a bunch of MonitorFixtures for each fixture */
+    bool noFilter = m_selectedUniverses.isEmpty() && m_selectedFixtures.isEmpty() && m_selectedChannels.isEmpty();
+
     foreach (Fixture* fxi, m_doc->fixtures())
     {
         Q_ASSERT(fxi != NULL);
-        if (m_currentUniverse == Universe::invalid() ||
-            m_currentUniverse == fxi->universe())
-                createMonitorFixture(fxi);
+
+        if (noFilter)
+        {
+            createMonitorFixture(fxi);
+            continue;
+        }
+
+        /* Determine channel visibility for this fixture */
+        QSet<int> visibleChannels;
+
+        /* Collect channels specifically selected for this fixture */
+        for (const QPair<quint32,int>& sel : m_selectedChannels)
+        {
+            if (sel.first == fxi->id())
+                visibleChannels.insert(sel.second);
+        }
+
+        bool fixtureSelected   = m_selectedFixtures.contains(fxi->id());
+        bool universeSelected  = m_selectedUniverses.contains(fxi->universe());
+        bool hasChannelSel     = !visibleChannels.isEmpty();
+
+        if (!fixtureSelected && !universeSelected && !hasChannelSel)
+            continue;
+
+        /* If fixture or universe selected (without individual channels): show all channels */
+        if ((fixtureSelected || universeSelected) && !hasChannelSel)
+            visibleChannels.clear(); // empty = all
+
+        createMonitorFixture(fxi);
+
+        /* Apply channel-level visibility if needed */
+        if (!visibleChannels.isEmpty())
+        {
+            MonitorFixture* mof = m_monitorFixtures.last();
+            mof->setVisibleChannels(visibleChannels);
+        }
     }
 }
 
@@ -178,14 +215,7 @@ void Monitor::showDMXView()
     m_DMXToolBar->show();
     m_scrollArea->show();
 
-    for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
-    {
-        quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
-        if (m_currentUniverse == Universe::invalid() || uniID == m_currentUniverse)
-            m_doc->inputOutputMap()->setUniverseMonitor(i, true);
-        else
-            m_doc->inputOutputMap()->setUniverseMonitor(i, false);
-    }
+    updateUniverseMonitoring();
 }
 
 void Monitor::initGraphicsView()
@@ -351,6 +381,15 @@ void Monitor::createAndShow(QWidget* parent, Doc* doc)
             window->move(rWd / 2, rHd / 2);
         }
         AppUtil::ensureWidgetIsVisible(window);
+
+        /* Restore always-on-top preference */
+        bool alwaysOnTop = settings.value(QStringLiteral("monitor/alwaysOnTop"), false).toBool();
+        if (alwaysOnTop)
+        {
+            s_instance->setWindowFlags(s_instance->windowFlags() | Qt::WindowStaysOnTopHint);
+            if (s_instance->m_alwaysOnTopAction != NULL)
+                s_instance->m_alwaysOnTopAction->setChecked(true);
+        }
     }
     else
     {
@@ -442,23 +481,63 @@ void Monitor::initDMXToolbar()
     if (m_props->valueStyle() == MonitorProperties::PercentageValues)
         action->setChecked(true);
 
-    /* Universe combo box */
+    /* Always On Top toggle */
     m_DMXToolBar->addSeparator();
 
-    QLabel *uniLabel = new QLabel(tr("Universe"));
-    uniLabel->setMargin(5);
-    m_DMXToolBar->addWidget(uniLabel);
+    m_alwaysOnTopAction = m_DMXToolBar->addAction(tr("Always On Top"));
+    m_alwaysOnTopAction->setToolTip(tr("Keep Fixture Monitor window always on top of other windows"));
+    m_alwaysOnTopAction->setCheckable(true);
+    connect(m_alwaysOnTopAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotAlwaysOnTop(bool)));
 
-    QComboBox *uniCombo = new QComboBox(this);
-    uniCombo->addItem(tr("All universes"), Universe::invalid());
+    /* Filter combo (universes / fixtures / channels) */
+    m_DMXToolBar->addSeparator();
+
+    QLabel *filterLabel = new QLabel(tr("Filter"));
+    filterLabel->setMargin(5);
+    m_DMXToolBar->addWidget(filterLabel);
+
+    m_filterCombo = new MultiSelectChannelCombo(this);
+    m_filterCombo->setMinimumWidth(200);
+    m_filterCombo->addItem(tr("All"), QVariantMap({{QStringLiteral("type"), QStringLiteral("all")}}));
+
     for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
     {
         quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
-        uniCombo->addItem(m_doc->inputOutputMap()->getUniverseNameByIndex(i), uniID);
+        QString uniName = m_doc->inputOutputMap()->getUniverseNameByIndex(i);
+
+        QVariantMap uniData;
+        uniData[QStringLiteral("type")] = QStringLiteral("universe");
+        uniData[QStringLiteral("id")]   = uniID;
+        m_filterCombo->addItem(uniName, uniData);
+
+        foreach (Fixture* fxi, m_doc->fixtures())
+        {
+            if (fxi->universe() != uniID)
+                continue;
+
+            QVariantMap fxiData;
+            fxiData[QStringLiteral("type")]  = QStringLiteral("fixture");
+            fxiData[QStringLiteral("id")]    = fxi->id();
+            fxiData[QStringLiteral("uniID")] = uniID;
+            m_filterCombo->addItem(QString("  \u2514 %1").arg(fxi->name()), fxiData);
+
+            for (quint32 ch = 0; ch < fxi->channels(); ch++)
+            {
+                const QLCChannel* channel = fxi->channel(ch);
+                QString chName = channel ? channel->name() : tr("Channel %1").arg(ch + 1);
+                QVariantMap chData;
+                chData[QStringLiteral("type")]  = QStringLiteral("channel");
+                chData[QStringLiteral("fxiID")] = fxi->id();
+                chData[QStringLiteral("ch")]    = (int)ch;
+                m_filterCombo->addItem(QString("    \u00B7 %1 – %2").arg(ch + 1).arg(chName), chData);
+            }
+        }
     }
-    connect(uniCombo, SIGNAL(currentIndexChanged(int)),
-            this, SLOT(slotUniverseSelected(int)));
-    m_DMXToolBar->addWidget(uniCombo);
+
+    connect(m_filterCombo, SIGNAL(selectionChanged()),
+            this, SLOT(slotFilterSelectionChanged()));
+    m_DMXToolBar->addWidget(m_filterCombo);
 
     if (QLCFile::hasWindowManager() == false)
     {
@@ -472,7 +551,6 @@ void Monitor::initDMXToolbar()
         connect(action, SIGNAL(triggered(bool)),
                 this, SLOT(close()));
         m_DMXToolBar->addAction(action);
-        group->addAction(action);
     }
 }
 
@@ -666,19 +744,105 @@ void Monitor::slotFixtureRemoved(quint32 fxi_id)
 
 void Monitor::slotUniverseSelected(int index)
 {
-    QComboBox *combo = qobject_cast<QComboBox *>(sender());
-    m_currentUniverse = combo->itemData(index).toUInt();
+    Q_UNUSED(index)
+    /* Legacy slot — kept for API compatibility; filtering now handled by slotFilterSelectionChanged */
+}
+
+void Monitor::slotAlwaysOnTop(bool checked)
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("monitor/alwaysOnTop"), checked);
+
+    Qt::WindowFlags flags = windowFlags();
+    if (checked)
+        flags |= Qt::WindowStaysOnTopHint;
+    else
+        flags &= ~Qt::WindowStaysOnTopHint;
+    setWindowFlags(flags);
+    show();
+}
+
+void Monitor::slotFilterSelectionChanged()
+{
+    m_selectedUniverses.clear();
+    m_selectedFixtures.clear();
+    m_selectedChannels.clear();
+
+    if (m_filterCombo == NULL)
+        return;
+
+    QVariantList selected = m_filterCombo->selectedData();
+    bool allSelected = false;
+
+    for (const QVariant& var : selected)
+    {
+        QVariantMap map = var.toMap();
+        QString type = map.value(QStringLiteral("type")).toString();
+
+        if (type == QStringLiteral("all"))
+        {
+            allSelected = true;
+            break;
+        }
+        else if (type == QStringLiteral("universe"))
+        {
+            m_selectedUniverses.insert(map.value(QStringLiteral("id")).toUInt());
+        }
+        else if (type == QStringLiteral("fixture"))
+        {
+            m_selectedFixtures.insert(map.value(QStringLiteral("id")).toUInt());
+        }
+        else if (type == QStringLiteral("channel"))
+        {
+            quint32 fxiID = map.value(QStringLiteral("fxiID")).toUInt();
+            int ch = map.value(QStringLiteral("ch")).toInt();
+            m_selectedChannels.insert(qMakePair(fxiID, ch));
+        }
+    }
+
+    if (allSelected || selected.isEmpty())
+    {
+        m_selectedUniverses.clear();
+        m_selectedFixtures.clear();
+        m_selectedChannels.clear();
+    }
+
+    updateUniverseMonitoring();
+    fillDMXView();
+}
+
+void Monitor::updateUniverseMonitoring()
+{
+    bool noFilter = m_selectedUniverses.isEmpty() && m_selectedFixtures.isEmpty() && m_selectedChannels.isEmpty();
 
     for (quint32 i = 0; i < m_doc->inputOutputMap()->universesCount(); i++)
     {
         quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
-        if (m_currentUniverse == Universe::invalid() || uniID == m_currentUniverse)
-            m_doc->inputOutputMap()->setUniverseMonitor(i, true);
-        else
-            m_doc->inputOutputMap()->setUniverseMonitor(i, false);
-    }
+        bool enable = noFilter;
 
-    fillDMXView();
+        if (!enable && m_selectedUniverses.contains(uniID))
+            enable = true;
+
+        if (!enable)
+        {
+            /* Check if any selected fixture or channel belongs to this universe */
+            foreach (Fixture* fxi, m_doc->fixtures())
+            {
+                if (fxi->universe() != uniID)
+                    continue;
+                if (m_selectedFixtures.contains(fxi->id()))
+                    { enable = true; break; }
+                for (const QPair<quint32,int>& sel : m_selectedChannels)
+                {
+                    if (sel.first == fxi->id())
+                        { enable = true; break; }
+                }
+                if (enable) break;
+            }
+        }
+
+        m_doc->inputOutputMap()->setUniverseMonitor(i, enable);
+    }
 }
 
 /********************************************************************

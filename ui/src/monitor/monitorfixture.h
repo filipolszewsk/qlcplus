@@ -23,6 +23,7 @@
 #include <QFrame>
 #include <QList>
 #include <QFont>
+#include <QSet>
 
 #include "monitor.h"
 
@@ -63,12 +64,17 @@ public:
 public slots:
     void slotChannelStyleChanged(MonitorProperties::ChannelStyle style);
 
+    /** Set which channel indices (0-based, relative to fixture) are visible.
+     *  An empty set means all channels are shown. */
+    void setVisibleChannels(const QSet<int>& channels);
+
 protected:
     quint32 m_fixture;
     MonitorProperties::ChannelStyle m_channelStyle;
     QLabel* m_fixtureLabel;
     QList <QLabel*> m_iconsLabels;
     QList <QLabel*> m_channelLabels;
+    QSet<int> m_visibleChannels;
 
     /********************************************************************
      * Values
@@ -80,6 +86,13 @@ public slots:
 protected:
     QList <QLabel*> m_valueLabels;
     MonitorProperties::ValueStyle m_valueStyle;
+
+private:
+    /** Returns a stylesheet string with text color based on raw DMX value (0-255) */
+    static QString valueColorStyleSheet(uchar value);
+
+    /** Show/hide channel widgets according to m_visibleChannels */
+    void applyChannelVisibility();
 };
 
 /** @} */

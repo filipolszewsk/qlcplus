@@ -24,6 +24,7 @@
 #include <QLabel>
 #include <QDebug>
 #include <QFont>
+#include <QColor>
 #include <cmath>
 
 #include "monitorfixture.h"
@@ -165,9 +166,15 @@ void MonitorFixture::setFixture(quint32 fxi_id)
             QString str;
             label = new QLabel(this);
             lay->addWidget(label, 3, i, Qt::AlignHCenter);
-            label->setText(str.asprintf("%.3d", uchar(fxValues.at(i))));
+            uchar rawVal = uchar(fxValues.at(i));
+            label->setText(str.asprintf("%.3d", rawVal));
+            label->setStyleSheet(valueColorStyleSheet(rawVal));
             m_valueLabels.append(label);
         }
+
+        /* Apply initial channel visibility */
+        applyChannelVisibility();
+
         connect(fxi, SIGNAL(valuesChanged()), this, SLOT(slotValuesChanged()));
     }
 }
@@ -263,17 +270,48 @@ void MonitorFixture::slotValuesChanged()
         Q_ASSERT(label != NULL);
         QString str;
 
+        uchar rawVal = uchar(fxValues.at(i));
+
         /* Set the label's text to reflect the changed value */
         if (m_valueStyle == MonitorProperties::DMXValues)
         {
-            label->setText(str.asprintf("%.3d", uchar(fxValues.at(i))));
+            label->setText(str.asprintf("%.3d", rawVal));
         }
         else
         {
-            label->setText(str.asprintf("%.3d", int(ceil(SCALE(qreal(uchar(fxValues.at(i))),
+            label->setText(str.asprintf("%.3d", int(ceil(SCALE(qreal(rawVal),
                                                                qreal(0), qreal(UCHAR_MAX),
                                                                qreal(0), qreal(100))))));
         }
+
+        label->setStyleSheet(valueColorStyleSheet(rawVal));
         i++;
     }
+}
+
+QString MonitorFixture::valueColorStyleSheet(uchar value)
+{
+    if (value == 0)
+        return QStringLiteral("color: rgb(80, 80, 80);");
+
+    /* Scale: low values → dim green, high values → bright green */
+    int green = 60 + int(qreal(value) / 255.0 * 195.0);
+    return QString("color: rgb(0, %1, 0);").arg(green);
+}
+
+void MonitorFixture::applyChannelVisibility()
+{
+    for (int i = 0; i < m_iconsLabels.size(); i++)
+    {
+        bool visible = m_visibleChannels.isEmpty() || m_visibleChannels.contains(i);
+        m_iconsLabels[i]->setVisible(visible);
+        m_channelLabels[i]->setVisible(visible);
+        m_valueLabels[i]->setVisible(visible);
+    }
+}
+
+void MonitorFixture::setVisibleChannels(const QSet<int>& channels)
+{
+    m_visibleChannels = channels;
+    applyChannelVisibility();
 }

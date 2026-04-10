@@ -23,9 +23,12 @@
 #include <QWidget>
 #include <QHash>
 #include <QList>
+#include <QSet>
+#include <QPair>
 
 #include "monitorproperties.h"
 
+class MultiSelectChannelCombo;
 class MonitorGraphicsView;
 class MonitorFixture;
 class MonitorLayout;
@@ -128,6 +131,12 @@ protected slots:
     /** Menu action slot to trigger display mode switch */
     void slotSwitchMode();
 
+    /** Menu action slot for Always On Top toggle */
+    void slotAlwaysOnTop(bool checked);
+
+    /** Slot called when the fixture/channel filter selection changes */
+    void slotFilterSelectionChanged();
+
     /********************************************************************
      * Monitor Fixtures
      ********************************************************************/
@@ -149,7 +158,7 @@ protected slots:
     /** Slot for fixture removals (to remove the fixture from layout) */
     void slotFixtureRemoved(quint32 fxi_id);
 
-    /** Slot called when a universe combo item is selected */
+    /** Slot called when a universe combo item is selected (legacy, kept for compatibility) */
     void slotUniverseSelected(int index);
 
 signals:
@@ -157,12 +166,25 @@ signals:
     void valueStyleChanged(MonitorProperties::ValueStyle style);
 
 protected:
+    /** Rebuild universe-monitor enables based on current filter */
+    void updateUniverseMonitoring();
+
     QToolBar* m_DMXToolBar;
     QScrollArea* m_scrollArea;
     QWidget* m_monitorWidget;
     MonitorLayout* m_monitorLayout;
     QList <MonitorFixture*> m_monitorFixtures;
+
+    /* Legacy single-universe filter (kept for slotUniverseSelected, unused when filter combo active) */
     quint32 m_currentUniverse;
+
+    /* Advanced multi-select filter state */
+    MultiSelectChannelCombo* m_filterCombo;
+    QSet<quint32> m_selectedUniverses;   // empty = all universes
+    QSet<quint32> m_selectedFixtures;    // empty = all fixtures
+    QSet<QPair<quint32,int>> m_selectedChannels; // empty = all channels
+
+    QAction* m_alwaysOnTopAction;
 
     /********************************************************************
      * Graphics View
