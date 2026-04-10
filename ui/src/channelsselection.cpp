@@ -70,6 +70,9 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
 
     m_channelsTree->setHeaderLabels(hdrLabels);
 
+    if (mode == NormalMode)
+        m_applyAllCheck->setVisible(false);
+
     updateFixturesTree();
 
     QSettings settings;
@@ -109,6 +112,26 @@ QList<SceneValue> ChannelsSelection::channelsList()
     return m_channelsList;
 }
 
+static Qt::CheckState triStateFromChildren(QTreeWidgetItem *parent)
+{
+    int checkedCount = 0;
+    int partialCount = 0;
+    int total = parent->childCount();
+    for (int i = 0; i < total; i++)
+    {
+        Qt::CheckState cs = parent->child(i)->checkState(KColumnSelection);
+        if (cs == Qt::Checked)
+            checkedCount++;
+        else if (cs == Qt::PartiallyChecked)
+            partialCount++;
+    }
+    if (checkedCount == total && total > 0)
+        return Qt::Checked;
+    if (checkedCount == 0 && partialCount == 0)
+        return Qt::Unchecked;
+    return Qt::PartiallyChecked;
+}
+
 void ChannelsSelection::updateFixturesTree()
 {
     m_channelsTree->clear();
@@ -136,6 +159,11 @@ void ChannelsSelection::updateFixturesTree()
             topItem->setText(KColumnName, m_doc->inputOutputMap()->universes().at(uni)->name());
             topItem->setText(KColumnID, QString::number(uni));
             topItem->setExpanded(true);
+            if (m_mode == NormalMode)
+            {
+                topItem->setFlags(topItem->flags() | Qt::ItemIsUserCheckable);
+                topItem->setCheckState(KColumnSelection, Qt::Unchecked);
+            }
         }
 
         QTreeWidgetItem *fItem = new QTreeWidgetItem(topItem);
@@ -279,6 +307,17 @@ void ChannelsSelection::updateFixturesTree()
             item->setText(KColumnChIdx, QString::number(c));
         }
     }
+
+    /* Recalculate universe tri-state from loaded fixture states */
+    if (m_mode == NormalMode)
+    {
+        for (int i = 0; i < m_channelsTree->topLevelItemCount(); i++)
+        {
+            QTreeWidgetItem *uniItem = m_channelsTree->topLevelItem(i);
+            uniItem->setCheckState(KColumnSelection, triStateFromChildren(uniItem));
+        }
+    }
+
     m_channelsTree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
@@ -337,57 +376,70 @@ void ChannelsSelection::slotItemChecked(QTreeWidgetItem *item, int col)
 
     Qt::CheckState enable = item->checkState(KColumnSelection);
 
-    // If this is a fixture item (has children), select/deselect all its channels
-    if (item->childCount() > 0 && m_mode == NormalMode)
+    if (m_mode == NormalMode)
     {
-        for (int i = 0; i < item->childCount(); i++)
+        bool isUniverse = (item->parent() == NULL);
+        bool isFixture  = (!isUniverse && item->childCount() > 0);
+        bool isChannel  = (!isUniverse && item->childCount() == 0);
+
+        if (isUniverse)
         {
-            QTreeWidgetItem *chItem = item->child(i);
-            if (chItem == NULL)
-                continue;
-            chItem->setCheckState(KColumnSelection, enable);
+            /* Cascade universe state down to all fixtures and their channels */
+            for (int f = 0; f < item->childCount(); f++)
+            {
+                QTreeWidgetItem *fItem = item->child(f);
+                if (fItem == NULL) continue;
+                fItem->setCheckState(KColumnSelection, enable);
+                for (int c = 0; c < fItem->childCount(); c++)
+                {
+                    QTreeWidgetItem *cItem = fItem->child(c);
+                    if (cItem != NULL)
+                        cItem->setCheckState(KColumnSelection, enable);
+                }
+            }
+        }
+        else if (isFixture)
+        {
+            /* Cascade fixture state down to all channels */
+            for (int c = 0; c < item->childCount(); c++)
+            {
+                QTreeWidgetItem *cItem = item->child(c);
+                if (cItem != NULL)
+                    cItem->setCheckState(KColumnSelection, enable);
+            }
+            /* Update universe tri-state */
+            QTreeWidgetItem *uniItem = item->parent();
+            if (uniItem != NULL)
+                uniItem->setCheckState(KColumnSelection, triStateFromChildren(uniItem));
+        }
+        else if (isChannel)
+        {
+            /* Update parent fixture tri-state */
+            QTreeWidgetItem *fItem = item->parent();
+            if (fItem != NULL)
+            {
+                fItem->setCheckState(KColumnSelection, triStateFromChildren(fItem));
+                /* Update grandparent universe tri-state */
+                QTreeWidgetItem *uniItem = fItem->parent();
+                if (uniItem != NULL)
+                    uniItem->setCheckState(KColumnSelection, triStateFromChildren(uniItem));
+            }
+
+            if (m_applyAllCheck->isChecked() == true)
+            {
+                foreach (QTreeWidgetItem *chItem, getSameChannels(item))
+                    chItem->setCheckState(KColumnSelection, enable);
+            }
         }
     }
-    // If this is a channel item, update parent fixture checkbox state
-    else if (item->parent() != NULL && m_mode == NormalMode)
+    else
     {
-        QTreeWidgetItem *parentItem = item->parent();
-        // Check if parent is a fixture (has this item as child and has ID)
-        if (parentItem->childCount() > 0 && !parentItem->text(KColumnID).isEmpty())
-        {
-            // Count checked channels
-            int checkedCount = 0;
-            int totalCount = parentItem->childCount();
-            for (int i = 0; i < totalCount; i++)
-            {
-                QTreeWidgetItem *childItem = parentItem->child(i);
-                if (childItem == NULL)
-                    continue;
-                if (childItem->checkState(KColumnSelection) == Qt::Checked)
-                    checkedCount++;
-            }
-            
-            // Update fixture checkbox state
-            if (checkedCount == 0)
-                parentItem->setCheckState(KColumnSelection, Qt::Unchecked);
-            else if (checkedCount == totalCount)
-                parentItem->setCheckState(KColumnSelection, Qt::Checked);
-            else
-                parentItem->setCheckState(KColumnSelection, Qt::PartiallyChecked);
-        }
-        
-        // If apply all is checked, apply to same channels
+        /* ConfigurationMode: keep original apply-all logic */
         if (m_applyAllCheck->isChecked() == true)
         {
             foreach (QTreeWidgetItem *chItem, getSameChannels(item))
                 chItem->setCheckState(KColumnSelection, enable);
         }
-    }
-    // If apply all is checked, apply to same channels
-    else if (m_applyAllCheck->isChecked() == true)
-    {
-        foreach (QTreeWidgetItem *chItem, getSameChannels(item))
-            chItem->setCheckState(KColumnSelection, enable);
     }
 
     m_channelsTree->blockSignals(false);
