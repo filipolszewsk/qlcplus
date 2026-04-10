@@ -60,7 +60,7 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
     QList <SceneValue> chans = group->getChannels();
     int ch = 0;
 
-    foreach (Fixture* fxi, m_doc->visibleFixtures())
+    foreach (Fixture* fxi, m_doc->fixtures())
     {
         QTreeWidgetItem *topItem = NULL;
         quint32 uni = fxi->universe();

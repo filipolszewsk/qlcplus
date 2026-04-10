@@ -138,7 +138,7 @@ void ChannelsSelection::updateFixturesTree()
     m_channelsTree->setIconSize(QSize(24, 24));
     m_channelsTree->setAllColumnsShowFocus(true);
 
-    foreach (Fixture *fxi, m_doc->visibleFixtures())
+    foreach (Fixture *fxi, m_doc->fixtures())
     {
         QTreeWidgetItem *topItem = NULL;
         quint32 uni = fxi->universe();
