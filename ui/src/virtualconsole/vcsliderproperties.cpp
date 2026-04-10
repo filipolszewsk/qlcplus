@@ -163,6 +163,7 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
 
     connect(m_levelHideUtilityCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotHideUtilityToggled(bool)));
+    m_levelHideUtilityCheck->setChecked(!m_doc->showHiddenFixtures());
 
     connect(m_levelList, SIGNAL(expanded(QModelIndex)),
             this, SLOT(slotItemExpanded()));

@@ -329,6 +329,15 @@ public:
     QList<Fixture*> visibleFixtures() const;
 
     /**
+     * Global UI preference: whether hidden (utility) fixtures are currently
+     * shown in the Fixture Manager tree and should also be visible in
+     * widget property dialogs. Defaults to false (hidden everywhere).
+     * Not persisted to project XML - this is a per-session UI state.
+     */
+    bool showHiddenFixtures() const;
+    void setShowHiddenFixtures(bool show);
+
+    /**
      * Get the number of fixtures currently added to the project
      *
      * @return The number of fixtures
@@ -689,6 +698,9 @@ private:
     void postLoad();
 
     QString m_errorLog;
+
+    /** Per-session UI state: whether utility (hidden) fixtures are shown */
+    bool m_showHiddenFixtures;
 };
 
 /** @} */

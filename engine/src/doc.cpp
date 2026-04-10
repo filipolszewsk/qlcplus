@@ -84,6 +84,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_latestPaletteId(0)
     , m_latestFunctionId(0)
     , m_startupFunctionId(Function::invalidId())
+    , m_showHiddenFixtures(false)
 {
     Bus::init(this);
     resetModified();
@@ -925,6 +926,16 @@ QList<Fixture*> Doc::visibleFixtures() const
             result.append(fxi);
     }
     return result;
+}
+
+bool Doc::showHiddenFixtures() const
+{
+    return m_showHiddenFixtures;
+}
+
+void Doc::setShowHiddenFixtures(bool show)
+{
+    m_showHiddenFixtures = show;
 }
 
 int Doc::fixturesCount() const

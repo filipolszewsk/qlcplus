@@ -94,6 +94,7 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
             m_channelsTree, SLOT(expandAll()));
     connect(m_hideUtilityCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotHideUtilityToggled(bool)));
+    m_hideUtilityCheck->setChecked(!m_doc->showHiddenFixtures());
 }
 
 ChannelsSelection::~ChannelsSelection()

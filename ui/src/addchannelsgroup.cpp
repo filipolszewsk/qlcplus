@@ -156,6 +156,7 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
             m_tree, SLOT(expandAll()));
     connect(m_hideUtilityCheck, SIGNAL(toggled(bool)),
             this, SLOT(slotHideUtilityToggled(bool)));
+    m_hideUtilityCheck->setChecked(!m_doc->showHiddenFixtures());
 }
 
 AddChannelsGroup::~AddChannelsGroup()

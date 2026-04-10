@@ -463,6 +463,8 @@ void FixtureManager::updateView()
     m_moveUpAction->setEnabled(false);
     m_moveDownAction->setEnabled(false);
 
+    m_showHiddenFixtures = m_doc->showHiddenFixtures();
+    m_toggleHiddenAction->setChecked(m_showHiddenFixtures);
     m_fixtures_tree->setHideHidden(!m_showHiddenFixtures);
     m_fixtures_tree->updateTree();
 
@@ -2013,6 +2015,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
 void FixtureManager::slotToggleHiddenFixtures()
 {
     m_showHiddenFixtures = m_toggleHiddenAction->isChecked();
+    m_doc->setShowHiddenFixtures(m_showHiddenFixtures);
     updateView();
 }
 
