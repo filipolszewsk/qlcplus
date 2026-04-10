@@ -398,6 +398,19 @@ void Universe::reset()
     m_passthrough = false; // not releasing m_passthroughValues, see comment in setPassthrough
 }
 
+void Universe::resetValues()
+{
+    m_preGMValues->fill(0);
+    m_blackoutValues->fill(0);
+
+    // Use modifier-transformed zero values so channels with modifiers (e.g. Invert outputs 255 at 0)
+    // produce the correct idle output rather than raw 0.
+    *m_postGMValues = *m_modifiedZeroValues;
+
+    if (m_passthrough)
+        applyPassthroughValues(0, UNIVERSE_SIZE);
+}
+
 void Universe::reset(int address, int range)
 {
     if (address >= UNIVERSE_SIZE)

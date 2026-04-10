@@ -388,11 +388,13 @@ void Doc::setMode(Doc::Mode mode)
 
     // After notifying VC widgets (which mark their faders for deletion on Design),
     // reset all universe channel values so LTP channels don't persist stale data.
+    // Use resetValues() instead of reset() to preserve channel modifier assignments
+    // so that modifiers (e.g. Invert: 0->255) produce the correct idle output.
     if (m_mode == Design)
     {
         QList<Universe *> universes = inputOutputMap()->claimUniverses();
         foreach (Universe *universe, universes)
-            universe->reset();
+            universe->resetValues();
         inputOutputMap()->releaseUniverses(false);
     }
 }

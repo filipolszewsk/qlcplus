@@ -472,8 +472,17 @@ protected:
 public:
     /**
      * Reset all values to 0.
+     * Also clears modifier assignments and passthrough. Use for full universe wipe (e.g. document clear).
      */
     void reset();
+
+    /**
+     * Reset all channel values to 0 (pre-GM and blackout buffers), and write modifier-transformed
+     * zero values to post-GM output so that channel modifiers (e.g. Invert) are honoured on output.
+     * Does NOT clear modifier assignments or passthrough state.
+     * Use when entering Design mode so fixtures with channel modifiers output their correct idle state.
+     */
+    void resetValues();
 
     /**
      * Unapplies Grand Master to the given address range and resets values to 0.
