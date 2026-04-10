@@ -57,6 +57,7 @@ class Doc;
 #define KXMLFixtureExcludeFade      QStringLiteral("ExcludeFade")
 #define KXMLFixtureForcedHTP        QStringLiteral("ForcedHTP")
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
+#define KXMLFixtureHidden           QStringLiteral("Hidden")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
 #define KXMLFixtureChannelIndex     QStringLiteral("Channel")
@@ -110,6 +111,7 @@ class Fixture : public QObject
     Q_PROPERTY(quint32 universe READ universe WRITE setUniverse NOTIFY changed)
     Q_PROPERTY(quint32 address READ address WRITE setAddress NOTIFY changed)
     Q_PROPERTY(quint32 channels READ channels WRITE setChannels NOTIFY changed)
+    Q_PROPERTY(bool hidden READ isHidden WRITE setHidden NOTIFY changed)
 
     /*********************************************************************
      * Initialization
@@ -180,6 +182,26 @@ public:
 protected:
     /** Friendly name */
     QString m_name;
+
+    /*********************************************************************
+     * Hidden flag
+     *********************************************************************/
+public:
+    /**
+     * Mark this fixture as hidden so it does not appear in selection lists.
+     * The fixture remains fully operational in the engine.
+     *
+     * @param hidden true to hide, false to show
+     */
+    void setHidden(bool hidden);
+
+    /**
+     * Return whether this fixture is hidden from selection lists.
+     */
+    bool isHidden() const;
+
+protected:
+    bool m_hidden;
 
     /*********************************************************************
      * Fixture type

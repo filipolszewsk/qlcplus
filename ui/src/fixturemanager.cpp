@@ -99,7 +99,9 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     , m_moveDownAction(NULL)
     , m_importAction(NULL)
     , m_exportAction(NULL)
+    , m_toggleHiddenAction(NULL)
     , m_groupMenu(NULL)
+    , m_showHiddenFixtures(false)
 {
     Q_ASSERT(s_instance == NULL);
     s_instance = this;
@@ -461,6 +463,7 @@ void FixtureManager::updateView()
     m_moveUpAction->setEnabled(false);
     m_moveDownAction->setEnabled(false);
 
+    m_fixtures_tree->setHideHidden(!m_showHiddenFixtures);
     m_fixtures_tree->updateTree();
 
     // Reopen groups that were open before update
@@ -1087,6 +1090,14 @@ void FixtureManager::initActions()
                                tr("Remap fixtures..."), this);
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
+
+    m_toggleHiddenAction = new QAction(QIcon(":/fade.png"),
+                               tr("Show utility fixtures"), this);
+    m_toggleHiddenAction->setCheckable(true);
+    m_toggleHiddenAction->setChecked(false);
+    m_toggleHiddenAction->setToolTip(tr("Show/hide utility fixtures in selection lists"));
+    connect(m_toggleHiddenAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotToggleHiddenFixtures()));
 }
 
 void FixtureManager::updateGroupMenu()
@@ -1136,6 +1147,8 @@ void FixtureManager::initToolBar()
     toolbar->addAction(m_importAction);
     toolbar->addAction(m_exportAction);
     toolbar->addAction(m_remapAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_toggleHiddenAction);
 
     QToolButton* btn = qobject_cast<QToolButton*> (toolbar->widgetForAction(m_groupAction));
     Q_ASSERT(btn != NULL);
@@ -1976,5 +1989,68 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     menu.addSeparator();
     menu.addAction(m_groupAction);
     menu.addAction(m_unGroupAction);
+
+    QList<QTreeWidgetItem*> selected = m_fixtures_tree->selectedItems();
+    if (!selected.isEmpty())
+    {
+        QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
+        if (idVar.isValid())
+        {
+            Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
+            if (fxi != NULL)
+            {
+                menu.addSeparator();
+                if (fxi->isHidden())
+                    menu.addAction(tr("Unhide fixture"), this, SLOT(slotUnhideSelectedFixture()));
+                else
+                    menu.addAction(tr("Hide fixture (utility)"), this, SLOT(slotHideSelectedFixture()));
+            }
+        }
+    }
+
     menu.exec(QCursor::pos());
+}
+
+void FixtureManager::slotToggleHiddenFixtures()
+{
+    m_showHiddenFixtures = m_toggleHiddenAction->isChecked();
+    updateView();
+}
+
+void FixtureManager::slotHideSelectedFixture()
+{
+    QList<QTreeWidgetItem*> selected = m_fixtures_tree->selectedItems();
+    if (selected.isEmpty())
+        return;
+
+    QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
+    if (!idVar.isValid())
+        return;
+
+    Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
+    if (fxi == NULL)
+        return;
+
+    fxi->setHidden(true);
+    m_doc->setModified();
+    updateView();
+}
+
+void FixtureManager::slotUnhideSelectedFixture()
+{
+    QList<QTreeWidgetItem*> selected = m_fixtures_tree->selectedItems();
+    if (selected.isEmpty())
+        return;
+
+    QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
+    if (!idVar.isValid())
+        return;
+
+    Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
+    if (fxi == NULL)
+        return;
+
+    fxi->setHidden(false);
+    m_doc->setModified();
+    updateView();
 }

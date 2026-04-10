@@ -323,6 +323,12 @@ public:
     QList<Fixture*> const& fixtures() const;
 
     /**
+     * Get a list of fixtures that are not marked as hidden, ordered by ID.
+     * Use this in selection/chooser UI so utility fixtures stay invisible.
+     */
+    QList<Fixture*> visibleFixtures() const;
+
+    /**
      * Get the number of fixtures currently added to the project
      *
      * @return The number of fixtures

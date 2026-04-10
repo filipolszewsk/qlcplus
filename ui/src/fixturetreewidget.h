@@ -93,12 +93,16 @@ public:
         Model            = 1 << 5,
         ShowGroups       = 1 << 6,
         ShowHeads        = 1 << 7,
-        ChannelSelection = 1 << 8
+        ChannelSelection = 1 << 8,
+        HideHidden       = 1 << 9
     };
 
     void setFlags(quint32 flags);
 
     quint32 flags();
+
+    /** Dynamically control whether hidden fixtures are filtered out */
+    void setHideHidden(bool hide);
 
 private:
     int m_uniColumn;
@@ -110,6 +114,7 @@ private:
     bool m_showGroups;
     bool m_showHeads;
     bool m_channelSelection;
+    bool m_hideHidden;
 
     /****************************************************************************
      * Disabled items

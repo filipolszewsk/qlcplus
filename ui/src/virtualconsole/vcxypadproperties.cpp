@@ -467,7 +467,7 @@ void VCXYPadProperties::slotAddClicked()
     }
 
     /* Disable all fixtures that don't have pan OR tilt channels */
-    QListIterator <Fixture*> fxit(m_doc->fixtures());
+    QListIterator <Fixture*> fxit(m_doc->visibleFixtures());
     while (fxit.hasNext() == true)
     {
         Fixture* fixture(fxit.next());
@@ -1124,7 +1124,7 @@ void VCXYPadProperties::slotAddFixtureGroupClicked()
         ++it;
     }
 
-    foreach (Fixture *fx, m_doc->fixtures())
+    foreach (Fixture *fx, m_doc->visibleFixtures())
     {
         for (int i = 0; i < fx->heads(); i++)
         {

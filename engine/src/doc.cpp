@@ -746,6 +746,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setExcludeFadeChannels(fixture->excludeFadeChannels());
         newFixture->setForcedHTPChannels(fixture->forcedHTPChannels());
         newFixture->setForcedLTPChannels(fixture->forcedLTPChannels());
+        newFixture->setHidden(fixture->isHidden());
 
         for (quint32 s = 0; s < fixture->channels(); s++)
         {
@@ -913,6 +914,17 @@ QList<Fixture*> const& Doc::fixtures() const
         const_cast<bool&>(m_fixturesListCacheUpToDate) = true;
     }
     return m_fixturesListCache;
+}
+
+QList<Fixture*> Doc::visibleFixtures() const
+{
+    QList<Fixture*> result;
+    foreach (Fixture* fxi, fixtures())
+    {
+        if (!fxi->isHidden())
+            result.append(fxi);
+    }
+    return result;
 }
 
 int Doc::fixturesCount() const

@@ -47,6 +47,7 @@ Fixture::Fixture(QObject* parent) : QObject(parent)
     m_address = 0;
     m_channels = 0;
     m_crossUniverse = false;
+    m_hidden = false;
 
     m_fixtureDef = NULL;
     m_fixtureMode = NULL;
@@ -97,6 +98,21 @@ void Fixture::setName(const QString& name)
 QString Fixture::name() const
 {
     return m_name;
+}
+
+/*****************************************************************************
+ * Hidden flag
+ *****************************************************************************/
+
+void Fixture::setHidden(bool hidden)
+{
+    m_hidden = hidden;
+    emit changed(m_id);
+}
+
+bool Fixture::isHidden() const
+{
+    return m_hidden;
 }
 
 /*****************************************************************************
@@ -1301,6 +1317,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
             tempPanTiltRanges[head] = range;
             xmlDoc.skipCurrentElement();
         }
+        else if (xmlDoc.name() == KXMLFixtureHidden)
+        {
+            m_hidden = (xmlDoc.readElementText() == "1");
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown fixture tag:" << xmlDoc.name();
@@ -1472,6 +1492,10 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
     doc->writeTextElement(KXMLFixtureAddress, QString::number(address()));
     /* Channel count */
     doc->writeTextElement(KXMLFixtureChannels, QString::number(channels()));
+
+    /* Hidden flag - only written when true for backward compatibility */
+    if (m_hidden)
+        doc->writeTextElement(KXMLFixtureHidden, "1");
 
     if (m_excludeFadeIndices.count() > 0)
     {

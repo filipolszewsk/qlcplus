@@ -56,7 +56,8 @@ DmxDumpFactory::DmxDumpFactory(Doc *doc, DmxDumpFactoryProperties *props, QWidge
     setupUi(this);
 
     quint32 treeFlags = FixtureTreeWidget::ChannelType |
-                        FixtureTreeWidget::ChannelSelection;
+                        FixtureTreeWidget::ChannelSelection |
+                        FixtureTreeWidget::HideHidden;
 
     m_fixturesTree = new FixtureTreeWidget(m_doc, treeFlags, this);
     m_fixturesTree->setIconSize(QSize(24, 24));

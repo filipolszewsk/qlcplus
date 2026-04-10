@@ -69,6 +69,7 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
 
     /* Auto start */
     m_autoStartCheck->setChecked(cueList->autoStartInOperate());
+    m_autoStartOffsetSpin->setValue(cueList->autoStartOffset());
 
     /* Show channel columns */
     m_showChannelColumnsCheck->setChecked(cueList->showChannelColumns());
@@ -279,6 +280,7 @@ void VCCueListProperties::accept()
 
     /* Auto start */
     m_cueList->setAutoStartInOperate(m_autoStartCheck->isChecked());
+    m_cueList->setAutoStartOffset(m_autoStartOffsetSpin->value());
 
     /* Show channel columns */
     m_cueList->setShowChannelColumns(m_showChannelColumnsCheck->isChecked());
@@ -441,7 +443,7 @@ void VCCueListProperties::slotStepIndexOutputSelectClicked()
     tree->setAllColumnsShowFocus(true);
     
     // Fill tree with fixtures and channels
-    foreach (Fixture *fxi, m_doc->fixtures())
+    foreach (Fixture *fxi, m_doc->visibleFixtures())
     {
         Q_ASSERT(fxi != NULL);
         

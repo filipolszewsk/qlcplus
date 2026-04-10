@@ -19,6 +19,8 @@
 
 #include <QDebug>
 #include <QHeaderView>
+#include <QFont>
+#include <QBrush>
 
 #include "fixturetreewidget.h"
 #include "qlcfixturedef.h"
@@ -44,6 +46,7 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
     , m_showGroups(false)
     , m_showHeads(false)
     , m_channelSelection(false)
+    , m_hideHidden(false)
 {
     setFlags(flags);
 
@@ -104,7 +107,15 @@ void FixtureTreeWidget::setFlags(quint32 flags)
     if (flags & ChannelSelection)
         m_channelSelection = true;
 
+    if (flags & HideHidden)
+        m_hideHidden = true;
+
     setHeaderLabels(labels);
+}
+
+void FixtureTreeWidget::setHideHidden(bool hide)
+{
+    m_hideHidden = hide;
 }
 
 /****************************************************************************
@@ -174,6 +185,15 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
     item->setText(KColumnName, fixture->name());
     item->setIcon(KColumnName, fixture->getIconFromType());
     item->setData(KColumnName, PROP_ID, QString::number(fixture->id()));
+
+    if (fixture->isHidden())
+    {
+        QFont f = item->font(KColumnName);
+        f.setItalic(true);
+        item->setFont(KColumnName, f);
+        item->setForeground(KColumnName, QBrush(Qt::gray));
+    }
+
     if (m_channelSelection)
     {
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsAutoTristate);
@@ -438,6 +458,9 @@ void FixtureTreeWidget::updateTree()
     foreach (Fixture* fixture, m_doc->fixtures())
     {
         Q_ASSERT(fixture != NULL);
+
+        if (m_hideHidden && fixture->isHidden())
+            continue;
 
         QTreeWidgetItem *topItem = NULL;
         quint32 uni = fixture->universe();

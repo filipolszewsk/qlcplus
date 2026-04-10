@@ -213,6 +213,9 @@ private slots:
     void slotMoveGroupDown();
     void slotImport();
     void slotExport();
+    void slotToggleHiddenFixtures();
+    void slotHideSelectedFixture();
+    void slotUnhideSelectedFixture();
 
     /** Callback for right mouse button clicks over a fixture item */
     void slotContextMenuRequested(const QPoint& pos);
@@ -233,7 +236,10 @@ private:
 
     QAction* m_importAction;
     QAction* m_exportAction;
+    QAction* m_toggleHiddenAction;
     QMenu* m_groupMenu;
+
+    bool m_showHiddenFixtures;
 };
 
 /** @} */

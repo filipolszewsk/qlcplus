@@ -154,7 +154,7 @@ QList<Fixture *> FixtureMappingDialog::findCompatibleFixtures(Fixture *importFix
     QLCFixtureDef *importDef = importFixture->fixtureDef();
     QLCFixtureMode *importMode = importFixture->fixtureMode();
 
-    for (Fixture *docFxi : m_doc->fixtures())
+    for (Fixture *docFxi : m_doc->visibleFixtures())
     {
         /* Show all fixtures, but put same-type ones first */
         result.append(docFxi);
