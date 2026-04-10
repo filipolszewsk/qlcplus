@@ -97,6 +97,9 @@ public:
     void rgbMap(const QSize& size, uint rgb, int step, RGBMap &map);
 
     /** @reimp */
+    void postRun();
+
+    /** @reimp */
     QString name() const;
 
     /** @reimp */

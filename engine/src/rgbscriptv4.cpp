@@ -405,6 +405,18 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
     }
 }
 
+void RGBScript::postRun()
+{
+    if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
+    {
+        QMetaObject::invokeMethod(s_jsThread->engine, [this]{ postRun(); }, Qt::BlockingQueuedConnection);
+        return;
+    }
+
+    if (!m_script.isUndefined())
+        m_script.setProperty(QStringLiteral("initialized"), QJSValue(false));
+}
+
 QString RGBScript::name() const
 {
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
