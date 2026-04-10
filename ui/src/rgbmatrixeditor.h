@@ -33,6 +33,7 @@ class SpeedDialWidget;
 class QGraphicsScene;
 class RGBItem;
 class QTimer;
+class QToolButton;
 
 /** @addtogroup ui_functions
  * @{
@@ -153,8 +154,8 @@ private:
         QString fixtureDefKey;
         QLabel *label;                      // Fixture name label
         QList<ChannelMappingRow> rows;      // List of channel mapping rows
-        QPushButton *addButton;             // [➕] button
-        QPushButton *collapseButton;        // [▼/▶] collapse/expand button
+        QPushButton *addButton;             // add mapping button
+        QToolButton *collapseButton;        // collapse/expand button
         QVBoxLayout *containerLayout;       // Container for multi-row layout
         QWidget *containerWidget;           // Widget for indented rows
         bool isCollapsed;                   // Collapse state

@@ -45,6 +45,7 @@
 #include <QCheckBox>
 #include <QDialog>
 #include <QVBoxLayout>
+#include <QToolButton>
 
 #include "fixtureselection.h"
 #include "speeddialwidget.h"
@@ -2048,7 +2049,7 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     // Remove button (ONLY for non-first rows)
     if (!isFirstRow)
     {
-        row.removeButton = new QPushButton("🗑");
+        row.removeButton = new QPushButton(QIcon(":/edit_remove.png"), QString());
         row.removeButton->setMaximumWidth(30);
         row.removeButton->setToolTip(tr("Remove channel mapping"));
         row.removeButton->setProperty("fixtureDefKey", widget.fixtureDefKey);
@@ -2184,13 +2185,14 @@ void RGBMatrixEditor::updateChannelMappingUI()
         widget.label = new QLabel(QString("<b>%1:</b>").arg(def->name()));
         
         // Create collapse/expand button
-        widget.collapseButton = new QPushButton("▼");
-        widget.collapseButton->setMaximumWidth(30);
+        widget.collapseButton = new QToolButton();
+        widget.collapseButton->setArrowType(Qt::DownArrow);
+        widget.collapseButton->setAutoRaise(true);
         widget.collapseButton->setToolTip(tr("Collapse/Expand channel mappings"));
         widget.collapseButton->setProperty("fixtureDefKey", key);
         widget.collapseButton->setCheckable(true);
         widget.collapseButton->setChecked(false);  // Not collapsed initially
-        connect(widget.collapseButton, &QPushButton::toggled, this, &RGBMatrixEditor::slotToggleCollapse);
+        connect(widget.collapseButton, &QToolButton::toggled, this, &RGBMatrixEditor::slotToggleCollapse);
 
         // Get existing mappings from backend
         QList<RGBMatrix::ChannelMapping> existingMappings = m_matrix->fixtureDefChannelMappings(key);
@@ -2225,8 +2227,8 @@ void RGBMatrixEditor::updateChannelMappingUI()
             isFirstRow = false;
         }
 
-        // Create [➕] button
-        widget.addButton = new QPushButton("➕");
+        // Create add-row button
+        widget.addButton = new QPushButton(QIcon(":/edit_add.png"), QString());
         widget.addButton->setMaximumWidth(30);
         widget.addButton->setToolTip(tr("Add channel mapping"));
         widget.addButton->setProperty("fixtureDefKey", key);
@@ -2427,7 +2429,7 @@ void RGBMatrixEditor::slotRemoveChannelMapping()
 
 void RGBMatrixEditor::slotToggleCollapse(bool collapsed)
 {
-    QPushButton *btn = qobject_cast<QPushButton*>(sender());
+    QToolButton *btn = qobject_cast<QToolButton*>(sender());
     if (btn == NULL)
         return;
     
@@ -2443,8 +2445,8 @@ void RGBMatrixEditor::slotToggleCollapse(bool collapsed)
             FixtureDefMappingWidget &widget = m_mappingWidgets[i];
             widget.isCollapsed = collapsed;
             
-            // Update button icon
-            btn->setText(collapsed ? "▶" : "▼");
+            // Update arrow direction
+            btn->setArrowType(collapsed ? Qt::RightArrow : Qt::DownArrow);
             
             // Show/hide container widget (for multi-row mode)
             if (widget.containerWidget != NULL)

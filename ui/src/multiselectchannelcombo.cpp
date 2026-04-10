@@ -24,6 +24,7 @@
 #include <QListWidgetItem>
 #include <QFrame>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QScreen>
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -44,7 +45,8 @@ MultiSelectChannelCombo::MultiSelectChannelCombo(QWidget *parent)
 
     m_button = new QPushButton(this);
     m_button->setText(tr("Select channels..."));
-    m_button->setStyleSheet("QPushButton { text-align: left; padding: 4px 8px; }");
+    m_button->setIcon(QIcon(":/down.png"));
+    m_button->setLayoutDirection(Qt::RightToLeft);
     connect(m_button, &QPushButton::clicked, this, &MultiSelectChannelCombo::slotButtonClicked);
     layout->addWidget(m_button);
 
@@ -224,14 +226,25 @@ void MultiSelectChannelCombo::showPopup()
 
     m_popupFrame->resize(width, height);
 
-    // Position below button, flip up if too close to screen bottom
+    // Position below button, flip up if too close to screen bottom.
+    // Use the screen the widget is actually on (multi-monitor safe).
     QPoint globalPos = m_button->mapToGlobal(QPoint(0, m_button->height()));
-    QRect screen = QApplication::primaryScreen()
-                       ? QApplication::primaryScreen()->availableGeometry()
+    QScreen *currentScreen = QGuiApplication::screenAt(m_button->mapToGlobal(QPoint(0, 0)));
+    if (!currentScreen)
+        currentScreen = QApplication::primaryScreen();
+    QRect screen = currentScreen
+                       ? currentScreen->availableGeometry()
                        : QRect(0, 0, 1920, 1080);
 
+    // Vertical: flip above the button if popup would go past screen bottom
     if (globalPos.y() + height > screen.bottom())
         globalPos.setY(m_button->mapToGlobal(QPoint(0, 0)).y() - height);
+
+    // Horizontal: clamp so popup stays within screen bounds
+    if (globalPos.x() + width > screen.right())
+        globalPos.setX(screen.right() - width);
+    if (globalPos.x() < screen.left())
+        globalPos.setX(screen.left());
 
     m_popupFrame->move(globalPos);
     m_popupFrame->show();
