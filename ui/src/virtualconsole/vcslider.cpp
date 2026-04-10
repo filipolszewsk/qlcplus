@@ -411,6 +411,11 @@ void VCSlider::slotModeChanged(Doc::Mode mode)
             m_doc->masterTimer()->registerDMXSource(this);
             if (m_sliderMode == Level)
                 m_levelValueChanged = true;
+            else if (m_sliderMode == Playback && m_playbackValue > 0)
+            {
+                QMutexLocker locker(&m_playbackValueMutex);
+                m_playbackChangeCounter = PLAYBACK_CHANGE_THRESHOLD;
+            }
         }
     }
     else

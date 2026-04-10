@@ -384,6 +384,16 @@ void Doc::setMode(Doc::Mode mode)
     }
 
     emit modeChanged(m_mode);
+
+    // After notifying VC widgets (which mark their faders for deletion on Design),
+    // reset all universe channel values so LTP channels don't persist stale data.
+    if (m_mode == Design)
+    {
+        QList<Universe *> universes = inputOutputMap()->claimUniverses();
+        foreach (Universe *universe, universes)
+            universe->reset();
+        inputOutputMap()->releaseUniverses(false);
+    }
 }
 
 Doc::Mode Doc::mode() const
