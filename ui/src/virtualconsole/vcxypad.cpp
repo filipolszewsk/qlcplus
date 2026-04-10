@@ -1309,6 +1309,42 @@ void VCXYPad::slotModeChanged(Doc::Mode mode)
     }
     else
     {
+        if (m_efx != NULL && m_efx->isRunning())
+        {
+            disconnect(m_efx, SIGNAL(durationChanged(uint)), this, SLOT(slotEFXDurationChanged(uint)));
+            m_efx->stopAndWait();
+            m_efx = NULL;
+            m_efxStartXOverrideId = Function::invalidAttributeId();
+            m_efxStartYOverrideId = Function::invalidAttributeId();
+            m_efxWidthOverrideId = Function::invalidAttributeId();
+            m_efxHeightOverrideId = Function::invalidAttributeId();
+        }
+        if (m_scene != NULL)
+        {
+            m_scene->stop(functionParent());
+            m_scene = NULL;
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+            {
+                if (!fader.isNull())
+                    fader->requestDelete();
+            }
+            m_fadersMap.clear();
+        }
+        m_area->enableEFXPreview(false);
+        for (QHash<QWidget *, VCXYPadPreset *>::iterator it = m_presets.begin();
+                it != m_presets.end(); ++it)
+        {
+            QPushButton *btn = reinterpret_cast<QPushButton*>(it.key());
+            VCXYPadPreset *pr = it.value();
+            if (btn->isChecked())
+            {
+                btn->blockSignals(true);
+                btn->setChecked(false);
+                btn->blockSignals(false);
+                if (!pr->m_inputSource.isNull())
+                    sendFeedback(pr->m_inputSource->feedbackValue(QLCInputFeedback::LowerValue), pr->m_inputSource);
+            }
+        }
         enableWidgetUI(false);
     }
 
