@@ -23,15 +23,14 @@
 #include <QWidget>
 #include <QHash>
 #include <QList>
-#include <QSet>
-#include <QPair>
 
 #include "monitorproperties.h"
+#include "scenevalue.h"
 
-class MultiSelectChannelCombo;
 class MonitorGraphicsView;
 class MonitorFixture;
 class MonitorLayout;
+class QPushButton;
 class QScrollArea;
 class QComboBox;
 class QSplitter;
@@ -134,8 +133,8 @@ protected slots:
     /** Menu action slot for Always On Top toggle */
     void slotAlwaysOnTop(bool checked);
 
-    /** Slot called when the fixture/channel filter selection changes */
-    void slotFilterSelectionChanged();
+    /** Slot called when the user clicks the channel filter button */
+    void slotSelectFilterChannels();
 
     /********************************************************************
      * Monitor Fixtures
@@ -158,7 +157,7 @@ protected slots:
     /** Slot for fixture removals (to remove the fixture from layout) */
     void slotFixtureRemoved(quint32 fxi_id);
 
-    /** Slot called when a universe combo item is selected (legacy, kept for compatibility) */
+    /** Kept for build compatibility — no longer used */
     void slotUniverseSelected(int index);
 
 signals:
@@ -175,14 +174,11 @@ protected:
     MonitorLayout* m_monitorLayout;
     QList <MonitorFixture*> m_monitorFixtures;
 
-    /* Legacy single-universe filter (kept for slotUniverseSelected, unused when filter combo active) */
     quint32 m_currentUniverse;
 
-    /* Advanced multi-select filter state */
-    MultiSelectChannelCombo* m_filterCombo;
-    QSet<quint32> m_selectedUniverses;   // empty = all universes
-    QSet<quint32> m_selectedFixtures;    // empty = all fixtures
-    QSet<QPair<quint32,int>> m_selectedChannels; // empty = all channels
+    /* Channel filter — empty list means show all */
+    QList<SceneValue> m_channelFilter;
+    QPushButton*      m_filterButton;
 
     QAction* m_alwaysOnTopAction;
 
