@@ -22,6 +22,8 @@
 #include <QComboBox>
 #include <QDebug>
 #include <QSettings>
+#include <QFont>
+#include <QBrush>
 
 #include "channelmodifiereditor.h"
 #include "pantiltrangeeditor.h"
@@ -90,6 +92,8 @@ ChannelsSelection::ChannelsSelection(Doc *doc, QWidget *parent, ChannelSelection
             m_channelsTree, SLOT(collapseAll()));
     connect(m_expandButton, SIGNAL(clicked(bool)),
             m_channelsTree, SLOT(expandAll()));
+    connect(m_hideUtilityCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotHideUtilityToggled(bool)));
 }
 
 ChannelsSelection::~ChannelsSelection()
@@ -170,7 +174,17 @@ void ChannelsSelection::updateFixturesTree()
         fItem->setText(KColumnName, fxi->name());
         fItem->setIcon(KColumnName, fxi->getIconFromType());
         fItem->setText(KColumnID, QString::number(fxi->id()));
-        
+
+        if (fxi->isHidden())
+        {
+            QFont f = fItem->font(KColumnName);
+            f.setItalic(true);
+            fItem->setFont(KColumnName, f);
+            fItem->setForeground(KColumnName, QBrush(Qt::gray));
+            if (m_hideUtilityCheck->isChecked())
+                fItem->setHidden(true);
+        }
+
         // Make fixture items checkable in NormalMode
         if (m_mode == NormalMode)
         {
@@ -589,6 +603,30 @@ void ChannelsSelection::slotPanTiltRangeButtonClicked()
         m_doc->updateFixtureChannelCapabilities(fxID, 
                                                 fxi->forcedHTPChannels(),
                                                 fxi->forcedLTPChannels());
+    }
+}
+
+void ChannelsSelection::slotHideUtilityToggled(bool checked)
+{
+    for (int t = 0; t < m_channelsTree->topLevelItemCount(); t++)
+    {
+        QTreeWidgetItem *uniItem = m_channelsTree->topLevelItem(t);
+        bool allHidden = true;
+        for (int f = 0; f < uniItem->childCount(); f++)
+        {
+            QTreeWidgetItem *fixItem = uniItem->child(f);
+            quint32 fxID = fixItem->text(KColumnID).toUInt();
+            Fixture *fxi = m_doc->fixture(fxID);
+            if (fxi != NULL && fxi->isHidden())
+                fixItem->setHidden(checked);
+            else
+                allHidden = false;
+        }
+        // hide universe node too if all its children are hidden
+        if (checked && allHidden && uniItem->childCount() > 0)
+            uniItem->setHidden(true);
+        else
+            uniItem->setHidden(false);
     }
 }
 

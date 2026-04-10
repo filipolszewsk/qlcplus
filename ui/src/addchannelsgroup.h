@@ -64,6 +64,7 @@ protected:
 
 protected slots:
     void slotItemChecked(QTreeWidgetItem *item, int col);
+    void slotHideUtilityToggled(bool checked);
 };
 
 /** @} */

@@ -130,6 +130,9 @@ protected slots:
     /** Callback for tree item expanded/collapsed */
     void slotItemExpanded();
 
+    /** Callback for hide utility fixtures checkbox */
+    void slotHideUtilityToggled(bool checked);
+
     /** Callback for monitoring enable */
     void slotMonitorCheckClicked(bool checked);
 
@@ -140,6 +143,7 @@ protected:
     InputSelectionWidget *m_ovrResetSelWidget;
     quint32 m_cngPresetFixtureId;
     quint32 m_cngPresetChannelIdx;
+    QCheckBox *m_hideUtilityCheck;
 
     /*************************************************************************
      * Playback page

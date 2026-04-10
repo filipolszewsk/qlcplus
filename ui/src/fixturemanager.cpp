@@ -1991,21 +1991,20 @@ void FixtureManager::slotContextMenuRequested(const QPoint&)
     menu.addAction(m_unGroupAction);
 
     QList<QTreeWidgetItem*> selected = m_fixtures_tree->selectedItems();
-    if (!selected.isEmpty())
+    bool anyFixtureSelected = false;
+    foreach (QTreeWidgetItem* item, selected)
     {
-        QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
-        if (idVar.isValid())
+        if (item->data(KColumnName, PROP_ID).isValid())
         {
-            Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
-            if (fxi != NULL)
-            {
-                menu.addSeparator();
-                if (fxi->isHidden())
-                    menu.addAction(tr("Unhide fixture"), this, SLOT(slotUnhideSelectedFixture()));
-                else
-                    menu.addAction(tr("Hide fixture (utility)"), this, SLOT(slotHideSelectedFixture()));
-            }
+            anyFixtureSelected = true;
+            break;
         }
+    }
+    if (anyFixtureSelected)
+    {
+        menu.addSeparator();
+        menu.addAction(tr("Hide selected as utility"), this, SLOT(slotHideSelectedFixture()));
+        menu.addAction(tr("Unhide selected"), this, SLOT(slotUnhideSelectedFixture()));
     }
 
     menu.exec(QCursor::pos());
@@ -2023,15 +2022,15 @@ void FixtureManager::slotHideSelectedFixture()
     if (selected.isEmpty())
         return;
 
-    QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
-    if (!idVar.isValid())
-        return;
-
-    Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
-    if (fxi == NULL)
-        return;
-
-    fxi->setHidden(true);
+    foreach (QTreeWidgetItem* item, selected)
+    {
+        QVariant idVar = item->data(KColumnName, PROP_ID);
+        if (!idVar.isValid())
+            continue;
+        Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
+        if (fxi != NULL)
+            fxi->setHidden(true);
+    }
     m_doc->setModified();
     updateView();
 }
@@ -2042,15 +2041,15 @@ void FixtureManager::slotUnhideSelectedFixture()
     if (selected.isEmpty())
         return;
 
-    QVariant idVar = selected.first()->data(KColumnName, PROP_ID);
-    if (!idVar.isValid())
-        return;
-
-    Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
-    if (fxi == NULL)
-        return;
-
-    fxi->setHidden(false);
+    foreach (QTreeWidgetItem* item, selected)
+    {
+        QVariant idVar = item->data(KColumnName, PROP_ID);
+        if (!idVar.isValid())
+            continue;
+        Fixture* fxi = m_doc->fixture(idVar.toString().toUInt());
+        if (fxi != NULL)
+            fxi->setHidden(false);
+    }
     m_doc->setModified();
     updateView();
 }

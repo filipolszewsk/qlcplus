@@ -64,6 +64,13 @@
       </widget>
      </item>
      <item>
+      <widget class="QCheckBox" name="m_hideUtilityCheck">
+       <property name="text">
+        <string>Hide utility fixtures</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="m_collapseButton">
        <property name="text">
         <string>Collapse all</string>

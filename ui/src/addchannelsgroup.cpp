@@ -20,6 +20,8 @@
 #include <QPushButton>
 #include <QDebug>
 #include <QSettings>
+#include <QFont>
+#include <QBrush>
 
 #include "inputselectionwidget.h"
 #include "addchannelsgroup.h"
@@ -89,6 +91,16 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
         fItem->setIcon(KColumnName, fxi->getIconFromType());
         fItem->setText(KColumnID, QString::number(fxi->id()));
 
+        if (fxi->isHidden())
+        {
+            QFont f = fItem->font(KColumnName);
+            f.setItalic(true);
+            fItem->setFont(KColumnName, f);
+            fItem->setForeground(KColumnName, QBrush(Qt::gray));
+            if (m_hideUtilityCheck->isChecked())
+                fItem->setHidden(true);
+        }
+
         for (quint32 c = 0; c < fxi->channels(); c++)
         {
             const QLCChannel* channel = fxi->channel(c);
@@ -142,6 +154,8 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
             m_tree, SLOT(collapseAll()));
     connect(m_expandButton, SIGNAL(clicked(bool)),
             m_tree, SLOT(expandAll()));
+    connect(m_hideUtilityCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotHideUtilityToggled(bool)));
 }
 
 AddChannelsGroup::~AddChannelsGroup()
@@ -149,6 +163,29 @@ AddChannelsGroup::~AddChannelsGroup()
     QSettings settings;
     settings.setValue(SETTINGS_GEOMETRY, saveGeometry());
     settings.setValue(SETTINGS_APPLYALL, m_applyAllCheck->isChecked());
+}
+
+void AddChannelsGroup::slotHideUtilityToggled(bool checked)
+{
+    for (int t = 0; t < m_tree->topLevelItemCount(); t++)
+    {
+        QTreeWidgetItem *uniItem = m_tree->topLevelItem(t);
+        bool allHidden = true;
+        for (int f = 0; f < uniItem->childCount(); f++)
+        {
+            QTreeWidgetItem *fixItem = uniItem->child(f);
+            quint32 fxID = fixItem->text(KColumnID).toUInt();
+            Fixture *fxi = m_doc->fixture(fxID);
+            if (fxi != NULL && fxi->isHidden())
+                fixItem->setHidden(checked);
+            else
+                allHidden = false;
+        }
+        if (checked && allHidden && uniItem->childCount() > 0)
+            uniItem->setHidden(true);
+        else
+            uniItem->setHidden(false);
+    }
 }
 
 void AddChannelsGroup::accept()

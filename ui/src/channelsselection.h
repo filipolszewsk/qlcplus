@@ -81,6 +81,7 @@ protected slots:
 
     void slotItemChecked(QTreeWidgetItem *item, int col);
     void slotItemExpanded();
+    void slotHideUtilityToggled(bool checked);
 
     /** Slot called when user picks a new behaviour from a channel
      *  combo box */

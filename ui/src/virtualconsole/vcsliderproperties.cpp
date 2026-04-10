@@ -24,11 +24,14 @@
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QLabel>
 #include <QAction>
+#include <QFont>
+#include <QBrush>
 
 #include "qlccapability.h"
 #include "qlcchannel.h"
@@ -157,6 +160,9 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     /* Tree widget contents */
     levelUpdateFixtures();
     levelUpdateChannelSelections();
+
+    connect(m_levelHideUtilityCheck, SIGNAL(toggled(bool)),
+            this, SLOT(slotHideUtilityToggled(bool)));
 
     connect(m_levelList, SIGNAL(expanded(QModelIndex)),
             this, SLOT(slotItemExpanded()));
@@ -413,6 +419,16 @@ void VCSliderProperties::levelUpdateFixtureNode(quint32 id)
     item->setText(KColumnName, fxi->name());
     item->setIcon(KColumnName, fxi->getIconFromType());
     item->setText(KColumnType, fxi->typeString());
+
+    if (fxi->isHidden())
+    {
+        QFont f = item->font(KColumnName);
+        f.setItalic(true);
+        item->setFont(KColumnName, f);
+        item->setForeground(KColumnName, QBrush(Qt::gray));
+        if (m_levelHideUtilityCheck->isChecked())
+            item->setHidden(true);
+    }
 
     levelUpdateChannels(item, fxi);
 
@@ -830,6 +846,18 @@ void VCSliderProperties::checkMajorColor(int *comp, int *max, int type)
     {
         *max = *comp;
         m_slider->setClickAndGoType((ClickAndGoWidget::ClickAndGo)type);
+    }
+}
+
+void VCSliderProperties::slotHideUtilityToggled(bool checked)
+{
+    for (int i = 0; i < m_levelList->topLevelItemCount(); i++)
+    {
+        QTreeWidgetItem* item = m_levelList->topLevelItem(i);
+        quint32 fxID = item->text(KColumnID).toUInt();
+        Fixture* fxi = m_doc->fixture(fxID);
+        if (fxi != NULL && fxi->isHidden())
+            item->setHidden(checked);
     }
 }
 
