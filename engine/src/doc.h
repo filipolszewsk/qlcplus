@@ -338,6 +338,14 @@ public:
     void setShowHiddenFixtures(bool show);
 
     /**
+     * Global UI preference: whether utility functions are currently shown
+     * in the Function Manager tree. Defaults to false (hidden).
+     * Not persisted to project XML - this is a per-session UI state.
+     */
+    bool showUtilityFunctions() const;
+    void setShowUtilityFunctions(bool show);
+
+    /**
      * Get the number of fixtures currently added to the project
      *
      * @return The number of fixtures
@@ -701,6 +709,9 @@ private:
 
     /** Per-session UI state: whether utility (hidden) fixtures are shown */
     bool m_showHiddenFixtures;
+
+    /** Per-session UI state: whether utility functions are shown */
+    bool m_showUtilityFunctions;
 };
 
 /** @} */

@@ -52,6 +52,7 @@ class FunctionUiState;
 #define KXMLQLCFunctionData      QStringLiteral("Data")
 #define KXMLQLCFunctionPath      QStringLiteral("Path")
 #define KXMLQLCFunctionHidden    QStringLiteral("Hidden")
+#define KXMLQLCFunctionUtility   QStringLiteral("Utility")
 #define KXMLQLCFunctionBlendMode QStringLiteral("BlendMode")
 
 #define KXMLQLCFunctionValue     QStringLiteral("Value")
@@ -298,6 +299,20 @@ public:
 
 private:
     bool m_visible;
+
+    /*********************************************************************
+     * Utility
+     *********************************************************************/
+public:
+    /** Mark this function as a utility. Utility functions can be hidden from the
+     *  Function Manager tree to reduce clutter, but remain fully operational. */
+    void setUtility(bool utility);
+
+    /** Returns true if this function is marked as a utility */
+    bool isUtility() const;
+
+private:
+    bool m_utility;
 
     /*********************************************************************
      * Common XML

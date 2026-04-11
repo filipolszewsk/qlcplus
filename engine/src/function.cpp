@@ -77,6 +77,7 @@ Function::Function(QObject *parent)
     , m_type(Undefined)
     , m_path(QString())
     , m_visible(true)
+    , m_utility(false)
     , m_runOrder(Loop)
     , m_direction(Forward)
     , m_tempoType(Time)
@@ -107,6 +108,7 @@ Function::Function(Doc* doc, Type t)
     , m_type(t)
     , m_path(QString())
     , m_visible(true)
+    , m_utility(false)
     , m_runOrder(Loop)
     , m_direction(Forward)
     , m_tempoType(Time)
@@ -177,6 +179,7 @@ bool Function::copyFrom(const Function* function)
     m_duration = function->duration();
     m_path = function->path(true);
     m_visible = function->isVisible();
+    m_utility = function->isUtility();
     m_blendMode = function->blendMode();
     m_uiState = function->uiStateMap();
 
@@ -324,6 +327,21 @@ bool Function::isVisible() const
 }
 
 /*********************************************************************
+ * Utility
+ *********************************************************************/
+
+void Function::setUtility(bool utility)
+{
+    m_utility = utility;
+    emit changed(m_id);
+}
+
+bool Function::isUtility() const
+{
+    return m_utility;
+}
+
+/*********************************************************************
  * Common
  *********************************************************************/
 
@@ -336,6 +354,8 @@ bool Function::saveXMLCommon(QXmlStreamWriter *doc) const
     doc->writeAttribute(KXMLQLCFunctionName, name());
     if (isVisible() == false)
         doc->writeAttribute(KXMLQLCFunctionHidden, KXMLQLCTrue);
+    if (isUtility() == true)
+        doc->writeAttribute(KXMLQLCFunctionUtility, KXMLQLCTrue);
     if (path(true).isEmpty() == false)
         doc->writeAttribute(KXMLQLCFunctionPath, path(true));
     if (blendMode() != Universe::NormalBlend)
@@ -873,12 +893,15 @@ bool Function::loader(QXmlStreamReader &root, Doc* doc)
     Type type = Function::stringToType(attrs.value(KXMLQLCFunctionType).toString());
     QString path;
     bool visible = true;
+    bool utility = false;
     Universe::BlendMode blendMode = Universe::NormalBlend;
 
     if (attrs.hasAttribute(KXMLQLCFunctionPath))
         path = attrs.value(KXMLQLCFunctionPath).toString();
     if (attrs.hasAttribute(KXMLQLCFunctionHidden))
         visible = false;
+    if (attrs.hasAttribute(KXMLQLCFunctionUtility))
+        utility = true;
     if (attrs.hasAttribute(KXMLQLCFunctionBlendMode))
         blendMode = Universe::stringToBlendMode(attrs.value(KXMLQLCFunctionBlendMode).toString());
 
@@ -917,6 +940,7 @@ bool Function::loader(QXmlStreamReader &root, Doc* doc)
     function->setName(name);
     function->setPath(path);
     function->setVisible(visible);
+    function->setUtility(utility);
     function->setBlendMode(blendMode);
     if (function->loadXML(root) == true)
     {

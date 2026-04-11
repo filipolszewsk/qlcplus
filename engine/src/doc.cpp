@@ -85,6 +85,7 @@ Doc::Doc(QObject* parent, int universes)
     , m_latestFunctionId(0)
     , m_startupFunctionId(Function::invalidId())
     , m_showHiddenFixtures(false)
+    , m_showUtilityFunctions(false)
 {
     Bus::init(this);
     resetModified();
@@ -938,6 +939,16 @@ bool Doc::showHiddenFixtures() const
 void Doc::setShowHiddenFixtures(bool show)
 {
     m_showHiddenFixtures = show;
+}
+
+bool Doc::showUtilityFunctions() const
+{
+    return m_showUtilityFunctions;
+}
+
+void Doc::setShowUtilityFunctions(bool show)
+{
+    m_showUtilityFunctions = show;
 }
 
 int Doc::fixturesCount() const

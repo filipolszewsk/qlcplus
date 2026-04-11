@@ -108,6 +108,21 @@ private slots:
     /** Toggle "show only functions not used in VC" filter */
     void slotFilterUnusedVC(bool checked);
 
+    /** Toggle visibility of utility functions */
+    void slotToggleUtilityFunctions();
+
+    /** Mark selected functions as utilities */
+    void slotHideSelectedFunction();
+
+    /** Remove the utility mark from selected functions */
+    void slotUnhideSelectedFunction();
+
+    /** Mark all functions inside selected folders as utilities */
+    void slotHideFolderContents();
+
+    /** Remove the utility mark from all functions inside selected folders */
+    void slotUnhideFolderContents();
+
 private:
     QSplitter* m_hsplitter;
     QSplitter* m_vsplitter;
@@ -166,6 +181,9 @@ protected:
     QAction* m_importAction;
     QAction* m_pasteSettingsAction;
     QAction* m_filterUnusedVCAction;
+    QAction* m_toggleUtilityAction;
+
+    bool m_showUtilityFunctions;
 
     /*********************************************************************
      * Helpers

@@ -107,6 +107,8 @@ FunctionManager::FunctionManager(QWidget* parent, Doc* doc)
     , m_importAction(NULL)
     , m_pasteSettingsAction(NULL)
     , m_filterUnusedVCAction(NULL)
+    , m_toggleUtilityAction(NULL)
+    , m_showUtilityFunctions(false)
     , m_editor(NULL)
     , m_scene_editor(NULL)
 {
@@ -202,6 +204,115 @@ void FunctionManager::updateVCUsageIndicators()
 void FunctionManager::slotFilterUnusedVC(bool checked)
 {
     m_tree->filterByVCUsage(checked);
+}
+
+void FunctionManager::slotToggleUtilityFunctions()
+{
+    m_showUtilityFunctions = m_toggleUtilityAction->isChecked();
+    m_doc->setShowUtilityFunctions(m_showUtilityFunctions);
+    m_tree->setHideUtility(!m_showUtilityFunctions);
+    m_tree->updateTree();
+    if (m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
+}
+
+void FunctionManager::slotHideSelectedFunction()
+{
+    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+    if (selected.isEmpty())
+        return;
+
+    foreach (QTreeWidgetItem *item, selected)
+    {
+        quint32 fid = m_tree->itemFunctionId(item);
+        Function *func = m_doc->function(fid);
+        if (func != NULL)
+            func->setUtility(true);
+    }
+    m_doc->setModified();
+    m_tree->setHideUtility(!m_showUtilityFunctions);
+    m_tree->updateTree();
+    if (m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
+}
+
+void FunctionManager::slotUnhideSelectedFunction()
+{
+    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+    if (selected.isEmpty())
+        return;
+
+    foreach (QTreeWidgetItem *item, selected)
+    {
+        quint32 fid = m_tree->itemFunctionId(item);
+        Function *func = m_doc->function(fid);
+        if (func != NULL)
+            func->setUtility(false);
+    }
+    m_doc->setModified();
+    m_tree->setHideUtility(!m_showUtilityFunctions);
+    m_tree->updateTree();
+    if (m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
+}
+
+static void collectFunctionIdsRecursive(QTreeWidgetItem *root,
+                                        FunctionsTreeWidget *tree,
+                                        QList<quint32> &out)
+{
+    for (int i = 0; i < root->childCount(); i++)
+    {
+        QTreeWidgetItem *child = root->child(i);
+        quint32 fid = tree->itemFunctionId(child);
+        if (fid != Function::invalidId())
+            out.append(fid);
+        else
+            collectFunctionIdsRecursive(child, tree, out);
+    }
+}
+
+void FunctionManager::slotHideFolderContents()
+{
+    QList<quint32> ids;
+    foreach (QTreeWidgetItem *item, m_tree->selectedItems())
+    {
+        if (m_tree->itemFunctionId(item) == Function::invalidId())
+            collectFunctionIdsRecursive(item, m_tree, ids);
+    }
+
+    foreach (quint32 fid, ids)
+    {
+        Function *func = m_doc->function(fid);
+        if (func != NULL)
+            func->setUtility(true);
+    }
+    m_doc->setModified();
+    m_tree->setHideUtility(!m_showUtilityFunctions);
+    m_tree->updateTree();
+    if (m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
+}
+
+void FunctionManager::slotUnhideFolderContents()
+{
+    QList<quint32> ids;
+    foreach (QTreeWidgetItem *item, m_tree->selectedItems())
+    {
+        if (m_tree->itemFunctionId(item) == Function::invalidId())
+            collectFunctionIdsRecursive(item, m_tree, ids);
+    }
+
+    foreach (quint32 fid, ids)
+    {
+        Function *func = m_doc->function(fid);
+        if (func != NULL)
+            func->setUtility(false);
+    }
+    m_doc->setModified();
+    m_tree->setHideUtility(!m_showUtilityFunctions);
+    m_tree->updateTree();
+    if (m_filterUnusedVCAction->isChecked())
+        m_tree->filterByVCUsage(true);
 }
 
 void FunctionManager::slotFunctionNameChanged(quint32 id)
@@ -344,6 +455,14 @@ void FunctionManager::initActions()
     m_filterUnusedVCAction->setChecked(false);
     connect(m_filterUnusedVCAction, SIGNAL(toggled(bool)),
             this, SLOT(slotFilterUnusedVC(bool)));
+
+    m_toggleUtilityAction = new QAction(QIcon(":/fade.png"),
+                                        tr("Show &utility functions"), this);
+    m_toggleUtilityAction->setCheckable(true);
+    m_toggleUtilityAction->setChecked(false);
+    m_toggleUtilityAction->setToolTip(tr("Show/hide utility functions in the list"));
+    connect(m_toggleUtilityAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotToggleUtilityFunctions()));
 }
 
 void FunctionManager::initToolbar()
@@ -375,6 +494,7 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_deleteAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_filterUnusedVCAction);
+    m_toolbar->addAction(m_toggleUtilityAction);
 }
 
 void FunctionManager::slotAddScene()
@@ -994,6 +1114,30 @@ void FunctionManager::slotTreeContextMenuRequested()
     menu.addSeparator();
     menu.addAction(m_wizardAction);
     menu.addAction(m_importAction);
+
+    // Utility hide/unhide for selected functions
+    bool anyFunctionSelected = false;
+    bool anyFolderSelected = false;
+    foreach (QTreeWidgetItem *item, m_tree->selectedItems())
+    {
+        quint32 fid = m_tree->itemFunctionId(item);
+        if (fid != Function::invalidId())
+            anyFunctionSelected = true;
+        else
+            anyFolderSelected = true;
+    }
+    if (anyFunctionSelected)
+    {
+        menu.addSeparator();
+        menu.addAction(tr("Hide selected as &utility"), this, SLOT(slotHideSelectedFunction()));
+        menu.addAction(tr("U&nhide selected"), this, SLOT(slotUnhideSelectedFunction()));
+    }
+    if (anyFolderSelected)
+    {
+        menu.addSeparator();
+        menu.addAction(tr("Hide folder contents as utility"), this, SLOT(slotHideFolderContents()));
+        menu.addAction(tr("Unhide folder contents"), this, SLOT(slotUnhideFolderContents()));
+    }
 
     updateActionStatus();
 

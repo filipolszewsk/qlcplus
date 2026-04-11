@@ -94,6 +94,14 @@ public:
      */
     void filterByVCUsage(bool showOnlyUnused);
 
+    /**
+     * Control whether utility functions are hidden from the tree.
+     * When hide=true, functions with isUtility()==true are skipped entirely
+     * (requires updateTree() to take effect).
+     * When hide=false, utility functions appear with italic+gray styling.
+     */
+    void setHideUtility(bool hide);
+
 private:
     /** Update $item's contents from the given $function */
     void updateFunctionItem(QTreeWidgetItem* item, const Function* function);
@@ -107,6 +115,7 @@ private:
 private:
     Doc* m_doc;
     QSet<quint32> m_usedFunctionIDs;
+    bool m_hideUtility;
 
     /*********************************************************************
      * Tree folders

@@ -19,6 +19,7 @@
 
 #include <QTreeWidgetItemIterator>
 #include <QContextMenuEvent>
+#include <QBrush>
 #include <QDebug>
 
 #include "functionstreewidget.h"
@@ -32,6 +33,7 @@
 FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
     QTreeWidget(parent)
   , m_doc(doc)
+  , m_hideUtility(true)
 {
     sortItems(COL_NAME, Qt::AscendingOrder);
 
@@ -42,6 +44,11 @@ FunctionsTreeWidget::FunctionsTreeWidget(Doc *doc, QWidget *parent) :
                 this, SLOT(slotItemChanged(QTreeWidgetItem*)));
 }
 
+void FunctionsTreeWidget::setHideUtility(bool hide)
+{
+    m_hideUtility = hide;
+}
+
 void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);
@@ -50,8 +57,11 @@ void FunctionsTreeWidget::updateTree()
 
     foreach (Function* function, m_doc->functions())
     {
-        if (function->isVisible())
-            updateFunctionItem(new QTreeWidgetItem(parentItem(function)), function);
+        if (function->isVisible() == false)
+            continue;
+        if (m_hideUtility && function->isUtility())
+            continue;
+        updateFunctionItem(new QTreeWidgetItem(parentItem(function)), function);
     }
 
     blockSignals(false);
@@ -85,6 +95,8 @@ QTreeWidgetItem *FunctionsTreeWidget::addFunction(quint32 fid)
     Function* function = m_doc->function(fid);
     if (function == NULL || function->isVisible() == false)
         return NULL;
+    if (m_hideUtility && function->isUtility())
+        return NULL;
 
     QTreeWidgetItem* item = functionItem(function);
     if (item != NULL)
@@ -109,6 +121,14 @@ void FunctionsTreeWidget::updateFunctionItem(QTreeWidgetItem* item, const Functi
     item->setData(COL_NAME, Qt::UserRole, function->id());
     item->setData(COL_NAME, Qt::UserRole + 1, function->type());
     item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
+
+    if (function->isUtility())
+    {
+        QFont f = item->font(COL_NAME);
+        f.setItalic(true);
+        item->setFont(COL_NAME, f);
+        item->setForeground(COL_NAME, QBrush(Qt::gray));
+    }
 
     if (m_usedFunctionIDs.contains(function->id()))
     {
@@ -187,6 +207,8 @@ QTreeWidgetItem* FunctionsTreeWidget::parentItem(const Function* function)
 
     if (function->isVisible() == false)
         return NULL;
+    if (m_hideUtility && function->isUtility())
+        return NULL;
 
     QString basePath = Function::typeToString(function->type());
     if (m_foldersMap.contains(QString(basePath + "/")) == false)
@@ -232,6 +254,8 @@ QTreeWidgetItem* FunctionsTreeWidget::functionItem(const Function* function)
     Q_ASSERT(function != NULL);
 
     if (function->isVisible() == false)
+        return NULL;
+    if (m_hideUtility && function->isUtility())
         return NULL;
 
     QTreeWidgetItem* parent = parentItem(function);
