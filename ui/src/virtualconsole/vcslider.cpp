@@ -87,6 +87,7 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     : VCWidget(parent, doc)
     , m_valueDisplayStyle(ExactValue)
     , m_catchValues(false)
+    , m_resetValueOnOperate(false)
     , m_levelLowLimit(0)
     , m_levelHighLimit(UCHAR_MAX)
     , m_levelValueChanged(false)
@@ -286,6 +287,9 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     /* Copy monitor mode */
     setChannelsMonitorEnabled(slider->channelsMonitorEnabled());
 
+    /* Copy reset on operate flag */
+    setResetValueOnOperate(slider->resetValueOnOperate());
+
     /* Copy flash enabling */
     setPlaybackFlashEnable(slider->playbackFlashEnable());
 
@@ -405,6 +409,15 @@ void VCSlider::slotModeChanged(Doc::Mode mode)
 {
     if (mode == Doc::Operate)
     {
+        if (m_resetValueOnOperate)
+        {
+            setSliderValue(0);
+            if (m_sliderMode == Level)
+                setLevelValue(0);
+            else if (m_sliderMode == Playback)
+                setPlaybackValue(0);
+        }
+
         enableWidgetUI(true);
         if (m_sliderMode == Level || m_sliderMode == Playback)
         {
@@ -512,6 +525,20 @@ void VCSlider::setCatchValues(bool enable)
         return;
 
     m_catchValues = enable;
+}
+
+/*****************************************************************************
+ * Reset value on Operate
+ *****************************************************************************/
+
+bool VCSlider::resetValueOnOperate() const
+{
+    return m_resetValueOnOperate;
+}
+
+void VCSlider::setResetValueOnOperate(bool reset)
+{
+    m_resetValueOnOperate = reset;
 }
 
 /*****************************************************************************
@@ -1853,6 +1880,11 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
         {
             loadXMLPlayback(root);
         }
+        else if (root.name() == KXMLQLCVCSliderResetValueOnOperate)
+        {
+            setResetValueOnOperate(true);
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown slider tag:" << root.name().toString();
@@ -2069,6 +2101,10 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
 
     /* End the <Playback> tag */
     doc->writeEndElement();
+
+    /* Reset value on Operate */
+    if (m_resetValueOnOperate)
+        doc->writeTextElement(KXMLQLCVCSliderResetValueOnOperate, "true");
 
     /* End the <Slider> tag */
     doc->writeEndElement();

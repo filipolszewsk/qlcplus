@@ -138,6 +138,9 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     if (m_slider->catchValues())
         m_catchValueCheck->setChecked(true);
 
+    /* Reset value on Operate */
+    m_resetValueOnOperateCheck->setChecked(m_slider->resetValueOnOperate());
+
     /********************************************************************
      * External input
      ********************************************************************/
@@ -976,6 +979,9 @@ void VCSliderProperties::accept()
         m_slider->setCatchValues(true);
     else
         m_slider->setCatchValues(false);
+
+    /* Reset value on Operate */
+    m_slider->setResetValueOnOperate(m_resetValueOnOperateCheck->isChecked());
 
     /* Level page */
     bool limitDiff =

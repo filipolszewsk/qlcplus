@@ -79,6 +79,8 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderPlaybackFunction QStringLiteral("Function")
 #define KXMLQLCVCSliderPlaybackFlash    QStringLiteral("Flash")
 
+#define KXMLQLCVCSliderResetValueOnOperate QStringLiteral("ResetValueOnOperate")
+
 class VCSlider : public VCWidget, public DMXSource
 {
     Q_OBJECT
@@ -228,6 +230,16 @@ public:
 
 protected:
     bool m_catchValues;
+
+    /*********************************************************************
+     * Reset value on Operate
+     *********************************************************************/
+public:
+    bool resetValueOnOperate() const;
+    void setResetValueOnOperate(bool reset);
+
+protected:
+    bool m_resetValueOnOperate;
 
     /*************************************************************************
      * Class LevelChannel
