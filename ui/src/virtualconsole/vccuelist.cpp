@@ -980,13 +980,9 @@ void VCCueList::updateStepList()
                 const ChannelColumnInfo &col = m_channelColumns.at(i);
                 if (!col.activeInMask)
                 {
-                    // Channel no longer in recording mask — show grayed out, non-editable
                     item->setText(colOffset + i, "-");
                     item->setData(colOffset + i, Qt::ForegroundRole,
                                   QColor(Qt::gray));
-                    Qt::ItemFlags flags = item->flags();
-                    flags &= ~Qt::ItemIsEditable;
-                    item->setFlags(flags);
                 }
                 else if (scene != nullptr && col.fixtureId != UINT_MAX)
                 {
