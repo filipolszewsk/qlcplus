@@ -318,6 +318,8 @@ void FunctionSelection::refillTree()
         if (m_filter & function->type())
         {
             QTreeWidgetItem* item = m_funcTree->addFunction(function->id());
+            if (item == NULL)
+                continue;
             if (disabledFunctions().contains(function->id()))
                 item->setFlags(Qt::NoItemFlags); // Disable the item
             else
