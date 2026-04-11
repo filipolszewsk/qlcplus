@@ -59,7 +59,6 @@ FunctionSelection::FunctionSelection(QWidget* parent, Doc* doc)
     setupUi(this);
 
     m_funcTree = new FunctionsTreeWidget(m_doc, this);
-    m_funcTree->setHideUtility(!m_doc->showUtilityFunctions());
     QStringList labels;
     labels << tr("Functions");
     m_funcTree->setHeaderLabels(labels);
