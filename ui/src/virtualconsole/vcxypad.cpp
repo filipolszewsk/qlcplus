@@ -1246,19 +1246,13 @@ void VCXYPad::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), widthInputSourceId))
     {
-        if (m_efx != NULL && m_efx->isRunning())
-        {
-            m_hRangeSlider->setMaximumValue(value);
-            slotRangeValueChanged();
-        }
+        m_hRangeSlider->setMaximumValue(value);
+        slotRangeValueChanged();
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), heightInputSourceId))
     {
-        if (m_efx != NULL && m_efx->isRunning())
-        {
-            m_vRangeSlider->setMaximumValue(value);
-            slotRangeValueChanged();
-        }
+        m_vRangeSlider->setMaximumValue(value);
+        slotRangeValueChanged();
     }
     else
     {
