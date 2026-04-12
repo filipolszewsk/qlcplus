@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QString>
 #include <QMutex>
+#include <QRecursiveMutex>
 #include <QList>
 #include <QIcon>
 #include <QMap>
@@ -1012,6 +1013,13 @@ private:
 
     /** Flag to preserve or discard attributes on stop calls */
     bool m_preserveAttributes;
+
+    /** Protects m_overrideMap and override fields of m_attributes against
+     *  concurrent access from the GUI thread (requestAttributeOverride,
+     *  adjustAttribute) and the MasterTimer thread (postRun -> resetAttributes).
+     *  QRecursiveMutex is required because requestAttributeOverride calls
+     *  adjustAttribute which calls calculateOverrideValue. */
+    QRecursiveMutex m_attributesMutex;
 
     /*************************************************************************
      * Blend mode

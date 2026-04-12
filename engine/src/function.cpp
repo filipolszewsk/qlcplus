@@ -1275,6 +1275,8 @@ int Function::registerAttribute(QString name, int flags, qreal min, qreal max, q
 
 int Function::requestAttributeOverride(int attributeIndex, qreal value)
 {
+    QMutexLocker locker(&m_attributesMutex);
+
     if (attributeIndex < 0 || attributeIndex >= m_attributes.count())
         return -1;
 
@@ -1321,6 +1323,8 @@ int Function::requestAttributeOverride(int attributeIndex, qreal value)
 
 void Function::releaseAttributeOverride(int attributeId)
 {
+    QMutexLocker locker(&m_attributesMutex);
+
     if (m_overrideMap.contains(attributeId) == false)
         return;
 
@@ -1357,6 +1361,8 @@ bool Function::renameAttribute(int idx, QString newName)
 
 int Function::adjustAttribute(qreal value, int attributeId)
 {
+    QMutexLocker locker(&m_attributesMutex);
+
     if (attributeId < 0)
         return -1;
 
@@ -1393,6 +1399,8 @@ int Function::adjustAttribute(qreal value, int attributeId)
 
 void Function::resetAttributes()
 {
+    QMutexLocker locker(&m_attributesMutex);
+
     for (int i = 0; i < m_attributes.count(); i++)
     {
         m_attributes[i].m_isOverridden = false;
@@ -1430,6 +1438,8 @@ QList<Attribute> Function::attributes() const
 
 void Function::calculateOverrideValue(int attributeIndex)
 {
+    QMutexLocker locker(&m_attributesMutex);
+
     if (attributeIndex >= m_attributes.count())
         return;
 
