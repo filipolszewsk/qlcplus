@@ -116,6 +116,22 @@ protected:
 #endif
 
     /*********************************************************************
+     * Cross-project clipboard (JSON)
+     *********************************************************************/
+public:
+    enum CollectionCopyGroup
+    {
+        CopyCollectionSteps = (1 << 8),
+    };
+
+    /** @reimp */
+    QList<QPair<int, QString>> copyableParameterGroups() const override;
+    /** @reimp */
+    void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const override;
+    /** @reimp */
+    bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc) override;
+
+    /*********************************************************************
      * Save & Load
      *********************************************************************/
 public:

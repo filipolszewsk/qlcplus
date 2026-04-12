@@ -863,6 +863,91 @@ void Function::slotFixtureRemoved(quint32 fid)
 }
 
 /*****************************************************************************
+ * Cross-project clipboard (JSON)
+ *****************************************************************************/
+
+QList<QPair<int, QString>> Function::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups;
+    groups << QPair<int, QString>(CopyName,      tr("Name"));
+    groups << QPair<int, QString>(CopySpeed,     tr("Speed"));
+    groups << QPair<int, QString>(CopyRunOrder,  tr("Run Order"));
+    groups << QPair<int, QString>(CopyDirection, tr("Direction"));
+    groups << QPair<int, QString>(CopyBlendMode, tr("Blend Mode"));
+    return groups;
+}
+
+void Function::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Q_UNUSED(doc)
+
+    if (flags & CopyName)
+        obj["name"] = name();
+
+    if (flags & CopySpeed)
+    {
+        QJsonObject speed;
+        speed["fadeIn"]  = static_cast<qint64>(fadeInSpeed());
+        speed["fadeOut"] = static_cast<qint64>(fadeOutSpeed());
+        speed["duration"] = static_cast<qint64>(duration());
+        obj["speed"] = speed;
+    }
+
+    if (flags & CopyRunOrder)
+        obj["runOrder"] = runOrderToString(runOrder());
+
+    if (flags & CopyDirection)
+        obj["direction"] = directionToString(direction());
+
+    if (flags & CopyBlendMode)
+        obj["blendMode"] = Universe::blendModeToString(blendMode());
+}
+
+bool Function::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    Q_UNUSED(doc)
+    bool changed = false;
+
+    if ((flags & CopyName) && obj.contains("name"))
+    {
+        setName(obj["name"].toString());
+        changed = true;
+    }
+
+    if ((flags & CopySpeed) && obj.contains("speed"))
+    {
+        QJsonObject speed = obj["speed"].toObject();
+        if (speed.contains("fadeIn"))
+            setFadeInSpeed(static_cast<uint>(speed["fadeIn"].toInt()));
+        if (speed.contains("fadeOut"))
+            setFadeOutSpeed(static_cast<uint>(speed["fadeOut"].toInt()));
+        if (speed.contains("duration"))
+            setDuration(static_cast<uint>(speed["duration"].toInt()));
+        changed = true;
+    }
+
+    if ((flags & CopyRunOrder) && obj.contains("runOrder"))
+    {
+        setRunOrder(stringToRunOrder(obj["runOrder"].toString()));
+        changed = true;
+    }
+
+    if ((flags & CopyDirection) && obj.contains("direction"))
+    {
+        setDirection(stringToDirection(obj["direction"].toString()));
+        changed = true;
+    }
+
+    if ((flags & CopyBlendMode) && obj.contains("blendMode"))
+    {
+        setBlendMode(Universe::stringToBlendMode(obj["blendMode"].toString()));
+        changed = true;
+    }
+
+    return changed;
+}
+
+/*****************************************************************************
  * Load & Save
  *****************************************************************************/
 bool Function::saveXML(QXmlStreamWriter *doc)

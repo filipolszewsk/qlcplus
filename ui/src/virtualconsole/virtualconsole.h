@@ -22,6 +22,7 @@
 #define VIRTUALCONSOLE_H
 
 #include <QKeySequence>
+#include <QJsonArray>
 #include <QWidget>
 #include <QFrame>
 #include <QHash>
@@ -180,6 +181,8 @@ protected:
     QAction* m_editCutAction;
     QAction* m_editCopyAction;
     QAction* m_editPasteAction;
+    QAction* m_editCopyToClipboardAction;
+    QAction* m_editPasteFromClipboardAction;
     QAction* m_editDeleteAction;
     QAction* m_editPropertiesAction;
     QAction* m_editRenameAction;
@@ -262,7 +265,14 @@ public slots:
     void slotEditCut();
     void slotEditCopy();
     void slotEditPaste();
+    void slotEditCopyToClipboard();
+    void slotEditPasteFromClipboard();
     void slotEditDelete();
+
+public:
+    /** Create widgets from @p widgets JSON array under @p parentFrame.
+     *  Increments @p count for each widget created. */
+    void importWidgetsFromJson(const QJsonArray &widgets, VCFrame *parentFrame, int &count);
     void slotEditRename();
     void slotEditProperties();
     void slotMultiPatch();

@@ -20,6 +20,8 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMapIterator>
 #include <QMetaObject>
 #include <QCloseEvent>
@@ -1307,6 +1309,26 @@ QList<QPair<VCWidget::PastePropertyGroup, QString>> VCFrame::pasteablePropertyGr
     groups << qMakePair(PasteSpecific1, tr("Multipage Settings"));
     groups << qMakePair(PasteSpecific2, tr("Key Sequences"));
     return groups;
+}
+
+void VCFrame::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+
+    /* Serialize direct children */
+    QJsonArray children;
+    const QObjectList &objs = QObject::children();
+    for (QObject *child : objs)
+    {
+        VCWidget *w = qobject_cast<VCWidget*>(child);
+        if (!w || w->parentWidget() != const_cast<VCFrame*>(this))
+            continue;
+        QJsonObject childObj;
+        w->toClipboardJson(childObj, doc);
+        children.append(childObj);
+    }
+    if (!children.isEmpty())
+        obj["children"] = children;
 }
 
 void VCFrame::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)

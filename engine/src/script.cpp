@@ -20,6 +20,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QJsonObject>
 #if !defined(Q_OS_IOS)
 #include <QProcess>
 #endif
@@ -308,6 +309,33 @@ bool Script::loadXML(QXmlStreamReader &root)
     scanForLabels();
 
     return true;
+}
+
+QList<QPair<int, QString>> Script::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyScriptData, tr("Script Code"));
+    return groups;
+}
+
+void Script::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+    if (flags & CopyScriptData)
+        obj["scriptData"] = data();
+}
+
+bool Script::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+    if ((flags & CopyScriptData) && obj.contains("scriptData"))
+    {
+        setData(obj["scriptData"].toString());
+        changed = true;
+    }
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 bool Script::saveXML(QXmlStreamWriter *doc)

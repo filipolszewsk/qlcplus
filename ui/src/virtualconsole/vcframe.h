@@ -394,6 +394,9 @@ public:
     QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
     void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
 
+    /** @reimp: serializes this frame and all direct children recursively. */
+    void toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+
     /*********************************************************************
      * Properties
      *********************************************************************/

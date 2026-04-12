@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QMediaPlayer>
+#include <QJsonObject>
 #include <QDebug>
 #include <QFile>
 
@@ -348,6 +349,66 @@ int Video::adjustAttribute(qreal fraction, int attributeId)
 void Video::slotFunctionRemoved(quint32 fid)
 {
     Q_UNUSED(fid)
+}
+
+/*********************************************************************
+ * Cross-project clipboard (JSON)
+ *********************************************************************/
+
+QList<QPair<int, QString>> Video::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyVideoSource,   tr("Source File/URL"));
+    groups << QPair<int, QString>(CopyVideoScreen,   tr("Screen & Fullscreen"));
+    groups << QPair<int, QString>(CopyVideoGeometry, tr("Custom Geometry"));
+    return groups;
+}
+
+void Video::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+    if (flags & CopyVideoSource)
+        obj["sourceUrl"] = m_sourceUrl;
+    if (flags & CopyVideoScreen)
+    {
+        obj["screen"]     = m_screen;
+        obj["fullscreen"] = m_fullscreen;
+    }
+    if (flags & CopyVideoGeometry)
+    {
+        QJsonObject geom;
+        geom["x"] = m_customGeometry.x();
+        geom["y"] = m_customGeometry.y();
+        geom["w"] = m_customGeometry.width();
+        geom["h"] = m_customGeometry.height();
+        obj["customGeometry"] = geom;
+    }
+}
+
+bool Video::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+    if ((flags & CopyVideoSource) && obj.contains("sourceUrl"))
+    {
+        setSourceUrl(obj["sourceUrl"].toString());
+        changed = true;
+    }
+    if ((flags & CopyVideoScreen) && obj.contains("screen"))
+    {
+        setScreen(obj["screen"].toInt());
+        setFullscreen(obj["fullscreen"].toBool());
+        changed = true;
+    }
+    if ((flags & CopyVideoGeometry) && obj.contains("customGeometry"))
+    {
+        QJsonObject geom = obj["customGeometry"].toObject();
+        setCustomGeometry(QRect(geom["x"].toInt(), geom["y"].toInt(),
+                                geom["w"].toInt(), geom["h"].toInt()));
+        changed = true;
+    }
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 /*********************************************************************

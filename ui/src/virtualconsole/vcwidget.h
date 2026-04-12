@@ -31,6 +31,7 @@ class QXmlStreamWriter;
 class QLCInputSource;
 class QPaintEvent;
 class QMouseEvent;
+class QJsonObject;
 class QString;
 class QMenu;
 class QFile;
@@ -564,6 +565,21 @@ signals:
 
     /** Tell listeners that a key was released */
     void keyReleased(const QKeySequence& keySequence);
+
+    /*********************************************************************
+     * Cross-project clipboard (JSON)
+     *********************************************************************/
+public:
+    /** Serialize this widget to a JSON object for cross-project copy.
+     *  Subclasses must call this base and then append their own data.
+     *  Function references are stored by name (not ID). */
+    virtual void toClipboardJson(QJsonObject &obj, const Doc *doc) const;
+
+    /** Create a widget of the correct type from @p obj and add it to
+     *  @p parent.  Returns nullptr if @p obj is invalid or type is
+     *  not recognised.  Function references are resolved by name in @p doc. */
+    static VCWidget* fromClipboardJson(const QJsonObject &obj,
+                                       VCWidget *parent, Doc *doc);
 
     /*********************************************************************
      * Load & Save

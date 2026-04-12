@@ -44,6 +44,8 @@
 #include <QIcon>
 
 #include "importfunctionsdialog.h"
+#include "copyfunctionsettingsdialog.h"
+#include "pastefunctionsettingsdialog.h"
 #include "functionstreewidget.h"
 #include "virtualconsole.h"
 #include "functionselection.h"
@@ -443,6 +445,12 @@ void FunctionManager::initActions()
     connect(m_importAction, SIGNAL(triggered(bool)),
             this, SLOT(slotImportFunctions()));
 
+    m_copySettingsAction = new QAction(QIcon(":/editcopy.png"),
+                                       tr("&Copy settings to clipboard"), this);
+    m_copySettingsAction->setToolTip(tr("Copy selected function settings to system clipboard (cross-project)"));
+    connect(m_copySettingsAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotCopySettingsToClipboard()));
+
     m_pasteSettingsAction = new QAction(QIcon(":/editpaste.png"),
                                         tr("&Paste settings to selected"), this);
     m_pasteSettingsAction->setShortcut(QKeySequence(QKeySequence::Paste));
@@ -488,6 +496,7 @@ void FunctionManager::initToolbar()
     m_toolbar->addAction(m_wizardAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_cloneAction);
+    m_toolbar->addAction(m_copySettingsAction);
     m_toolbar->addAction(m_pasteSettingsAction);
     m_toolbar->addAction(m_importAction);
     m_toolbar->addSeparator();
@@ -908,6 +917,56 @@ void FunctionManager::slotPasteSettings()
                                      tr("No EFX functions were selected."));
         }
     }
+    else if (clipType == "qlc_function_settings")
+    {
+        /* New cross-project generic format */
+        QList<Function*> targets;
+        QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+        for (QTreeWidgetItem *item : selected)
+        {
+            quint32 fid = m_tree->itemFunctionId(item);
+            if (fid == Function::invalidId())
+                continue;
+            Function *func = m_doc->function(fid);
+            if (func)
+                targets << func;
+        }
+
+        PasteFunctionSettingsDialog dlg(root, targets, m_doc, this);
+        if (dlg.exec() == QDialog::Accepted)
+        {
+            m_doc->setModified();
+            if (m_editor != NULL && selected.size() == 1)
+            {
+                quint32 fid = m_tree->itemFunctionId(selected.first());
+                Function *func = m_doc->function(fid);
+                if (func)
+                    editFunction(func);
+            }
+        }
+    }
+}
+
+void FunctionManager::slotCopySettingsToClipboard()
+{
+    QList<QTreeWidgetItem*> selected = m_tree->selectedItems();
+    if (selected.size() != 1)
+    {
+        QMessageBox::information(this, tr("Copy Settings"),
+                                 tr("Please select exactly one function to copy settings from."));
+        return;
+    }
+
+    quint32 fid = m_tree->itemFunctionId(selected.first());
+    if (fid == Function::invalidId())
+        return;
+
+    Function *func = m_doc->function(fid);
+    if (!func)
+        return;
+
+    CopyFunctionSettingsDialog dlg(func, m_doc, this);
+    dlg.exec();
 }
 
 void FunctionManager::updateActionStatus()
@@ -1096,6 +1155,7 @@ void FunctionManager::slotTreeContextMenuRequested()
 {
     QMenu menu(this);
     menu.addAction(m_cloneAction);
+    menu.addAction(m_copySettingsAction);
     menu.addAction(m_pasteSettingsAction);
     menu.addAction(m_selectAllAction);
     menu.addSeparator();

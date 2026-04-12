@@ -21,6 +21,10 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QApplication>
+#include <QClipboard>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QInputDialog>
 #include <QColorDialog>
 #include <QActionGroup>
@@ -39,6 +43,7 @@
 #include <QMenu>
 #include <QList>
 
+#include "importvcwidgetsdialog.h"
 #include "vcpastepropertiesdialog.h"
 #include "vcmultipatcheditor.h"
 #include "vcpropertieseditor.h"
@@ -110,6 +115,8 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_editCutAction(NULL)
     , m_editCopyAction(NULL)
     , m_editPasteAction(NULL)
+    , m_editCopyToClipboardAction(NULL)
+    , m_editPasteFromClipboardAction(NULL)
     , m_editDeleteAction(NULL)
     , m_editPropertiesAction(NULL)
     , m_editRenameAction(NULL)
@@ -388,6 +395,20 @@ void VirtualConsole::initActions()
     m_editPasteAction->setEnabled(false);
     connect(m_editPasteAction, SIGNAL(triggered(bool)), this, SLOT(slotEditPaste()));
 
+    m_editCopyToClipboardAction = new QAction(QIcon(":/editcopy.png"),
+                                              tr("Copy to system clipboard (cross-project)"), this);
+    m_editCopyToClipboardAction->setToolTip(
+        tr("Serialize selected widgets to the system clipboard so they can be pasted into another QLC+ project"));
+    connect(m_editCopyToClipboardAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotEditCopyToClipboard()));
+
+    m_editPasteFromClipboardAction = new QAction(QIcon(":/editpaste.png"),
+                                                 tr("Paste from system clipboard (cross-project)"), this);
+    m_editPasteFromClipboardAction->setToolTip(
+        tr("Paste widgets previously copied from another QLC+ project"));
+    connect(m_editPasteFromClipboardAction, SIGNAL(triggered(bool)),
+            this, SLOT(slotEditPasteFromClipboard()));
+
     m_editDeleteAction = new QAction(QIcon(":/editdelete.png"), tr("Delete"), this);
     connect(m_editDeleteAction, SIGNAL(triggered(bool)), this, SLOT(slotEditDelete()));
 
@@ -514,6 +535,10 @@ void VirtualConsole::initMenuBar()
     m_editMenu->addAction(m_editCutAction);
     m_editMenu->addAction(m_editCopyAction);
     m_editMenu->addAction(m_editPasteAction);
+    m_editMenu->addSeparator();
+    m_editMenu->addAction(m_editCopyToClipboardAction);
+    m_editMenu->addAction(m_editPasteFromClipboardAction);
+    m_editMenu->addSeparator();
     m_editMenu->addAction(m_editDeleteAction);
     m_editMenu->addSeparator();
     m_editMenu->addAction(m_editPropertiesAction);
@@ -586,6 +611,8 @@ void VirtualConsole::initMenuBar()
     m_toolbar->addAction(m_editCutAction);
     m_toolbar->addAction(m_editCopyAction);
     m_toolbar->addAction(m_editPasteAction);
+    m_toolbar->addAction(m_editCopyToClipboardAction);
+    m_toolbar->addAction(m_editPasteFromClipboardAction);
     m_toolbar->addSeparator();
     m_toolbar->addAction(m_editDeleteAction);
     m_toolbar->addSeparator();
@@ -1109,6 +1136,177 @@ void VirtualConsole::slotEditCopy()
         m_editAction = EditCopy;
         m_clipboard = m_selectedWidgets;
         m_editPasteAction->setEnabled(true);
+    }
+}
+
+void VirtualConsole::slotEditCopyToClipboard()
+{
+    if (m_selectedWidgets.isEmpty())
+        return;
+
+    QJsonArray widgets;
+    for (VCWidget *w : m_selectedWidgets)
+    {
+        QJsonObject obj;
+        w->toClipboardJson(obj, m_doc);
+        widgets.append(obj);
+    }
+
+    QJsonObject root;
+    root["type"]    = QString("qlc_vc_widgets");
+    root["version"] = 1;
+    root["widgets"] = widgets;
+
+    QJsonDocument doc(root);
+    QApplication::clipboard()->setText(doc.toJson(QJsonDocument::Compact));
+}
+
+void VirtualConsole::slotEditPasteFromClipboard()
+{
+    QString text = QApplication::clipboard()->text();
+    if (text.isEmpty())
+        return;
+
+    QJsonParseError err;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(text.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError)
+        return;
+
+    QJsonObject root = jsonDoc.object();
+    if (root["type"].toString() != "qlc_vc_widgets")
+    {
+        QMessageBox::information(this, tr("Paste from Clipboard"),
+                                 tr("Clipboard does not contain VC widget data."));
+        return;
+    }
+
+    /* Find the target frame -- prefer selected frame, fall back to root */
+    VCFrame *targetFrame = nullptr;
+    for (VCWidget *w : m_selectedWidgets)
+    {
+        VCFrame *f = qobject_cast<VCFrame*>(w);
+        if (f)
+        {
+            targetFrame = f;
+            break;
+        }
+    }
+    if (!targetFrame)
+        targetFrame = m_contents;
+
+    ImportVCWidgetsDialog dlg(root, targetFrame, m_doc, this);
+    dlg.exec();
+}
+
+void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
+                                            VCFrame *parentFrame, int &count)
+{
+    for (const QJsonValue &v : widgets)
+    {
+        QJsonObject obj = v.toObject();
+        int wType = obj["widgetType"].toInt(-1);
+        if (wType < 0)
+            continue;
+
+        VCWidget *widget = nullptr;
+
+        switch (static_cast<VCWidget::WidgetType>(wType))
+        {
+            case VCWidget::ButtonWidget:
+            {
+                widget = new VCButton(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::SliderWidget:
+            {
+                widget = new VCSlider(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::LabelWidget:
+            {
+                widget = new VCLabel(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::FrameWidget:
+            {
+                widget = new VCFrame(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::SoloFrameWidget:
+            {
+                widget = new VCSoloFrame(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::XYPadWidget:
+            {
+                widget = new VCXYPad(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::CueListWidget:
+            {
+                widget = new VCCueList(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::SpeedDialWidget:
+            {
+                widget = new VCSpeedDial(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::AnimationWidget:
+            {
+                widget = new VCMatrix(parentFrame, m_doc);
+            }
+            break;
+            case VCWidget::ClockWidget:
+            {
+                widget = new VCClock(parentFrame, m_doc);
+            }
+            break;
+            default:
+                continue;
+        }
+
+        if (!widget)
+            continue;
+
+        /* Apply common appearance from JSON */
+        widget->setCaption(obj["caption"].toString());
+        int x = obj["x"].toInt();
+        int y = obj["y"].toInt();
+        int w = obj["width"].toInt(100);
+        int h = obj["height"].toInt(50);
+        widget->setGeometry(QRect(x, y, w, h));
+
+        if (obj.contains("appearance"))
+        {
+            QJsonObject appear = obj["appearance"].toObject();
+            if (appear.contains("bgColor"))
+                widget->setBackgroundColor(QColor(appear["bgColor"].toString()));
+            if (appear.contains("bgImage"))
+                widget->setBackgroundImage(appear["bgImage"].toString());
+            if (appear.contains("fgColor"))
+                widget->setForegroundColor(QColor(appear["fgColor"].toString()));
+            if (appear.contains("font"))
+            {
+                QFont f;
+                f.fromString(appear["font"].toString());
+                widget->setFont(f);
+            }
+            widget->setFrameStyle(appear["frameStyle"].toInt());
+        }
+
+        addWidgetInMap(widget);
+        connectWidgetToParent(widget, parentFrame);
+        widget->show();
+        count++;
+
+        /* Recurse for frame children */
+        if (obj.contains("children"))
+        {
+            VCFrame *childFrame = qobject_cast<VCFrame*>(widget);
+            if (childFrame)
+                importWidgetsFromJson(obj["children"].toArray(), childFrame, count);
+        }
     }
 }
 

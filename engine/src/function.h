@@ -29,6 +29,7 @@
 #include <QList>
 #include <QIcon>
 #include <QMap>
+#include <QJsonObject>
 
 #include "universe.h"
 #include "functionparent.h"
@@ -606,6 +607,45 @@ public slots:
     virtual void slotFixtureRemoved(quint32 fxi_id);
 
     /*********************************************************************
+     * Cross-project clipboard (JSON)
+     *********************************************************************/
+public:
+    /** Bit flags for parameter groups that can be selectively copied.
+     *  Bits 0-7 are reserved for common parameters shared by all types.
+     *  Bits 8-23 are free for type-specific groups (each subclass defines
+     *  its own meaning for those bits). */
+    enum CopyParamGroup
+    {
+        CopyName       = (1 << 0),
+        CopySpeed      = (1 << 1),
+        CopyRunOrder   = (1 << 2),
+        CopyDirection  = (1 << 3),
+        CopyBlendMode  = (1 << 4),
+        // bits 8+ are reserved for subclass-specific groups
+    };
+    Q_DECLARE_FLAGS(CopyParamGroups, CopyParamGroup)
+
+    /** Return list of (flag, display-name) pairs for parameter groups this
+     *  function type supports.  Base implementation returns the common
+     *  groups; subclasses should call the base and append their own. */
+    virtual QList<QPair<int, QString>> copyableParameterGroups() const;
+
+    /** Serialize the parameter groups indicated by @p flags into @p obj.
+     *  The base implementation writes the common groups; subclasses must
+     *  call this and then append their own data.
+     *  @param obj    JSON object to write into (may already have keys).
+     *  @param flags  OR-combination of CopyParamGroup + subclass flags.
+     *  @param doc    The owning Doc (may be nullptr for read-only ops). */
+    virtual void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const;
+
+    /** Apply parameter groups from @p obj to this function.
+     *  Only keys present in obj and matching @p flags are applied.
+     *  The base implementation handles common groups; subclasses must call
+     *  this and then handle their own data.
+     *  @return true if any setting was changed. */
+    virtual bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc);
+
+    /*********************************************************************
      * Load & Save
      *********************************************************************/
 public:
@@ -1042,5 +1082,7 @@ private:
 };
 
 /** @} */
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(Function::CopyParamGroups)
 
 #endif

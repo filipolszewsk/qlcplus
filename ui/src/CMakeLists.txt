@@ -89,6 +89,8 @@ add_library(${module_name}
     functionselection.cpp functionselection.h functionselection.ui
     fixturemappingdialog.cpp fixturemappingdialog.h
     importfunctionsdialog.cpp importfunctionsdialog.h
+    copyfunctionsettingsdialog.cpp copyfunctionsettingsdialog.h
+    pastefunctionsettingsdialog.cpp pastefunctionsettingsdialog.h
     functionstreewidget.cpp functionstreewidget.h
     functionwizard.cpp functionwizard.h functionwizard.ui
     grandmasterslider.cpp grandmasterslider.h
@@ -162,6 +164,7 @@ add_library(${module_name}
     virtualconsole/vcmatrix.cpp virtualconsole/vcmatrix.h
     virtualconsole/vcmatrixcontrol.cpp virtualconsole/vcmatrixcontrol.h
     virtualconsole/vcpastepropertiesdialog.cpp virtualconsole/vcpastepropertiesdialog.h
+    virtualconsole/importvcwidgetsdialog.cpp virtualconsole/importvcwidgetsdialog.h
     virtualconsole/vcmatrixpresetselection.cpp virtualconsole/vcmatrixpresetselection.h virtualconsole/vcmatrixpresetselection.ui
     virtualconsole/vcmatrixproperties.cpp virtualconsole/vcmatrixproperties.h virtualconsole/vcmatrixproperties.ui
     virtualconsole/vcmultipatcheditor.cpp virtualconsole/vcmultipatcheditor.h virtualconsole/vcmultipatcheditor.ui

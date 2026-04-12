@@ -141,6 +141,24 @@ private:
     qreal m_volume;
 
     /*********************************************************************
+     * Cross-project clipboard (JSON)
+     *********************************************************************/
+public:
+    enum AudioCopyGroup
+    {
+        CopyAudioSource = (1 << 8),
+        CopyAudioVolume = (1 << 9),
+        CopyAudioDevice = (1 << 10),
+    };
+
+    /** @reimp */
+    QList<QPair<int, QString>> copyableParameterGroups() const override;
+    /** @reimp */
+    void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const override;
+    /** @reimp */
+    bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc) override;
+
+    /*********************************************************************
      * Save & Load
      *********************************************************************/
 public:

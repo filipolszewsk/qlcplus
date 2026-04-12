@@ -120,6 +120,22 @@ private:
     QString m_data;
 
     /************************************************************************
+     * Cross-project clipboard (JSON)
+     ************************************************************************/
+public:
+    enum ScriptCopyGroup
+    {
+        CopyScriptData = (1 << 8),
+    };
+
+    /** @reimp */
+    QList<QPair<int, QString>> copyableParameterGroups() const override;
+    /** @reimp */
+    void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const override;
+    /** @reimp */
+    bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc) override;
+
+    /************************************************************************
      * Load & Save
      ************************************************************************/
 public:

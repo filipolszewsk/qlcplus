@@ -800,7 +800,24 @@ private:
      * JSON Settings Import/Export
      *********************************************************************/
 public:
-    /** Apply settings from a JSON object (used by copy/paste).
+    enum EFXCopyGroup
+    {
+        CopyEFXFixtures    = (1 << 8),
+        CopyEFXGroupMode   = (1 << 9),
+        CopyEFXRowSelect   = (1 << 10),
+        CopyEFXOrder       = (1 << 11),
+        CopyEFXPattern     = (1 << 12),
+        CopyEFXParameters  = (1 << 13),
+    };
+
+    /** @reimp */
+    QList<QPair<int, QString>> copyableParameterGroups() const override;
+    /** @reimp */
+    void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const override;
+    /** @reimp -- delegates to legacy applySettingsFromJson(root, doc) */
+    bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc) override;
+
+    /** Legacy: Apply settings from a JSON object produced by the editor copy button.
      *  Only sections present in the JSON are applied.
      *  Returns true if any settings were applied. */
     bool applySettingsFromJson(const QJsonObject &root, Doc *doc);

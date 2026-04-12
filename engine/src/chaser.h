@@ -194,6 +194,23 @@ protected:
     SpeedMode m_holdMode;
 
     /*********************************************************************
+     * Cross-project clipboard (JSON)
+     *********************************************************************/
+public:
+    enum ChaserCopyGroup
+    {
+        CopyChaserSteps      = (1 << 8),
+        CopyChaserSpeedModes = (1 << 9),
+    };
+
+    /** @reimp */
+    QList<QPair<int, QString>> copyableParameterGroups() const override;
+    /** @reimp */
+    void settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const override;
+    /** @reimp */
+    bool applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc) override;
+
+    /*********************************************************************
      * Save & Load
      *********************************************************************/
 protected:

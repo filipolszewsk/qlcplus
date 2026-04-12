@@ -21,6 +21,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QDebug>
 #include <QColor>
 #include <QFile>
@@ -326,6 +328,115 @@ Chaser::SpeedMode Chaser::stringToSpeedMode(const QString& str)
         return PerStep;
     else
         return Default;
+}
+
+/*****************************************************************************
+ * Cross-project clipboard (JSON)
+ *****************************************************************************/
+
+QList<QPair<int, QString>> Chaser::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyChaserSteps,      tr("Steps"));
+    groups << QPair<int, QString>(CopyChaserSpeedModes, tr("Speed Modes"));
+    return groups;
+}
+
+void Chaser::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+
+    if (flags & CopyChaserSpeedModes)
+    {
+        QJsonObject modes;
+        modes["fadeIn"]   = speedModeToString(fadeInMode());
+        modes["fadeOut"]  = speedModeToString(fadeOutMode());
+        modes["duration"] = speedModeToString(durationMode());
+        obj["speedModes"] = modes;
+    }
+
+    if (flags & CopyChaserSteps)
+    {
+        QJsonArray stepsArr;
+        for (int i = 0; i < stepsCount(); i++)
+        {
+            const ChaserStep *step = const_cast<Chaser*>(this)->stepAt(i);
+            if (!step)
+                continue;
+            QJsonObject s;
+            Function *f = doc ? doc->function(step->fid) : nullptr;
+            s["functionName"] = f ? f->name() : QString();
+            s["functionId"]   = static_cast<int>(step->fid);
+            s["fadeIn"]       = static_cast<qint64>(step->fadeIn);
+            s["hold"]         = static_cast<qint64>(step->hold);
+            s["fadeOut"]      = static_cast<qint64>(step->fadeOut);
+            s["duration"]     = static_cast<qint64>(step->duration);
+            s["note"]         = step->note;
+            stepsArr.append(s);
+        }
+        obj["steps"] = stepsArr;
+    }
+}
+
+bool Chaser::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+
+    if ((flags & CopyChaserSpeedModes) && obj.contains("speedModes"))
+    {
+        QJsonObject modes = obj["speedModes"].toObject();
+        if (modes.contains("fadeIn"))
+            setFadeInMode(stringToSpeedMode(modes["fadeIn"].toString()));
+        if (modes.contains("fadeOut"))
+            setFadeOutMode(stringToSpeedMode(modes["fadeOut"].toString()));
+        if (modes.contains("duration"))
+            setDurationMode(stringToSpeedMode(modes["duration"].toString()));
+        changed = true;
+    }
+
+    if ((flags & CopyChaserSteps) && obj.contains("steps") && doc)
+    {
+        const QJsonArray stepsArr = obj["steps"].toArray();
+        for (int i = stepsCount() - 1; i >= 0; i--)
+            removeStep(i);
+        int idx = 0;
+        for (const QJsonValue &v : stepsArr)
+        {
+            QJsonObject s = v.toObject();
+            QString funcName = s["functionName"].toString();
+            quint32 funcId   = static_cast<quint32>(s["functionId"].toInt());
+
+            /* Try to resolve by name first */
+            quint32 resolvedId = Function::invalidId();
+            for (Function *f : doc->functions())
+            {
+                if (!funcName.isEmpty() && f->name() == funcName)
+                {
+                    resolvedId = f->id();
+                    break;
+                }
+            }
+            if (resolvedId == Function::invalidId() &&
+                doc->function(funcId) != nullptr)
+                resolvedId = funcId;
+
+            if (resolvedId == Function::invalidId())
+                continue;
+
+            ChaserStep step(resolvedId);
+            step.fadeIn   = static_cast<uint>(s["fadeIn"].toInt());
+            step.hold     = static_cast<uint>(s["hold"].toInt());
+            step.fadeOut  = static_cast<uint>(s["fadeOut"].toInt());
+            step.duration = static_cast<uint>(s["duration"].toInt());
+            step.note     = s["note"].toString();
+            addStep(step, idx++);
+        }
+        changed = true;
+    }
+
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 /*****************************************************************************

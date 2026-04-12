@@ -21,6 +21,8 @@
 #include <QStyleOptionFrame>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QApplication>
 #include <QInputDialog>
 #include <QColorDialog>
@@ -927,6 +929,46 @@ void VCWidget::slotKeyPressed(const QKeySequence& keySequence)
 void VCWidget::slotKeyReleased(const QKeySequence& keySequence)
 {
     emit keyReleased(keySequence);
+}
+
+/*****************************************************************************
+ * Cross-project clipboard (JSON)
+ *****************************************************************************/
+
+void VCWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    Q_UNUSED(doc)
+    obj["widgetType"]   = static_cast<int>(const_cast<VCWidget*>(this)->type());
+    obj["caption"]      = caption();
+    obj["x"]            = pos().x();
+    obj["y"]            = pos().y();
+    obj["width"]        = size().width();
+    obj["height"]       = size().height();
+    obj["page"]         = const_cast<VCWidget*>(this)->page();
+    obj["allowResize"]  = allowResize();
+
+    /* Appearance */
+    QJsonObject appear;
+    if (hasCustomBackgroundColor())
+        appear["bgColor"] = backgroundColor().name();
+    if (!backgroundImage().isEmpty())
+        appear["bgImage"] = backgroundImage();
+    if (hasCustomForegroundColor())
+        appear["fgColor"] = foregroundColor().name();
+    if (hasCustomFont())
+        appear["font"] = font().toString();
+    appear["frameStyle"] = frameStyle();
+    obj["appearance"] = appear;
+}
+
+VCWidget* VCWidget::fromClipboardJson(const QJsonObject &obj, VCWidget *parent, Doc *doc)
+{
+    /* This factory is implemented in vcframe.cpp to avoid circular includes.
+     * It is declared here for the API. The implementation is in VCFrame. */
+    Q_UNUSED(obj)
+    Q_UNUSED(parent)
+    Q_UNUSED(doc)
+    return nullptr;
 }
 
 /*****************************************************************************

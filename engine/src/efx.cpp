@@ -19,6 +19,8 @@
 */
 
 #include <QVector>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 #include <QList>
 #include <QXmlStreamReader>
@@ -1819,6 +1821,69 @@ bool EFX::saveXML(QXmlStreamWriter *doc)
     doc->writeEndElement();
 
     return true;
+}
+
+QList<QPair<int, QString>> EFX::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyEFXFixtures,   tr("Fixtures"));
+    groups << QPair<int, QString>(CopyEFXGroupMode,  tr("Fixture Group Mode"));
+    groups << QPair<int, QString>(CopyEFXRowSelect,  tr("Row Selection"));
+    groups << QPair<int, QString>(CopyEFXOrder,      tr("Fixture Order"));
+    groups << QPair<int, QString>(CopyEFXPattern,    tr("Pattern"));
+    groups << QPair<int, QString>(CopyEFXParameters, tr("Parameters"));
+    return groups;
+}
+
+void EFX::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Q_UNUSED(doc)
+    Function::settingsToJson(obj, flags, doc);
+
+    if (flags & CopyEFXFixtures)
+    {
+        QJsonArray fixtureSettings;
+        for (EFXFixture *ef : fixtures())
+        {
+            QJsonObject fx;
+            fx["fixtureId"]   = static_cast<int>(ef->head().fxi);
+            fx["headIndex"]   = ef->head().head;
+            fx["startOffset"] = ef->startOffset();
+            fx["direction"]   = static_cast<int>(ef->direction());
+            fx["mode"]        = static_cast<int>(ef->mode());
+            fixtureSettings.append(fx);
+        }
+        obj["fixtures"] = fixtureSettings;
+    }
+
+    if (flags & CopyEFXPattern)
+    {
+        obj["algorithm"]   = algorithmToString(algorithm());
+        obj["width"]       = width();
+        obj["height"]      = height();
+        obj["xOffset"]     = xOffset();
+        obj["yOffset"]     = yOffset();
+        obj["rotation"]    = rotation();
+        obj["startOffset"] = startOffset();
+        obj["isRelative"]  = isRelative();
+    }
+
+    if (flags & CopyEFXParameters)
+    {
+        obj["xFrequency"] = xFrequency();
+        obj["yFrequency"] = yFrequency();
+        obj["xPhase"]     = xPhase();
+        obj["yPhase"]     = yPhase();
+    }
+}
+
+bool EFX::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+    changed |= applySettingsFromJson(obj, doc);
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 bool EFX::applySettingsFromJson(const QJsonObject &root, Doc *doc)

@@ -25,6 +25,8 @@
 #include <QMutexLocker>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include "mastertimer.h"
 #include "collection.h"
@@ -160,6 +162,77 @@ QList<quint32> Collection::functions() const
 void Collection::slotFunctionRemoved(quint32 fid)
 {
     removeFunction(fid);
+}
+
+/*****************************************************************************
+ * Cross-project clipboard (JSON)
+ *****************************************************************************/
+
+QList<QPair<int, QString>> Collection::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyCollectionSteps, tr("Child Functions"));
+    return groups;
+}
+
+void Collection::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+
+    if (flags & CopyCollectionSteps)
+    {
+        QJsonArray arr;
+        for (quint32 fid : m_functions)
+        {
+            Function *f = doc ? doc->function(fid) : nullptr;
+            QJsonObject entry;
+            entry["functionName"] = f ? f->name() : QString();
+            entry["functionId"]   = static_cast<int>(fid);
+            arr.append(entry);
+        }
+        obj["steps"] = arr;
+    }
+}
+
+bool Collection::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+
+    if ((flags & CopyCollectionSteps) && obj.contains("steps") && doc)
+    {
+        QMutexLocker locker(&m_functionListMutex);
+        m_functions.clear();
+        locker.unlock();
+
+        const QJsonArray arr = obj["steps"].toArray();
+        for (const QJsonValue &v : arr)
+        {
+            QJsonObject entry = v.toObject();
+            QString funcName = entry["functionName"].toString();
+            quint32 funcId   = static_cast<quint32>(entry["functionId"].toInt());
+
+            quint32 resolvedId = Function::invalidId();
+            for (Function *f : doc->functions())
+            {
+                if (!funcName.isEmpty() && f->name() == funcName)
+                {
+                    resolvedId = f->id();
+                    break;
+                }
+            }
+            if (resolvedId == Function::invalidId() &&
+                doc->function(funcId) != nullptr)
+                resolvedId = funcId;
+
+            if (resolvedId != Function::invalidId())
+                addFunction(resolvedId);
+        }
+        changed = true;
+    }
+
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 /*****************************************************************************

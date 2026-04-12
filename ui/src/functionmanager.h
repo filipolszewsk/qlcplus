@@ -155,6 +155,7 @@ protected slots:
     void slotSelectAll();
     void slotImportFunctions();
     void slotPasteSettings();
+    void slotCopySettingsToClipboard();
 
 protected:
     void updateActionStatus();
@@ -180,6 +181,7 @@ protected:
     QAction* m_selectAllAction;
     QAction* m_importAction;
     QAction* m_pasteSettingsAction;
+    QAction* m_copySettingsAction;
     QAction* m_filterUnusedVCAction;
     QAction* m_toggleUtilityAction;
 

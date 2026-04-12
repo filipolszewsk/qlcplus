@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
+#include <QJsonObject>
 #include <QDebug>
 #include <QFile>
 
@@ -240,6 +241,53 @@ void Audio::slotEndOfStream()
 void Audio::slotFunctionRemoved(quint32 fid)
 {
     Q_UNUSED(fid)
+}
+
+/*********************************************************************
+ * Cross-project clipboard (JSON)
+ *********************************************************************/
+
+QList<QPair<int, QString>> Audio::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyAudioSource, tr("Source File"));
+    groups << QPair<int, QString>(CopyAudioVolume, tr("Volume"));
+    groups << QPair<int, QString>(CopyAudioDevice, tr("Audio Device"));
+    return groups;
+}
+
+void Audio::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+    if (flags & CopyAudioSource)
+        obj["sourceFileName"] = m_sourceFileName;
+    if (flags & CopyAudioVolume)
+        obj["volume"] = m_volume;
+    if (flags & CopyAudioDevice)
+        obj["audioDevice"] = m_audioDevice;
+}
+
+bool Audio::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+    if ((flags & CopyAudioSource) && obj.contains("sourceFileName"))
+    {
+        setSourceFileName(obj["sourceFileName"].toString());
+        changed = true;
+    }
+    if ((flags & CopyAudioVolume) && obj.contains("volume"))
+    {
+        setVolume(obj["volume"].toDouble());
+        changed = true;
+    }
+    if ((flags & CopyAudioDevice) && obj.contains("audioDevice"))
+    {
+        setAudioDevice(obj["audioDevice"].toString());
+        changed = true;
+    }
+    if (changed && doc)
+        doc->setModified();
+    return changed;
 }
 
 /*********************************************************************

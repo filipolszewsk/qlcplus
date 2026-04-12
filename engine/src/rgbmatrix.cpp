@@ -538,6 +538,64 @@ QString RGBMatrix::property(QString propName)
  * JSON Settings Import/Export
  ****************************************************************************/
 
+QList<QPair<int, QString>> RGBMatrix::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopyRGBPattern,    tr("Pattern"));
+    groups << QPair<int, QString>(CopyRGBProperties, tr("Properties"));
+    groups << QPair<int, QString>(CopyRGBRowFilter,  tr("Row Filter"));
+    groups << QPair<int, QString>(CopyRGBMultiValue, tr("Multi-Value Mapping"));
+    return groups;
+}
+
+void RGBMatrix::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Q_UNUSED(doc)
+    Function::settingsToJson(obj, flags, doc);
+
+    if ((flags & CopyRGBPattern) && algorithm() != nullptr)
+    {
+        QJsonObject pattern;
+        pattern["algorithmName"] = algorithm()->name();
+        pattern["algorithmType"] = static_cast<int>(algorithm()->type());
+        pattern["controlMode"]   = static_cast<int>(controlMode());
+        obj["pattern"] = pattern;
+    }
+
+    if ((flags & CopyRGBProperties) && algorithm() != nullptr &&
+        algorithm()->type() == RGBAlgorithm::Script)
+    {
+        QJsonObject props;
+        for (const QString &key : m_properties.keys())
+            props[key] = m_properties.value(key);
+        obj["properties"] = props;
+    }
+
+    if (flags & CopyRGBRowFilter)
+    {
+        QJsonArray rows;
+        for (int r : selectedRows())
+            rows.append(r);
+        obj["rowFilter"] = rows;
+    }
+
+    if (flags & CopyRGBMultiValue)
+    {
+        QJsonObject mv;
+        mv["enabled"] = enablePerFixtureMapping();
+        obj["multiValueMapping"] = mv;
+    }
+}
+
+bool RGBMatrix::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+    changed |= applySettingsFromJson(obj, doc);
+    if (changed && doc)
+        doc->setModified();
+    return changed;
+}
+
 bool RGBMatrix::applySettingsFromJson(const QJsonObject &root, Doc *doc)
 {
     bool applied = false;

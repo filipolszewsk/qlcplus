@@ -20,6 +20,8 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QDebug>
 #include <cmath>
 #include <QList>
@@ -415,6 +417,80 @@ bool Scene::removePalette(quint32 id)
 QList<quint32> Scene::palettes() const
 {
     return m_palettes;
+}
+
+/*****************************************************************************
+ * Cross-project clipboard (JSON)
+ *****************************************************************************/
+
+QList<QPair<int, QString>> Scene::copyableParameterGroups() const
+{
+    QList<QPair<int, QString>> groups = Function::copyableParameterGroups();
+    groups << QPair<int, QString>(CopySceneValues, tr("Channel Values"));
+    return groups;
+}
+
+void Scene::settingsToJson(QJsonObject &obj, int flags, const Doc *doc) const
+{
+    Function::settingsToJson(obj, flags, doc);
+
+    if (flags & CopySceneValues)
+    {
+        QJsonArray valArr;
+        QList<SceneValue> vals = values();
+        for (const SceneValue &sv : vals)
+        {
+            QJsonObject entry;
+            const Fixture *fx = doc ? doc->fixture(sv.fxi) : nullptr;
+            entry["fixtureName"] = fx ? fx->name() : QString();
+            entry["fixtureId"]   = static_cast<int>(sv.fxi);
+            entry["channel"]     = static_cast<int>(sv.channel);
+            entry["value"]       = static_cast<int>(sv.value);
+            valArr.append(entry);
+        }
+        obj["sceneValues"] = valArr;
+    }
+}
+
+bool Scene::applySettingsFromJson(const QJsonObject &obj, int flags, Doc *doc)
+{
+    bool changed = Function::applySettingsFromJson(obj, flags, doc);
+
+    if ((flags & CopySceneValues) && obj.contains("sceneValues") && doc)
+    {
+        const QJsonArray valArr = obj["sceneValues"].toArray();
+        for (const QJsonValue &v : valArr)
+        {
+            QJsonObject entry = v.toObject();
+            QString fxName = entry["fixtureName"].toString();
+            quint32 fxId   = static_cast<quint32>(entry["fixtureId"].toInt());
+            int channel    = entry["channel"].toInt();
+            int value      = entry["value"].toInt();
+
+            /* Try to match fixture by name first, fall back to raw ID */
+            quint32 resolvedId = Function::invalidId();
+            for (Fixture *fx : doc->fixtures())
+            {
+                if (!fxName.isEmpty() && fx->name() == fxName)
+                {
+                    resolvedId = fx->id();
+                    break;
+                }
+            }
+            if (resolvedId == Function::invalidId())
+                resolvedId = fxId;
+
+            if (doc->fixture(resolvedId) != nullptr)
+            {
+                setValue(SceneValue(resolvedId, channel, static_cast<uchar>(value)));
+                changed = true;
+            }
+        }
+    }
+
+    if (changed)
+        doc->setModified();
+    return changed;
 }
 
 /*****************************************************************************
