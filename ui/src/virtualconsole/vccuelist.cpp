@@ -2782,7 +2782,7 @@ void VCCueList::updateDeleteButtonState()
     }
 
     Chaser *ch = chaser();
-    if (ch == NULL || !ch->stopped())
+    if (ch == NULL)
     {
         m_deleteButton->setEnabled(false);
         m_renameButton->setEnabled(false);
@@ -2898,10 +2898,6 @@ void VCCueList::slotDeleteButtonClicked()
     Chaser *ch = chaser();
     if (ch == NULL)
         return;
-
-    // Check if chaser is stopped
-    if (!ch->stopped())
-        return; // Cannot delete when chaser is running
 
     // Check if item is selected
     QTreeWidgetItem *item = m_tree->currentItem();
