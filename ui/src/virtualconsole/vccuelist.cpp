@@ -1408,9 +1408,11 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     if (m_updateTimer->isActive())
         return;
 
-    Q_ASSERT(stepNumber < m_tree->topLevelItemCount() && stepNumber >= 0);
+    if (stepNumber < 0 || stepNumber >= m_tree->topLevelItemCount())
+        return;
     QTreeWidgetItem *item = m_tree->topLevelItem(stepNumber);
-    Q_ASSERT(item != NULL);
+    if (item == NULL)
+        return;
     m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
     m_tree->setCurrentItem(item);
     m_primaryIndex = stepNumber;
@@ -2980,6 +2982,20 @@ void VCCueList::deleteSelectedCue()
     if (stepIndex < 0 || stepIndex >= ch->steps().count())
         return;
 
+    // Detect whether we are deleting the currently active/running step
+    bool chaserWasRunning = ch->isRunning();
+    bool deletingActiveStep = chaserWasRunning &&
+                              (ch->currentStepIndex() == stepIndex ||
+                               m_primaryIndex == stepIndex);
+    int safeIndex = -1;
+    if (deletingActiveStep)
+    {
+        int stepsAfterDelete = ch->steps().count() - 1;
+        if (stepsAfterDelete > 0)
+            safeIndex = qMax(0, stepIndex - 1);
+        // safeIndex == -1: list will be empty after delete → stop chaser
+    }
+
     // Get ChaserStep to retrieve function ID before removing
     ChaserStep step = ch->steps().at(stepIndex);
     quint32 functionId = step.fid;
@@ -3042,8 +3058,29 @@ void VCCueList::deleteSelectedCue()
         }
     }
 
-    // Update the step list
+    // Rebuild tree first so playCueAtIndex works with correct indices
     updateStepList();
+
+    // If we deleted the active step, navigate to a safe position
+    if (deletingActiveStep)
+    {
+        if (safeIndex >= 0)
+        {
+            m_primaryIndex = safeIndex;
+            playCueAtIndex(safeIndex);
+        }
+        else
+        {
+            // No steps left — stop the chaser
+            stopChaser();
+            m_primaryIndex = 0;
+        }
+    }
+    else if (ch->steps().count() > 0)
+    {
+        // Clamp m_primaryIndex in case a step before current was removed
+        m_primaryIndex = qBound(0, m_primaryIndex, ch->steps().count() - 1);
+    }
 
     // Mark document as modified
     m_doc->setModified();
