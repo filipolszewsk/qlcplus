@@ -149,6 +149,7 @@ void EFXEditor::initGeneralPage()
     if (layout)
         layout->setRowStretch(1, 1);  // Row 1 contains m_tree
     m_tree->setMinimumHeight(0);
+    m_tree->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
     
     // Doc
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)), this, SLOT(slotFixtureRemoved()));
@@ -260,6 +261,21 @@ void EFXEditor::initMovementPage()
     m_previewArea = new EFXPreviewArea(m_previewFrame);
     m_previewFrame->layout()->setContentsMargins(0, 0, 0, 0);
     m_previewFrame->layout()->addWidget(m_previewArea);
+
+    /* Give the parameters group room to breathe — without row stretch the grid
+       compresses all ~20 parameter rows into too little height, causing overlap */
+    QGridLayout *outerGrid = qobject_cast<QGridLayout*>(Movement->layout());
+    if (outerGrid)
+    {
+        outerGrid->setRowStretch(1, 1);
+
+        /* Move Color Background out of the crowded Parameters group and into
+           the outer layout as a full-width item at the bottom of the tab */
+        QGridLayout *paramGrid = qobject_cast<QGridLayout*>(m_parametersGroup->layout());
+        if (paramGrid)
+            paramGrid->removeWidget(m_colorCheck);
+        outerGrid->addWidget(m_colorCheck, 3, 0, 1, 3);
+    }
 
     /* Get supported algorithms and fill the algorithm combo with them */
     m_algorithmCombo->addItems(EFX::algorithmList());
