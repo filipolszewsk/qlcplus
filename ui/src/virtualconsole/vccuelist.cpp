@@ -400,6 +400,13 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
             this, SLOT(slotUpdateStepList()));
     m_updateTimer->setSingleShot(true);
 
+    // Deferred function deletion: MasterTimer::functionStopped fires from the engine thread
+    // after the function pointer is queued for removal from m_functionList.
+    // QueuedConnection ensures the slot runs in the UI thread after that tick completes.
+    connect(m_doc->masterTimer(), SIGNAL(functionStopped(quint32)),
+            this, SLOT(slotPendingFunctionStopped(quint32)),
+            Qt::QueuedConnection);
+
     /* Create control buttons */
     QHBoxLayout *hbox = new QHBoxLayout();
     hbox->setSpacing(2);
@@ -2966,6 +2973,18 @@ void VCCueList::slotRenameButtonClicked()
     m_renameLatestValue = 0;
 }
 
+void VCCueList::slotPendingFunctionStopped(quint32 id)
+{
+    if (!m_pendingDeleteFunctionIds.contains(id))
+        return;
+
+    m_pendingDeleteFunctionIds.remove(id);
+    // By the time this slot runs (Qt::QueuedConnection from the engine thread),
+    // MasterTimer has already processed postRun() and removed the pointer from
+    // m_functionList, so deleting the Function object is now safe.
+    m_doc->deleteFunction(id);
+}
+
 void VCCueList::deleteSelectedCue()
 {
     Chaser *ch = chaser();
@@ -3051,10 +3070,26 @@ void VCCueList::deleteSelectedCue()
             }
         }
 
-        // If not used elsewhere, delete the function
+        // If not used elsewhere, delete the function — defer if it is still running
+        // to avoid a use-after-free crash in MasterTimer::timerTickFunctions (Thread 11).
+        // Doc::deleteFunction() destroys the object immediately; if MasterTimer still
+        // holds a pointer to it in m_functionList, calling write() on the freed object
+        // causes an EXC_BAD_ACCESS / SIGSEGV. Calling stop() marks m_stop=true so the
+        // next timer tick calls postRun() and removes the pointer, then emits
+        // functionStopped — at that point it is safe to delete.
         if (!usedElsewhere)
         {
-            m_doc->deleteFunction(functionId);
+            Function *delFunc = m_doc->function(functionId);
+            if (delFunc != NULL && delFunc->isRunning())
+            {
+                delFunc->stop(FunctionParent::master());
+                m_pendingDeleteFunctionIds.insert(functionId);
+                // Actual deletion happens in slotPendingFunctionStopped
+            }
+            else
+            {
+                m_doc->deleteFunction(functionId);
+            }
         }
     }
 

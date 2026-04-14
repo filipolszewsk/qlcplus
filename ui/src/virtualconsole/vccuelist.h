@@ -23,6 +23,7 @@
 
 #include <QKeySequence>
 #include <QMap>
+#include <QSet>
 #include <QWidget>
 
 #include "dmxsource.h"
@@ -635,7 +636,13 @@ private slots:
     /** Slot called when rename button is clicked */
     void slotRenameButtonClicked();
 
+    /** Called when MasterTimer finishes a function; deletes functions awaiting safe removal */
+    void slotPendingFunctionStopped(quint32 id);
+
 private:
+    /** Function IDs scheduled for deletion after MasterTimer drops them from its run list */
+    QSet<quint32> m_pendingDeleteFunctionIds;
+
     /** Channel mask for recording (0 = excluded, 1 = included) */
     QByteArray m_recordChannelsMask;
 
