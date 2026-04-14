@@ -338,7 +338,9 @@ void VCSliderProperties::setLevelPageVisibility(bool visible)
     m_levelNoneButton->setVisible(visible);
     m_levelInvertButton->setVisible(visible);
     m_levelByGroupButton->setVisible(visible);
+    m_levelHideUtilityCheck->setVisible(visible);
     m_clickngoGroup->setVisible(visible);
+    m_cngPresetWidget->setVisible(visible);
     m_monitorValuesCheck->setVisible(visible);
     if (m_monitorValuesCheck->isChecked() && m_ovrResetSelWidget != NULL)
         m_ovrResetSelWidget->setVisible(visible);

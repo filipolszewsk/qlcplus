@@ -148,6 +148,7 @@ void EFXEditor::initGeneralPage()
     QGridLayout *layout = qobject_cast<QGridLayout*>(General->layout());
     if (layout)
         layout->setRowStretch(1, 1);  // Row 1 contains m_tree
+    m_tree->setMinimumHeight(0);
     
     // Doc
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)), this, SLOT(slotFixtureRemoved()));
