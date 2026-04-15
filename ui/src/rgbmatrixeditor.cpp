@@ -1991,13 +1991,12 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
         row.channelCombo->addItem(tr("Virtual Dimmer"), QString("__VIRTUAL_DIMMER__"));
     }
     
-    // Set current selection from mappings (all mappings should have same valueIndex)
+    // Set current selection from mappings (all mappings should have same valueIndex).
+    // Empty channelName means "Auto (use control mode)" — include it so the Auto
+    // item is visually checked when the project is reloaded.
     QVariantList selectedChannels;
     for (const RGBMatrix::ChannelMapping &mapping : mappings)
-    {
-        if (!mapping.channelName.isEmpty())
-            selectedChannels.append(mapping.channelName);
-    }
+        selectedChannels.append(mapping.channelName);
     row.channelCombo->setSelectedData(selectedChannels);
     
     // Offset combo
