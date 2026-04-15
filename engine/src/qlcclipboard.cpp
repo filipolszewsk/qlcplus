@@ -108,3 +108,18 @@ Function *QLCClipboard::getFunction()
 {
     return m_copyFunction;
 }
+
+void QLCClipboard::copyStepChannelValues(const StepChannelData &data)
+{
+    m_stepChannelData = data;
+}
+
+bool QLCClipboard::hasStepChannelValues() const
+{
+    return m_stepChannelData.isValid;
+}
+
+StepChannelData QLCClipboard::stepChannelValues() const
+{
+    return m_stepChannelData;
+}

@@ -21,6 +21,7 @@
 #define QLCCLIPBOARD_H
 
 #include <QList>
+#include <QPair>
 
 #include "chaserstep.h"
 #include "scenevalue.h"
@@ -28,6 +29,19 @@
 class Chaser;
 class Scene;
 class Doc;
+
+/**
+ * Holds copied channel-column values for a single cuelist step.
+ * columnValues[i] = raw DMX value for column i of the source cuelist.
+ * Used by VCCueList context-menu copy/paste of one step.
+ */
+struct StepChannelData
+{
+    QList<uchar> columnValues;  ///< DMX value per column index
+    bool isValid;
+
+    StepChannelData() : isValid(false) {}
+};
 
 /** @addtogroup engine Engine
  * @{
@@ -63,10 +77,19 @@ public:
     QList <SceneValue> getSceneValues();
     Function *getFunction();
 
+    /********************************************************************
+     * Single-step channel values (VCCueList context-menu copy/paste)
+     ********************************************************************/
+public:
+    void copyStepChannelValues(const StepChannelData &data);
+    bool hasStepChannelValues() const;
+    StepChannelData stepChannelValues() const;
+
 private:
     QList <ChaserStep> m_copySteps;
     QList <SceneValue> m_copySceneValues;
     Function *m_copyFunction;
+    StepChannelData m_stepChannelData;
 };
 
 /** @} */

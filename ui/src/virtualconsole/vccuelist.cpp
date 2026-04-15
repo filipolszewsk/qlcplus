@@ -63,6 +63,10 @@
 #include <QSpinBox>
 #include <QDoubleSpinBox>
 #include <QComboBox>
+#include <QMenu>
+#include <QAction>
+
+#include "qlcclipboard.h"
 
 /*****************************************************************************
  * ChannelValueDelegate - delegate for editing channel values
@@ -376,6 +380,10 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     m_tree->setItemDelegateForColumn(COL_FADEOUT, new NoEditDelegate(this));
     m_tree->setItemDelegateForColumn(COL_DURATION, new NoEditDelegate(this));
 
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, &QTreeWidget::customContextMenuRequested,
+            this, &VCCueList::slotTreeContextMenu);
+
     connect(m_tree, SIGNAL(itemActivated(QTreeWidgetItem*,int)),
             this, SLOT(slotItemActivated(QTreeWidgetItem*)));
     connect(m_tree, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
@@ -547,7 +555,10 @@ VCCueList::~VCCueList()
 
 void VCCueList::enableWidgetUI(bool enable)
 {
-    m_tree->setEnabled(enable);
+    // Tree stays interactive in Design mode so the user can select rows
+    // for context-menu copy/paste of step channel values.
+    // Playback-triggering actions are already guarded by mode() checks.
+    m_tree->setEnabled(true);
     m_playbackButton->setEnabled(enable);
     m_stopButton->setEnabled(enable);
     m_previousButton->setEnabled(enable);
@@ -2983,6 +2994,89 @@ void VCCueList::slotPendingFunctionStopped(quint32 id)
     // MasterTimer has already processed postRun() and removed the pointer from
     // m_functionList, so deleting the Function object is now safe.
     m_doc->deleteFunction(id);
+}
+
+void VCCueList::slotTreeContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
+    if (item == NULL)
+        return;
+
+    QMenu menu(m_tree);
+
+    QAction *copyAction = menu.addAction(tr("Copy step channel values"));
+    copyAction->setEnabled(m_channelColumns.size() > 0);
+    connect(copyAction, &QAction::triggered, this, &VCCueList::slotCopyStepChannelValues);
+
+    QAction *pasteAction = menu.addAction(tr("Paste step channel values"));
+    pasteAction->setEnabled(m_doc->clipboard()->hasStepChannelValues() &&
+                            m_channelColumns.size() > 0);
+    connect(pasteAction, &QAction::triggered, this, &VCCueList::slotPasteStepChannelValues);
+
+    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
+
+void VCCueList::slotCopyStepChannelValues()
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return;
+
+    int stepIdx = m_tree->indexOfTopLevelItem(item);
+    Chaser *ch = chaser();
+    if (ch == NULL || stepIdx < 0 || stepIdx >= ch->steps().count())
+        return;
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(ch->steps().at(stepIdx).fid));
+    if (scene == NULL)
+        return;
+
+    StepChannelData data;
+    for (int colIdx = 0; colIdx < m_channelColumns.size(); colIdx++)
+    {
+        const ChannelColumnInfo &col = m_channelColumns.at(colIdx);
+        uchar val = 0;
+        if (col.fixtureId != UINT_MAX)
+            val = scene->value(col.fixtureId, col.fixtureChannel);
+        data.columnValues.append(val);
+    }
+    data.isValid = true;
+
+    m_doc->clipboard()->copyStepChannelValues(data);
+}
+
+void VCCueList::slotPasteStepChannelValues()
+{
+    if (!m_doc->clipboard()->hasStepChannelValues())
+        return;
+
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (item == NULL)
+        return;
+
+    int stepIdx = m_tree->indexOfTopLevelItem(item);
+    Chaser *ch = chaser();
+    if (ch == NULL || stepIdx < 0 || stepIdx >= ch->steps().count())
+        return;
+
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(ch->steps().at(stepIdx).fid));
+    if (scene == NULL)
+        return;
+
+    StepChannelData data = m_doc->clipboard()->stepChannelValues();
+    int colCount = qMin(data.columnValues.size(), m_channelColumns.size());
+
+    for (int colIdx = 0; colIdx < colCount; colIdx++)
+    {
+        const ChannelColumnInfo &dstCol = m_channelColumns.at(colIdx);
+        if (!dstCol.activeInMask || dstCol.fixtureId == UINT_MAX)
+            continue;
+        scene->setValue(SceneValue(dstCol.fixtureId, dstCol.fixtureChannel,
+                                   data.columnValues.at(colIdx)));
+    }
+
+    updateStepList();
+    m_doc->setModified();
 }
 
 void VCCueList::deleteSelectedCue()

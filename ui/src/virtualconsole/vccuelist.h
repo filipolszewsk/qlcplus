@@ -639,6 +639,15 @@ private slots:
     /** Called when MasterTimer finishes a function; deletes functions awaiting safe removal */
     void slotPendingFunctionStopped(quint32 id);
 
+    /** Show right-click context menu on the step tree */
+    void slotTreeContextMenu(const QPoint &pos);
+
+    /** Copy selected step's channel-column values to the document clipboard */
+    void slotCopyStepChannelValues();
+
+    /** Paste previously copied step channel-column values into the selected step */
+    void slotPasteStepChannelValues();
+
 private:
     /** Function IDs scheduled for deletion after MasterTimer drops them from its run list */
     QSet<quint32> m_pendingDeleteFunctionIds;
