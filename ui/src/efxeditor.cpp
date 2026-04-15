@@ -84,6 +84,20 @@ EFXEditor::EFXEditor(QWidget* parent, EFX* efx, Doc* doc)
 
     setupUi(this);
 
+    /* Wrap the tab widget in a scroll area so the editor scrolls when content
+       doesn't fit instead of forcing the parent window to grow */
+    QGridLayout *rootGrid = qobject_cast<QGridLayout*>(this->layout());
+    if (rootGrid)
+    {
+        rootGrid->removeWidget(m_tab);
+        QScrollArea *editorScrollArea = new QScrollArea(this);
+        editorScrollArea->setWidgetResizable(true);
+        editorScrollArea->setFrameShape(QFrame::NoFrame);
+        editorScrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        editorScrollArea->setWidget(m_tab);
+        rootGrid->addWidget(editorScrollArea, 3, 0, 1, 2);
+    }
+
     connect(m_speedDial, SIGNAL(toggled(bool)),
             this, SLOT(slotSpeedDialToggle(bool)));
 
@@ -261,6 +275,10 @@ void EFXEditor::initMovementPage()
     m_previewArea = new EFXPreviewArea(m_previewFrame);
     m_previewFrame->layout()->setContentsMargins(0, 0, 0, 0);
     m_previewFrame->layout()->addWidget(m_previewArea);
+
+    /* line_3 separator conflicts with m_waveShapeLabel/Combo at the same grid
+       row 15 in m_parametersGroup — hide it to remove the crossing line */
+    line_3->hide();
 
     /* Give the parameters group room to breathe — without row stretch the grid
        compresses all ~20 parameter rows into too little height, causing overlap */
