@@ -74,13 +74,19 @@ void HPMPrivate::extractVidPid(io_service_t usbDevice, UInt16* vid, UInt16* pid)
 
     number = (CFNumberRef) IORegistryEntryCreateCFProperty(usbDevice, CFSTR(kUSBVendorID),
                                                            kCFAllocatorDefault, 0);
-    CFNumberGetValue(number, kCFNumberSInt16Type, vid);
-    CFRelease(number);
+    if (number != NULL)
+    {
+        CFNumberGetValue(number, kCFNumberSInt16Type, vid);
+        CFRelease(number);
+    }
 
     number = (CFNumberRef) IORegistryEntryCreateCFProperty(usbDevice, CFSTR(kUSBProductID),
                                                            kCFAllocatorDefault, 0);
-    CFNumberGetValue(number, kCFNumberSInt16Type, pid);
-    CFRelease(number);
+    if (number != NULL)
+    {
+        CFNumberGetValue(number, kCFNumberSInt16Type, pid);
+        CFRelease(number);
+    }
 }
 
 void HPMPrivate::deviceAdded(io_iterator_t iterator)
