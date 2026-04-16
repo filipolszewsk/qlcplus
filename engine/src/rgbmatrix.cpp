@@ -1406,6 +1406,33 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     }
                     usePerDefinitionMapping = true;
                 }
+                else if (channelIdx == RGBMATRIX_VIRTUAL_STROBE_CHANNEL)
+                {
+                    // Use Virtual Strobe as normal FadeChannel with special channel 0xFFFC
+                    int offset = mapping.valueIndex;
+                    int sourceRow = scriptRow * paramCount + offset;
+
+                    uint sourceCol = col;
+                    if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
+                        sourceCol = map[sourceRow][scriptPos.x()];
+
+                    uchar strobeValue = rgbToGrey(sourceCol);
+
+                    quint32 universeIndex = floor(fxi->universeAddress() / 512);
+                    Universe *uni = universes.at(universeIndex);
+
+                    FadeChannel *fc = getFader(uni, fxi->id(), VIRTUAL_STROBE_CHANNEL);
+                    if (fc != NULL)
+                    {
+                        if (updateFaderValues(fc, strobeValue, fadeTime))
+                        {
+                            QSharedPointer<GenericFader> fader = m_fadersMap.value(uni->id(), QSharedPointer<GenericFader>());
+                            if (!fader.isNull())
+                                fader->remove(fc);
+                        }
+                    }
+                    usePerDefinitionMapping = true;
+                }
                 else if (channelIdx != QLCChannel::invalid())
                 {
                     int offset = mapping.valueIndex;
@@ -1744,6 +1771,15 @@ quint32 RGBMatrix::findChannelByName(const QLCFixtureMode *mode, const QString &
     {
         if (mode->virtualDimmer())
             return RGBMATRIX_VIRTUAL_DIMMER_CHANNEL;
+        else
+            return QLCChannel::invalid();
+    }
+
+    // Special case: Virtual Strobe
+    if (channelName == "__VIRTUAL_STROBE__")
+    {
+        if (mode->virtualStrobe())
+            return RGBMATRIX_VIRTUAL_STROBE_CHANNEL;
         else
             return QLCChannel::invalid();
     }

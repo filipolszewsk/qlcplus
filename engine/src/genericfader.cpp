@@ -267,6 +267,18 @@ void GenericFader::write(Universe *universe)
                 it.remove();
             continue;
         }
+
+        // Handle Virtual Strobe channels specially
+        if (flags & FadeChannel::VirtualStrobe)
+        {
+            bool isOverride = (flags & FadeChannel::Override) != 0;
+            universe->writeVirtualStrobe(fc.fixture(), value, isOverride);
+
+            // Auto-remove at zero
+            if (fc.current() == 0 && fc.target() == 0 && fc.isReady())
+                it.remove();
+            continue;
+        }
         
         if (flags & FadeChannel::Override)
         {

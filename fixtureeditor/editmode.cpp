@@ -92,6 +92,9 @@ void EditMode::init()
     m_virtualDimmerCheck->setChecked(m_mode->virtualDimmer());
     connect(m_virtualDimmerCheck, SIGNAL(toggled(bool)), this, SLOT(slotVirtualDimmerToggled(bool)));
 
+    m_virtualStrobeCheck->setChecked(m_mode->virtualStrobe());
+    connect(m_virtualStrobeCheck, SIGNAL(toggled(bool)), this, SLOT(slotVirtualStrobeToggled(bool)));
+
     /* Heads page */
     connect(m_addHeadButton, SIGNAL(clicked()), this, SLOT(slotAddHeadClicked()));
     connect(m_removeHeadButton, SIGNAL(clicked()), this, SLOT(slotRemoveHeadClicked()));
@@ -462,6 +465,11 @@ void EditMode::slotVirtualDimmerToggled(bool enabled)
     m_mode->setVirtualDimmer(enabled);
 }
 
+void EditMode::slotVirtualStrobeToggled(bool enabled)
+{
+    m_mode->setVirtualStrobe(enabled);
+}
+
 /*****************************************************************************
  * Accept
  *****************************************************************************/
@@ -472,6 +480,7 @@ void EditMode::accept()
     if (m_overridePhyCheck->isChecked())
         m_mode->setPhysical(m_phyEdit->physical());
     m_mode->setVirtualDimmer(m_virtualDimmerCheck->isChecked());
+    m_mode->setVirtualStrobe(m_virtualStrobeCheck->isChecked());
 
     QDialog::accept();
 }

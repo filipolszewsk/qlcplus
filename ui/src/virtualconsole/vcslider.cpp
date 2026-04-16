@@ -1356,8 +1356,22 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
 
             if (lch.channel == VCSLIDER_VIRTUAL_DIMMER_CHANNEL)
             {
-                // Virtual dimmer now uses normal FadeChannel system (special channel 0xFFFE)
+                // Virtual dimmer uses normal FadeChannel system (special channel 0xFFFE)
                 FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, VIRTUAL_DIMMER_CHANNEL);
+                if (fc->universe() != Universe::invalid())
+                {
+                    fc->setStart(fc->current());
+                    fc->setTarget(modLevel);
+                    fc->setReady(false);
+                    fc->setElapsed(0);
+                }
+                continue;
+            }
+
+            if (lch.channel == VCSLIDER_VIRTUAL_STROBE_CHANNEL)
+            {
+                // Virtual strobe uses normal FadeChannel system (special channel 0xFFFD)
+                FadeChannel *fc = fader->getChannelFader(m_doc, universes[universe], lch.fixture, VIRTUAL_STROBE_CHANNEL);
                 if (fc->universe() != Universe::invalid())
                 {
                     fc->setStart(fc->current());

@@ -196,6 +196,16 @@
          </property>
         </widget>
        </item>
+       <item row="6" column="0" colspan="2">
+        <widget class="QCheckBox" name="m_virtualStrobeCheck">
+         <property name="toolTip">
+          <string>Enable a software-only (virtual) strobe channel. Value 0=closed, 1-244=strobe slow to fast, 255=open. Use for fixtures without a physical shutter/strobe channel.</string>
+         </property>
+         <property name="text">
+          <string>Virtual Strobe (software shutter for colour-only fixtures)</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="tab_heads">

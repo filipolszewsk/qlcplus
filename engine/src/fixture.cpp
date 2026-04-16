@@ -349,6 +349,20 @@ QVector<quint32> Fixture::virtualDimmerChannels() const
     return result;
 }
 
+bool Fixture::hasVirtualStrobe() const
+{
+    if (m_fixtureMode == NULL)
+        return false;
+
+    return m_fixtureMode->virtualStrobe();
+}
+
+QVector<quint32> Fixture::virtualStrobeChannels() const
+{
+    // Strobe affects the same channels as Virtual Dimmer (intensity RGB/RGBW etc.)
+    return virtualDimmerChannels();
+}
+
 QVector <quint32> Fixture::rgbChannels(int head) const
 {
     if (m_fixtureMode == NULL || head < 0 || head >= m_fixtureMode->heads().size())

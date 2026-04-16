@@ -74,6 +74,7 @@ class VCSliderProperties;
  *  When stored as a LevelChannel, this causes writeDMXLevel() to scale all
  *  colour-intensity channels of that fixture instead of a single DMX channel. */
 #define VCSLIDER_VIRTUAL_DIMMER_CHANNEL quint32(0xFFFE)
+#define VCSLIDER_VIRTUAL_STROBE_CHANNEL quint32(0xFFFC)
 
 #define KXMLQLCVCSliderPlayback         QStringLiteral("Playback")
 #define KXMLQLCVCSliderPlaybackFunction QStringLiteral("Function")

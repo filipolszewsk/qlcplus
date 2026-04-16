@@ -343,6 +343,13 @@ public:
      *  that should be scaled by the virtual dimmer (MSB only, colour != NoColour) */
     QVector<quint32> virtualDimmerChannels() const;
 
+    /** Return true if this fixture mode has a virtual (software-only) strobe channel */
+    bool hasVirtualStrobe() const;
+
+    /** Return channel indices (relative to fixture start) of all colour Intensity channels
+     *  affected by the virtual strobe (same channels as virtualDimmerChannels) */
+    QVector<quint32> virtualStrobeChannels() const;
+
     /** @see QLCFixtureHead */
     QVector <quint32> rgbChannels(int head = 0) const;
 

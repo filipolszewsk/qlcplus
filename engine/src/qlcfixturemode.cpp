@@ -34,6 +34,7 @@ QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef)
     : m_fixtureDef(fixtureDef)
     , m_masterIntensityChannel(QLCChannel::invalid())
     , m_virtualDimmer(false)
+    , m_virtualStrobe(false)
     , m_useGlobalPhysical(true)
 {
     Q_ASSERT(fixtureDef != NULL);
@@ -43,6 +44,7 @@ QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef, const QLCFixtureMode *
     : m_fixtureDef(fixtureDef)
     , m_masterIntensityChannel(QLCChannel::invalid())
     , m_virtualDimmer(false)
+    , m_virtualStrobe(false)
     , m_useGlobalPhysical(true)
 {
     Q_ASSERT(fixtureDef != NULL);
@@ -66,6 +68,7 @@ QLCFixtureMode& QLCFixtureMode::operator=(const QLCFixtureMode& mode)
         m_heads = mode.m_heads;
         m_masterIntensityChannel = QLCChannel::invalid();
         m_virtualDimmer = mode.m_virtualDimmer;
+        m_virtualStrobe = mode.m_virtualStrobe;
 
         m_actsOnMap = mode.m_actsOnMap;
 
@@ -259,6 +262,16 @@ void QLCFixtureMode::setVirtualDimmer(bool enable)
     m_virtualDimmer = enable;
 }
 
+bool QLCFixtureMode::virtualStrobe() const
+{
+    return m_virtualStrobe;
+}
+
+void QLCFixtureMode::setVirtualStrobe(bool enable)
+{
+    m_virtualStrobe = enable;
+}
+
 quint32 QLCFixtureMode::primaryChannel(quint32 chIndex)
 {
     return m_secondaryMap.value(chIndex, QLCChannel::invalid());
@@ -446,6 +459,10 @@ bool QLCFixtureMode::loadXML(QXmlStreamReader &doc)
         {
             setVirtualDimmer(doc.readElementText() == QStringLiteral("true"));
         }
+        else if (doc.name() == KXMLQLCFixtureModeVirtualStrobe)
+        {
+            setVirtualStrobe(doc.readElementText() == QStringLiteral("true"));
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown Fixture Mode tag:" << doc.name();
@@ -496,6 +513,13 @@ bool QLCFixtureMode::saveXML(QXmlStreamWriter *doc)
     if (m_virtualDimmer)
     {
         doc->writeStartElement(KXMLQLCFixtureModeVirtualDimmer);
+        doc->writeCharacters(QStringLiteral("true"));
+        doc->writeEndElement();
+    }
+
+    if (m_virtualStrobe)
+    {
+        doc->writeStartElement(KXMLQLCFixtureModeVirtualStrobe);
         doc->writeCharacters(QStringLiteral("true"));
         doc->writeEndElement();
     }

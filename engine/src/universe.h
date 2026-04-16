@@ -32,6 +32,11 @@
  *  This is a special channel number that identifies Virtual Dimmer FadeChannels. */
 #define VIRTUAL_DIMMER_CHANNEL quint32(0xFFFE)
 
+/** Virtual Strobe channel number used in FadeChannel.
+ *  This is a special channel number that identifies Virtual Strobe FadeChannels.
+ *  0xFFFD is reserved for RGBMATRIX_VIRTUAL_DIMMER_CHANNEL sentinel, so we use 0xFFFC. */
+#define VIRTUAL_STROBE_CHANNEL quint32(0xFFFC)
+
 #include "inputpatch.h"
 #include "qlcchannel.h"
 
@@ -386,6 +391,37 @@ protected:
 
     /** Maps fixture ID to its DMX channels for efficient updatePostGMValue() calls. */
     QMap<quint32, QList<ushort>> m_fixtureToChannelsMap;
+
+    /************************************************************************
+     * Virtual Strobe (software strobe/shutter for colour-only fixtures)
+     * Value 0=closed, 1-244=slow-to-fast strobe, 255=open
+     ************************************************************************/
+public:
+    /** Reset all Virtual Strobe values each cycle. */
+    void zeroVirtualStrobes();
+
+    /** Write Virtual Strobe value with HTP merging. forceLTP bypasses HTP check. */
+    bool writeVirtualStrobe(quint32 fixtureId, uchar value, bool forceLTP = false);
+
+    /** Register fixture's Virtual Strobe channels. Called from Doc on fixture add/update. */
+    void registerVirtualStrobeChannels(quint32 fixtureId, const QList<ushort>& absChannels);
+
+    /** Unregister fixture's Virtual Strobe channels. Called from Doc on fixture delete. */
+    void unregisterVirtualStrobeChannels(quint32 fixtureId);
+
+protected:
+    /** Virtual Strobe values (fixture ID -> strobe value 0-255).
+     *  Reset to empty each cycle, populated by writeVirtualStrobe(). */
+    QMap<quint32, uchar> m_virtualStrobePreGM;
+
+    /** Maps DMX channel to fixture ID for Virtual Strobe lookup. */
+    QMap<ushort, quint32> m_strobeChannelToFixtureMap;
+
+    /** Maps fixture ID to its DMX channels for efficient strobe updates. */
+    QMap<quint32, QList<ushort>> m_strobeFixtureToChannelsMap;
+
+    /** Tick counter for strobe timing. Incremented each processFaders() call. */
+    quint32 m_strobeTick;
 
 protected:
     /** An array of each channel's capabilities. This helps to optimize HTP/LTP/Relative checks */

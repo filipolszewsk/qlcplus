@@ -48,6 +48,7 @@ class QLCChannel;
 #define KXMLQLCFixtureModeChannelNumber   QStringLiteral("Number")
 #define KXMLQLCFixtureModeChannelActsOn   QStringLiteral("ActsOn")
 #define KXMLQLCFixtureModeVirtualDimmer   QStringLiteral("VirtualDimmer")
+#define KXMLQLCFixtureModeVirtualStrobe   QStringLiteral("VirtualStrobe")
 
 /**
  * QLCFixtureMode is essentially a collection of QLCChannels, arranged in such
@@ -216,6 +217,12 @@ public:
     /** Enable or disable the virtual dimmer for this mode */
     void setVirtualDimmer(bool enable);
 
+    /** Return true if this mode has a virtual (software-only) strobe channel */
+    bool virtualStrobe() const;
+
+    /** Enable or disable the virtual strobe for this mode */
+    void setVirtualStrobe(bool enable);
+
     /** Return the index of the primary channel $chIndex relates to.
      *  Return invalid if not present */
     quint32 primaryChannel(quint32 chIndex);
@@ -240,6 +247,7 @@ protected:
 
     quint32 m_masterIntensityChannel;
     bool m_virtualDimmer;
+    bool m_virtualStrobe;
 
     /*********************************************************************
      * Heads

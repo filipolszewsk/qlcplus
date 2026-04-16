@@ -159,6 +159,15 @@ void FadeChannel::autoDetect(const Doc *doc)
             return;
         }
 
+        // Special case: Virtual Strobe channel
+        if (channel() == VIRTUAL_STROBE_CHANNEL)
+        {
+            m_universe = fixture->universe();
+            m_address = QLCChannel::invalid();  // No DMX address
+            addFlag(FadeChannel::VirtualStrobe | FadeChannel::HTP | FadeChannel::Intensity | FadeChannel::CanFade);
+            return;
+        }
+
         QLCFixtureMode *mode = fixture->fixtureMode();
         m_universe = fixture->universe();
         m_address = fixture->address();

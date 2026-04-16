@@ -100,6 +100,7 @@ private:
      *********************************************************************/
 private slots:
     void slotVirtualDimmerToggled(bool enabled);
+    void slotVirtualStrobeToggled(bool enabled);
 
     /*********************************************************************
      * Physical and clipboard

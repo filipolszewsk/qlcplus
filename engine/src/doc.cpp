@@ -641,6 +641,16 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
         universes.at(fixture->universe())->registerVirtualDimmerChannels(fixture->id(), absChannels);
     }
 
+    // Register virtual strobe channels
+    if (fixture->hasVirtualStrobe())
+    {
+        QList<ushort> absChannels;
+        quint32 start = fixture->address();
+        foreach (quint32 relCh, fixture->virtualStrobeChannels())
+            absChannels << ushort(start + relCh);
+        universes.at(fixture->universe())->registerVirtualStrobeChannels(fixture->id(), absChannels);
+    }
+
     inputOutputMap()->releaseUniverses(true);
 
     emit fixtureAdded(id);
@@ -673,6 +683,14 @@ bool Doc::deleteFixture(quint32 id)
         {
             QList<Universe *> universes = inputOutputMap()->claimUniverses();
             universes.at(fxi->universe())->unregisterVirtualDimmerChannels(id);
+            inputOutputMap()->releaseUniverses(false);
+        }
+
+        // Unregister virtual strobe before destroying the fixture object
+        if (fxi->hasVirtualStrobe())
+        {
+            QList<Universe *> universes = inputOutputMap()->claimUniverses();
+            universes.at(fxi->universe())->unregisterVirtualStrobeChannels(id);
             inputOutputMap()->releaseUniverses(false);
         }
 
@@ -895,6 +913,16 @@ bool Doc::updateFixtureChannelCapabilities(quint32 id, QList<int> forcedHTP, QLi
         foreach (quint32 relCh, fixture->virtualDimmerChannels())
             absChannels << ushort(fxAddress + relCh);
         universe->registerVirtualDimmerChannels(fixture->id(), absChannels);
+    }
+
+    // Re-register virtual strobe (channel addresses may have changed)
+    if (fixture->hasVirtualStrobe())
+    {
+        universe->unregisterVirtualStrobeChannels(fixture->id());
+        QList<ushort> absChannels;
+        foreach (quint32 relCh, fixture->virtualStrobeChannels())
+            absChannels << ushort(fxAddress + relCh);
+        universe->registerVirtualStrobeChannels(fixture->id(), absChannels);
     }
 
     inputOutputMap()->releaseUniverses(true);

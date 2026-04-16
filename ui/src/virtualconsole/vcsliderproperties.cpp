@@ -467,6 +467,9 @@ void VCSliderProperties::levelUpdateChannels(QTreeWidgetItem* parent,
 
     if (fxi->hasVirtualDimmer())
         levelUpdateChannelNode(parent, fxi, VCSLIDER_VIRTUAL_DIMMER_CHANNEL);
+
+    if (fxi->hasVirtualStrobe())
+        levelUpdateChannelNode(parent, fxi, VCSLIDER_VIRTUAL_STROBE_CHANNEL);
 }
 
 void VCSliderProperties::levelUpdateChannelNode(QTreeWidgetItem* parent,
@@ -489,6 +492,21 @@ void VCSliderProperties::levelUpdateChannelNode(QTreeWidgetItem* parent,
         }
         item->setText(KColumnName, tr("Virtual Dimmer"));
         item->setText(KColumnType, QLCChannel::groupToString(QLCChannel::Intensity));
+        return;
+    }
+
+    if (ch == VCSLIDER_VIRTUAL_STROBE_CHANNEL)
+    {
+        QTreeWidgetItem* item = levelChannelNode(parent, ch);
+        if (item == NULL)
+        {
+            item = new QTreeWidgetItem(parent);
+            item->setText(KColumnID, QString::number(ch));
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(KColumnName, Qt::Unchecked);
+        }
+        item->setText(KColumnName, tr("Virtual Strobe"));
+        item->setText(KColumnType, QLCChannel::groupToString(QLCChannel::Shutter));
         return;
     }
 
@@ -893,7 +911,7 @@ void VCSliderProperties::storeLevelChannels()
             {
                 quint32 ch_num = ch_item->text(KColumnID).toUInt();
 
-                if (ch_num == VCSLIDER_VIRTUAL_DIMMER_CHANNEL)
+                if (ch_num == VCSLIDER_VIRTUAL_DIMMER_CHANNEL || ch_num == VCSLIDER_VIRTUAL_STROBE_CHANNEL)
                 {
                     m_slider->addLevelChannel(fxi_id, ch_num);
                     continue;

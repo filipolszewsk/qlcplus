@@ -67,6 +67,7 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     , m_lastPostGMValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_blackoutValues(new QByteArray(UNIVERSE_SIZE, char(0)))
     , m_passthroughValues()
+    , m_strobeTick(0)
 {
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
 
@@ -320,6 +321,8 @@ void Universe::processFaders()
     flushInput();
     zeroIntensityChannels();
     zeroVirtualDimmers();
+    zeroVirtualStrobes();
+    m_strobeTick++;
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
@@ -609,6 +612,29 @@ void Universe::updatePostGMValue(int channel)
     if (vdScale < 255 && value > 0)
         value = uchar(qRound(value * vdScale / 255.0));
 
+    // Apply virtual strobe gating (after VD scaling - strobe gates the final value)
+    // value 0=closed, 1-244=strobe slow-to-fast, 255=open
+    if (m_strobeChannelToFixtureMap.contains(channel))
+    {
+        quint32 fixtureId = m_strobeChannelToFixtureMap[channel];
+        uchar strobeVal = m_virtualStrobePreGM.value(fixtureId, 255);  // Default 255 = open
+
+        if (strobeVal == 0)
+        {
+            value = 0;  // shutter closed
+        }
+        else if (strobeVal < 255)
+        {
+            // strobeVal 1-244: half_period in ticks, 1=slowest (100 ticks), 244=fastest (1 tick)
+            int halfPeriod = qMax(1, (245 - int(strobeVal)) / 2);
+            int phase = int(m_strobeTick) % (2 * halfPeriod);
+            if (phase >= halfPeriod)
+                value = 0;  // off phase
+            // else: on phase - value unchanged
+        }
+        // strobeVal == 255: open, value unchanged
+    }
+
     (*m_postGMValues)[channel] = static_cast<char>(value);
 }
 
@@ -668,6 +694,58 @@ void Universe::unregisterVirtualDimmerChannels(quint32 fixtureId)
     // Remove fixture's channel mapping and current VD value
     m_fixtureToChannelsMap.remove(fixtureId);
     m_virtualDimmerPreGM.remove(fixtureId);
+}
+
+/************************************************************************
+ * Virtual Strobe
+ ************************************************************************/
+
+void Universe::zeroVirtualStrobes()
+{
+    m_virtualStrobePreGM.clear();
+}
+
+bool Universe::writeVirtualStrobe(quint32 fixtureId, uchar value, bool forceLTP)
+{
+    // HTP logic: higher value wins (or forceLTP from Override flag)
+    uchar currentValue = m_virtualStrobePreGM.value(fixtureId, 0);
+    if (!forceLTP && value < currentValue)
+        return false;
+
+    m_virtualStrobePreGM[fixtureId] = value;
+
+    // Trigger updatePostGMValue for all channels of this fixture
+    foreach (ushort channel, m_strobeFixtureToChannelsMap.value(fixtureId))
+    {
+        if (channel < UNIVERSE_SIZE)
+            updatePostGMValue(channel);
+    }
+
+    return true;
+}
+
+void Universe::registerVirtualStrobeChannels(quint32 fixtureId, const QList<ushort>& absChannels)
+{
+    foreach (ushort channel, absChannels)
+    {
+        if (channel < UNIVERSE_SIZE)
+            m_strobeChannelToFixtureMap[channel] = fixtureId;
+    }
+    m_strobeFixtureToChannelsMap[fixtureId] = absChannels;
+}
+
+void Universe::unregisterVirtualStrobeChannels(quint32 fixtureId)
+{
+    QMutableMapIterator<ushort, quint32> it(m_strobeChannelToFixtureMap);
+    while (it.hasNext())
+    {
+        it.next();
+        if (it.value() == fixtureId)
+            it.remove();
+    }
+
+    m_strobeFixtureToChannelsMap.remove(fixtureId);
+    m_virtualStrobePreGM.remove(fixtureId);
 }
 
 /************************************************************************
