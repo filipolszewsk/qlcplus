@@ -63,6 +63,7 @@ VCWidget::VCWidget(QWidget* parent, Doc* doc)
     , m_page(0)
     , m_allowChildren(false)
     , m_allowResize(true)
+    , m_positionLocked(false)
     , m_intensityOverrideId(Function::invalidAttributeId())
     , m_intensity(1.0)
     , m_liveEdit(VirtualConsole::instance()->liveEdit())
@@ -252,6 +253,7 @@ bool VCWidget::copyFrom(const VCWidget* widget)
 
     m_allowChildren = widget->m_allowChildren;
     m_allowResize = widget->m_allowResize;
+    m_positionLocked = widget->m_positionLocked;
 
     QHashIterator <quint8, QSharedPointer<QLCInputSource> > it(widget->m_inputs);
     while (it.hasNext() == true)
@@ -586,6 +588,20 @@ void VCWidget::setAllowResize(bool allow)
 bool VCWidget::allowResize() const
 {
     return m_allowResize;
+}
+
+/*****************************************************************************
+ * Position lock
+ *****************************************************************************/
+
+void VCWidget::setPositionLocked(bool lock)
+{
+    m_positionLocked = lock;
+}
+
+bool VCWidget::positionLocked() const
+{
+    return m_positionLocked;
 }
 
 /*****************************************************************************
@@ -999,6 +1015,10 @@ bool VCWidget::loadXMLCommon(QXmlStreamReader &root)
     if (attrs.hasAttribute(KXMLQLCVCWidgetPage))
         setPage(attrs.value(KXMLQLCVCWidgetPage).toString().toInt());
 
+    /* Position lock */
+    if (attrs.hasAttribute(KXMLQLCVCWidgetPositionLocked))
+        m_positionLocked = (attrs.value(KXMLQLCVCWidgetPositionLocked).toString() == KXMLQLCTrue);
+
     return true;
 }
 
@@ -1177,6 +1197,10 @@ bool VCWidget::saveXMLCommon(QXmlStreamWriter *doc)
     /* Page */
     if (page() != 0)
         doc->writeAttribute(KXMLQLCVCWidgetPage, QString::number(page()));
+
+    /* Position lock */
+    if (m_positionLocked)
+        doc->writeAttribute(KXMLQLCVCWidgetPositionLocked, KXMLQLCTrue);
 
     return true;
 }
@@ -1538,7 +1562,7 @@ void VCWidget::mousePressEvent(QMouseEvent* e)
             setMouseTracking(true);
             setCursor(QCursor(Qt::SizeFDiagCursor));
         }
-        else
+        else if (!m_positionLocked)
         {
             m_mousePressPoint = QPoint(e->pos().x(), e->pos().y());
             setCursor(QCursor(Qt::SizeAllCursor));
@@ -1621,7 +1645,7 @@ void VCWidget::mouseMoveEvent(QMouseEvent* e)
             resize(QSize(p.x() - x(), p.y() - y()));
             m_doc->setModified();
         }
-        else if (e->buttons() & Qt::LeftButton || e->buttons() & Qt::MiddleButton)
+        else if (!m_positionLocked && (e->buttons() & Qt::LeftButton || e->buttons() & Qt::MiddleButton))
         {
             QPoint p = mapToParent(e->pos());
             p.setX(p.x() - m_mousePressPoint.x());

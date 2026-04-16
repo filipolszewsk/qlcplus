@@ -395,14 +395,14 @@ void VirtualConsole::initActions()
     m_editPasteAction->setEnabled(false);
     connect(m_editPasteAction, SIGNAL(triggered(bool)), this, SLOT(slotEditPaste()));
 
-    m_editCopyToClipboardAction = new QAction(QIcon(":/editcopy.png"),
+    m_editCopyToClipboardAction = new QAction(QIcon(":/copyproject.png"),
                                               tr("Copy to system clipboard (cross-project)"), this);
     m_editCopyToClipboardAction->setToolTip(
         tr("Serialize selected widgets to the system clipboard so they can be pasted into another QLC+ project"));
     connect(m_editCopyToClipboardAction, SIGNAL(triggered(bool)),
             this, SLOT(slotEditCopyToClipboard()));
 
-    m_editPasteFromClipboardAction = new QAction(QIcon(":/editpaste.png"),
+    m_editPasteFromClipboardAction = new QAction(QIcon(":/pasteproject.png"),
                                                  tr("Paste from system clipboard (cross-project)"), this);
     m_editPasteFromClipboardAction->setToolTip(
         tr("Paste widgets previously copied from another QLC+ project"));
@@ -504,6 +504,12 @@ void VirtualConsole::initActions()
     m_stackingActionGroup->setExclusive(false);
     m_stackingActionGroup->addAction(m_stackingRaiseAction);
     m_stackingActionGroup->addAction(m_stackingLowerAction);
+
+    /* Position lock action */
+    m_lockPositionAction = new QAction(QIcon(":/lock.png"), tr("Lock position"), this);
+    m_lockPositionAction->setCheckable(true);
+    m_lockPositionAction->setEnabled(false);
+    connect(m_lockPositionAction, SIGNAL(triggered(bool)), this, SLOT(slotToggleLockPosition()));
 }
 
 void VirtualConsole::initMenuBar()
@@ -582,6 +588,10 @@ void VirtualConsole::initMenuBar()
     m_editMenu->addMenu(stackMenu);
     stackMenu->addAction(m_stackingRaiseAction);
     stackMenu->addAction(m_stackingLowerAction);
+
+    /* Position lock */
+    m_editMenu->addSeparator();
+    m_editMenu->addAction(m_lockPositionAction);
 
     /* Add a separator that separates the common edit items from a custom
        widget menu that gets appended to the edit menu when a selected
@@ -677,6 +687,8 @@ void VirtualConsole::updateActions()
         /* All the rest are disabled for draw area, except BG & font */
         m_frameActionGroup->setEnabled(false);
         m_stackingActionGroup->setEnabled(false);
+        m_lockPositionAction->setEnabled(false);
+        m_lockPositionAction->setChecked(false);
 
         /* Enable paste to draw area if there's something to paste */
         if (m_clipboard.isEmpty() == true)
@@ -733,6 +745,19 @@ void VirtualConsole::updateActions()
             }
             m_editPasteAction->setEnabled(samePasteAvailable);
         }
+
+        /* Lock position: enabled when widgets are selected; checked when ALL are locked */
+        m_lockPositionAction->setEnabled(true);
+        bool allLocked = true;
+        foreach (VCWidget* w, m_selectedWidgets)
+        {
+            if (!w->positionLocked())
+            {
+                allLocked = false;
+                break;
+            }
+        }
+        m_lockPositionAction->setChecked(allLocked);
     }
 
     if (contents()->children().count() == 0)
@@ -1693,6 +1718,33 @@ void VirtualConsole::slotStackingLower()
         widget->lower();
 
     m_doc->setModified();
+}
+
+/*****************************************************************************
+ * Position lock callbacks
+ *****************************************************************************/
+
+void VirtualConsole::slotToggleLockPosition()
+{
+    if (m_selectedWidgets.isEmpty())
+        return;
+
+    bool allLocked = true;
+    foreach (VCWidget* w, m_selectedWidgets)
+    {
+        if (!w->positionLocked())
+        {
+            allLocked = false;
+            break;
+        }
+    }
+
+    bool newState = !allLocked;
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->setPositionLocked(newState);
+
+    m_doc->setModified();
+    updateActions();
 }
 
 /*****************************************************************************

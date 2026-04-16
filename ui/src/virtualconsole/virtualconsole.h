@@ -205,6 +205,8 @@ protected:
     QAction* m_stackingRaiseAction;
     QAction* m_stackingLowerAction;
 
+    QAction* m_lockPositionAction;
+
 protected:
     QMenu* m_customMenu;
     QMenu* m_editMenu;
@@ -313,6 +315,12 @@ public slots:
 public slots:
     void slotStackingRaise();
     void slotStackingLower();
+
+    /*********************************************************************
+     * Position lock callbacks
+     *********************************************************************/
+public slots:
+    void slotToggleLockPosition();
 
     /*********************************************************************
      * Dock Area

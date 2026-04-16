@@ -79,6 +79,8 @@ class QFile;
 #define KXMLQLCWindowStateWidth     QStringLiteral("Width")
 #define KXMLQLCWindowStateHeight    QStringLiteral("Height")
 
+#define KXMLQLCVCWidgetPositionLocked QStringLiteral("PositionLocked")
+
 class VCWidget : public QWidget
 {
     Q_OBJECT
@@ -374,6 +376,19 @@ public:
 
 private:
     bool m_allowResize;
+
+    /*********************************************************************
+     * Position lock
+     *********************************************************************/
+public:
+    /** Set whether the widget's position is locked (cannot be dragged in Design mode) */
+    void setPositionLocked(bool lock);
+
+    /** Check if the widget's position is locked */
+    bool positionLocked() const;
+
+private:
+    bool m_positionLocked;
 
     /*********************************************************************
      * Widget Function
