@@ -815,7 +815,7 @@ void App::initActions()
     m_helpAboutAction = new QAction(QIcon(":/qlcplus.png"), tr("&About QLC+"), this);
     connect(m_helpAboutAction, SIGNAL(triggered(bool)), this, SLOT(slotHelpAbout()));
 
-    m_licenseAction = new QAction(QIcon(":/qlcplus.png"), tr("Premium &License"), this);
+    m_licenseAction = new QAction(QIcon(":/gridqlc.png"), tr("Premium &License"), this);
     connect(m_licenseAction, SIGNAL(triggered(bool)), this, SLOT(slotLicenseDialog()));
 
     if (QLCFile::hasWindowManager() == false)
@@ -857,7 +857,7 @@ void App::initToolBar()
     // LTC Timecode button — placed on the LEFT side of the toolbar (before spacer).
     // m_ltcEngine is created just after initToolBar() returns, so we set up the
     // action here and wire the slot after the engine exists.
-    m_ltcAction = new QAction(QIcon(":/clock.png"), tr("LTC Timecode"), this);
+    m_ltcAction = new QAction(QIcon(":/timecode.png"), tr("LTC Timecode"), this);
     m_ltcAction->setToolTip(tr("Open LTC Timecode synchronization panel"));
     m_toolbar->insertAction(spacerAction, m_ltcAction);
 

@@ -445,13 +445,13 @@ void FunctionManager::initActions()
     connect(m_importAction, SIGNAL(triggered(bool)),
             this, SLOT(slotImportFunctions()));
 
-    m_copySettingsAction = new QAction(QIcon(":/editcopy.png"),
+    m_copySettingsAction = new QAction(QIcon(":/copyproject.png"),
                                        tr("&Copy settings to clipboard"), this);
     m_copySettingsAction->setToolTip(tr("Copy selected function settings to system clipboard (cross-project)"));
     connect(m_copySettingsAction, SIGNAL(triggered(bool)),
             this, SLOT(slotCopySettingsToClipboard()));
 
-    m_pasteSettingsAction = new QAction(QIcon(":/editpaste.png"),
+    m_pasteSettingsAction = new QAction(QIcon(":/pasteproject.png"),
                                         tr("&Paste settings to selected"), this);
     m_pasteSettingsAction->setShortcut(QKeySequence(QKeySequence::Paste));
     connect(m_pasteSettingsAction, SIGNAL(triggered(bool)),
@@ -464,7 +464,7 @@ void FunctionManager::initActions()
     connect(m_filterUnusedVCAction, SIGNAL(toggled(bool)),
             this, SLOT(slotFilterUnusedVC(bool)));
 
-    m_toggleUtilityAction = new QAction(QIcon(":/fade.png"),
+    m_toggleUtilityAction = new QAction(QIcon(":/hideutility.png"),
                                         tr("Show &utility functions"), this);
     m_toggleUtilityAction->setCheckable(true);
     m_toggleUtilityAction->setChecked(false);

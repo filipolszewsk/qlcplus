@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.2 GIT</Version>
+  <Author>filipolszewski</Author>
+ </Creator>
+ <Manufacturer>Generic</Manufacturer>
+ <Model>LED Zoom COB Par WW/CW</Model>
+ <Type>Color Changer</Type>
+ <Channel Name="Motor Operation">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="255" Preset="BeamZoomSmallBig">Zoom position small to big</Capability>
+ </Channel>
+ <Channel Name="Motor Speed">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="255" Preset="SpeedMotorSlowToFast">Motor speed slow to fast</Capability>
+ </Channel>
+ <Channel Name="Total Dimming" Preset="IntensityMasterDimmer"/>
+ <Channel Name="Warm White" Preset="IntensityWarmWhite"/>
+ <Channel Name="White" Preset="IntensityWhite"/>
+ <Channel Name="Strobe">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="0" Preset="ShutterOpen">No function</Capability>
+  <Capability Min="1" Max="255" Preset="StrobeSlowToFast">Strobe slow to fast</Capability>
+ </Channel>
+ <Channel Name="Auto Effect">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="255">Auto effect selection</Capability>
+ </Channel>
+ <Channel Name="Auto Speed">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="255" Preset="SpeedGlobalSlowToFast">Auto speed slow to fast</Capability>
+ </Channel>
+ <Channel Name="Reset">
+  <Group Byte="0">Maintenance</Group>
+  <Capability Min="0" Max="249">No function</Capability>
+  <Capability Min="250" Max="255" Preset="ResetAll">Reset (hold 5s)</Capability>
+ </Channel>
+ <Mode Name="5 Channel">
+  <Channel Number="0">Motor Operation</Channel>
+  <Channel Number="1">Total Dimming</Channel>
+  <Channel Number="2">Warm White</Channel>
+  <Channel Number="3">White</Channel>
+  <Channel Number="4">Reset</Channel>
+ </Mode>
+ <Mode Name="9 Channel">
+  <Channel Number="0">Motor Operation</Channel>
+  <Channel Number="1">Motor Speed</Channel>
+  <Channel Number="2">Total Dimming</Channel>
+  <Channel Number="3">Warm White</Channel>
+  <Channel Number="4">White</Channel>
+  <Channel Number="5">Strobe</Channel>
+  <Channel Number="6">Auto Effect</Channel>
+  <Channel Number="7">Auto Speed</Channel>
+  <Channel Number="8">Reset</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="0" ColourTemperature="5350"/>
+  <Dimensions Weight="6.3" Width="460" Height="280" Depth="210"/>
+  <Lens Name="Other" DegreesMin="5" DegreesMax="50"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="0" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

@@ -1093,7 +1093,7 @@ void FixtureManager::initActions()
     connect(m_remapAction, SIGNAL(triggered(bool)),
             this, SLOT(slotRemap()));
 
-    m_toggleHiddenAction = new QAction(QIcon(":/fade.png"),
+    m_toggleHiddenAction = new QAction(QIcon(":/hideutility.png"),
                                tr("Show utility fixtures"), this);
     m_toggleHiddenAction->setCheckable(true);
     m_toggleHiddenAction->setChecked(false);

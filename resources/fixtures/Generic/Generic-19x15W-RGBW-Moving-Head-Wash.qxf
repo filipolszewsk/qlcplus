@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.2 GIT</Version>
+  <Author>filipolszewski</Author>
+ </Creator>
+ <Manufacturer>Generic</Manufacturer>
+ <Model>19x15W RGBW Moving Head Wash</Model>
+ <Type>Moving Head</Type>
+ <Channel Name="Pan" Preset="PositionPan"/>
+ <Channel Name="Tilt" Preset="PositionTilt"/>
+ <Channel Name="Pan/Tilt Speed" Preset="SpeedPanTiltFastSlow"/>
+ <Channel Name="Total Dimmer" Preset="IntensityMasterDimmer"/>
+ <Channel Name="Red" Preset="IntensityRed"/>
+ <Channel Name="Green" Preset="IntensityGreen"/>
+ <Channel Name="Blue" Preset="IntensityBlue"/>
+ <Channel Name="White" Preset="IntensityWhite"/>
+ <Channel Name="Red Zone 1" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 1" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 1" Preset="IntensityBlue"/>
+ <Channel Name="White Zone 1" Preset="IntensityWhite"/>
+ <Channel Name="Red Zone 2" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 2" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 2" Preset="IntensityBlue"/>
+ <Channel Name="White Zone 2" Preset="IntensityWhite"/>
+ <Channel Name="Red Zone 3" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 3" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 3" Preset="IntensityBlue"/>
+ <Channel Name="White Zone 3" Preset="IntensityWhite"/>
+ <Channel Name="Strobe">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="9" Preset="ShutterOpen">No strobe</Capability>
+  <Capability Min="10" Max="255" Preset="StrobeSlowToFast">Strobe slow to fast</Capability>
+ </Channel>
+ <Channel Name="Zoom" Preset="BeamZoomSmallBig"/>
+ <Channel Name="Macro">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="9">No effect</Capability>
+  <Capability Min="10" Max="19">Color 1</Capability>
+  <Capability Min="20" Max="29">Color 2</Capability>
+  <Capability Min="30" Max="39">Color 3</Capability>
+  <Capability Min="40" Max="49">Color 4</Capability>
+  <Capability Min="50" Max="59">Color 5</Capability>
+  <Capability Min="60" Max="69">Color 6</Capability>
+  <Capability Min="70" Max="79">Color 7</Capability>
+  <Capability Min="80" Max="89">Color 8</Capability>
+  <Capability Min="90" Max="102">Auto Color 1</Capability>
+  <Capability Min="103" Max="115">Auto Color 2</Capability>
+  <Capability Min="116" Max="128">Auto Color 3</Capability>
+  <Capability Min="129" Max="141">Auto Color 4</Capability>
+  <Capability Min="142" Max="154">Auto Color 5</Capability>
+  <Capability Min="155" Max="167">Auto Color 6</Capability>
+  <Capability Min="168" Max="180">Auto Color 7</Capability>
+  <Capability Min="181" Max="193">Auto Color 8</Capability>
+  <Capability Min="194" Max="206">Auto Color 9</Capability>
+  <Capability Min="207" Max="219">Auto Color 10</Capability>
+  <Capability Min="220" Max="232">Auto Color 11</Capability>
+  <Capability Min="233" Max="249">Auto Color 12</Capability>
+  <Capability Min="250" Max="255">Sound Color</Capability>
+ </Channel>
+ <Channel Name="ColorAuto Speed">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255" Preset="SpeedGlobalSlowToFast">Color auto speed slow to fast</Capability>
+ </Channel>
+ <Channel Name="Pan Fine" Preset="PositionPanFine"/>
+ <Channel Name="Tilt Fine" Preset="PositionTiltFine"/>
+ <Channel Name="Restoration">
+  <Group Byte="0">Maintenance</Group>
+  <Capability Min="0" Max="249">Auto effect</Capability>
+  <Capability Min="250" Max="255" Preset="ResetAll">Restoration</Capability>
+ </Channel>
+ <Channel Name="CTO">
+  <Group Byte="0">Colour</Group>
+  <Capability Min="0" Max="249">No CTO</Capability>
+  <Capability Min="250" Max="255" Preset="ColorTemperature">Color temperature 2000K-8000K</Capability>
+ </Channel>
+ <Mode Name="16 Channel">
+  <Channel Number="0">Pan</Channel>
+  <Channel Number="1">Tilt</Channel>
+  <Channel Number="2">Pan/Tilt Speed</Channel>
+  <Channel Number="3">Total Dimmer</Channel>
+  <Channel Number="4">Red</Channel>
+  <Channel Number="5">Green</Channel>
+  <Channel Number="6">Blue</Channel>
+  <Channel Number="7">White</Channel>
+  <Channel Number="8">Strobe</Channel>
+  <Channel Number="9">Zoom</Channel>
+  <Channel Number="10">Macro</Channel>
+  <Channel Number="11">ColorAuto Speed</Channel>
+  <Channel Number="12" ActsOn="0">Pan Fine</Channel>
+  <Channel Number="13" ActsOn="1">Tilt Fine</Channel>
+  <Channel Number="14">Restoration</Channel>
+  <Channel Number="15">CTO</Channel>
+ </Mode>
+ <Mode Name="24 Channel">
+  <Channel Number="0">Pan</Channel>
+  <Channel Number="1">Tilt</Channel>
+  <Channel Number="2">Pan/Tilt Speed</Channel>
+  <Channel Number="3">Total Dimmer</Channel>
+  <Channel Number="4">Red Zone 1</Channel>
+  <Channel Number="5">Green Zone 1</Channel>
+  <Channel Number="6">Blue Zone 1</Channel>
+  <Channel Number="7">White Zone 1</Channel>
+  <Channel Number="8">Red Zone 2</Channel>
+  <Channel Number="9">Green Zone 2</Channel>
+  <Channel Number="10">Blue Zone 2</Channel>
+  <Channel Number="11">White Zone 2</Channel>
+  <Channel Number="12">Red Zone 3</Channel>
+  <Channel Number="13">Green Zone 3</Channel>
+  <Channel Number="14">Blue Zone 3</Channel>
+  <Channel Number="15">White Zone 3</Channel>
+  <Channel Number="16">Strobe</Channel>
+  <Channel Number="17">Zoom</Channel>
+  <Channel Number="18">Macro</Channel>
+  <Channel Number="19">ColorAuto Speed</Channel>
+  <Channel Number="20" ActsOn="0">Pan Fine</Channel>
+  <Channel Number="21" ActsOn="1">Tilt Fine</Channel>
+  <Channel Number="22">Restoration</Channel>
+  <Channel Number="23">CTO</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="6.5" Width="410" Height="330" Depth="215"/>
+  <Lens Name="Other" DegreesMin="8" DegreesMax="60"/>
+  <Focus Type="Head" PanMax="540" TiltMax="270"/>
+  <Technical PowerConsumption="300" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

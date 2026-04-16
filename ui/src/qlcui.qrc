@@ -98,6 +98,11 @@
         <file alias="player_pause.png">../../resources/icons/png/player_pause.png</file>
         <file alias="player_stop.png">../../resources/icons/png/player_stop.png</file>
         <file alias="prism.png">../../resources/icons/png/prism.png</file>
+        <file alias="gridqlc.png">../../resources/icons/png/gridqlc.png</file>
+        <file alias="copyproject.png">../../resources/icons/png/copyproject.png</file>
+        <file alias="hideutility.png">../../resources/icons/png/hideutility.png</file>
+        <file alias="pasteproject.png">../../resources/icons/png/pasteproject.png</file>
+        <file alias="timecode.png">../../resources/icons/png/timecode.png</file>
         <file alias="qlcplus.png">../../resources/icons/png/qlcplus.png</file>
         <file alias="qt.png">../../resources/icons/png/qt.png</file>
         <file alias="rainbow.png">../../resources/icons/png/rainbow.png</file>

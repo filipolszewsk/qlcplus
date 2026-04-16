@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.2 GIT</Version>
+  <Author>filipolszewski</Author>
+ </Creator>
+ <Manufacturer>Shehds</Manufacturer>
+ <Model>18x12W RGB LED Flash</Model>
+ <Type>LED Bar (Beams)</Type>
+ <Channel Name="Red" Preset="IntensityRed"/>
+ <Channel Name="Green" Preset="IntensityGreen"/>
+ <Channel Name="Blue" Preset="IntensityBlue"/>
+ <Channel Name="Total Dimmer" Preset="IntensityMasterDimmer"/>
+ <Channel Name="Strobe">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="0" Preset="ShutterOpen">No function</Capability>
+  <Capability Min="1" Max="255" Preset="StrobeSlowToFast">Strobe slow to fast (0-38Hz)</Capability>
+ </Channel>
+ <Channel Name="Macro Mode">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="127">Auto program 1-127</Capability>
+  <Capability Min="128" Max="255">Extended effects</Capability>
+ </Channel>
+ <Channel Name="Macro Speed">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="255" Preset="SpeedGlobalSlowToFast">Macro speed slow to fast</Capability>
+ </Channel>
+ <Channel Name="Background Color">
+  <Group Byte="0">Colour</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="250">Background color selection</Capability>
+ </Channel>
+ <Channel Name="Background Dimming">
+  <Group Byte="0">Intensity</Group>
+  <Capability Min="0" Max="0">No function</Capability>
+  <Capability Min="1" Max="250">Background dimming dark to bright</Capability>
+ </Channel>
+ <Channel Name="Red Zone 1" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 1" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 1" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 2" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 2" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 2" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 3" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 3" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 3" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 4" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 4" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 4" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 5" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 5" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 5" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 6" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 6" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 6" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 7" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 7" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 7" Preset="IntensityBlue"/>
+ <Channel Name="Red Zone 8" Preset="IntensityRed"/>
+ <Channel Name="Green Zone 8" Preset="IntensityGreen"/>
+ <Channel Name="Blue Zone 8" Preset="IntensityBlue"/>
+ <Mode Name="3 Channel">
+  <Channel Number="0">Red</Channel>
+  <Channel Number="1">Green</Channel>
+  <Channel Number="2">Blue</Channel>
+ </Mode>
+ <Mode Name="9 Channel">
+  <Channel Number="0">Total Dimmer</Channel>
+  <Channel Number="1">Strobe</Channel>
+  <Channel Number="2">Macro Mode</Channel>
+  <Channel Number="3">Macro Speed</Channel>
+  <Channel Number="4">Red</Channel>
+  <Channel Number="5">Green</Channel>
+  <Channel Number="6">Blue</Channel>
+  <Channel Number="7">Background Color</Channel>
+  <Channel Number="8">Background Dimming</Channel>
+ </Mode>
+ <Mode Name="24 Channel">
+  <Channel Number="0">Red Zone 1</Channel>
+  <Channel Number="1">Green Zone 1</Channel>
+  <Channel Number="2">Blue Zone 1</Channel>
+  <Channel Number="3">Red Zone 2</Channel>
+  <Channel Number="4">Green Zone 2</Channel>
+  <Channel Number="5">Blue Zone 2</Channel>
+  <Channel Number="6">Red Zone 3</Channel>
+  <Channel Number="7">Green Zone 3</Channel>
+  <Channel Number="8">Blue Zone 3</Channel>
+  <Channel Number="9">Red Zone 4</Channel>
+  <Channel Number="10">Green Zone 4</Channel>
+  <Channel Number="11">Blue Zone 4</Channel>
+  <Channel Number="12">Red Zone 5</Channel>
+  <Channel Number="13">Green Zone 5</Channel>
+  <Channel Number="14">Blue Zone 5</Channel>
+  <Channel Number="15">Red Zone 6</Channel>
+  <Channel Number="16">Green Zone 6</Channel>
+  <Channel Number="17">Blue Zone 6</Channel>
+  <Channel Number="18">Red Zone 7</Channel>
+  <Channel Number="19">Green Zone 7</Channel>
+  <Channel Number="20">Blue Zone 7</Channel>
+  <Channel Number="21">Red Zone 8</Channel>
+  <Channel Number="22">Green Zone 8</Channel>
+  <Channel Number="23">Blue Zone 8</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="LED" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="2.95" Width="400" Height="216" Depth="99"/>
+  <Lens Name="Other" DegreesMin="40" DegreesMax="40"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="216" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>
