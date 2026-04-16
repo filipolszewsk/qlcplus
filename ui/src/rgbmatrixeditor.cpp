@@ -1990,6 +1990,12 @@ void RGBMatrixEditor::addChannelMappingRow(FixtureDefMappingWidget &widget, QLCF
     {
         row.channelCombo->addItem(tr("Virtual Dimmer"), QString("__VIRTUAL_DIMMER__"));
     }
+
+    // Add Virtual Strobe option for fixtures that support it
+    if (mode->virtualStrobe())
+    {
+        row.channelCombo->addItem(tr("Virtual Strobe"), QString("__VIRTUAL_STROBE__"));
+    }
     
     // Set current selection from mappings (all mappings should have same valueIndex).
     // Empty channelName means "Auto (use control mode)" — include it so the Auto
