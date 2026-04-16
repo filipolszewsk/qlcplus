@@ -357,6 +357,21 @@ elseif (IOS)
     set(USERRGBSCRIPTDIR "${USERDATADIR}/RGBScripts")
 endif ()
 
+# User Scribbles
+if (WIN32)
+    set(USERSCRIBBLEDIR "${USERDATADIR}/Scribbles")
+elseif (APPLE)
+    set(USERSCRIBBLEDIR "${USERDATADIR}/Scribbles")
+elseif (UNIX)
+    set(USERSCRIBBLEDIR "${USERDATADIR}/scribbles")
+endif ()
+
+if (ANDROID)
+    set(USERSCRIBBLEDIR "${USERDATADIR}/scribbles")
+elseif (IOS)
+    set(USERSCRIBBLEDIR "${USERDATADIR}/Scribbles")
+endif ()
+
 # Web Files
 if (WIN32)
     set(WEBFILESDIR "Web")

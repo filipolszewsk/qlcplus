@@ -140,8 +140,11 @@ private slots:
     void slotLibraryContextMenu(const QPoint &pos);
 
 private:
-    /** Generate the save directory path (next to the project file) */
+    /** Returns the user-global scribbles directory (creates it if needed) */
     QString scribbleDirectory() const;
+
+    /** Returns the legacy project-relative scribbles directory (for backward compatibility) */
+    QString legacyScribbleDirectory() const;
 
     /** Save the image and return the path, or empty on failure */
     QString saveImage(const QString &directory);

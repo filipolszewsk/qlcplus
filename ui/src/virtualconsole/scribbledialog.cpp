@@ -41,6 +41,8 @@
 
 #include "scribbledialog.h"
 #include "doc.h"
+#include "qlcfile.h"
+#include "qlcconfig.h"
 
 /*****************************************************************************
  * ScribbleArea
@@ -507,7 +509,6 @@ void ScribbleDialog::slotSaveAsIcon()
     QString dir = scribbleDirectory();
     if (dir.isEmpty())
     {
-        /* No project saved yet - fall back to file dialog */
         slotSaveToFile();
         return;
     }
@@ -634,6 +635,14 @@ void ScribbleDialog::slotLibraryContextMenu(const QPoint &pos)
 
 QString ScribbleDialog::scribbleDirectory() const
 {
+    QDir dir = QLCFile::userDirectory(QString(USERSCRIBBLEDIR),
+                                      QString(USERSCRIBBLEDIR),
+                                      QStringList() << "*.png" << "*.PNG");
+    return dir.absolutePath();
+}
+
+QString ScribbleDialog::legacyScribbleDirectory() const
+{
     if (m_doc == nullptr)
         return QString();
 
@@ -641,8 +650,7 @@ QString ScribbleDialog::scribbleDirectory() const
     if (workspace.isEmpty())
         return QString();
 
-    QString scribbleDir = workspace + QDir::separator() + "scribbles";
-    return scribbleDir;
+    return workspace + QDir::separator() + "scribbles";
 }
 
 QString ScribbleDialog::saveImage(const QString &directory)
@@ -686,27 +694,36 @@ void ScribbleDialog::populateLibrary()
 {
     m_libraryList->clear();
 
-    QString dir = scribbleDirectory();
-    if (dir.isEmpty())
-    {
-        m_libraryLabel->hide();
-        m_libraryList->hide();
-        return;
-    }
-
-    QDir scribbleDir(dir);
-    if (!scribbleDir.exists())
-    {
-        m_libraryLabel->hide();
-        m_libraryList->hide();
-        return;
-    }
-
+    QStringList allFiles;
     QStringList filters;
     filters << "*.png" << "*.PNG";
-    QStringList files = scribbleDir.entryList(filters, QDir::Files, QDir::Time);
 
-    if (files.isEmpty())
+    /* Primary: user-global scribbles directory */
+    QString userDir = scribbleDirectory();
+    if (!userDir.isEmpty())
+    {
+        QDir d(userDir);
+        foreach (const QString &f, d.entryList(filters, QDir::Files, QDir::Time))
+            allFiles << d.absoluteFilePath(f);
+    }
+
+    /* Legacy: project-relative scribbles/ folder (backward compatibility) */
+    QString legacy = legacyScribbleDirectory();
+    if (!legacy.isEmpty())
+    {
+        QDir d(legacy);
+        if (d.exists())
+        {
+            foreach (const QString &f, d.entryList(filters, QDir::Files, QDir::Time))
+            {
+                QString fp = d.absoluteFilePath(f);
+                if (!allFiles.contains(fp))
+                    allFiles << fp;
+            }
+        }
+    }
+
+    if (allFiles.isEmpty())
     {
         m_libraryLabel->hide();
         m_libraryList->hide();
@@ -716,16 +733,15 @@ void ScribbleDialog::populateLibrary()
     m_libraryLabel->show();
     m_libraryList->show();
 
-    foreach (const QString &filename, files)
+    foreach (const QString &fullPath, allFiles)
     {
-        QString fullPath = scribbleDir.absoluteFilePath(filename);
         QPixmap pix(fullPath);
         if (pix.isNull())
             continue;
 
         QListWidgetItem *item = new QListWidgetItem();
         item->setIcon(QIcon(pix.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
-        item->setToolTip(filename);
+        item->setToolTip(QFileInfo(fullPath).fileName());
         item->setData(Qt::UserRole, fullPath);
         m_libraryList->addItem(item);
     }
