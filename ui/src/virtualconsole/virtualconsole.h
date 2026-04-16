@@ -258,6 +258,11 @@ public slots:
     void slotWizard();
     void slotToolsSettings();
 
+public:
+    /** Create widgets from @p widgets JSON array under @p parentFrame.
+     *  Increments @p count for each widget created. */
+    void importWidgetsFromJson(const QJsonArray &widgets, VCFrame *parentFrame, int &count);
+
     /*********************************************************************
      * Edit menu callbacks
      *********************************************************************/
@@ -268,11 +273,6 @@ public slots:
     void slotEditCopyToClipboard();
     void slotEditPasteFromClipboard();
     void slotEditDelete();
-
-public:
-    /** Create widgets from @p widgets JSON array under @p parentFrame.
-     *  Increments @p count for each widget created. */
-    void importWidgetsFromJson(const QJsonArray &widgets, VCFrame *parentFrame, int &count);
     void slotEditRename();
     void slotEditProperties();
     void slotMultiPatch();
