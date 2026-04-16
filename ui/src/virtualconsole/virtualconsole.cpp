@@ -82,6 +82,7 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     : QWidget(parent)
     , m_doc(doc)
     , m_latestWidgetId(0)
+    , m_latestGroupId(1)
 
     , m_editAction(EditNone)
     , m_toolbar(NULL)
@@ -138,6 +139,9 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
 
     , m_stackingRaiseAction(NULL)
     , m_stackingLowerAction(NULL)
+
+    , m_makeGroupAction(NULL)
+    , m_ungroupAction(NULL)
 
     , m_customMenu(NULL)
     , m_editMenu(NULL)
@@ -206,6 +210,16 @@ quint32 VirtualConsole::newWidgetId()
     return m_latestWidgetId;
 }
 
+quint32 VirtualConsole::newGroupId()
+{
+    while (m_widgetGroups.contains(m_latestGroupId) ||
+           m_latestGroupId == VCWidget::invalidId())
+    {
+        m_latestGroupId++;
+    }
+    return m_latestGroupId;
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/
@@ -242,11 +256,41 @@ void VirtualConsole::setWidgetSelected(VCWidget* widget, bool select)
     {
         m_selectedWidgets.removeAll(widget);
         widget->update();
+
+        /* If widget is in a group, deselect all group siblings too */
+        quint32 gid = widget->groupId();
+        if (gid != VCWidget::invalidId() && m_widgetGroups.contains(gid))
+        {
+            foreach (quint32 sibId, m_widgetGroups.value(gid))
+            {
+                VCWidget* sib = this->widget(sibId);
+                if (sib && sib != widget)
+                {
+                    m_selectedWidgets.removeAll(sib);
+                    sib->update();
+                }
+            }
+        }
     }
     else if (select == true && m_selectedWidgets.indexOf(widget) == -1)
     {
         m_selectedWidgets.append(widget);
         widget->update();
+
+        /* If widget is in a group, auto-select all group siblings too */
+        quint32 gid = widget->groupId();
+        if (gid != VCWidget::invalidId() && m_widgetGroups.contains(gid))
+        {
+            foreach (quint32 sibId, m_widgetGroups.value(gid))
+            {
+                VCWidget* sib = this->widget(sibId);
+                if (sib && sib != widget && m_selectedWidgets.indexOf(sib) == -1)
+                {
+                    m_selectedWidgets.append(sib);
+                    sib->update();
+                }
+            }
+        }
     }
 
     /* Change the custom menu to the latest-selected widget's menu */
@@ -510,6 +554,15 @@ void VirtualConsole::initActions()
     m_lockPositionAction->setCheckable(true);
     m_lockPositionAction->setEnabled(false);
     connect(m_lockPositionAction, SIGNAL(triggered(bool)), this, SLOT(slotToggleLockPosition()));
+
+    /* Group selection actions */
+    m_makeGroupAction = new QAction(tr("Make Group"), this);
+    m_makeGroupAction->setEnabled(false);
+    connect(m_makeGroupAction, SIGNAL(triggered(bool)), this, SLOT(slotMakeGroup()));
+
+    m_ungroupAction = new QAction(tr("Ungroup"), this);
+    m_ungroupAction->setEnabled(false);
+    connect(m_ungroupAction, SIGNAL(triggered(bool)), this, SLOT(slotUngroup()));
 }
 
 void VirtualConsole::initMenuBar()
@@ -592,6 +645,11 @@ void VirtualConsole::initMenuBar()
     /* Position lock */
     m_editMenu->addSeparator();
     m_editMenu->addAction(m_lockPositionAction);
+
+    /* Group selection */
+    m_editMenu->addSeparator();
+    m_editMenu->addAction(m_makeGroupAction);
+    m_editMenu->addAction(m_ungroupAction);
 
     /* Add a separator that separates the common edit items from a custom
        widget menu that gets appended to the edit menu when a selected
@@ -689,6 +747,8 @@ void VirtualConsole::updateActions()
         m_stackingActionGroup->setEnabled(false);
         m_lockPositionAction->setEnabled(false);
         m_lockPositionAction->setChecked(false);
+        m_makeGroupAction->setEnabled(false);
+        m_ungroupAction->setEnabled(false);
 
         /* Enable paste to draw area if there's something to paste */
         if (m_clipboard.isEmpty() == true)
@@ -758,6 +818,23 @@ void VirtualConsole::updateActions()
             }
         }
         m_lockPositionAction->setChecked(allLocked);
+
+        /* Group actions:
+           Make Group — enabled when >=2 selected and they do NOT already all share one group
+           Ungroup    — enabled when at least one selected widget is in a group */
+        bool anyGrouped = false;
+        bool allSameGroup = (m_selectedWidgets.size() >= 2);
+        quint32 firstGid = m_selectedWidgets.first()->groupId();
+        foreach (VCWidget* w, m_selectedWidgets)
+        {
+            quint32 gid = w->groupId();
+            if (gid != VCWidget::invalidId())
+                anyGrouped = true;
+            if (gid == VCWidget::invalidId() || gid != firstGid)
+                allSameGroup = false;
+        }
+        m_makeGroupAction->setEnabled(m_selectedWidgets.size() >= 2 && !allSameGroup);
+        m_ungroupAction->setEnabled(anyGrouped);
     }
 
     if (contents()->children().count() == 0)
@@ -1468,6 +1545,12 @@ void VirtualConsole::slotEditDelete()
             /* Consume the selected list until it is empty and
                delete each widget. */
             VCWidget* widget = m_selectedWidgets.takeFirst();
+
+            /* Remove from group before deleting (may dissolve group if <2 remain) */
+            removeFromGroup(widget);
+            foreach (VCWidget* child, getChildren(widget))
+                removeFromGroup(child);
+
             m_widgetsMap.remove(widget->id());
             foreach (VCWidget* child, getChildren(widget))
                 m_widgetsMap.remove(child->id());
@@ -1743,6 +1826,97 @@ void VirtualConsole::slotToggleLockPosition()
     foreach (VCWidget* w, m_selectedWidgets)
         w->setPositionLocked(newState);
 
+    m_doc->setModified();
+    updateActions();
+}
+
+/*****************************************************************************
+ * Group selection callbacks
+ *****************************************************************************/
+
+void VirtualConsole::makeGroup(const QList<VCWidget*>& widgets)
+{
+    if (widgets.size() < 2)
+        return;
+
+    quint32 gid = newGroupId();
+    QList<quint32> members;
+
+    foreach (VCWidget* w, widgets)
+    {
+        /* Remove from any previous group first */
+        removeFromGroup(w);
+        w->setGroupId(gid);
+        members.append(w->id());
+    }
+    m_widgetGroups.insert(gid, members);
+}
+
+void VirtualConsole::ungroup(const QList<VCWidget*>& widgets)
+{
+    QSet<quint32> toDissolve;
+    foreach (VCWidget* w, widgets)
+    {
+        if (w->groupId() != VCWidget::invalidId())
+            toDissolve.insert(w->groupId());
+    }
+
+    foreach (quint32 gid, toDissolve)
+    {
+        foreach (quint32 wid, m_widgetGroups.value(gid))
+        {
+            VCWidget* w = this->widget(wid);
+            if (w)
+                w->setGroupId(VCWidget::invalidId());
+        }
+        m_widgetGroups.remove(gid);
+    }
+}
+
+void VirtualConsole::removeFromGroup(VCWidget* w)
+{
+    if (!w || w->groupId() == VCWidget::invalidId())
+        return;
+
+    quint32 gid = w->groupId();
+    if (!m_widgetGroups.contains(gid))
+    {
+        w->setGroupId(VCWidget::invalidId());
+        return;
+    }
+
+    m_widgetGroups[gid].removeAll(w->id());
+    w->setGroupId(VCWidget::invalidId());
+
+    /* If only one member left, dissolve the group entirely */
+    if (m_widgetGroups[gid].size() < 2)
+    {
+        foreach (quint32 wid, m_widgetGroups[gid])
+        {
+            VCWidget* remaining = this->widget(wid);
+            if (remaining)
+                remaining->setGroupId(VCWidget::invalidId());
+        }
+        m_widgetGroups.remove(gid);
+    }
+}
+
+void VirtualConsole::slotMakeGroup()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    makeGroup(m_selectedWidgets);
+    m_doc->setModified();
+    updateActions();
+}
+
+void VirtualConsole::slotUngroup()
+{
+    if (m_selectedWidgets.isEmpty())
+        return;
+
+    ungroup(m_selectedWidgets);
     m_doc->setModified();
     updateActions();
 }
@@ -2322,6 +2496,20 @@ void VirtualConsole::postLoad()
 
     m_dockArea->setGrandMasterVisible(m_properties.grandMasterVisible());
     m_dockArea->setGrandMasterInvertedAppearance(m_properties.grandMasterSliderMode());
+
+    /* Rebuild m_widgetGroups from per-widget groupId persisted in XML */
+    m_widgetGroups.clear();
+    foreach (VCWidget* w, m_widgetsMap)
+    {
+        quint32 gid = w->groupId();
+        if (gid != VCWidget::invalidId())
+        {
+            m_widgetGroups[gid].append(w->id());
+            /* Keep m_latestGroupId ahead of any loaded group ID */
+            if (gid >= m_latestGroupId)
+                m_latestGroupId = gid + 1;
+        }
+    }
 
     m_contents->setFocus();
 

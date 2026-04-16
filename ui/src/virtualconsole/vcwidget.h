@@ -80,6 +80,7 @@ class QFile;
 #define KXMLQLCWindowStateHeight    QStringLiteral("Height")
 
 #define KXMLQLCVCWidgetPositionLocked QStringLiteral("PositionLocked")
+#define KXMLQLCVCWidgetGroupID        QStringLiteral("GroupID")
 
 class VCWidget : public QWidget
 {
@@ -389,6 +390,19 @@ public:
 
 private:
     bool m_positionLocked;
+
+    /*********************************************************************
+     * Widget group membership
+     *********************************************************************/
+public:
+    /** Set the selection group this widget belongs to (invalidId = no group) */
+    void setGroupId(quint32 id);
+
+    /** Get the selection group ID this widget belongs to */
+    quint32 groupId() const;
+
+private:
+    quint32 m_groupId;
 
     /*********************************************************************
      * Widget Function

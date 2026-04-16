@@ -28,6 +28,7 @@
 #include <QHash>
 #include <QList>
 #include <QSet>
+#include <QMap>
 
 #include "vcproperties.h"
 #include "doc.h"
@@ -79,6 +80,29 @@ protected:
 private:
     /** Latest assigned widget ID */
     quint32 m_latestWidgetId;
+
+    /*********************************************************************
+     * Widget groups
+     *********************************************************************/
+public:
+    /** Make all selected widgets a named selection group */
+    void makeGroup(const QList<VCWidget*>& widgets);
+
+    /** Dissolve all groups that any of the given widgets belong to */
+    void ungroup(const QList<VCWidget*>& widgets);
+
+    /** Remove a widget from its group (called on widget deletion) */
+    void removeFromGroup(VCWidget* widget);
+
+protected:
+    /** Generate a unique group ID */
+    quint32 newGroupId();
+
+    /** group ID → ordered list of member widget IDs */
+    QMap<quint32, QList<quint32>> m_widgetGroups;
+
+    /** Counter for allocating group IDs */
+    quint32 m_latestGroupId;
 
     /*********************************************************************
      * Properties
@@ -207,6 +231,9 @@ protected:
 
     QAction* m_lockPositionAction;
 
+    QAction* m_makeGroupAction;
+    QAction* m_ungroupAction;
+
 protected:
     QMenu* m_customMenu;
     QMenu* m_editMenu;
@@ -321,6 +348,13 @@ public slots:
      *********************************************************************/
 public slots:
     void slotToggleLockPosition();
+
+    /*********************************************************************
+     * Group selection callbacks
+     *********************************************************************/
+public slots:
+    void slotMakeGroup();
+    void slotUngroup();
 
     /*********************************************************************
      * Dock Area

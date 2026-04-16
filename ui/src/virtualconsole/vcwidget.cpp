@@ -64,6 +64,7 @@ VCWidget::VCWidget(QWidget* parent, Doc* doc)
     , m_allowChildren(false)
     , m_allowResize(true)
     , m_positionLocked(false)
+    , m_groupId(VCWidget::invalidId())
     , m_intensityOverrideId(Function::invalidAttributeId())
     , m_intensity(1.0)
     , m_liveEdit(VirtualConsole::instance()->liveEdit())
@@ -254,6 +255,7 @@ bool VCWidget::copyFrom(const VCWidget* widget)
     m_allowChildren = widget->m_allowChildren;
     m_allowResize = widget->m_allowResize;
     m_positionLocked = widget->m_positionLocked;
+    m_groupId = VCWidget::invalidId(); // copies are not part of any group
 
     QHashIterator <quint8, QSharedPointer<QLCInputSource> > it(widget->m_inputs);
     while (it.hasNext() == true)
@@ -602,6 +604,20 @@ void VCWidget::setPositionLocked(bool lock)
 bool VCWidget::positionLocked() const
 {
     return m_positionLocked;
+}
+
+/*****************************************************************************
+ * Widget group membership
+ *****************************************************************************/
+
+void VCWidget::setGroupId(quint32 id)
+{
+    m_groupId = id;
+}
+
+quint32 VCWidget::groupId() const
+{
+    return m_groupId;
 }
 
 /*****************************************************************************
@@ -1019,6 +1035,10 @@ bool VCWidget::loadXMLCommon(QXmlStreamReader &root)
     if (attrs.hasAttribute(KXMLQLCVCWidgetPositionLocked))
         m_positionLocked = (attrs.value(KXMLQLCVCWidgetPositionLocked).toString() == KXMLQLCTrue);
 
+    /* Group membership */
+    if (attrs.hasAttribute(KXMLQLCVCWidgetGroupID))
+        m_groupId = attrs.value(KXMLQLCVCWidgetGroupID).toString().toUInt();
+
     return true;
 }
 
@@ -1201,6 +1221,10 @@ bool VCWidget::saveXMLCommon(QXmlStreamWriter *doc)
     /* Position lock */
     if (m_positionLocked)
         doc->writeAttribute(KXMLQLCVCWidgetPositionLocked, KXMLQLCTrue);
+
+    /* Group membership */
+    if (m_groupId != VCWidget::invalidId())
+        doc->writeAttribute(KXMLQLCVCWidgetGroupID, QString::number(m_groupId));
 
     return true;
 }
