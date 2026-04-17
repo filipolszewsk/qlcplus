@@ -234,6 +234,13 @@ protected:
     QAction* m_makeGroupAction;
     QAction* m_ungroupAction;
 
+    QAction* m_alignTopAction;
+    QAction* m_alignBottomAction;
+    QAction* m_alignLeftAction;
+    QAction* m_alignRightAction;
+    QAction* m_alignCenterVAction;
+    QAction* m_alignCenterHAction;
+
 protected:
     QMenu* m_customMenu;
     QMenu* m_editMenu;
@@ -355,6 +362,17 @@ public slots:
 public slots:
     void slotMakeGroup();
     void slotUngroup();
+
+    /*********************************************************************
+     * Align callbacks
+     *********************************************************************/
+public slots:
+    void slotAlignTop();
+    void slotAlignBottom();
+    void slotAlignLeft();
+    void slotAlignRight();
+    void slotAlignCenterV();
+    void slotAlignCenterH();
 
     /*********************************************************************
      * Dock Area

@@ -143,6 +143,13 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_makeGroupAction(NULL)
     , m_ungroupAction(NULL)
 
+    , m_alignTopAction(NULL)
+    , m_alignBottomAction(NULL)
+    , m_alignLeftAction(NULL)
+    , m_alignRightAction(NULL)
+    , m_alignCenterVAction(NULL)
+    , m_alignCenterHAction(NULL)
+
     , m_customMenu(NULL)
     , m_editMenu(NULL)
     , m_addMenu(NULL)
@@ -563,6 +570,31 @@ void VirtualConsole::initActions()
     m_ungroupAction = new QAction(tr("Ungroup"), this);
     m_ungroupAction->setEnabled(false);
     connect(m_ungroupAction, SIGNAL(triggered(bool)), this, SLOT(slotUngroup()));
+
+    /* Align actions */
+    m_alignTopAction = new QAction(tr("Align Top"), this);
+    m_alignTopAction->setEnabled(false);
+    connect(m_alignTopAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignTop()));
+
+    m_alignBottomAction = new QAction(tr("Align Bottom"), this);
+    m_alignBottomAction->setEnabled(false);
+    connect(m_alignBottomAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignBottom()));
+
+    m_alignLeftAction = new QAction(tr("Align Left"), this);
+    m_alignLeftAction->setEnabled(false);
+    connect(m_alignLeftAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignLeft()));
+
+    m_alignRightAction = new QAction(tr("Align Right"), this);
+    m_alignRightAction->setEnabled(false);
+    connect(m_alignRightAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignRight()));
+
+    m_alignCenterVAction = new QAction(tr("Center Vertically"), this);
+    m_alignCenterVAction->setEnabled(false);
+    connect(m_alignCenterVAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignCenterV()));
+
+    m_alignCenterHAction = new QAction(tr("Center Horizontally"), this);
+    m_alignCenterHAction->setEnabled(false);
+    connect(m_alignCenterHAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignCenterH()));
 }
 
 void VirtualConsole::initMenuBar()
@@ -650,6 +682,19 @@ void VirtualConsole::initMenuBar()
     m_editMenu->addSeparator();
     m_editMenu->addAction(m_makeGroupAction);
     m_editMenu->addAction(m_ungroupAction);
+
+    /* Align submenu */
+    QMenu* alignMenu = new QMenu(m_editMenu);
+    alignMenu->setTitle(tr("&Align"));
+    m_editMenu->addMenu(alignMenu);
+    alignMenu->addAction(m_alignTopAction);
+    alignMenu->addAction(m_alignBottomAction);
+    alignMenu->addSeparator();
+    alignMenu->addAction(m_alignLeftAction);
+    alignMenu->addAction(m_alignRightAction);
+    alignMenu->addSeparator();
+    alignMenu->addAction(m_alignCenterVAction);
+    alignMenu->addAction(m_alignCenterHAction);
 
     /* Add a separator that separates the common edit items from a custom
        widget menu that gets appended to the edit menu when a selected
@@ -749,6 +794,12 @@ void VirtualConsole::updateActions()
         m_lockPositionAction->setChecked(false);
         m_makeGroupAction->setEnabled(false);
         m_ungroupAction->setEnabled(false);
+        m_alignTopAction->setEnabled(false);
+        m_alignBottomAction->setEnabled(false);
+        m_alignLeftAction->setEnabled(false);
+        m_alignRightAction->setEnabled(false);
+        m_alignCenterVAction->setEnabled(false);
+        m_alignCenterHAction->setEnabled(false);
 
         /* Enable paste to draw area if there's something to paste */
         if (m_clipboard.isEmpty() == true)
@@ -835,6 +886,15 @@ void VirtualConsole::updateActions()
         }
         m_makeGroupAction->setEnabled(m_selectedWidgets.size() >= 2 && !allSameGroup);
         m_ungroupAction->setEnabled(anyGrouped);
+
+        /* Align: enabled when >= 2 widgets selected */
+        bool canAlign = (m_selectedWidgets.size() >= 2);
+        m_alignTopAction->setEnabled(canAlign);
+        m_alignBottomAction->setEnabled(canAlign);
+        m_alignLeftAction->setEnabled(canAlign);
+        m_alignRightAction->setEnabled(canAlign);
+        m_alignCenterVAction->setEnabled(canAlign);
+        m_alignCenterHAction->setEnabled(canAlign);
     }
 
     if (contents()->children().count() == 0)
@@ -1919,6 +1979,96 @@ void VirtualConsole::slotUngroup()
     ungroup(m_selectedWidgets);
     m_doc->setModified();
     updateActions();
+}
+
+/*****************************************************************************
+ * Align callbacks
+ *****************************************************************************/
+
+void VirtualConsole::slotAlignTop()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int minY = INT_MAX;
+    foreach (VCWidget* w, m_selectedWidgets)
+        minY = qMin(minY, w->y());
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(w->x(), minY));
+
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAlignBottom()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int maxBottom = INT_MIN;
+    foreach (VCWidget* w, m_selectedWidgets)
+        maxBottom = qMax(maxBottom, w->y() + w->height());
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(w->x(), maxBottom - w->height()));
+
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAlignLeft()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int minX = INT_MAX;
+    foreach (VCWidget* w, m_selectedWidgets)
+        minX = qMin(minX, w->x());
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(minX, w->y()));
+
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAlignRight()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int maxRight = INT_MIN;
+    foreach (VCWidget* w, m_selectedWidgets)
+        maxRight = qMax(maxRight, w->x() + w->width());
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(maxRight - w->width(), w->y()));
+
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAlignCenterV()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int sumCenterY = 0;
+    foreach (VCWidget* w, m_selectedWidgets)
+        sumCenterY += w->y() + w->height() / 2;
+    int avgCenterY = sumCenterY / m_selectedWidgets.size();
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(w->x(), avgCenterY - w->height() / 2));
+
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotAlignCenterH()
+{
+    if (m_selectedWidgets.size() < 2)
+        return;
+
+    int sumCenterX = 0;
+    foreach (VCWidget* w, m_selectedWidgets)
+        sumCenterX += w->x() + w->width() / 2;
+    int avgCenterX = sumCenterX / m_selectedWidgets.size();
+    foreach (VCWidget* w, m_selectedWidgets)
+        w->move(QPoint(avgCenterX - w->width() / 2, w->y()));
+
+    m_doc->setModified();
 }
 
 /*****************************************************************************
