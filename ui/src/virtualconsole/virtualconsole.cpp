@@ -588,11 +588,11 @@ void VirtualConsole::initActions()
     m_alignRightAction->setEnabled(false);
     connect(m_alignRightAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignRight()));
 
-    m_alignCenterVAction = new QAction(tr("Center Vertically"), this);
+    m_alignCenterVAction = new QAction(tr("Distribute Vertically"), this);
     m_alignCenterVAction->setEnabled(false);
     connect(m_alignCenterVAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignCenterV()));
 
-    m_alignCenterHAction = new QAction(tr("Center Horizontally"), this);
+    m_alignCenterHAction = new QAction(tr("Distribute Horizontally"), this);
     m_alignCenterHAction->setEnabled(false);
     connect(m_alignCenterHAction, SIGNAL(triggered(bool)), this, SLOT(slotAlignCenterH()));
 }
@@ -2046,13 +2046,21 @@ void VirtualConsole::slotAlignCenterV()
     if (m_selectedWidgets.size() < 2)
         return;
 
-    int sumCenterY = 0;
-    foreach (VCWidget* w, m_selectedWidgets)
-        sumCenterY += w->y() + w->height() / 2;
-    int avgCenterY = sumCenterY / m_selectedWidgets.size();
-    foreach (VCWidget* w, m_selectedWidgets)
-        w->move(QPoint(w->x(), avgCenterY - w->height() / 2));
+    QList<VCWidget*> sorted = m_selectedWidgets;
+    std::sort(sorted.begin(), sorted.end(),
+        [](VCWidget* a, VCWidget* b){ return a->y() < b->y(); });
 
+    int totalSpan = (sorted.last()->y() + sorted.last()->height()) - sorted.first()->y();
+    int sumHeights = 0;
+    foreach (VCWidget* w, sorted) sumHeights += w->height();
+    int gap = (sorted.size() > 1) ? (totalSpan - sumHeights) / (sorted.size() - 1) : 0;
+
+    int curY = sorted.first()->y();
+    foreach (VCWidget* w, sorted)
+    {
+        w->move(QPoint(w->x(), curY));
+        curY += w->height() + gap;
+    }
     m_doc->setModified();
 }
 
@@ -2061,13 +2069,21 @@ void VirtualConsole::slotAlignCenterH()
     if (m_selectedWidgets.size() < 2)
         return;
 
-    int sumCenterX = 0;
-    foreach (VCWidget* w, m_selectedWidgets)
-        sumCenterX += w->x() + w->width() / 2;
-    int avgCenterX = sumCenterX / m_selectedWidgets.size();
-    foreach (VCWidget* w, m_selectedWidgets)
-        w->move(QPoint(avgCenterX - w->width() / 2, w->y()));
+    QList<VCWidget*> sorted = m_selectedWidgets;
+    std::sort(sorted.begin(), sorted.end(),
+        [](VCWidget* a, VCWidget* b){ return a->x() < b->x(); });
 
+    int totalSpan = (sorted.last()->x() + sorted.last()->width()) - sorted.first()->x();
+    int sumWidths = 0;
+    foreach (VCWidget* w, sorted) sumWidths += w->width();
+    int gap = (sorted.size() > 1) ? (totalSpan - sumWidths) / (sorted.size() - 1) : 0;
+
+    int curX = sorted.first()->x();
+    foreach (VCWidget* w, sorted)
+    {
+        w->move(QPoint(curX, w->y()));
+        curX += w->width() + gap;
+    }
     m_doc->setModified();
 }
 
