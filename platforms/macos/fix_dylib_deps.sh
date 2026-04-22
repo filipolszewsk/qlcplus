@@ -28,6 +28,14 @@ otool -L "$SRC_DYLIB" | grep opt | awk '{print $1}' | while read -r dep; do
     if [[ "$dep" == *"$HOMEBREW_PREFIX"* ]]; then
         echo "Found Homebrew library: $dep ($subst)"
 
+        # Skip Qt framework binaries (they lack a .dylib extension e.g. QtCore, QtWidgets).
+        # macdeployqt is responsible for bundling these as proper .framework bundles.
+        # Copying them here as loose files causes duplicate class registration at runtime.
+        if [[ "$subst" != *.dylib ]]; then
+            echo "Skipping Qt framework binary: $subst (macdeployqt handles this)"
+            continue
+        fi
+
         # Check if the dependency is already in the target Frameworks directory
         if [ ! -f "$FRAMEWORKS_DIR/$subst" ]; then
             echo "Dependency missing: $subst. Adding it to target..."

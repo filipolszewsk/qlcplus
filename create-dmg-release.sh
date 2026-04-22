@@ -164,6 +164,10 @@ find "$BIN_DIR" -type f | while read -r file; do
         "$file"
 done
 
+# Remove any Info.plist-e temp files that codesign --entitlements may have created;
+# if left in place they cause the bundle-level --deep signing to fail.
+find "$APP_DIR" -name "*-e" -delete 2>/dev/null || true
+
 echo ">>> Signing the whole .app bundle (--deep ensures correct nested sealing)..."
 codesign --force --sign "$SIGNATURE" \
     --deep \
