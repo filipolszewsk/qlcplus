@@ -21,6 +21,8 @@
 #define VCSLIDERPROPERTIES_H
 
 #include <QDialog>
+#include <QHash>
+#include <QIcon>
 
 #include "ui_vcsliderproperties.h"
 
@@ -190,6 +192,10 @@ protected slots:
 protected:
     /** The slider, whose properties are being edited */
     VCSlider* m_slider;
+
+    /* Icon caches to avoid repeated SVG/pixmap construction per dialog open */
+    QHash<int, QIcon> m_fixtureIconCache;
+    QHash<int, QIcon> m_channelIconCache;
 };
 
 /** @} */

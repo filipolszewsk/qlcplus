@@ -397,11 +397,17 @@ void VCSliderProperties::setSubmasterPageVisibility(bool visible)
 
 void VCSliderProperties::levelUpdateFixtures()
 {
+    m_levelList->setSortingEnabled(false);
+    m_levelList->setUpdatesEnabled(false);
+
     foreach (Fixture* fixture, m_doc->fixtures())
     {
         Q_ASSERT(fixture != NULL);
         levelUpdateFixtureNode(fixture->id());
     }
+
+    m_levelList->setUpdatesEnabled(true);
+    m_levelList->setSortingEnabled(true);
     m_levelList->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 
@@ -423,7 +429,10 @@ void VCSliderProperties::levelUpdateFixtureNode(quint32 id)
     }
 
     item->setText(KColumnName, fxi->name());
-    item->setIcon(KColumnName, fxi->getIconFromType());
+    int fixtureTypeKey = (int)fxi->type();
+    if (!m_fixtureIconCache.contains(fixtureTypeKey))
+        m_fixtureIconCache[fixtureTypeKey] = fxi->getIconFromType();
+    item->setIcon(KColumnName, m_fixtureIconCache[fixtureTypeKey]);
     item->setText(KColumnType, fxi->typeString());
 
     if (fxi->isHidden())
@@ -525,7 +534,10 @@ void VCSliderProperties::levelUpdateChannelNode(QTreeWidgetItem* parent,
 
     item->setText(KColumnName, QString("%1:%2").arg(ch + 1)
                   .arg(channel->name()));
-    item->setIcon(KColumnName, channel->getIcon());
+    int channelIconKey = (int)channel->group() * 256 + (int)channel->colour();
+    if (!m_channelIconCache.contains(channelIconKey))
+        m_channelIconCache[channelIconKey] = channel->getIcon();
+    item->setIcon(KColumnName, m_channelIconCache[channelIconKey]);
     if (channel->group() == QLCChannel::Intensity &&
         channel->colour() != QLCChannel::NoColour)
         item->setText(KColumnType, QLCChannel::colourToString(channel->colour()));
