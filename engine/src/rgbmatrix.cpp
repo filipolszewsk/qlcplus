@@ -1761,6 +1761,39 @@ QString RGBMatrix::getFixtureDefKey(const QLCFixtureDef *def)
     return QString("%1|%2").arg(def->manufacturer()).arg(def->model());
 }
 
+void RGBMatrix::slotFixtureRemoved(quint32 fxi_id)
+{
+    if (m_fixtureDefChannelMap.isEmpty())
+        return;
+
+    FixtureGroup *grp = doc()->fixtureGroup(fixtureGroup());
+    if (grp == NULL)
+    {
+        m_fixtureDefChannelMap.clear();
+        return;
+    }
+
+    // Build set of defKeys still present in the group, skipping the removed
+    // fixture explicitly (FixtureGroup may or may not have processed the same
+    // signal yet, depending on connection order).
+    QSet<QString> activeKeys;
+    foreach (quint32 id, grp->fixtureList())
+    {
+        if (id == fxi_id)
+            continue;
+        Fixture *fxi = doc()->fixture(id);
+        if (fxi != NULL && fxi->fixtureDef() != NULL)
+            activeKeys.insert(getFixtureDefKey(fxi->fixtureDef()));
+    }
+
+    // Remove entries for models that are no longer in the group
+    foreach (const QString &key, m_fixtureDefChannelMap.keys())
+    {
+        if (!activeKeys.contains(key))
+            m_fixtureDefChannelMap.remove(key);
+    }
+}
+
 quint32 RGBMatrix::findChannelByName(const QLCFixtureMode *mode, const QString &channelName)
 {
     if (mode == NULL || channelName.isEmpty())

@@ -441,6 +441,9 @@ public:
     /** Check if a specific row is selected */
     bool isRowSelected(int row) const;
 
+private slots:
+    void slotFixtureRemoved(quint32 fxi_id);
+
 private:
     /** Map of fixture definition key (manufacturer|model) to list of channel mappings */
     QMap<QString, QList<ChannelMapping>> m_fixtureDefChannelMap;
