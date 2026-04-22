@@ -550,6 +550,7 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
         return;
 
     Universe *uni = universes[universe()];
+    Fixture *fxi = doc()->fixture(head().fxi);
 
     //qDebug() << "Pan value: " << pan << ", tilt value:" << tilt;
 
@@ -575,10 +576,28 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
             else
             {
                 FadeChannel *lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_firstLsbChannel);
-                updateFaderValues(lsbFc, quint32((pan - floor(pan)) * float(UCHAR_MAX)));
+                if (m_parent->isRelative() && fxi != nullptr)
+                {
+                    // Non-contiguous relative: compute the full 16-bit delta here so MSB and LSB
+                    // remain consistent every tick — avoids independent per-byte accumulation drift.
+                    quint32 uniMsb = fxi->address() + m_firstMsbChannel;
+                    quint32 uniLsb = fxi->address() + m_firstLsbChannel;
+                    quint32 cur16 = ((quint32)uni->preGMValue(uniMsb) << 8) | (quint32)uni->preGMValue(uniLsb);
+                    quint32 efx16 = (quint32(floor(pan)) << 8) | quint32((pan - floor(pan)) * float(UCHAR_MAX));
+                    // 0x7F00 == RELATIVE_ZERO_16BIT (center of the relative range)
+                    qint32 new16 = CLAMP((qint32)cur16 + (qint32)efx16 - 0x7F00, 0, 0xFFFF);
+                    panValue = quint32(new16) >> 8;
+                    updateFaderValues(lsbFc, quint32(new16) & 0xFF);
+                }
+                else
+                {
+                    updateFaderValues(lsbFc, quint32((pan - floor(pan)) * float(UCHAR_MAX)));
+                }
             }
         }
-        if (m_parent->isRelative())
+        // For non-contiguous relative the delta was already applied above (absolute write).
+        // Relative flag is only needed for contiguous 16-bit pairs or 8-bit-only fixtures.
+        if (m_parent->isRelative() && (fader->handleSecondary() || m_firstLsbChannel == QLCChannel::invalid()))
             fc->addFlag(FadeChannel::Relative);
 
         updateFaderValues(fc, panValue);
@@ -597,10 +616,23 @@ void EFXFixture::setPointPanTilt(QList<Universe *> universes, QSharedPointer<Gen
             else
             {
                 FadeChannel *lsbFc = fader->getChannelFader(doc(), uni, head().fxi, m_secondLsbChannel);
-                updateFaderValues(lsbFc, quint32((tilt - floor(tilt)) * float(UCHAR_MAX)));
+                if (m_parent->isRelative() && fxi != nullptr)
+                {
+                    quint32 uniMsb = fxi->address() + m_secondMsbChannel;
+                    quint32 uniLsb = fxi->address() + m_secondLsbChannel;
+                    quint32 cur16 = ((quint32)uni->preGMValue(uniMsb) << 8) | (quint32)uni->preGMValue(uniLsb);
+                    quint32 efx16 = (quint32(floor(tilt)) << 8) | quint32((tilt - floor(tilt)) * float(UCHAR_MAX));
+                    qint32 new16 = CLAMP((qint32)cur16 + (qint32)efx16 - 0x7F00, 0, 0xFFFF);
+                    tiltValue = quint32(new16) >> 8;
+                    updateFaderValues(lsbFc, quint32(new16) & 0xFF);
+                }
+                else
+                {
+                    updateFaderValues(lsbFc, quint32((tilt - floor(tilt)) * float(UCHAR_MAX)));
+                }
             }
         }
-        if (m_parent->isRelative())
+        if (m_parent->isRelative() && (fader->handleSecondary() || m_secondLsbChannel == QLCChannel::invalid()))
             fc->addFlag(FadeChannel::Relative);
 
         updateFaderValues(fc, tiltValue);
