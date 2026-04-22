@@ -34,5 +34,15 @@
       -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
+    <!-- Disable library validation for ad-hoc and third-party signed dylibs.
+         Required when distributing without a Developer ID certificate:
+         hardened runtime enforces team-ID matching between the process and loaded
+         libraries. Since Qt frameworks are re-signed ad-hoc (TeamIdentifier=not set)
+         and the process also runs ad-hoc, macOS 15+ still rejects them without this
+         entitlement. Remove this key once distributing with a real Developer ID
+         (notarized) build where all binaries share the same Team ID.
+      -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
   </dict>
 </plist>

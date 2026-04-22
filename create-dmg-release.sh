@@ -110,6 +110,62 @@ echo ">>> Running macdeployqt..."
 "$QTDIR/bin/macdeployqt" "$APP_DIR" -verbose=1
 
 # ---------------------------------------------------------------------------
+# Purge all Homebrew references from the app bundle
+#
+# macdeployqt (especially Homebrew-installed) does not always:
+#   a) Remove LC_RPATH entries that point to /opt/homebrew inside binaries
+#   b) Fix the install_name (-id) of frameworks it copies (QtDBus, QtQmlMeta, etc.)
+#   c) Rewrite all dependency paths that still reference /opt/homebrew
+#
+# Any surviving Homebrew path causes dyld to load that library from Homebrew
+# IN ADDITION TO the bundled copy → "implemented in both" crash at startup.
+# ---------------------------------------------------------------------------
+
+echo ">>> Purging Homebrew references from bundle..."
+
+# A. Remove LC_RPATH entries pointing to /opt/homebrew or /usr/local from every Mach-O
+find "$APP_DIR/Contents" -type f | while read -r f; do
+    otool -l "$f" 2>/dev/null | awk '/LC_RPATH/{found=1;next} found && /path/{print $2; found=0}' | \
+        grep -E "^(/opt/homebrew|/usr/local)" | while read -r rp; do
+        install_name_tool -delete_rpath "$rp" "$f" 2>/dev/null || true
+    done
+done
+
+# B. Fix install_name (-id) of Qt frameworks that macdeployqt forgot to update
+find "$APP_DIR/Contents/Frameworks" -maxdepth 1 -type d -name "*.framework" | while read -r fw; do
+    name=$(basename "$fw" .framework)
+    bin="$fw/Versions/A/$name"
+    if [ -f "$bin" ]; then
+        current_id=$(otool -D "$bin" 2>/dev/null | tail -1)
+        if echo "$current_id" | grep -q "/opt/homebrew\|/usr/local"; then
+            install_name_tool -id \
+                "@executable_path/../Frameworks/$name.framework/Versions/A/$name" \
+                "$bin" 2>/dev/null || true
+            echo "    Fixed install_name: $name"
+        fi
+    fi
+done
+
+# C. Rewrite any remaining /opt/homebrew or /usr/local dependency references
+find "$APP_DIR/Contents" -type f | while read -r f; do
+    otool -L "$f" 2>/dev/null | awk 'NR>1{print $1}' | \
+        grep -E "^(/opt/homebrew|/usr/local)" | while read -r dep; do
+        base=$(basename "$dep")
+        if [[ "$dep" == *.framework/* ]]; then
+            # e.g. /opt/homebrew/.../QtFoo.framework/Versions/A/QtFoo
+            fw_name=$(echo "$dep" | sed -E 's|.*/([^/]+\.framework)/.*|\1|')
+            bin_name="${fw_name%.framework}"
+            new="@executable_path/../Frameworks/$fw_name/Versions/A/$bin_name"
+        else
+            new="@executable_path/../Frameworks/$base"
+        fi
+        install_name_tool -change "$dep" "$new" "$f" 2>/dev/null || true
+    done
+done
+
+echo ">>> Homebrew references purged."
+
+# ---------------------------------------------------------------------------
 # Code signing
 # ad-hoc (-): checksum only, no identity, ARM64 requires this minimum
 # real cert: full Gatekeeper-accepted signature
