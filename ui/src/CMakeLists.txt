@@ -3,29 +3,31 @@ set(module_name "qlcplusui")
 include(../../variables.cmake)
 
 # Find libltc for LTC Timecode decoding
-find_path(LIBLTC_INCLUDE_DIRS ltc.h
-    PATHS /usr/local/include /opt/homebrew/include
-    PATH_SUFFIXES ltc
-)
-find_library(LIBLTC_LIBRARIES NAMES ltc
-    PATHS /usr/local/lib /opt/homebrew/lib
-    PATH_SUFFIXES lib
-)
-if(NOT LIBLTC_INCLUDE_DIRS OR NOT LIBLTC_LIBRARIES)
-    # Try pkg-config as fallback
-    find_package(PkgConfig QUIET)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(LIBLTC QUIET ltc)
-        if(LIBLTC_FOUND)
-            set(LIBLTC_INCLUDE_DIRS ${LIBLTC_INCLUDE_DIRS})
-            set(LIBLTC_LIBRARIES ${LIBLTC_LINK_LIBRARIES})
-        endif()
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(LIBLTC QUIET ltc)
+    if(LIBLTC_FOUND)
+        set(LIBLTC_INCLUDE_DIRS ${LIBLTC_INCLUDE_DIRS})
+        set(LIBLTC_LIBRARIES ${LIBLTC_LINK_LIBRARIES})
     endif()
 endif()
-if(LIBLTC_INCLUDE_DIRS AND LIBLTC_LIBRARIES)
+if(NOT LIBLTC_FOUND)
+    find_path(LIBLTC_INCLUDE_DIRS ltc.h)
+    find_library(LIBLTC_LIBRARIES NAMES ltc)
+    if(LIBLTC_INCLUDE_DIRS AND LIBLTC_LIBRARIES)
+        set(LIBLTC_FOUND TRUE)
+    endif()
+endif()
+if(LIBLTC_FOUND)
     message(STATUS "Found libltc: ${LIBLTC_LIBRARIES}")
 else()
-    message(FATAL_ERROR "libltc not found. Install it with: brew install libltc")
+    if(APPLE)
+        message(FATAL_ERROR "libltc not found. Install it with: brew install libltc")
+    elseif(WIN32)
+        message(FATAL_ERROR "libltc not found. Build from source: https://github.com/x42/libltc")
+    else()
+        message(FATAL_ERROR "libltc not found. Install it with: sudo apt install libltc-dev (or equivalent)")
+    endif()
 endif()
 
 set(TS_FILES
