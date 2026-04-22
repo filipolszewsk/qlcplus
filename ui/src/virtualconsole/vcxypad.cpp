@@ -282,6 +282,7 @@ QList<QPair<VCWidget::PastePropertyGroup, QString>> VCXYPad::pasteablePropertyGr
 {
     QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
     groups << qMakePair(PasteSpecific0, tr("Fixtures && Groups"));
+    groups << qMakePair(PasteSpecific3, tr("Row Filter"));
     groups << qMakePair(PasteSpecific1, tr("Current Position"));
     groups << qMakePair(PasteSpecific2, tr("Presets"));
     return groups;
@@ -298,9 +299,14 @@ void VCXYPad::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups fl
         m_fixtures.clear();
         m_fixtures = xypad->fixtures();
         m_fixtureGroupID = xypad->m_fixtureGroupID;
-        m_selectedRows = xypad->m_selectedRows;
         m_excludedColumns = xypad->m_excludedColumns;
         m_columnRanges = xypad->m_columnRanges;
+    }
+
+    if (flags & PasteSpecific3)
+    {
+        m_selectedRows = xypad->m_selectedRows;
+        slotFixtureGroupContentChanged(m_fixtureGroupID);
     }
 
     if (flags & PasteSpecific1)

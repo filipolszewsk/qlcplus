@@ -168,6 +168,8 @@ VCXYPadProperties::VCXYPadProperties(VCXYPad* xypad, Doc* doc)
             this, SLOT(slotUseFixtureGroupToggled(bool)));
     connect(m_fixtureGroupCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotFixtureGroupChanged(int)));
+    connect(m_resetColumnsButton, SIGNAL(clicked()),
+            this, SLOT(slotResetColumnsClicked()));
     connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
             this, SLOT(slotFixtureGroupRemoved(quint32)));
     connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)),
@@ -567,6 +569,12 @@ void VCXYPadProperties::slotRemoveClicked()
                 delete it.next();
         }
     }
+}
+
+void VCXYPadProperties::slotResetColumnsClicked()
+{
+    m_xypad->setExcludedColumns(QList<int>());
+    slotFixtureGroupChanged(m_fixtureGroupCombo->currentIndex());
 }
 
 void VCXYPadProperties::slotEditClicked()
@@ -1545,14 +1553,16 @@ void VCXYPadProperties::slotUseFixtureGroupToggled(bool checked)
             m_removeButton->setEnabled(false);
             // Edit will be enabled/disabled by slotSelectionChanged
         }
-        
+
+        m_resetColumnsButton->setEnabled(!m_xypad->excludedColumns().isEmpty());
         m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
     }
     else
     {
         m_fixtureGroupCombo->setCurrentIndex(-1);
         updateRowSelection();
-        
+
+        m_resetColumnsButton->setEnabled(false);
         // Clear fixtures when disabling group mode
         m_tree->clear();
         fillFixturesTree();
@@ -1658,7 +1668,8 @@ void VCXYPadProperties::slotFixtureGroupChanged(int index)
         m_addButton->setEnabled(false);
         // Remove and Edit will be enabled/disabled by slotSelectionChanged
     }
-    
+
+    m_resetColumnsButton->setEnabled(!m_xypad->excludedColumns().isEmpty());
     m_tree->header()->resizeSections(QHeaderView::ResizeToContents);
 }
 

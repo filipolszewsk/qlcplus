@@ -249,6 +249,29 @@
          </property>
         </widget>
        </item>
+       <item row="3" column="1">
+        <widget class="QToolButton" name="m_resetColumnsButton">
+         <property name="toolTip">
+          <string>Restore all excluded columns back to the list</string>
+         </property>
+         <property name="text">
+          <string notr="true">...</string>
+         </property>
+         <property name="icon">
+          <iconset resource="../../../build/fixtureeditor/.qt/rcc/qlcui.qrc">
+           <normaloff>:/refresh.png</normaloff>:/refresh.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>32</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
        <item row="4" column="0">
         <widget class="QGroupBox" name="groupBox">
          <property name="title">
@@ -614,6 +637,22 @@
    </hints>
   </connection>
   <connection>
+   <sender>m_resetColumnsButton</sender>
+   <signal>clicked()</signal>
+   <receiver>VCXYPadProperties</receiver>
+   <slot>slotResetColumnsClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>400</x>
+     <y>235</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>416</x>
+     <y>199</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
    <sender>m_tree</sender>
    <signal>currentItemChanged(QTreeWidgetItem*,QTreeWidgetItem*)</signal>
    <receiver>VCXYPadProperties</receiver>
@@ -650,6 +689,7 @@
   <slot>slotAddClicked()</slot>
   <slot>slotRemoveClicked()</slot>
   <slot>slotEditClicked()</slot>
+  <slot>slotResetColumnsClicked()</slot>
   <slot>slotSelectionChanged(QTreeWidgetItem*)</slot>
   <slot>slotItemDoubleClicked(QTreeWidgetItem*)</slot>
   <slot>slotPanChooseClicked()</slot>

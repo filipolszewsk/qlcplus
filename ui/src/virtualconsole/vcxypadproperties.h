@@ -92,6 +92,7 @@ private slots:
     void slotUseFixtureGroupToggled(bool checked);
     void slotFixtureGroupChanged(int index);
     void slotRowSelectionChanged();
+    void slotResetColumnsClicked();
     void slotFixtureGroupRemoved(quint32 id);
     void slotFixtureGroupContentChanged(quint32 id);
 
