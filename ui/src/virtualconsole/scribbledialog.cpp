@@ -221,7 +221,7 @@ void ScribbleArea::paintEvent(QPaintEvent *event)
 
     QPainter painter(this);
 
-    /* Draw a checkerboard background to show transparency */
+    /* Draw a dark checkerboard background so light colours (e.g. white) remain visible */
     const int gridSize = 8;
     for (int y = 0; y < height(); y += gridSize)
     {
@@ -229,7 +229,7 @@ void ScribbleArea::paintEvent(QPaintEvent *event)
         {
             bool light = ((x / gridSize) + (y / gridSize)) % 2 == 0;
             painter.fillRect(x, y, gridSize, gridSize,
-                             light ? QColor(200, 200, 200) : QColor(160, 160, 160));
+                             light ? QColor(60, 60, 60) : QColor(45, 45, 45));
         }
     }
 
@@ -307,6 +307,25 @@ ScribbleDialog::ScribbleDialog(Doc *doc, QWidget *parent)
     setMinimumSize(400, 500);
     resize(520, 650);
 
+    /* Force dark theme regardless of system light/dark mode */
+    setStyleSheet(
+        "QDialog { background-color: #2b2b2b; color: #e0e0e0; } "
+        "QLabel { color: #e0e0e0; } "
+        "QToolButton { color: #e0e0e0; background-color: #3c3c3c; border: 1px solid #555; "
+        "              border-radius: 3px; padding: 2px 4px; } "
+        "QToolButton:hover { background-color: #4c4c4c; } "
+        "QToolButton:checked { background-color: #5a5a5a; border: 2px solid #888; } "
+        "QPushButton { color: #e0e0e0; background-color: #3c3c3c; border: 1px solid #555; "
+        "              border-radius: 3px; padding: 4px 8px; } "
+        "QPushButton:hover { background-color: #4c4c4c; } "
+        "QPushButton:default { border-color: #888; } "
+        "QSlider::groove:horizontal { background: #555; height: 4px; border-radius: 2px; } "
+        "QSlider::handle:horizontal { background: #aaa; width: 14px; height: 14px; "
+        "                             border-radius: 7px; margin: -5px 0; } "
+        "QListWidget { background-color: #1e1e1e; color: #e0e0e0; border: 1px solid #555; } "
+        "QListWidget::item:selected { background-color: #3a5a8a; } "
+    );
+
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     /* ---- Toolbar ---- */
@@ -314,10 +333,10 @@ ScribbleDialog::ScribbleDialog(Doc *doc, QWidget *parent)
 
     /* Color button */
     m_colorButton = new QToolButton(this);
-    m_colorButton->setText(tr("Color"));
-    m_colorButton->setToolTip(tr("Choose pen color"));
+    m_colorButton->setText(tr("Color..."));
+    m_colorButton->setToolTip(tr("Choose custom pen color"));
     m_colorButton->setIconSize(QSize(24, 24));
-    m_colorButton->setMinimumSize(60, 32);
+    m_colorButton->setMinimumSize(70, 32);
     toolbarLayout->addWidget(m_colorButton);
     connect(m_colorButton, SIGNAL(clicked()), this, SLOT(slotChooseColor()));
 
@@ -375,6 +394,36 @@ ScribbleDialog::ScribbleDialog(Doc *doc, QWidget *parent)
     toolbarLayout->addWidget(shiftHint);
 
     mainLayout->addLayout(toolbarLayout);
+
+    /* ---- Quick colour swatches ---- */
+    QHBoxLayout *swatchLayout = new QHBoxLayout();
+    swatchLayout->setSpacing(4);
+
+    QLabel *swatchLabel = new QLabel(tr("Color:"), this);
+    swatchLabel->setStyleSheet("color: #aaa; font-size: 10px;");
+    swatchLayout->addWidget(swatchLabel);
+
+    const QList<QColor> presetColors = {
+        Qt::white, QColor(192, 192, 192), QColor(128, 128, 128), Qt::black,
+        Qt::red, QColor(255, 128, 0), Qt::yellow, Qt::green,
+        Qt::cyan, Qt::blue, QColor(128, 0, 255), QColor(255, 0, 128)
+    };
+
+    for (const QColor &c : presetColors)
+    {
+        QToolButton *swatch = new QToolButton(this);
+        swatch->setFixedSize(24, 24);
+        swatch->setToolTip(c.name());
+        swatch->setStyleSheet(
+            QString("QToolButton { background-color: %1; border: 1px solid #222; border-radius: 3px; } "
+                    "QToolButton:hover { border: 2px solid #fff; }").arg(c.name())
+        );
+        connect(swatch, &QToolButton::clicked, this, [this, c]() { slotColorSwatch(c); });
+        swatchLayout->addWidget(swatch);
+    }
+    swatchLayout->addStretch();
+
+    mainLayout->addLayout(swatchLayout);
 
     /* ---- Canvas in a square-enforcing container ---- */
     m_canvasContainer = new QWidget(this);
@@ -684,10 +733,20 @@ QString ScribbleDialog::saveImage(const QString &directory)
 void ScribbleDialog::updateColorButtonStyle()
 {
     QColor c = m_scribbleArea->penColor();
-    QString style = QString("QToolButton { background-color: %1; border: 2px solid #555; "
-                            "border-radius: 4px; min-width: 50px; min-height: 24px; }")
-                        .arg(c.name());
+    double luminance = 0.299 * c.redF() + 0.587 * c.greenF() + 0.114 * c.blueF();
+    QString textColor = (luminance > 0.45) ? "#000000" : "#ffffff";
+    QString style = QString(
+        "QToolButton { background-color: %1; color: %2; border: 2px solid #555; "
+        "border-radius: 4px; min-width: 70px; min-height: 24px; } "
+        "QToolButton:hover { border-color: #aaa; }")
+        .arg(c.name()).arg(textColor);
     m_colorButton->setStyleSheet(style);
+}
+
+void ScribbleDialog::slotColorSwatch(const QColor &color)
+{
+    m_scribbleArea->setPenColor(color);
+    updateColorButtonStyle();
 }
 
 void ScribbleDialog::populateLibrary()

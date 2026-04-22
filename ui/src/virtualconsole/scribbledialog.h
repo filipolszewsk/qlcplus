@@ -128,6 +128,7 @@ protected:
 
 private slots:
     void slotChooseColor();
+    void slotColorSwatch(const QColor &color);
     void slotPenWidthChanged(int value);
     void slotEraserToggled(bool checked);
     void slotClear();
