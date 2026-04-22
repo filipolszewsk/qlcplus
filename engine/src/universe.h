@@ -438,8 +438,8 @@ protected:
     /** Map of Pan/Tilt channel pairs for custom range scaling */
     QMap<ushort, PanTiltChannelPair> m_panTiltPairs;
     
-    /** Set of LSB channels that are part of Pan/Tilt pairs (for fast lookup) */
-    QSet<ushort> m_panTiltLSBChannels;
+    /** Maps LSB channel address → MSB channel address for Pan/Tilt pairs (fast redirect lookup) */
+    QHash<ushort, ushort> m_panTiltLSBToMSB;
 
     /** Apply Pan/Tilt scaling to a 16-bit channel pair (post-modifier, like channel modifier) */
     void applyPanTiltScaling(ushort msbChannel, quint16 value16bit);

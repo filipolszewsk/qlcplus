@@ -565,9 +565,14 @@ uchar Universe::applyPassthrough(int channel, uchar value)
 
 void Universe::updatePostGMValue(int channel)
 {
-    // Skip LSB channels of Pan/Tilt pairs - they're updated by MSB scaling
-    if (m_panTiltLSBChannels.contains(channel))
+    // LSB of a Pan/Tilt pair was updated — redirect to MSB partner so the full
+    // 16-bit postGM is recalculated with the fresh LSB value, regardless of
+    // the order in which GenericFader iterates its QHash channels.
+    if (m_panTiltLSBToMSB.contains(channel))
+    {
+        updatePostGMValue(m_panTiltLSBToMSB[channel]);
         return;
+    }
     
     // ⭐ Pan/Tilt MSB: operate on full 16-bit (MSB+LSB as pair)
     if (isPanTiltChannel(channel))
@@ -1086,9 +1091,9 @@ void Universe::registerPanTiltPair(const PanTiltChannelPair &pair)
 {
     m_panTiltPairs[pair.msbChannel] = pair;
     
-    // Add LSB to the set for fast lookup
+    // Map LSB → MSB for fast redirect in updatePostGMValue
     if (pair.lsbChannel != QLCChannel::invalid())
-        m_panTiltLSBChannels.insert(pair.lsbChannel);
+        m_panTiltLSBToMSB[pair.lsbChannel] = pair.msbChannel;
     
     qDebug() << "[Universe] Registered Pan/Tilt pair:" 
              << (pair.isPan ? "Pan" : "Tilt")
@@ -1105,7 +1110,7 @@ void Universe::unregisterPanTiltPair(ushort msbChannel)
     {
         ushort lsbChannel = m_panTiltPairs[msbChannel].lsbChannel;
         if (lsbChannel != QLCChannel::invalid())
-            m_panTiltLSBChannels.remove(lsbChannel);
+            m_panTiltLSBToMSB.remove(lsbChannel);
     }
     
     m_panTiltPairs.remove(msbChannel);
