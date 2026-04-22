@@ -261,10 +261,9 @@ void GenericFader::write(Universe *universe)
         {
             bool isOverride = (flags & FadeChannel::Override) != 0;
             universe->writeVirtualDimmer(fc.fixture(), value, isOverride);
-            
-            // Auto-remove at zero (same logic as normal intensity channels)
-            if (fc.current() == 0 && fc.target() == 0 && fc.isReady())
-                it.remove();
+            // VD=0 means blackout (scale all fixture channels to 0), so the
+            // FadeChannel must persist at zero — unlike normal HTP channels
+            // where 0 is a no-op. Fader is deleted on mode change to Design.
             continue;
         }
 
@@ -273,10 +272,9 @@ void GenericFader::write(Universe *universe)
         {
             bool isOverride = (flags & FadeChannel::Override) != 0;
             universe->writeVirtualStrobe(fc.fixture(), value, isOverride);
-
-            // Auto-remove at zero
-            if (fc.current() == 0 && fc.target() == 0 && fc.isReady())
-                it.remove();
+            // VS=0 means shutter closed (gate all fixture channels to 0), so
+            // the FadeChannel must persist at zero — fader is deleted on mode
+            // change to Design.
             continue;
         }
         
