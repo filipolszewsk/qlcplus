@@ -1,0 +1,123 @@
+name: Build macOS DMG (QLC+ 4.14)
+
+on:
+  push:
+    branches: [ main, master, fix/vcslider-properties-perf ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-macos-v4:
+    runs-on: macos-13
+    name: Build QLC+ 4.14 macOS DMG
+
+    env:
+      CI_REPO_SLUG: ${{ github.repository }}
+      CI_BRANCH: ${{ github.head_ref }}
+      CI_PULL_REQUEST: ${{ github.event.number }}
+      QT_VERSION: "6.8.1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set ENV variables
+        shell: bash
+        run: |
+          echo "CI_BRANCH=$(echo $GITHUB_REF | cut -d '/' -f 3)" >> $GITHUB_ENV
+          echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//;s/ /_/g')" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
+          echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/macos" >> $GITHUB_ENV
+          echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
+
+      - name: Install dependencies via Homebrew
+        run: |
+          brew update
+          brew install fftw mad libsndfile libftdi libltc
+          brew link --overwrite python@3.13 || true
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+          dir: "${{ github.workspace }}/qt/"
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-build-macos-v4
+
+      - name: Print ENV vars
+        shell: bash
+        run: |
+          echo "CI_BRANCH: ${CI_BRANCH}"
+          echo "APPVERSION: ${APPVERSION}"
+          echo "BUILD_DATE: ${BUILD_DATE}"
+          echo "GIT_REV: ${GIT_REV}"
+          echo "QTDIR: ${QTDIR}"
+          echo "NPROC: ${NPROC}"
+
+      - name: Configure build
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        shell: bash
+        run: |
+          cd build
+          make -j${{ env.NPROC }}
+
+      - name: Install
+        shell: bash
+        run: |
+          cd build
+          make install/fast
+
+      - name: Fix dylib dependencies
+        shell: bash
+        run: |
+          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib || true
+          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus
+          platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor || true
+          ${{ env.QTDIR }}/bin/macdeployqt ~/QLC+.app
+
+      - name: Create DMG
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 12
+          retry_wait_seconds: 1
+          command: |
+            OUTDIR=$PWD
+            cd platforms/macos/dmg
+            ./create-dmg --volname "Q Light Controller Plus ${{ env.APPVERSION }}" \
+              --volicon $OUTDIR/resources/icons/qlcplus.icns \
+              --background background.png \
+              --window-size 400 300 \
+              --window-pos 200 100 \
+              --icon-size 64 \
+              --icon "QLC+" 0 150 \
+              --app-drop-link 200 150 \
+              $OUTDIR/QLC+_${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg \
+              ~/QLC+.app
+
+      - name: Store DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QLC+-${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg
+          path: QLC+_${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg
+          retention-days: 30
