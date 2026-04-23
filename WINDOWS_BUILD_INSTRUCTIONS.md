@@ -178,6 +178,41 @@ Reguła `build*` w `.gitignore` blokuje dodawanie nowych plików w `.github/work
 git add -f .github/workflows/build-macos-v4.yml
 ```
 
+### Pułapka #5: Nowa biblioteka budowana ze źródeł — DLL nie trafia do instalatora
+
+**Objaw (runtime, nie build!):**
+```
+qlcplus.exe - System Error
+The code execution cannot proceed because libltc-11.dll was not found.
+Reinstalling the program may fix this problem.
+```
+
+**Przyczyna:** Build w CI przechodzi bez błędów, ale DLL-ka biblioteki (np. `libltc-11.dll`) **nie jest spakowana do instalatora NSIS**. Samo `windeployqt` kopiuje tylko zależności Qt, nie biblioteki systemowe. NSIS robi `File *.dll` — pakuje tylko to, co już leży w `/c/qlcplus`.
+
+**Wymagane dwa kroki, które muszą być oba:**
+
+1. **Workflow** — krok buildujący bibliotekę ze źródeł i instalujący do `/mingw64` (już jest dla libltc).
+2. **`platforms/windows/CMakeLists.txt`** — wpis `copy_system_library(...)` który kopiuje DLL z `/mingw64/bin` do katalogu instalacyjnego podczas `ninja install`.
+
+**Jak dodać nową bibliotekę poprawnie:**
+
+```cmake
+# platforms/windows/CMakeLists.txt — sekcja "audio libraries"
+copy_system_library(mmedia_files "libltc-11.dll")     # ← wymagany wpis
+install(FILES ${mmedia_files} DESTINATION ${mmedia_path})
+```
+
+Nazwa DLL-ki = `lib<nazwa>-<soversion>.dll`. Sprawdź ją po `make install` w `/mingw64/bin/`:
+```bash
+ls /mingw64/bin/lib<nazwa>*.dll
+```
+
+**Jak diagnozować:** jeśli build CI przechodzi, ale `.exe` nie odpala się na Windows z błędem o brakującym DLL — szukaj w `platforms/windows/CMakeLists.txt` czy ta DLL jest na liście `copy_system_library`.
+
+**Fix zastosowany 2026-04-23:** dodano `copy_system_library(mmedia_files "libltc-11.dll")` do `platforms/windows/CMakeLists.txt`.
+
+---
+
 ### Pułapka #4: Kolejność inicjalizacji C++
 
 Zawsze przy dodawaniu nowego pola członkowskiego do klasy:
@@ -207,7 +242,8 @@ Foo::Foo()
 |---|---|---|
 | `-Werror=reorder` | `.cpp` z konstruktorem | Przenieś pole w liście init. zgodnie z kolejnością w `.h` |
 | `-Werror=dangling-else` | wskazany plik | Dodaj `{}` wokół `if`/`else` |
-| `libXXX not found` | workflow `yml` | Dodaj pakiet MSYS2/brew lub build ze źródeł |
+| `libXXX not found` (**build**) | workflow `yml` | Dodaj pakiet MSYS2/brew lub build ze źródeł |
+| `libXXX.dll was not found` (**runtime**) | `platforms/windows/CMakeLists.txt` | Dodaj `copy_system_library(mmedia_files "libXXX.dll")` — patrz Pułapka #5 |
 | `git.exe failed (post)` | — | Ignoruj |
 | Velleman plugin error | workflow | Już wyłączony (sed w "Fix build") |
 
@@ -229,6 +265,7 @@ Foo::Foo()
 - [ ] Branch dodany do listy `branches:` w obu workflow
 - [ ] Kolejność inicjalizacji w konstruktorach C++ zgodna z `.h`
 - [ ] Nowe biblioteki mają źródło w workflow (MSYS2 pacman / brew / build ze źródeł)
+- [ ] Nowe biblioteki budowane ze źródeł mają wpis `copy_system_library(...)` w `platforms/windows/CMakeLists.txt` (inaczej DLL nie trafi do instalatora — patrz Pułapka #5)
 - [ ] `git status` — żadnych zbędnych zmian (np. `build*`)
 - [ ] Test lokalny (jeśli masz Windows/macOS pod ręką)
 - [ ] `git push` → sprawdź https://github.com/filipolszewsk/qlcplus/actions
@@ -254,6 +291,7 @@ Foo::Foo()
 | 2026-04-23 | Wyłączenie `-Werror` w Windows CI | GCC 15 w MSYS2 strikter niż upstream (GCC 11) |
 | 2026-04-23 | Dodano `build-macos-v4.yml` | Potrzeba macOS DMG installera |
 | 2026-04-23 | Naprawa kolejności init. w `doc.cpp` | `m_timeCodeSource` przed `m_monitorProps` |
+| 2026-04-23 | `copy_system_library("libltc-11.dll")` w `platforms/windows/CMakeLists.txt` | libltc-11.dll nie trafiała do instalatora → runtime error na Windowsie |
 
 ---
 
