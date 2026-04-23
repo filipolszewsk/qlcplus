@@ -96,7 +96,7 @@ jobs:
           cd /tmp/qtscript
           "${QT5_PREFIX}/bin/qmake" QMAKE_APPLE_DEVICE_ARCHS=arm64
           make -j$(sysctl -n hw.ncpu)
-          make install
+          sudo make install
 
       # ----------------------------------------------------------------
       # Build
