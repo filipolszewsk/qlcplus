@@ -137,12 +137,27 @@ jobs:
       - name: Fix dylib dependencies and deploy Qt
         shell: bash
         run: |
+          # Defensywne sprzatanie przed codesign:
+          #   *.plist-e / *.bak - smieciowy backup BSD sed'a z platforms/macos/CMakeLists.txt
+          #     (upstream uzywa `sed -i -e` co na macOS pisze Info.plist-e; naprawione
+          #     osobno w CMakeLists, to tutaj to druga linia obrony)
+          find ~/QLC+.app \( -name '*.plist-e' -o -name '*.bak' \) -delete 2>/dev/null || true
+
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib || true
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor || true
+
+          # Homebrew kopiuje dyliby z read-only Cellara (tryb 0444). macdeployqt
+          # probuje potem na nich strip i wyrzuca "Permission denied", co psuje
+          # jego wlasna sygnature. u+w na calym bundle to naprawia.
+          chmod -R u+w ~/QLC+.app
+
           # macdeployqt -codesign=- podpisuje ad-hoc wszystkie frameworki w trakcie deploy
           # (poprawna metoda w Qt 6, zastepuje deprecated `codesign --deep`).
           "${QTDIR}/bin/macdeployqt" ~/QLC+.app -codesign=-
+
+          # Drugi sweep — na wypadek gdyby cokolwiek po drodze zostawilo backup.
+          find ~/QLC+.app \( -name '*.plist-e' -o -name '*.bak' \) -delete 2>/dev/null || true
 
       - name: Ad-hoc codesign app bundle
         shell: bash

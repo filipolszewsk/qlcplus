@@ -12,7 +12,12 @@ if(qmlui)
 else()
     install(FILES Info.plist DESTINATION ${INSTALLROOT})
 endif()
-install(CODE "execute_process(COMMAND sed -i -e \"s/__QLC_VERSION__/${APPVERSION}/g\" ${INSTALLROOT}/Info.plist)")
+# NOTE: we use `sed -i.bak` (not `-i -e`) because BSD sed on macOS parses
+# the `-e` after `-i` as the backup suffix and silently writes Info.plist-e,
+# which later breaks codesign with "code object is not signed at all /
+# In subcomponent: .../Info.plist-e". `.bak` works on both BSD and GNU sed.
+install(CODE "execute_process(COMMAND sed -i.bak -e \"s/__QLC_VERSION__/${APPVERSION}/g\" ${INSTALLROOT}/Info.plist)")
+install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -E rm -f ${INSTALLROOT}/Info.plist.bak)")
 
 # Qt frameworks and plugins are bundled by macdeployqt during the DMG creation step.
 # Do NOT install Qt here - macdeployqt handles dependency resolution and rpath rewriting.
