@@ -22,7 +22,8 @@ if [ ! -d "$APP_SRC" ]; then
 fi
 
 echo "Installing QLC+.app to /Applications..."
-cp -Rf "$APP_SRC" "$DEST"
+rm -rf "$DEST"
+cp -Rf "$APP_SRC" /Applications/
 
 echo "Removing macOS quarantine attribute..."
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
