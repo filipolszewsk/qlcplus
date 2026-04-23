@@ -1184,7 +1184,23 @@ bool VCButton::loadXML(QXmlStreamReader &root)
     loadXMLCommon(root);
 
     /* Icon */
-    setIconPath(m_doc->denormalizeComponentPath(root.attributes().value(KXMLQLCVCButtonIcon).toString()));
+    {
+        QString iconPath = m_doc->denormalizeComponentPath(
+            root.attributes().value(KXMLQLCVCButtonIcon).toString());
+
+        // Fallback for old projects: absolute path may be from a different
+        // machine/OS. Look for a file with the same name in workspace/scribbles/.
+        if (!iconPath.isEmpty() && !QFileInfo::exists(iconPath))
+        {
+            QString candidate = m_doc->workspacePath()
+                + "/scribbles/"
+                + QFileInfo(iconPath).fileName();
+            if (QFileInfo::exists(candidate))
+                iconPath = candidate;
+        }
+
+        setIconPath(iconPath);
+    }
 
     /* Children */
     while (root.readNextStartElement())

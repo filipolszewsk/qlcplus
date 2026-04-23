@@ -236,7 +236,10 @@ QString Doc::denormalizeComponentPath(const QString& filePath) const
     if (filePath.isEmpty())
         return filePath;
 
-    return QFileInfo(QDir(workspacePath()), filePath).absoluteFilePath();
+    // Normalize backslashes written on Windows so the path resolves correctly
+    // on all platforms.
+    QString normalized = QDir::fromNativeSeparators(filePath);
+    return QFileInfo(QDir(workspacePath()), normalized).absoluteFilePath();
 }
 
 /*****************************************************************************

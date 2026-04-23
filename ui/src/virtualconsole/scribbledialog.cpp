@@ -555,7 +555,12 @@ void ScribbleDialog::slotUndoAvailableChanged(bool available)
 
 void ScribbleDialog::slotSaveAsIcon()
 {
-    QString dir = scribbleDirectory();
+    // Prefer workspace-relative folder so the path is portable across
+    // platforms and machines. Fall back to the user global directory when
+    // the project has not been saved yet (no workspace path available).
+    QString dir = legacyScribbleDirectory();
+    if (dir.isEmpty())
+        dir = scribbleDirectory();
     if (dir.isEmpty())
     {
         slotSaveToFile();
@@ -719,7 +724,7 @@ QString ScribbleDialog::saveImage(const QString &directory)
     /* Generate unique filename */
     QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss_zzz");
     QString filename = QString("scribble_%1.png").arg(timestamp);
-    QString fullPath = directory + QDir::separator() + filename;
+    QString fullPath = QDir(directory).filePath(filename);
 
     QImage img = m_scribbleArea->image();
     if (img.save(fullPath, "PNG"))
