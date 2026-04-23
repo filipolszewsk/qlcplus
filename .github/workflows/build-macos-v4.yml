@@ -105,6 +105,27 @@ jobs:
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor || true
           ${{ env.QTDIR }}/bin/macdeployqt ~/QLC+.app
 
+      - name: Ad-hoc code sign
+        shell: bash
+        run: |
+          # Bez Apple Developer ID używamy ad-hoc signing ("-").
+          # Entitlements są wymagane przez macOS 14+ do załadowania frameworków Qt z JIT.
+          # --deep podpisuje wszystkie zagnieżdżone dyliby i frameworki.
+          codesign --force --deep --sign - \
+            --entitlements platforms/macos/qlcplus.entitlements \
+            ~/QLC+.app
+
+      - name: Prepare DMG staging folder
+        shell: bash
+        run: |
+          # Tworzymy staging folder żeby wrzucić do DMG zarówno QLC+.app jak i Install.command.
+          # Install.command pozwala użytkownikowi zainstalować przez Terminal (cp bez quarantine)
+          # zamiast drag-and-drop, który propaguje atrybut quarantine i powoduje błąd "uszkodzona".
+          mkdir -p /tmp/qlc-dmg-staging
+          cp -Rf ~/QLC+.app /tmp/qlc-dmg-staging/
+          cp platforms/macos/dmg/Install.command /tmp/qlc-dmg-staging/
+          chmod +x /tmp/qlc-dmg-staging/Install.command
+
       - name: Create DMG
         uses: nick-fields/retry@v3
         with:
@@ -117,13 +138,14 @@ jobs:
             ./create-dmg --volname "Q Light Controller Plus ${{ env.APPVERSION }}" \
               --volicon $OUTDIR/resources/icons/qlcplus.icns \
               --background background.png \
-              --window-size 400 300 \
+              --window-size 600 320 \
               --window-pos 200 100 \
-              --icon-size 64 \
-              --icon "QLC+" 0 150 \
-              --app-drop-link 200 150 \
+              --icon-size 80 \
+              --icon "QLC+.app" 120 160 \
+              --icon "Install.command" 380 160 \
+              --app-drop-link 560 160 \
               $OUTDIR/QLC+_${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg \
-              ~/QLC+.app
+              /tmp/qlc-dmg-staging/
 
       - name: Store DMG artifact
         uses: actions/upload-artifact@v4
