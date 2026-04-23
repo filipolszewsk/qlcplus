@@ -277,7 +277,11 @@ bool MultiSelectChannelCombo::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::MouseButtonPress)
     {
         QMouseEvent *me = static_cast<QMouseEvent*>(event);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QPoint globalPos = me->globalPosition().toPoint();
+#else
+        QPoint globalPos = me->globalPos();
+#endif
 
         // Close if click is outside the popup frame
         if (!m_popupFrame->geometry().contains(globalPos) &&
