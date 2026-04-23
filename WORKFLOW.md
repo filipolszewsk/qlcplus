@@ -500,6 +500,18 @@ on:
 
 Patrz sekcja w `WINDOWS_BUILD_INSTRUCTIONS.md` → "Znane pułapki" → pułapka #1/#5.
 
+### Build OK, ale `qlcplus.exe` nie startuje na Windowsie — błąd "libXXX.dll was not found"
+
+**Przyczyna:** Nowa biblioteka budowana ze źródeł w workflow (np. `libltc`) ma DLL-kę w `/mingw64/bin`, ale ta DLL-ka **nie jest kopiowana do instalatora NSIS**. Samo `windeployqt` kopiuje tylko biblioteki Qt, nie systemowe.
+
+**Fix:** Dodaj wpis do `platforms/windows/CMakeLists.txt`:
+```cmake
+copy_system_library(mmedia_files "libXXX-N.dll")
+```
+Nazwę DLL-ki sprawdź w `/mingw64/bin/` po udanym buildzie CI (`ls /mingw64/bin/libXXX*.dll`).
+
+Szczegóły: `WINDOWS_BUILD_INSTRUCTIONS.md` → Pułapka #5.
+
 ---
 
 ## 9. Kiedy pytać o pomoc
