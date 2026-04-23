@@ -555,12 +555,7 @@ void ScribbleDialog::slotUndoAvailableChanged(bool available)
 
 void ScribbleDialog::slotSaveAsIcon()
 {
-    // Prefer workspace-relative folder so the path is portable across
-    // platforms and machines. Fall back to the user global directory when
-    // the project has not been saved yet (no workspace path available).
-    QString dir = legacyScribbleDirectory();
-    if (dir.isEmpty())
-        dir = scribbleDirectory();
+    QString dir = scribbleDirectory();
     if (dir.isEmpty())
     {
         slotSaveToFile();
