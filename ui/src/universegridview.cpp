@@ -388,7 +388,11 @@ void UniverseGridView::dragEnterEvent(QDragEnterEvent *event)
 
 void UniverseGridView::dragMoveEvent(QDragMoveEvent *event)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     int channelIndex = getChannelAtPosition(event->position().toPoint());
+#else
+    int channelIndex = getChannelAtPosition(event->pos());
+#endif
     
     if (channelIndex >= 0 && channelIndex < 512)
     {
@@ -413,7 +417,11 @@ void UniverseGridView::dragLeaveEvent(QDragLeaveEvent *event)
 
 void UniverseGridView::dropEvent(QDropEvent *event)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     int targetChannel = getChannelAtPosition(event->position().toPoint());
+#else
+    int targetChannel = getChannelAtPosition(event->pos());
+#endif
     if (targetChannel < 0 || targetChannel >= 512)
     {
         m_dropTargetChannel = -1;
