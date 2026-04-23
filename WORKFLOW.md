@@ -213,58 +213,86 @@ Wtedy `git push upstream` da jasny błąd.
 
 ---
 
-## 4. Robienie własnego release'u
+## 4. Robienie własnego release'u — AUTOMATYCZNIE
 
-### Scenariusz: masz stabilną wersję, chcesz zrobić release 4.14.4-custom.1
+Masz workflow `.github/workflows/release.yml`, który robi WSZYSTKO sam: buduje Windows `.exe`, macOS `.dmg`, tworzy GitHub Release i dodaje pliki do pobrania.
 
-### Krok 1: Stwórz tag
+### Metoda A — Ręcznie z GitHub UI (ZALECANE, najłatwiejsze)
 
-**Convention:** `v<WERSJA>[-suffix]`  
-Przykłady: `v4.14.4-custom.1`, `v4.14.4-filip.2`
+1. Wejdź: https://github.com/filipolszewsk/qlcplus/actions/workflows/release.yml
+2. Kliknij **Run workflow** (po prawej)
+3. Wypełnij formularz:
+   - **Tag:** `v4.14.4-filip.1` (lub inna wersja)
+   - **Release name:** `QLC+ 4.14.4 (Filip Edition 1)` — opcjonalnie, puste = użyj tagu
+   - **Draft:** zazwyczaj `true` (szkic do edycji przed publikacją)
+   - **Prerelease:** `false` (lub `true` jeśli to wersja testowa)
+4. Kliknij **Run workflow**
+5. Czekaj ~15-20 min (build Windows + macOS + utworzenie release)
+6. Wejdź: https://github.com/filipolszewsk/qlcplus/releases
+7. Zobaczysz swój release z `.exe` i `.dmg` jako załącznikami
+
+**Co się dzieje pod spodem:**
+1. Jeśli tag nie istnieje — tworzy go na obecnym HEAD mastera
+2. Buduje Windows (build-windows-v4.yml)
+3. Buduje macOS (build-macos-v4.yml) równolegle
+4. Pobiera oba artefakty
+5. Tworzy GitHub Release z załącznikami i automatycznym changelogiem
+
+### Metoda B — Przez push tagu (dla power userów)
 
 ```bash
 git checkout master
-git pull                                       # upewnij się że masz najnowsze
-git tag -a v4.14.4-filip.1 -m "Release 4.14.4-filip.1: opis zmian"
-git push fork v4.14.4-filip.1                  # push taga na fork
+git pull
+git tag -a v4.14.4-filip.1 -m "Release opis zmian"
+git push fork v4.14.4-filip.1
 ```
 
-### Krok 2: CI zbuduje artefakty
+Reszta dzieje się sama. Po ~15-20 min release jest gotowy (automatycznie jako NIE-draft, ale możesz edytować).
 
-Workflow `build-windows-v4.yml` i `build-macos-v4.yml` zbudują automatycznie (na pushu `master`). Alternatywnie uruchom ręcznie:
+### Konwencja nazw tagów
 
-https://github.com/filipolszewsk/qlcplus/actions
+| Tag | Znaczenie |
+|---|---|
+| `v4.14.4-filip.1` | Twój build bazujący na upstream 4.14.4, iteracja 1 |
+| `v4.14.4-filip.2` | Kolejna iteracja (bugfix) |
+| `v4.14.5-filip.1` | Po wciągnięciu upstream 4.14.5 |
+| `v4.14.4-beta.1` | Wersja testowa (ustaw `prerelease: true`) |
 
-**TODO:** Możemy dodać trigger na tagi, żeby push tagu od razu budował release. Daj znać jak chcesz.
+### Edycja release'u po utworzeniu
 
-### Krok 3: Pobierz artefakty
+Jeśli chcesz poprawić opis / dodać screenshoty:
 
-1. https://github.com/filipolszewsk/qlcplus/actions
-2. Wybierz udany run
-3. Sekcja **Artifacts** → pobierz `.exe` i `.dmg`
+1. https://github.com/filipolszewsk/qlcplus/releases
+2. Wybierz release
+3. **Edit** (ikona ołówka)
+4. Zmień co chcesz, **Update release**
 
-### Krok 4: Stwórz GitHub Release
+### Jak inni pobierają Twój release
 
-1. https://github.com/filipolszewsk/qlcplus/releases/new
-2. **Tag:** wybierz `v4.14.4-filip.1`
-3. **Title:** `QLC+ 4.14.4-filip.1`
-4. **Description:** co zmieniłeś w porównaniu do upstream (changelog)
-5. **Załącz pliki:** przeciągnij `.exe` i `.dmg` z kroku 3
-6. **Publish release**
+Podaj link:
+```
+https://github.com/filipolszewsk/qlcplus/releases/latest
+```
 
-Link do pobrania dla innych:
+Albo konkretny:
 ```
 https://github.com/filipolszewsk/qlcplus/releases/tag/v4.14.4-filip.1
 ```
 
-### Automatyzacja release'u (opcjonalnie, na przyszłość)
+### Usuwanie release'u
 
-Możemy dodać workflow który na push tagu `v*`:
-1. Zbuduje Windows + macOS
-2. Stworzy draft release
-3. Załączy pliki automatycznie
+1. https://github.com/filipolszewsk/qlcplus/releases → **Edit** → **Delete this release**
+2. Usuń tag lokalnie i na forku:
+   ```bash
+   git tag -d v4.14.4-filip.1
+   git push fork --delete v4.14.4-filip.1
+   ```
 
-Daj znać jak chcesz żebym dodał.
+### Pułapki
+
+1. **Tag musi zaczynać się od `v`** — inaczej workflow się nie uruchomi
+2. **Nie pushuj taga dwa razy** — GitHub da błąd; jeśli musisz, najpierw usuń stary
+3. **Draft zawiera pliki** — nawet jako draft, release ma `.exe`/`.dmg` (ale niepubliczne dopóki nie klikniesz Publish)
 
 ---
 

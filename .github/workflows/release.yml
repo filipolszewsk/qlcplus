@@ -1,0 +1,117 @@
+name: Release (QLC+ Windows exe + macOS dmg)
+
+# Uruchamia się:
+# 1. Automatycznie gdy pushujesz tag zaczynający się od "v" (np. v4.14.4-filip.1)
+# 2. Ręcznie z zakładki Actions (workflow_dispatch) — musisz podać nazwę tagu
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Nazwa tagu (np. v4.14.4-filip.1). Jeśli tag nie istnieje, zostanie utworzony z obecnego HEAD.'
+        required: true
+        type: string
+      release_name:
+        description: 'Tytuł release (puste = użyj tagu)'
+        required: false
+        type: string
+        default: ''
+      draft:
+        description: 'Utwórz jako draft (szkic do edycji przed publikacją)?'
+        required: false
+        type: boolean
+        default: true
+      prerelease:
+        description: 'Oznaczyć jako pre-release?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # potrzebne żeby utworzyć release
+
+jobs:
+  # Jeśli triggered przez workflow_dispatch z tag inputem, utwórz tag
+  create-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag if needed
+        id: tag
+        run: |
+          TAG="${{ inputs.tag }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, using existing"
+          else
+            echo "Creating new tag $TAG on current HEAD"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+  # Wywołaj istniejący workflow Windows
+  build-windows:
+    needs: [create-tag]
+    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    uses: ./.github/workflows/build-windows-v4.yml
+
+  # Wywołaj istniejący workflow macOS
+  build-macos:
+    needs: [create-tag]
+    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    uses: ./.github/workflows/build-macos-v4.yml
+
+  # Pobierz artefakty z obu buildów i utwórz GitHub Release
+  create-release:
+    needs: [build-windows, build-macos, create-tag]
+    if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ needs.create-tag.outputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts (debug)
+        run: |
+          echo "=== Artifact tree ==="
+          find artifacts -type f | head -50
+          echo "=== End ==="
+
+      - name: Flatten artifacts (find .exe and .dmg)
+        id: files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' \) -exec cp -v {} release-files/ \;
+          echo "Files to be attached:"
+          ls -la release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ github.event.inputs.release_name != '' && github.event.inputs.release_name || format('QLC+ {0}', steps.tag.outputs.tag) }}
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: release-files/*

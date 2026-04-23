@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:  # Pozwala uruchomić ręcznie z GitHub UI
+  workflow_call:      # Pozwala wywołać z innego workflow (np. release.yml)
 
 jobs:
   build-windows-v4:
