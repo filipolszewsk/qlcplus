@@ -14,14 +14,19 @@ concurrency:
 
 jobs:
   build-macos-v4:
-    runs-on: macos-latest
+    # macos-13 (Intel) daje binarkę kompatybilną od macOS 10.13 wzwyż (przez Rosetta na ARM).
+    # ARM runnery (macos-14+) kompilują z nowym libc++ który referuje __libcpp_verbose_abort
+    # — ten symbol nie istnieje na macOS < 13.3, więc aplikacja nie startuje.
+    runs-on: macos-13
     name: Build QLC+ 4.14 macOS DMG
 
     env:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
-      QT_VERSION: "6.8.1"
+      # Qt 5.15.2 LTS — zbudowane na Xcode 12, nie ma problemu z verbose_abort.
+      # To jest Qt którego używa oficjalny QLC+ workflow dla macOS.
+      QT_VERSION: "5.15.2"
 
     steps:
       - name: Checkout code
@@ -36,7 +41,7 @@ jobs:
           echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//;s/ /_/g')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/macos" >> $GITHUB_ENV
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/clang_64" >> $GITHUB_ENV
           echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
 
       - name: Install dependencies via Homebrew
@@ -49,11 +54,9 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: 'mac'
-          target: 'desktop'
-          arch: 'clang_64'
           dir: "${{ github.workspace }}/qt/"
-          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          # qtscript jest wymagany dla Qt 5 (JS engine). W Qt 6 zastąpiony przez qml.
+          modules: 'qtscript'
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -73,10 +76,12 @@ jobs:
       - name: Configure build
         shell: bash
         run: |
+          # CMAKE_OSX_DEPLOYMENT_TARGET=10.13 (High Sierra 2017) — identycznie jak upstream.
+          # Gwarantuje kompatybilność binarki z macOS 10.13+ (wszystkie nowsze Maki).
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
