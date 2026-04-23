@@ -18,11 +18,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # x86_64: macos-13 (Intel) + oficjalne Qt 5.15.2 via aqtinstall.
+          # x86_64: macos-13 (Intel hardware, native x86_64 build)
           - arch: x86_64
             runner: macos-13
-          # arm64: macos-14 (Apple Silicon) + Homebrew qt@5 + qtscript ze zrodel
-          # (oficjalny Qt 5.15.2 nie ma buildu arm64 w aqtinstall).
+          # arm64: macos-14 (Apple Silicon hardware, native arm64 build)
           - arch: arm64
             runner: macos-14
 
@@ -33,7 +32,7 @@ jobs:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
-      QT_VERSION: "5.15.2"
+      QT_VERSION: "6.8.1"
 
     steps:
       - name: Checkout code
@@ -57,75 +56,33 @@ jobs:
           brew link --overwrite python@3.13 || true
 
       # ----------------------------------------------------------------
-      # Qt installation — rozne scieszki dla x86_64 vs arm64
+      # Qt 6.8.1 via aqtinstall — oficjalne uniwersalne buildy (x86_64 + arm64
+      # w jednym frameworku). Dziala identycznie na macos-13 i macos-14.
+      # Moduly dobrane zeby pokryc caly projekt QLC+ 4.14:
+      #   qtmultimedia         — QAudioSource/QVideoWidget (LTC, video provider)
+      #   qt5compat            — QtCore5Compat (legacy helpers w kilku miejscach)
+      #   qtserialport         — plugin DMX USB
+      #   qtwebsockets         — art-net/streaming
+      #   qtimageformats       — dodatkowe formaty ikon
+      #   qt3d                 — uzywany przez engine fixtures 3D
+      # UWAGA: rgbscriptv4.cpp uzywa QJSEngine z Qt::Qml (qtdeclarative),
+      # ktory jest w glownej dystrybucji aqtinstall i nie wymaga osobnego modulu.
       # ----------------------------------------------------------------
 
-      - name: Install Qt 5.15.2 (x86_64 via aqtinstall)
-        if: matrix.arch == 'x86_64'
+      - name: Install Qt 6.8.1
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
+          host: 'mac'
+          target: 'desktop'
           dir: "${{ github.workspace }}/qt/"
-          modules: 'qtscript'
+          modules: 'qt5compat qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
 
-      - name: Set QTDIR (x86_64)
-        if: matrix.arch == 'x86_64'
+      - name: Set QTDIR
         shell: bash
         run: |
-          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/clang_64" >> $GITHUB_ENV
-
-      - name: Install Qt 5 (arm64 via Homebrew qt@5)
-        if: matrix.arch == 'arm64'
-        shell: bash
-        run: |
-          brew install qt@5
-          QT5_PREFIX=$(brew --prefix qt@5)
-          echo "QTDIR=${QT5_PREFIX}" >> $GITHUB_ENV
-          echo "${QT5_PREFIX}/bin" >> $GITHUB_PATH
-
-      - name: Build qtscript from source (arm64)
-        if: matrix.arch == 'arm64'
-        shell: bash
-        run: |
-          # Homebrew qt@5 nie zawiera qtscript (modul deprecated w Qt 5.6+).
-          # QLC+ uzywa QScriptEngine dla RGB Scripts (engine/src/rgbscript.cpp).
-          #
-          # Problem z `make install`: qmake uzywa `sed > plik` dla .prl, co jest
-          # shell redirectem — nie moze byc podniesione przez sudo ani nie ma uprawnien
-          # do /opt/homebrew/Cellar (Homebrew Cellar jest write-protected).
-          #
-          # Rozwiazanie: staged install do /tmp (brak problemow z uprawnieniami),
-          # potem sudo cp wybranych plikow do wlasciwego prefixa Homebrew.
-          QT5_PREFIX=$(brew --prefix qt@5)
-          # Resolve symlink opt/homebrew/opt/qt@5 -> Cellar/qt@5/X.Y.Z
-          QT5_REAL=$(cd "${QT5_PREFIX}" && pwd -P)
-          STAGE=/tmp/qtscript-stage
-
-          git clone --branch 5.15 --depth 1 https://code.qt.io/qt/qtscript.git /tmp/qtscript
-          cd /tmp/qtscript
-          "${QT5_PREFIX}/bin/qmake" QMAKE_APPLE_DEVICE_ARCHS=arm64
-          make -j$(sysctl -n hw.ncpu)
-
-          # Staged install: INSTALL_ROOT prependuje sciezke, nie wymaga uprawnien
-          make install INSTALL_ROOT="${STAGE}"
-
-          # Sciezka staged odpowiada: STAGE + QT5_REAL (bez poczatkowego /)
-          QT5_STAGED="${STAGE}${QT5_REAL}"
-
-          # Kopiuj framework (biblioteka + headery)
-          sudo cp -Rf "${QT5_STAGED}/lib/QtScript.framework" "${QT5_REAL}/lib/"
-
-          # Kopiuj cmake config zeby find_package(Qt5 COMPONENTS Script) zadzialal
-          if [ -d "${QT5_STAGED}/lib/cmake/Qt5Script" ]; then
-            sudo cp -Rf "${QT5_STAGED}/lib/cmake/Qt5Script" "${QT5_REAL}/lib/cmake/"
-          fi
-
-          # Kopiuj modul qmake (opcjonalny, dla poprawnosci srodowiska Qt)
-          for f in qt_lib_script.pri qt_lib_script_private.pri; do
-            if [ -f "${QT5_STAGED}/mkspecs/modules/${f}" ]; then
-              sudo cp "${QT5_STAGED}/mkspecs/modules/${f}" "${QT5_REAL}/mkspecs/modules/"
-            fi
-          done
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/macos" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/macos/bin" >> $GITHUB_PATH
 
       # ----------------------------------------------------------------
       # Build
@@ -134,7 +91,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ github.job }}-build-macos-v4-${{ matrix.arch }}
+          key: ${{ github.job }}-build-macos-v4-${{ matrix.arch }}-qt6
 
       - name: Print ENV vars
         shell: bash
@@ -147,35 +104,37 @@ jobs:
           echo "GIT_REV: ${GIT_REV}"
           echo "QTDIR: ${QTDIR}"
           echo "NPROC: ${NPROC}"
+          "${QTDIR}/bin/qmake" -query QT_VERSION QT_HOST_PREFIX
 
       - name: Configure build
         shell: bash
         run: |
           # CMAKE_OSX_DEPLOYMENT_TARGET=12.0 — matching oficjalnej dystrybucji
-          # qlcplus.org ("macOS 12 or later"). arm64 musi byc min 11.0, 12.0 to OK.
-          # CMAKE_OSX_ARCHITECTURES wymusza pojedyncza architekture niezaleznie od
-          # tego co wykryje CMake z runnera (na wypadek gdyby ccache cos mylilo).
+          # qlcplus.org ("macOS 12 or later"). Qt 6.8 wymaga min 12.0.
+          # CMAKE_OSX_ARCHITECTURES wymusza natywna architekture — Qt jest uniwersalny,
+          # ale nasz build chcemy miec single-arch (mniejszy DMG, szybsza kompilacja).
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -Dqmlui=OFF
 
       - name: Build
         shell: bash
         run: |
           cd build
-          make -j${NPROC}
+          cmake --build . -j${NPROC}
 
       - name: Install
         shell: bash
         run: |
           cd build
-          make install/fast
+          cmake --install . --strip || cmake --install .
 
-      - name: Fix dylib dependencies
+      - name: Fix dylib dependencies and deploy Qt
         shell: bash
         run: |
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib || true
@@ -185,9 +144,9 @@ jobs:
 
       # UWAGA: Swiadomie nie robimy ad-hoc codesign + hardened runtime entitlements.
       # Na macOS 12 (szczegolnie M1) taka kombinacja jest flaky i powoduje crash
-      # przy starcie. Oficjalny upstream QLC+ (.github/workflows/build.yml) tez
-      # nie podpisuje. User pierwszy raz uruchamiajac apke musi zrobic prawy-klik
-      # -> Otworz (bypass Gatekeeper) LUB: xattr -dr com.apple.quarantine /Applications/QLC+.app
+      # przy starcie. Oficjalny upstream QLC+ tez nie podpisuje.
+      # User pierwszy raz uruchamiajac apke musi zrobic prawy-klik -> Otworz
+      # LUB: xattr -dr com.apple.quarantine /Applications/QLC+.app
 
       - name: Create DMG
         uses: nick-fields/retry@v3

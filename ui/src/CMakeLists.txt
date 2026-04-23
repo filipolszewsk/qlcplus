@@ -207,20 +207,19 @@ target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Gui
     Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
+    Qt${QT_MAJOR_VERSION}::Multimedia
+    Qt${QT_MAJOR_VERSION}::MultimediaWidgets
     qlcplusengine
     ${LIBLTC_LIBRARIES}
 )
 
 # LTC Timecode engine requires Qt >= 6.2 (QAudioSource, QAudioDevice, QMediaDevices).
-# On Qt 5 the engine/widget are stubbed out in their headers; .cpp files are excluded.
+# On Qt 5 the engine/widget are stubbed out in their headers; .cpp files are excluded
+# (they use Qt 6 audio APIs unconditionally).
 if(QT_VERSION_MAJOR GREATER 5)
     target_sources(${module_name} PRIVATE
         showmanager/ltctimecodeengine.cpp showmanager/ltctimecodeengine.h
         showmanager/ltctimecodewidget.cpp showmanager/ltctimecodewidget.h
-    )
-    target_link_libraries(${module_name} PUBLIC
-        Qt${QT_MAJOR_VERSION}::Multimedia
-        Qt${QT_MAJOR_VERSION}::MultimediaWidgets
     )
 endif()
 

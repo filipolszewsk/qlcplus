@@ -239,8 +239,8 @@ Masz workflow `.github/workflows/release.yml`, który robi WSZYSTKO sam: buduje 
 **Co się dzieje pod spodem:**
 1. Jeśli tag nie istnieje — tworzy go na obecnym HEAD mastera
 2. Buduje Windows (build-windows-v4.yml)
-3. Buduje macOS x86_64 (build-macos-v4.yml, job matrix: macos-13 + Qt 5.15.2 aqtinstall) równolegle
-4. Buduje macOS arm64 (build-macos-v4.yml, job matrix: macos-14 + Homebrew qt@5 + qtscript ze źródeł) równolegle
+3. Buduje macOS x86_64 (build-macos-v4.yml, job matrix: macos-13 + Qt 6.8.1 aqtinstall) równolegle
+4. Buduje macOS arm64 (build-macos-v4.yml, job matrix: macos-14 + Qt 6.8.1 aqtinstall) równolegle
 5. Pobiera wszystkie artefakty (`*.exe` + `*.dmg`)
 6. Tworzy GitHub Release z załącznikami i automatycznym changelogiem
 
@@ -304,7 +304,7 @@ https://github.com/filipolszewsk/qlcplus/releases/tag/v4.14.4-filip.1
    xattr -dr com.apple.quarantine /Applications/QLC+.app
    ```
    Dokładnie to samo co przy oficjalnym QLC+ (upstream też nie podpisuje buildów na GitHub).
-5. **macOS arm64: qtscript budowany ze źródeł** — dodaje ~5-10 min do buildu arm64. Gdyby kiedyś przestał się kompilować (po zmianach w Xcode), plan B: odtworzyć stary workflow z macos-13 only + instrukcją "uruchom przez Rosetta" dla M1 userów.
+5. **macOS i Windows budują się na Qt 6.8.1** — ten sam stack co upstream Linux. RGB Scripts idą przez `QJSEngine` (Qt::Qml), nie potrzebujemy archaicznego `qtscript`. Qt 6 z aqtinstall ma oficjalne buildy zarówno pod Intel (x86_64) jak i Apple Silicon (arm64), więc arm64 też ciągnie gotowy framework (koniec kompilacji ze źródeł).
 
 ---
 
