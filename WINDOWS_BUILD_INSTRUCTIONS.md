@@ -1,258 +1,262 @@
-# Instrukcje budowania Windows Installera dla QLC+ 4.14
+# Instrukcje budowania Windows Installera i macOS DMG dla QLC+ 4.14
 
-## Przegląd
+> **Cel dokumentu:** krok po kroku jak skonfigurować GitHub Actions żeby od razu zbudowało się Windows `.exe` i macOS `.dmg` bez wielu iteracji.
 
-Ten dokument opisuje proces budowania Windows installera dla QLC+ 4.14 używając GitHub Actions. Workflow automatycznie buduje installer na Windows runnerze i udostępnia go jako artifact.
+## TL;DR — Szybka lista kontrolna dla nowego brancha
 
-## Lokalizacja workflow
+Żeby build przeszedł od razu, zrób **po kolei**:
 
-Workflow znajduje się w: `.github/workflows/build-windows-v4.yml`
+1. **Dodaj branch do workflow triggerów** w `.github/workflows/build-windows-v4.yml` oraz `build-macos-v4.yml` (lista `branches:`)
+2. **Sprawdź kolejność inicjalizacji zmiennych członkowskich** we wszystkich nowo dodanych `.cpp/.h` (musi odpowiadać kolejności w `.h`) — patrz sekcja "Typowe błędy kompilacji"
+3. **Jeśli dodałeś nowe biblioteki zewnętrzne**, sprawdź czy są dostępne w MSYS2/brew lub dodaj krok budowania ze źródeł
+4. **Push** — workflow uruchomi się automatycznie
 
-## Jak uruchomić build
+Jeśli build się wywali, kroki naprawy są w sekcji "Znane pułapki".
 
-### Automatycznie
-Workflow uruchamia się automatycznie przy:
-- Push do gałęzi `main`, `master` lub `feature/windows-installer-workflow`
-- Pull request do `main` lub `master`
+---
 
-### Ręcznie (workflow_dispatch)
-1. Przejdź do: https://github.com/filipolszewsk/qlcplus/actions
-2. Wybierz workflow "Build Windows Installer (QLC+ 4.14)"
-3. Kliknij "Run workflow"
-4. Wybierz gałąź i kliknij "Run workflow"
+## Workflow Windows (`build-windows-v4.yml`)
 
-### Pobieranie artifactu
-1. Po zakończeniu builda, przejdź do zakładki "Actions"
-2. Kliknij na zakończony workflow run
-3. Przewiń w dół do sekcji "Artifacts"
-4. Pobierz plik `.exe` (nazwa: `QLC+-build-v4-{VERSION}-{DATE}-{GIT_REV}.exe`)
+### Triggery
 
-## Struktura workflow
-
-### Główne kroki:
-1. **Checkout code** - Pobiera kod z repozytorium
-2. **Setup ccache** - Konfiguruje cache dla szybszych buildów
-3. **Set environment variables** - Ustawia zmienne środowiskowe (QTDIR, BUILD_DATE, GIT_REV, etc.)
-4. **Install Qt** - Instaluje Qt 6.8.1 używając `jurplel/install-qt-action`
-5. **Install MSYS2** - Instaluje MSYS2 z wymaganymi pakietami (gcc, cmake, ninja, biblioteki)
-6. **D2XX SDK** - Pobiera i kompiluje bibliotekę FTDI D2XX dla wsparcia DMX USB
-7. **Fix build** - Modyfikuje pliki konfiguracyjne (CMakeLists.txt, NSIS script)
-8. **Configure build** - Konfiguruje build używając CMake
-9. **Build** - Kompiluje projekt używając Ninja
-10. **Install** - Instaluje zbudowane pliki do `/c/qlcplus`
-11. **windeployqt** - Kopiuje wymagane biblioteki Qt
-12. **Build installer** - Tworzy installer używając NSIS
-13. **Upload artifact** - Przesyła installer jako artifact
-
-## Ważne zmienne środowiskowe
-
-- `QT_VERSION`: "6.8.1"
-- `QTDIR`: `/d/a/qlcplus/qlcplus/qt/Qt/6.8.1/mingw_64`
-- `OUTFILE`: Nazwa pliku installera (np. `QLC+_4.14.4.exe`)
-- `APPVERSION`: Wersja aplikacji (np. `4.14.4`)
-- `NSIS_SCRIPT`: `qlcplus4Qt6.nsi`
-
-## Wnioski i nauki z procesu
-
-### 1. Używanie oficjalnego workflow jako wzorca
-**Problem:** Początkowo próbowaliśmy uproszczonego workflow, który nie działał.
-
-**Rozwiązanie:** Użyliśmy oficjalnego workflow QLC+ jako wzorca, co zapewniło kompatybilność i działanie wszystkich kroków.
-
-**Wniosek:** Zawsze sprawdzaj oficjalne workflow/CI w repozytorium przed tworzeniem własnego.
-
-### 2. Kolejność inicjalizacji zmiennych członkowskich w C++
-**Problem:** Błąd kompilacji:
-```
-error: 'EFX::m_wings' will be initialized after [-Werror=reorder]
-error:   'bool EFX::m_autoApplyOffsetTemplate' [-Werror=reorder]
-```
-
-**Przyczyna:** Kolejność inicjalizacji w konstruktorze nie odpowiadała kolejności deklaracji w klasie.
-
-**Rozwiązanie:** Poprawiono kolejność inicjalizacji w `efx.cpp`:
-```cpp
-// Przed (błędne):
-, m_fixtureGroupID(FixtureGroup::invalidId())
-, m_offsetDirection(LeftToRight)
-, m_offsetStep(90)
-, m_wings(1)                    // ❌ Przed m_autoApplyOffsetTemplate
-, m_autoApplyOffsetTemplate(false)
-, m_offsetTemplateDirty(false)
-
-// Po (poprawne):
-, m_fixtureGroupID(FixtureGroup::invalidId())
-, m_autoApplyOffsetTemplate(false)  // ✅ Zgodnie z kolejnością w klasie
-, m_offsetTemplateDirty(false)
-, m_offsetDirection(LeftToRight)
-, m_offsetStep(90)
-, m_wings(1)
-```
-
-**Wniosek:** Z flagą `-Werror=reorder` kompilator wymaga, aby kolejność inicjalizacji w konstruktorze odpowiadała kolejności deklaracji zmiennych członkowskich w klasie.
-
-### 3. Używanie backticks vs $() w bash
-**Różnica:** W oficjalnym workflow używane są backticks (`` ` ``) zamiast `$()` dla niektórych komend:
-```bash
-# Oficjalny workflow używa:
-echo "BUILD_DATE=`date -u '+%Y%m%d'`" >> $GITHUB_ENV
-echo "GIT_REV=`git rev-parse --short HEAD`" >> $GITHUB_ENV
-
-# Zamiast:
-echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
-```
-
-**Wniosek:** Oba podejścia działają, ale dla zgodności z oficjalnym workflow lepiej używać backticks.
-
-### 4. Hardcoded ścieżki vs zmienne GitHub Actions
-**Problem:** Próbowaliśmy użyć `${{ github.workspace }}` zamiast hardcoded ścieżek.
-
-**Rozwiązanie:** Oficjalny workflow używa hardcoded ścieżek `/d/a/qlcplus/qlcplus/` które są standardowe dla GitHub Actions Windows runners.
-
-**Wniosek:** W GitHub Actions Windows runners zawsze używają tych samych ścieżek, więc hardcoded ścieżki są bezpieczne i bardziej przewidywalne.
-
-### 5. Podział zmiennych środowiskowych na osobne kroki
-**Wzorzec:** Oficjalny workflow dzieli ustawianie zmiennych na osobne kroki:
-- "Set ENV variables" - podstawowe zmienne
-- "Set v4 ENV variables" - zmienne specyficzne dla wersji v4
-
-**Wniosek:** To ułatwia debugowanie i utrzymanie workflow.
-
-### 6. Instalacja Qt przez jurplel/install-qt-action
-**Ważne:** Używamy `jurplel/install-qt-action@v4` zamiast instalacji Qt przez MSYS2, ponieważ:
-- Zapewnia wszystkie wymagane narzędzia Qt (windeployqt, lrelease, etc.)
-- Jest bardziej niezawodne i szybsze
-- Automatycznie konfiguruje środowisko
-
-**Konfiguracja:**
 ```yaml
-- name: Install Qt
-  uses: jurplel/install-qt-action@v4
-  with:
-    version: ${{ env.QT_VERSION }}
-    host: 'windows'
-    target: 'desktop'
-    arch: 'win64_mingw'
-    dir: "${{ github.workspace }}/qt/"
-    modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+on:
+  push:
+    branches: [ main, master, <lista twoich branchy> ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 ```
 
-### 7. Modyfikacje plików przed buildem
-Workflow modyfikuje kilka plików przed buildem:
-- `CMakeLists.txt`: Zmienia `Debug` na `Release`
-- `plugins/CMakeLists.txt`: Wyłącza plugin Velleman
-- `platforms/windows/CMakeLists.txt`: Poprawia ścieżki MSYS2
-- `platforms/windows/qlcplus4Qt6.nsi`: Poprawia ścieżki projektu
+**WAŻNE:** Jeśli pracujesz na własnym branchu, **dodaj go do listy** lub używaj `workflow_dispatch` do ręcznego uruchomienia.
 
-**Wniosek:** Te modyfikacje są konieczne, ponieważ pliki są skonfigurowane dla lokalnego builda, a nie dla GitHub Actions.
+### Co ten workflow robi (skrót)
 
-### 8. Używanie MSYS2 shell
-**Ważne:** Wszystkie kroki związane z buildem używają `shell: msys2 {0}`, co zapewnia:
-- Dostęp do narzędzi MSYS2 (gcc, cmake, ninja)
-- Poprawne ścieżki Unix-style (`/c/qlcplus` zamiast `C:\qlcplus`)
-- Kompatybilność z narzędziami cross-compilation
+1. Checkout kodu
+2. Instalacja Qt 6.8.1 przez `jurplel/install-qt-action@v4`
+3. Instalacja MSYS2 z pakietami (gcc, cmake, ninja, libsndfile, fftw, libusb, nsis, ...)
+4. **Build libltc ze źródeł** (nie ma gotowego pakietu w MSYS2)
+5. Pobranie i kompilacja FTDI D2XX SDK
+6. Patche pre-build: `-Werror` off, `Debug→Release`, disable Velleman, fix ścieżek MSYS2/NSIS
+7. CMake configure + Ninja build + install do `/c/qlcplus`
+8. `windeployqt` (kopiuje DLL-e Qt)
+9. NSIS build installera
+10. Upload `.exe` jako artifact (retention: 30 dni)
 
-## Troubleshooting
+Artifact: `QLC+-build-v4-{APPVERSION}-{BUILD_DATE}-{GIT_REV}.exe`
 
-### Błąd: "git.exe failed with exit code 128"
-**Przyczyna:** Problem z checkout lub submodułami.
+---
 
-**Rozwiązanie:** 
-- Sprawdź czy workflow ma poprawne ustawienia checkout
-- Upewnij się że `submodules: false` jest ustawione
+## Workflow macOS (`build-macos-v4.yml`)
 
-### Błąd kompilacji: "will be initialized after [-Werror=reorder]"
-**Przyczyna:** Nieprawidłowa kolejność inicjalizacji zmiennych członkowskich.
+### Triggery — analogicznie jak Windows
 
-**Rozwiązanie:** 
-1. Sprawdź kolejność deklaracji w pliku `.h`
-2. Upewnij się że kolejność inicjalizacji w konstruktorze (`.cpp`) odpowiada kolejności deklaracji
+### Co robi
 
-### Błąd: "windeployqt: command not found"
-**Przyczyna:** Qt nie został poprawnie zainstalowany lub QTDIR nie jest ustawione.
+1. Checkout kodu (runner `macos-13`)
+2. Zależności przez Homebrew: `fftw mad libsndfile libftdi libltc`
+3. Qt 6.8.1 (`macos` / `clang_64`) przez `jurplel/install-qt-action@v4`
+4. CMake configure + `make -j`
+5. `make install/fast` (instaluje do `~/QLC+.app`)
+6. Fix dylib dependencies + `macdeployqt`
+7. Tworzenie DMG przez `platforms/macos/dmg/create-dmg`
+8. Upload `.dmg` jako artifact
+
+Artifact: `QLC+-{APPVERSION}-{BUILD_DATE}-{GIT_REV}.dmg`
+
+---
+
+## Typowe błędy kompilacji i jak im zapobiec
+
+### 1. `-Werror=reorder` (kolejność inicjalizacji w C++)
+
+**Objaw:**
+```
+error: 'Klasa::m_pole_B' will be initialized after [-Werror=reorder]
+error:   'Typ Klasa::m_pole_A'
+error:   when initialized here [-Werror=reorder]
+```
+
+**Przyczyna:** W konstruktorze `: m_pole_A(...), m_pole_B(...)` musi odpowiadać **kolejności deklaracji w `.h`**. GCC 15 (MSYS2) traktuje to jako błąd.
+
+**Jak naprawić od razu:**
+- Przy dodawaniu nowego pola do klasy, zawsze dodaj go w **takim samym miejscu** w `.h` i w liście inicjalizacyjnej `.cpp`
+- Domyślnie nasz workflow Windows **wyłącza `-Werror`** (patrz niżej), więc nie powinno już blokować buildów — ale dobre praktyki ich zniechęcają
+
+**Obejście w workflow (już wdrożone):**
+```bash
+sed -i -e 's/set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")/#&/' variables.cmake
+```
+
+### 2. `-Werror=dangling-else`
+
+**Objaw:**
+```
+error: suggest explicit braces to avoid ambiguous 'else' [-Werror=dangling-else]
+```
+
+**Jak naprawić:** dodaj `{}` wokół `if` wewnątrz innego `if`:
+```cpp
+if (warunek1) {
+    if (warunek2)
+        akcja();
+} else {
+    inna_akcja();
+}
+```
+
+**Workflow obejście:** `-Werror` jest wyłączony (patrz wyżej).
+
+### 3. `libltc not found`
+
+**Objaw:**
+```
+CMake Error: libltc not found. Install it with: brew install libltc
+```
+
+**Gdzie występuje:** `ui/src/CMakeLists.txt` — używane przez `ltctimecodeengine` i `ltctimecodewidget` (LTC Timecode w Show Manager).
 
 **Rozwiązanie:**
-- Sprawdź czy krok "Install Qt" zakończył się sukcesem
-- Sprawdź czy `QTDIR` jest poprawnie ustawione w zmiennych środowiskowych
-- Upewnij się że używasz `jurplel/install-qt-action` zamiast instalacji przez MSYS2
+- **macOS:** `brew install libltc` (zrobione w workflow)
+- **Windows:** **nie ma w MSYS2** — budowane ze źródeł w workflow (`wget` → `./configure && make install` do `/mingw64`)
+- **Linux:** `sudo apt install libltc-dev`
 
-### Błąd: "makensis: command not found"
-**Przyczyna:** NSIS nie został zainstalowany.
+Plik `ui/src/CMakeLists.txt` ma już cross-platform detection przez `pkg-config` z fallback do `find_path`/`find_library`.
 
-**Rozwiązanie:**
-- Sprawdź czy `mingw-w64-x86_64-nsis` jest w liście pakietów do instalacji w kroku MSYS2
+### 4. `git.exe failed with exit code 128` w "Post Checkout"
 
-### Build się nie uruchamia automatycznie
-**Przyczyna:** Workflow może nie być wyzwalany przez push.
+**Objaw:** W annotations na samym końcu workflow.
 
-**Rozwiązanie:**
-- Sprawdź sekcję `on:` w workflow
-- Upewnij się że gałąź jest w liście `branches:`
-- Użyj `workflow_dispatch` do ręcznego uruchomienia
+**Ignoruj to** — to post-cleanup step. Jeśli build przeszedł, artefakt jest OK.
+
+---
+
+## Biblioteki i ich źródła
+
+| Biblioteka | Windows (MSYS2) | macOS (brew) | Linux (apt) |
+|---|---|---|---|
+| Qt 6.8.1 | `install-qt-action` | `install-qt-action` | `install-qt-action` |
+| FFTW | `mingw-w64-x86_64-fftw` | `fftw` | `libfftw3-dev` |
+| libsndfile | `mingw-w64-x86_64-libsndfile` | `libsndfile` | `libsndfile1-dev` |
+| libmad | `mingw-w64-x86_64-libmad` | `mad` | `libmad0-dev` |
+| libusb | `mingw-w64-x86_64-libusb` | (builtin) | `libusb-1.0-0-dev` |
+| libftdi | (D2XX ze źródeł) | `libftdi` | `libftdi1-dev` |
+| **libltc** | **ze źródeł** (brak pakietu) | `libltc` | `libltc-dev` |
+| NSIS | `mingw-w64-x86_64-nsis` | — | — |
+
+---
+
+## Znane pułapki (nauki z prawdziwych buildów)
+
+### Pułapka #1: GCC 15 vs upstream CI (GCC 11/12)
+
+MSYS2 ma nowszy GCC (15.2) niż upstream QLC+ CI (`ubuntu-22.04` = GCC 11). **Więcej warningów** = więcej `-Werror` błędów.
+
+**Rozwiązanie:** workflow wyłącza `-Werror` dla buildu Windows. Warningi dalej są widoczne w logach (`-Wall -Wextra`).
+
+### Pułapka #2: Nowe biblioteki bez pakietów MSYS2
+
+Jeśli dodajesz zależność przez `find_package`/`pkg_check_modules`:
+1. Sprawdź https://packages.msys2.org/package/ czy jest pakiet `mingw-w64-x86_64-<nazwa>`
+2. Jeśli **jest** — dodaj do listy `install:` w kroku MSYS2
+3. Jeśli **nie ma** — dodaj krok buildu ze źródeł (jak dla libltc):
+   ```yaml
+   - name: Build and install libXXX from source
+     shell: msys2 {0}
+     run: |
+       pacman -S --noconfirm autoconf automake libtool
+       wget https://.../libXXX-x.y.z.tar.gz -O /tmp/lib.tar.gz
+       cd /tmp && tar xzf lib.tar.gz && cd libXXX-x.y.z
+       ./configure --prefix=/mingw64 && make -j$(nproc) && make install
+   ```
+
+### Pułapka #3: `.gitignore` blokuje pliki workflow
+
+Reguła `build*` w `.gitignore` blokuje dodawanie nowych plików w `.github/workflows/build-*.yml`. Użyj:
+
+```bash
+git add -f .github/workflows/build-macos-v4.yml
+```
+
+### Pułapka #4: Kolejność inicjalizacji C++
+
+Zawsze przy dodawaniu nowego pola członkowskiego do klasy:
+
+```cpp
+// foo.h
+class Foo {
+private:
+    int m_a;           // linia 10
+    int m_b;           // linia 11
+    int m_c;           // linia 12   ← nowe pole
+};
+
+// foo.cpp
+Foo::Foo()
+    : m_a(0)           // ✅ taka sama kolejność
+    , m_b(0)
+    , m_c(0)           // ✅ nowe pole DOKŁADNIE na końcu
+{}
+```
+
+---
+
+## Szybkie naprawy gdy build się wywala
+
+| Błąd | Plik do poprawy | Co zrobić |
+|---|---|---|
+| `-Werror=reorder` | `.cpp` z konstruktorem | Przenieś pole w liście init. zgodnie z kolejnością w `.h` |
+| `-Werror=dangling-else` | wskazany plik | Dodaj `{}` wokół `if`/`else` |
+| `libXXX not found` | workflow `yml` | Dodaj pakiet MSYS2/brew lub build ze źródeł |
+| `git.exe failed (post)` | — | Ignoruj |
+| Velleman plugin error | workflow | Już wyłączony (sed w "Fix build") |
+
+---
 
 ## Struktura plików workflow
 
 ```
 .github/
 └── workflows/
-    └── build-windows-v4.yml    # Workflow dla Windows installera
+    ├── build-windows-v4.yml    # Windows NSIS installer (.exe)
+    └── build-macos-v4.yml      # macOS DMG installer (.dmg)
 ```
-
-## Wymagane pakiety MSYS2
-
-- `wget` - Pobieranie plików
-- `unzip` - Rozpakowywanie archiwów
-- `mingw-w64-x86_64-gcc` - Kompilator C/C++
-- `mingw-w64-x86_64-gcc-libs` - Biblioteki GCC
-- `mingw-w64-x86_64-cmake` - System buildowy
-- `mingw-w64-x86_64-ninja` - Build system (szybszy niż make)
-- `mingw-w64-x86_64-libmad` - Biblioteka audio
-- `mingw-w64-x86_64-libsndfile` - Obsługa plików audio
-- `mingw-w64-x86_64-flac` - Codec FLAC
-- `mingw-w64-x86_64-fftw` - Biblioteka FFT
-- `mingw-w64-x86_64-libusb` - Obsługa USB
-- `mingw-w64-x86_64-python-lxml` - XML processing
-- `mingw-w64-x86_64-nsis` - Tworzenie installera
-
-## Wersje narzędzi
-
-- **Qt:** 6.8.1
-- **MSYS2:** Najnowsza wersja (release: true)
-- **GCC:** Z pakietu mingw-w64-x86_64-gcc
-- **CMake:** Z pakietu mingw-w64-x86_64-cmake
-- **Ninja:** Z pakietu mingw-w64-x86_64-ninja
-
-## Czas builda
-
-Typowy czas builda: **~10-15 minut** (w zależności od obciążenia GitHub Actions)
-
-## Retention artifacts
-
-Artifacts są przechowywane przez **30 dni** (ustawione w workflow).
-
-## Linki przydatne
-
-- [Oficjalny workflow QLC+](https://github.com/mcallegari/qlcplus/blob/main/.github/workflows/build.yml)
-- [Windows Build Wiki (Qt6 & CMake)](https://github.com/mcallegari/qlcplus/wiki/Windows-Build-(Qt6-&-cmake))
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [jurplel/install-qt-action](https://github.com/jurplel/install-qt-action)
-
-## Notatki na przyszłość
-
-1. **Zawsze sprawdzaj oficjalne workflow** przed tworzeniem własnego
-2. **Testuj lokalnie** jeśli to możliwe przed pushowaniem
-3. **Używaj ccache** dla szybszych buildów (już skonfigurowane)
-4. **Sprawdzaj logi** w GitHub Actions jeśli build się nie powiedzie
-5. **Kolejność inicjalizacji** w C++ musi odpowiadać kolejności deklaracji
-6. **Hardcoded ścieżki** są OK w GitHub Actions (są standardowe)
-7. **Backticks vs $()** - oba działają, ale backticks są używane w oficjalnym workflow
-8. **MSYS2 shell** jest wymagany dla wszystkich kroków builda
-9. **Qt przez install-qt-action** jest bardziej niezawodne niż przez MSYS2
-10. **Workflow_dispatch** pozwala na ręczne uruchomienie builda
 
 ---
 
-**Ostatnia aktualizacja:** 2025-12-16  
-**Wersja QLC+:** 4.14.4  
-**Workflow:** build-windows-v4.yml
+## Checklist przed pushem nowego feature branch
 
+- [ ] Branch dodany do listy `branches:` w obu workflow
+- [ ] Kolejność inicjalizacji w konstruktorach C++ zgodna z `.h`
+- [ ] Nowe biblioteki mają źródło w workflow (MSYS2 pacman / brew / build ze źródeł)
+- [ ] `git status` — żadnych zbędnych zmian (np. `build*`)
+- [ ] Test lokalny (jeśli masz Windows/macOS pod ręką)
+- [ ] `git push` → sprawdź https://github.com/filipolszewsk/qlcplus/actions
+
+---
+
+## Linki
+
+- [Oficjalny workflow QLC+](https://github.com/mcallegari/qlcplus/blob/main/.github/workflows/build.yml)
+- [Windows Build Wiki (Qt6 & CMake)](https://github.com/mcallegari/qlcplus/wiki/Windows-Build-(Qt6-&-cmake))
+- [MSYS2 Packages](https://packages.msys2.org/package/)
+- [jurplel/install-qt-action](https://github.com/jurplel/install-qt-action)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+
+---
+
+## Historia istotnych zmian w workflow
+
+| Data | Zmiana | Powód |
+|---|---|---|
+| 2026-04-23 | Dodano build libltc ze źródeł | Brak pakietu w MSYS2, wymagane dla LTC Timecode |
+| 2026-04-23 | Cross-platform `find_package` libltc | macOS wymaga brew, Linux apt |
+| 2026-04-23 | Wyłączenie `-Werror` w Windows CI | GCC 15 w MSYS2 strikter niż upstream (GCC 11) |
+| 2026-04-23 | Dodano `build-macos-v4.yml` | Potrzeba macOS DMG installera |
+| 2026-04-23 | Naprawa kolejności init. w `doc.cpp` | `m_timeCodeSource` przed `m_monitorProps` |
+
+---
+
+**Ostatnia aktualizacja:** 2026-04-23  
+**Wersja QLC+:** 4.14.4  
+**Workflow:** `build-windows-v4.yml`, `build-macos-v4.yml`
