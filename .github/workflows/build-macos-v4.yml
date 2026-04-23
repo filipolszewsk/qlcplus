@@ -89,14 +89,43 @@ jobs:
         run: |
           # Homebrew qt@5 nie zawiera qtscript (modul deprecated w Qt 5.6+).
           # QLC+ uzywa QScriptEngine dla RGB Scripts (engine/src/rgbscript.cpp).
-          # Kompilujemy qtscript z galazi 5.15 zgodnej z qt@5 i instalujemy
-          # do tego samego prefixa, zeby find_package(Qt5 COMPONENTS Script) zadzialal.
+          #
+          # Problem z `make install`: qmake uzywa `sed > plik` dla .prl, co jest
+          # shell redirectem — nie moze byc podniesione przez sudo ani nie ma uprawnien
+          # do /opt/homebrew/Cellar (Homebrew Cellar jest write-protected).
+          #
+          # Rozwiazanie: staged install do /tmp (brak problemow z uprawnieniami),
+          # potem sudo cp wybranych plikow do wlasciwego prefixa Homebrew.
           QT5_PREFIX=$(brew --prefix qt@5)
+          # Resolve symlink opt/homebrew/opt/qt@5 -> Cellar/qt@5/X.Y.Z
+          QT5_REAL=$(cd "${QT5_PREFIX}" && pwd -P)
+          STAGE=/tmp/qtscript-stage
+
           git clone --branch 5.15 --depth 1 https://code.qt.io/qt/qtscript.git /tmp/qtscript
           cd /tmp/qtscript
           "${QT5_PREFIX}/bin/qmake" QMAKE_APPLE_DEVICE_ARCHS=arm64
           make -j$(sysctl -n hw.ncpu)
-          sudo make install
+
+          # Staged install: INSTALL_ROOT prependuje sciezke, nie wymaga uprawnien
+          make install INSTALL_ROOT="${STAGE}"
+
+          # Sciezka staged odpowiada: STAGE + QT5_REAL (bez poczatkowego /)
+          QT5_STAGED="${STAGE}${QT5_REAL}"
+
+          # Kopiuj framework (biblioteka + headery)
+          sudo cp -Rf "${QT5_STAGED}/lib/QtScript.framework" "${QT5_REAL}/lib/"
+
+          # Kopiuj cmake config zeby find_package(Qt5 COMPONENTS Script) zadzialal
+          if [ -d "${QT5_STAGED}/lib/cmake/Qt5Script" ]; then
+            sudo cp -Rf "${QT5_STAGED}/lib/cmake/Qt5Script" "${QT5_REAL}/lib/cmake/"
+          fi
+
+          # Kopiuj modul qmake (opcjonalny, dla poprawnosci srodowiska Qt)
+          for f in qt_lib_script.pri qt_lib_script_private.pri; do
+            if [ -f "${QT5_STAGED}/mkspecs/modules/${f}" ]; then
+              sudo cp "${QT5_STAGED}/mkspecs/modules/${f}" "${QT5_REAL}/mkspecs/modules/"
+            fi
+          done
 
       # ----------------------------------------------------------------
       # Build
