@@ -14,18 +14,25 @@ concurrency:
 
 jobs:
   build-macos-v4:
-    # macos-13 (Intel) daje binarkę kompatybilną od macOS 10.13 wzwyż (przez Rosetta na ARM).
-    # ARM runnery (macos-14+) kompilują z nowym libc++ który referuje __libcpp_verbose_abort
-    # — ten symbol nie istnieje na macOS < 13.3, więc aplikacja nie startuje.
-    runs-on: macos-13
-    name: Build QLC+ 4.14 macOS DMG
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x86_64: macos-13 (Intel) + oficjalne Qt 5.15.2 via aqtinstall.
+          - arch: x86_64
+            runner: macos-13
+          # arm64: macos-14 (Apple Silicon) + Homebrew qt@5 + qtscript ze zrodel
+          # (oficjalny Qt 5.15.2 nie ma buildu arm64 w aqtinstall).
+          - arch: arm64
+            runner: macos-14
+
+    runs-on: ${{ matrix.runner }}
+    name: Build QLC+ 4.14 macOS DMG (${{ matrix.arch }})
 
     env:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
-      # Qt 5.15.2 LTS — zbudowane na Xcode 12, nie ma problemu z verbose_abort.
-      # To jest Qt którego używa oficjalny QLC+ workflow dla macOS.
       QT_VERSION: "5.15.2"
 
     steps:
@@ -41,7 +48,6 @@ jobs:
           echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//;s/ /_/g')" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
           echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/clang_64" >> $GITHUB_ENV
           echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
 
       - name: Install dependencies via Homebrew
@@ -50,22 +56,62 @@ jobs:
           brew install fftw mad libsndfile libftdi libltc
           brew link --overwrite python@3.13 || true
 
-      - name: Install Qt
+      # ----------------------------------------------------------------
+      # Qt installation — rozne scieszki dla x86_64 vs arm64
+      # ----------------------------------------------------------------
+
+      - name: Install Qt 5.15.2 (x86_64 via aqtinstall)
+        if: matrix.arch == 'x86_64'
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           dir: "${{ github.workspace }}/qt/"
-          # qtscript jest wymagany dla Qt 5 (JS engine). W Qt 6 zastąpiony przez qml.
           modules: 'qtscript'
+
+      - name: Set QTDIR (x86_64)
+        if: matrix.arch == 'x86_64'
+        shell: bash
+        run: |
+          echo "QTDIR=${{ github.workspace }}/qt/Qt/${{ env.QT_VERSION }}/clang_64" >> $GITHUB_ENV
+
+      - name: Install Qt 5 (arm64 via Homebrew qt@5)
+        if: matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          brew install qt@5
+          QT5_PREFIX=$(brew --prefix qt@5)
+          echo "QTDIR=${QT5_PREFIX}" >> $GITHUB_ENV
+          echo "${QT5_PREFIX}/bin" >> $GITHUB_PATH
+
+      - name: Build qtscript from source (arm64)
+        if: matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          # Homebrew qt@5 nie zawiera qtscript (modul deprecated w Qt 5.6+).
+          # QLC+ uzywa QScriptEngine dla RGB Scripts (engine/src/rgbscript.cpp).
+          # Kompilujemy qtscript z galazi 5.15 zgodnej z qt@5 i instalujemy
+          # do tego samego prefixa, zeby find_package(Qt5 COMPONENTS Script) zadzialal.
+          QT5_PREFIX=$(brew --prefix qt@5)
+          git clone --branch 5.15 --depth 1 https://code.qt.io/qt/qtscript.git /tmp/qtscript
+          cd /tmp/qtscript
+          "${QT5_PREFIX}/bin/qmake" QMAKE_APPLE_DEVICE_ARCHS=arm64
+          make -j$(sysctl -n hw.ncpu)
+          make install
+
+      # ----------------------------------------------------------------
+      # Build
+      # ----------------------------------------------------------------
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ github.job }}-build-macos-v4
+          key: ${{ github.job }}-build-macos-v4-${{ matrix.arch }}
 
       - name: Print ENV vars
         shell: bash
         run: |
+          echo "ARCH: ${{ matrix.arch }}"
+          echo "RUNNER: ${{ matrix.runner }}"
           echo "CI_BRANCH: ${CI_BRANCH}"
           echo "APPVERSION: ${APPVERSION}"
           echo "BUILD_DATE: ${BUILD_DATE}"
@@ -76,12 +122,15 @@ jobs:
       - name: Configure build
         shell: bash
         run: |
-          # CMAKE_OSX_DEPLOYMENT_TARGET=10.13 (High Sierra 2017) — identycznie jak upstream.
-          # Gwarantuje kompatybilność binarki z macOS 10.13+ (wszystkie nowsze Maki).
+          # CMAKE_OSX_DEPLOYMENT_TARGET=12.0 — matching oficjalnej dystrybucji
+          # qlcplus.org ("macOS 12 or later"). arm64 musi byc min 11.0, 12.0 to OK.
+          # CMAKE_OSX_ARCHITECTURES wymusza pojedyncza architekture niezaleznie od
+          # tego co wykryje CMake z runnera (na wypadek gdyby ccache cos mylilo).
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="${{ env.QTDIR }}/lib/cmake" \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13 \
+            -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -89,7 +138,7 @@ jobs:
         shell: bash
         run: |
           cd build
-          make -j${{ env.NPROC }}
+          make -j${NPROC}
 
       - name: Install
         shell: bash
@@ -103,28 +152,13 @@ jobs:
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib || true
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor || true
-          ${{ env.QTDIR }}/bin/macdeployqt ~/QLC+.app
+          "${QTDIR}/bin/macdeployqt" ~/QLC+.app
 
-      - name: Ad-hoc code sign
-        shell: bash
-        run: |
-          # Bez Apple Developer ID używamy ad-hoc signing ("-").
-          # Entitlements są wymagane przez macOS 14+ do załadowania frameworków Qt z JIT.
-          # --deep podpisuje wszystkie zagnieżdżone dyliby i frameworki.
-          codesign --force --deep --sign - \
-            --entitlements platforms/macos/qlcplus.entitlements \
-            ~/QLC+.app
-
-      - name: Prepare DMG staging folder
-        shell: bash
-        run: |
-          # Tworzymy staging folder żeby wrzucić do DMG zarówno QLC+.app jak i Install.command.
-          # Install.command pozwala użytkownikowi zainstalować przez Terminal (cp bez quarantine)
-          # zamiast drag-and-drop, który propaguje atrybut quarantine i powoduje błąd "uszkodzona".
-          mkdir -p /tmp/qlc-dmg-staging
-          cp -Rf ~/QLC+.app /tmp/qlc-dmg-staging/
-          cp platforms/macos/dmg/Install.command /tmp/qlc-dmg-staging/
-          chmod +x /tmp/qlc-dmg-staging/Install.command
+      # UWAGA: Swiadomie nie robimy ad-hoc codesign + hardened runtime entitlements.
+      # Na macOS 12 (szczegolnie M1) taka kombinacja jest flaky i powoduje crash
+      # przy starcie. Oficjalny upstream QLC+ (.github/workflows/build.yml) tez
+      # nie podpisuje. User pierwszy raz uruchamiajac apke musi zrobic prawy-klik
+      # -> Otworz (bypass Gatekeeper) LUB: xattr -dr com.apple.quarantine /Applications/QLC+.app
 
       - name: Create DMG
         uses: nick-fields/retry@v3
@@ -135,21 +169,20 @@ jobs:
           command: |
             OUTDIR=$PWD
             cd platforms/macos/dmg
-            ./create-dmg --volname "Q Light Controller Plus ${{ env.APPVERSION }}" \
+            ./create-dmg --volname "Q Light Controller Plus ${APPVERSION}" \
               --volicon $OUTDIR/resources/icons/qlcplus.icns \
               --background background.png \
-              --window-size 600 320 \
+              --window-size 400 300 \
               --window-pos 200 100 \
-              --icon-size 80 \
-              --icon "QLC+.app" 120 160 \
-              --icon "Install.command" 380 160 \
-              --app-drop-link 560 160 \
-              $OUTDIR/QLC+_${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg \
-              /tmp/qlc-dmg-staging/
+              --icon-size 64 \
+              --icon "QLC+" 0 150 \
+              --app-drop-link 200 150 \
+              "$OUTDIR/QLC+_${APPVERSION}_${{ matrix.arch }}.dmg" \
+              ~/QLC+.app
 
       - name: Store DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QLC+-${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg
-          path: QLC+_${{ env.APPVERSION }}-${{ env.BUILD_DATE }}-${{ env.GIT_REV }}.dmg
+          name: QLC+_${{ env.APPVERSION }}_${{ matrix.arch }}.dmg
+          path: QLC+_${{ env.APPVERSION }}_${{ matrix.arch }}.dmg
           retention-days: 30

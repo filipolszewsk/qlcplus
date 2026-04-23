@@ -6,7 +6,7 @@
 > 1. Wszystko trzymać u siebie (`filipolszewsk/qlcplus`)
 > 2. Nic nie pushować do `mcallegari/qlcplus` (upstream)
 > 3. Co jakiś czas wciągać patche z oryginału
-> 4. Robić własne release'y (Windows `.exe` + macOS `.dmg`)
+> 4. Robić własne release'y (Windows `.exe` + macOS `.dmg` x86_64 + macOS `.dmg` arm64)
 > 5. Innym dać możliwość robienia PR do Twojego forka
 
 ---
@@ -215,7 +215,12 @@ Wtedy `git push upstream` da jasny błąd.
 
 ## 4. Robienie własnego release'u — AUTOMATYCZNIE
 
-Masz workflow `.github/workflows/release.yml`, który robi WSZYSTKO sam: buduje Windows `.exe`, macOS `.dmg`, tworzy GitHub Release i dodaje pliki do pobrania.
+Masz workflow `.github/workflows/release.yml`, który robi WSZYSTKO sam: buduje Windows `.exe`, macOS `.dmg` (x86_64) i macOS `.dmg` (arm64), tworzy GitHub Release i dodaje pliki do pobrania.
+
+**macOS: dwa osobne DMG** — dokładnie jak oficjalna dystrybucja na [qlcplus.org](https://www.qlcplus.org/download.html):
+- `QLC+_<wersja>_x86_64.dmg` — dla Intel Maków
+- `QLC+_<wersja>_arm64.dmg` — dla Apple Silicon (M1/M2/M3/M4)
+- Oba wymagają **macOS 12 lub nowszy** (`CMAKE_OSX_DEPLOYMENT_TARGET=12.0`)
 
 ### Metoda A — Ręcznie z GitHub UI (ZALECANE, najłatwiejsze)
 
@@ -227,16 +232,17 @@ Masz workflow `.github/workflows/release.yml`, który robi WSZYSTKO sam: buduje 
    - **Draft:** zazwyczaj `true` (szkic do edycji przed publikacją)
    - **Prerelease:** `false` (lub `true` jeśli to wersja testowa)
 4. Kliknij **Run workflow**
-5. Czekaj ~15-20 min (build Windows + macOS + utworzenie release)
+5. Czekaj ~20-30 min (Windows + macOS x86_64 + macOS arm64 równolegle + utworzenie release)
 6. Wejdź: https://github.com/filipolszewsk/qlcplus/releases
-7. Zobaczysz swój release z `.exe` i `.dmg` jako załącznikami
+7. Zobaczysz swój release z `.exe` + dwoma `.dmg` jako załącznikami
 
 **Co się dzieje pod spodem:**
 1. Jeśli tag nie istnieje — tworzy go na obecnym HEAD mastera
 2. Buduje Windows (build-windows-v4.yml)
-3. Buduje macOS (build-macos-v4.yml) równolegle
-4. Pobiera oba artefakty
-5. Tworzy GitHub Release z załącznikami i automatycznym changelogiem
+3. Buduje macOS x86_64 (build-macos-v4.yml, job matrix: macos-13 + Qt 5.15.2 aqtinstall) równolegle
+4. Buduje macOS arm64 (build-macos-v4.yml, job matrix: macos-14 + Homebrew qt@5 + qtscript ze źródeł) równolegle
+5. Pobiera wszystkie artefakty (`*.exe` + `*.dmg`)
+6. Tworzy GitHub Release z załącznikami i automatycznym changelogiem
 
 ### Metoda B — Przez push tagu (dla power userów)
 
@@ -293,6 +299,12 @@ https://github.com/filipolszewsk/qlcplus/releases/tag/v4.14.4-filip.1
 1. **Tag musi zaczynać się od `v`** — inaczej workflow się nie uruchomi
 2. **Nie pushuj taga dwa razy** — GitHub da błąd; jeśli musisz, najpierw usuń stary
 3. **Draft zawiera pliki** — nawet jako draft, release ma `.exe`/`.dmg` (ale niepubliczne dopóki nie klikniesz Publish)
+4. **macOS: aplikacja NIE jest podpisana Apple Developer ID** — pierwsza próba uruchomienia pokaże "apka uszkodzona / niezaufany developer". User musi zrobić **prawy-klik → Otwórz** (raz) ALBO w terminalu:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/QLC+.app
+   ```
+   Dokładnie to samo co przy oficjalnym QLC+ (upstream też nie podpisuje buildów na GitHub).
+5. **macOS arm64: qtscript budowany ze źródeł** — dodaje ~5-10 min do buildu arm64. Gdyby kiedyś przestał się kompilować (po zmianach w Xcode), plan B: odtworzyć stary workflow z macos-13 only + instrukcją "uruchom przez Rosetta" dla M1 userów.
 
 ---
 
