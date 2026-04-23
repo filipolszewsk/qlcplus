@@ -140,13 +140,31 @@ jobs:
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/Frameworks/libsndfile.1.dylib || true
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus
           platforms/macos/fix_dylib_deps.sh ~/QLC+.app/Contents/MacOS/qlcplus-fixtureeditor || true
-          "${QTDIR}/bin/macdeployqt" ~/QLC+.app
+          # macdeployqt -codesign=- podpisuje ad-hoc wszystkie frameworki w trakcie deploy
+          # (poprawna metoda w Qt 6, zastepuje deprecated `codesign --deep`).
+          "${QTDIR}/bin/macdeployqt" ~/QLC+.app -codesign=-
 
-      # UWAGA: Swiadomie nie robimy ad-hoc codesign + hardened runtime entitlements.
-      # Na macOS 12 (szczegolnie M1) taka kombinacja jest flaky i powoduje crash
-      # przy starcie. Oficjalny upstream QLC+ tez nie podpisuje.
-      # User pierwszy raz uruchamiajac apke musi zrobic prawy-klik -> Otworz
-      # LUB: xattr -dr com.apple.quarantine /Applications/QLC+.app
+      - name: Ad-hoc codesign app bundle
+        shell: bash
+        run: |
+          # Final re-sign calego bundle ad-hoc zeby wygenerowac spojny
+          # Contents/_CodeSignature/CodeResources. Bez tego Gatekeeper na
+          # arm64 krzyczy "damaged" — linker auto-podpisuje sam binary
+          # (arm64 tego wymaga), ale bundle nie ma resources sealed.
+          #
+          # UWAGA co swiadomie pomijamy:
+          #   - BEZ --options runtime (hardened runtime wywalal apke na M1 macOS 12)
+          #   - BEZ --entitlements (nie potrzebne bez hardened runtime)
+          #   - BEZ --deep (deprecated w Qt 6; macdeployqt -codesign=- juz podpisalo frameworki)
+          #
+          # User pierwszy raz uruchamiajac apke dostanie "unidentified developer"
+          # (bo ad-hoc != Apple Developer ID) i musi raz zrobic prawy-klik -> Otworz.
+          # Alternatywnie: xattr -dr com.apple.quarantine /Applications/QLC+.app
+          codesign --force --sign - --timestamp=none ~/QLC+.app
+          echo "--- verify bundle signature ---"
+          codesign --verify --verbose=2 ~/QLC+.app || true
+          echo "--- spctl assessment (expected: rejected, source=Unsigned — OK dla ad-hoc) ---"
+          spctl --assess --type execute --verbose ~/QLC+.app || true
 
       - name: Create DMG
         uses: nick-fields/retry@v3

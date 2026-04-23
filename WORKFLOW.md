@@ -299,11 +299,14 @@ https://github.com/filipolszewsk/qlcplus/releases/tag/v4.14.4-filip.1
 1. **Tag musi zaczynać się od `v`** — inaczej workflow się nie uruchomi
 2. **Nie pushuj taga dwa razy** — GitHub da błąd; jeśli musisz, najpierw usuń stary
 3. **Draft zawiera pliki** — nawet jako draft, release ma `.exe`/`.dmg` (ale niepubliczne dopóki nie klikniesz Publish)
-4. **macOS: aplikacja NIE jest podpisana Apple Developer ID** — pierwsza próba uruchomienia pokaże "apka uszkodzona / niezaufany developer". User musi zrobić **prawy-klik → Otwórz** (raz) ALBO w terminalu:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/QLC+.app
-   ```
-   Dokładnie to samo co przy oficjalnym QLC+ (upstream też nie podpisuje buildów na GitHub).
+4. **macOS: aplikacja jest podpisana ad-hoc (bez Apple Developer ID)** — bundle ma spójną sygnaturę (macdeployqt `-codesign=-` + finalny `codesign --force --sign -`), więc Gatekeeper NIE mówi już "is damaged". Natomiast wciąż pokaże "unidentified developer" przy pierwszym uruchomieniu. Dwie drogi dla usera:
+   - **Prawy-klik → Otwórz → Otwórz** (jednorazowo; macOS zapamiętuje)
+   - Albo w terminalu:
+     ```bash
+     xattr -dr com.apple.quarantine /Applications/QLC+.app
+     ```
+   Dokładnie to samo doświadczenie co z oficjalnym QLC+ (upstream też nie ma Apple Developer ID).
+   **Historia:** poprzednio próbowaliśmy `codesign --force --deep --sign - --entitlements qlcplus.entitlements` — ta kombinacja z entitlements włącza hardened runtime i wywalała apkę na M1 macOS 12. Obecny wariant bez entitlements i bez `--options runtime` jest bezpieczny.
 5. **macOS i Windows budują się na Qt 6.8.1** — ten sam stack co upstream Linux. RGB Scripts idą przez `QJSEngine` (Qt::Qml), nie potrzebujemy archaicznego `qtscript`. Qt 6 z aqtinstall ma oficjalne buildy zarówno pod Intel (x86_64) jak i Apple Silicon (arm64), więc arm64 też ciągnie gotowy framework (koniec kompilacji ze źródeł).
 
 ---
