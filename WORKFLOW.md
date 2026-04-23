@@ -541,7 +541,130 @@ Jeśli:
 
 ---
 
-## 10. Przydatne linki
+## 10. Lessons learned: saga z macOS codesign
+
+Na wypadek gdyby to kiedyś znowu wróciło — pełna historia co się wydarzyło, dlaczego fix działa, i jakie reguły trzymać żeby więcej tego nie przerabiać.
+
+### 10.1 Objaw
+
+Po instalacji DMG na M1 macOS 12 i pierwszym uruchomieniu:
+
+> "QLC+.app" is damaged and can't be opened. You should move it to the Bin.
+
+To jest najbardziej mylący komunikat macOS. **99% userów (i tutoriali w necie) powie: "to quarantine, zrób `xattr -dr com.apple.quarantine`"**. W naszym przypadku to NIE było quarantine — to była **zepsuta sygnatura bundle**. Usunięcie quarantine nic nie dawało, bo Launch Services i tak odmawiał uruchomienia apki z niespójnym `_CodeSignature`.
+
+### 10.2 Jak zdiagnozować "damaged" — checklist
+
+Kiedy następnym razem zobaczysz "damaged and can't be opened", NIE zgaduj. Odpal to po kolei:
+
+```bash
+APP=/Applications/QLC+.app
+
+# 1. Czy to jest quarantine?
+xattr -l "$APP"
+# Jesli widzisz com.apple.quarantine → to MOZE byc tylko quarantine.
+# Jesli tego nie ma i dalej "damaged" → problem jest z sygnatura.
+
+# 2. Jaka jest sygnatura glownego binary?
+codesign -dv --verbose=4 "$APP/Contents/MacOS/qlcplus" 2>&1 | grep -E 'Signature|Sealed|Identifier'
+# Zdrowo: "Signature=adhoc", "Sealed Resources=..." (nie "none")
+# Chore: "Sealed Resources=none" = bundle nie ma CodeResources
+
+# 3. Czy istnieje _CodeSignature bundle?
+ls "$APP/Contents/_CodeSignature/"
+# Zdrowo: CodeResources
+# Chore: No such file or directory → KONIEC diagnozy, to ten bug
+
+# 4. Co powie Gatekeeper?
+spctl --assess --type execute --verbose "$APP"
+# "accepted" = wszystko OK
+# "rejected (source=Unsigned)" = ad-hoc sygnatura (OK dla naszego buildu)
+# "code has no resources but signature indicates they must be present" = BUG
+# "In subcomponent: .../Info.plist-e" = zostawiony smieciowy plik sed'a
+```
+
+Pkt 4 to ten nasz bug. Komunikat *"In subcomponent: ..."* dosłownie mówi ci którego pliku Gatekeeper nie umie zgłębić.
+
+### 10.3 Co dokładnie było zepsute
+
+Dwa niezależne bugi stacked na sobie:
+
+**Bug A — BSD sed w `platforms/macos/CMakeLists.txt`:**
+
+```cmake
+install(CODE "execute_process(COMMAND sed -i -e \"s/__QLC_VERSION__/${APPVERSION}/g\" ${INSTALLROOT}/Info.plist)")
+```
+
+GNU sed na Linuksie: `-i` bez argumentu = edit in place, zero backup. Działa.
+BSD sed na macOS: `-i` **wymaga argumentu** = backup suffix. Kiedy przekazujesz `-i -e "..."`, BSD sed łyka `-e` jako suffix i cicho zapisuje `Info.plist-e` obok prawdziwego plisty. Zero błędu, zero warninga.
+
+**Bug B — brak codesign bundle po `macdeployqt`:**
+
+Sam `macdeployqt` bez `-codesign` kopiuje frameworki ale nie generuje `Contents/_CodeSignature/`. Na arm64 macOS linker **zawsze** ad-hoc podpisuje każdy binary (wymóg architektury), więc sam `qlcplus` ma sygnaturę, ale bundle jako całość nie ma "sealed resources". Gatekeeper widzi: binary mówi "jestem podpisany, znajdź mój CodeResources" — a CodeResources nie ma. ERROR.
+
+**Kiedy oba buguje się zgrały:** codesign uruchomiony post-factum próbuje podpisać bundle → wchodzi w `Contents/Info.plist-e` jako "nieznany subcomponent" → *"code object is not signed at all"* → aborts. Bug A zablokował fix na Bug B.
+
+### 10.4 Dlaczego nasz fix działa
+
+Trzy warstwy, każda niezależna:
+
+| # | Co robi | Przed kim chroni |
+|---|---------|------------------|
+| 1 | `sed -i.bak` + `cmake -E rm Info.plist.bak` w [platforms/macos/CMakeLists.txt](platforms/macos/CMakeLists.txt) | Bug A u źródła — explicit backup suffix działa na BSD i GNU jednakowo |
+| 2 | `find ~/QLC+.app \( -name '*.plist-e' -o -name '*.bak' \) -delete` przed i po `macdeployqt` w [.github/workflows/build-macos-v4.yml](.github/workflows/build-macos-v4.yml) | Druga linia obrony — gdyby ktoś kiedyś znowu zasyfił bundle, CI go wyczyści |
+| 3 | `chmod -R u+w ~/QLC+.app` przed `macdeployqt`, potem `macdeployqt -codesign=-`, potem `codesign --force --sign - --timestamp=none ~/QLC+.app` | Bug B — `-codesign=-` podpisuje frameworki w trakcie deploy, finalny codesign tworzy spójne `_CodeSignature/CodeResources` dla całego bundle |
+
+Dlaczego `-codesign=-` w macdeployqt **i** osobny codesign na końcu?
+- `-codesign=-` w macdeployqt to jest **nowa** oficjalna droga Qt 6 (zastępuje deprecated `codesign --deep`). Podpisuje dokładnie to co macdeployqt kopiuje: frameworki Qt i ich dyliby.
+- Finalny `codesign --force --sign - ~/QLC+.app` zaczyna od outermost bundle i idzie w dół — zapisuje `Contents/_CodeSignature/CodeResources` z listą wszystkich zasobów i ich hashami. To jest co Gatekeeper czyta przy uruchomieniu.
+
+Dlaczego BEZ `--options runtime` i BEZ `--entitlements`?
+- `--options runtime` włącza **hardened runtime** — tryb w którym macOS wymaga od apki explicit entitlements na wiele rzeczy (JIT, loading unsigned frameworks, dostęp do mikrofonu itd). Bez Apple Developer ID entitlements nic nie dają; z entitlements + ad-hoc sign + hardened runtime = apka crashuje zaraz po starcie. Przerabialiśmy. Dwa razy.
+- `--entitlements file.plist` sam w sobie nic nie robi dopóki hardened runtime nie jest aktywne, ale też aktywuje pewne restrykcje. Plain ad-hoc sign BEZ entitlements i BEZ runtime = Gatekeeper zgłasza "unidentified developer" (nie "damaged"), user robi raz prawy‑klik → Otwórz, działa.
+
+### 10.5 Reguły na przyszłość (cytuj przy następnej zmianie w platforms/macos)
+
+**R1. NIGDY nie używaj `sed -i` w install(CODE ...) w CMake bez explicit suffix.**
+Zawsze `sed -i.bak ...` + `cmake -E rm ...bak`. To działa cross-platform. Jeszcze lepsze: użyj `configure_file()` CMake'a zamiast sed'a — `configure_file(Info.plist.in Info.plist @ONLY)` i podstaw `@APPVERSION@` na etapie configure.
+
+**R2. Na macOS bundle MUSI mieć `Contents/_CodeSignature/CodeResources` zanim go zapakujesz w DMG.** Zawsze na końcu pipelinu deployu wywołuj:
+```bash
+codesign --force --sign - --timestamp=none ~/QLC+.app
+codesign --verify --verbose=2 ~/QLC+.app   # musi powiedziec "valid on disk"
+```
+Jeśli `codesign --verify` się wywali → DMG jest martwy-w-wodzie, nie continuuj.
+
+**R3. Ad-hoc sign (`--sign -`) — tak. Hardened runtime, entitlements — nie, dopóki nie masz Apple Developer ID ($99/rok).**
+Hardened runtime + ad-hoc = crash on launch, nie rób tego nigdy.
+
+**R4. Po `fix_dylib_deps.sh` zawsze `chmod -R u+w ~/QLC+.app` przed macdeployqt.**
+Homebrew instaluje dyliby z trybem 0444 (read-only dla wszystkich). `cp` z Homebrew Cellara do bundle zachowuje te prawa. Potem macdeployqt próbuje strip i pada z Permission denied — warning, ale finalna sygnatura może być niespójna.
+
+**R5. Pierwszy test na realnym sprzęcie, nie na runnerze.**
+GitHub Actions macos-14 (arm64) **podpisuje ad-hoc i uruchomi apkę lokalnie bez problemu** bo runner ma własną politykę Gatekeeper. User na swoim M1 macOS 12 ma pełnego Gatekeeper + Quarantine + Launch Services — jedyny miarodajny test to ściągnięcie DMG z releases i kliknięcie Install na docelowej maszynie.
+
+**R6. Kiedy "damaged" wraca — od razu `codesign --verify --verbose=4` i `ls Contents/_CodeSignature/`.** Nie trać czasu na `xattr`.
+
+**R7. Diff przy aktualizacji upstream.** Przy każdym merge z upstream master patrz w diff dla:
+- `platforms/macos/CMakeLists.txt` (tam siedział bug)
+- `.github/workflows/build.yml` (jak upstream zmieni swój codesign flow, warto to podpatrzeć)
+- każdego `.sh` w `platforms/macos/`
+
+Jeśli upstream kiedyś naprawi `sed -i -e`, to świetnie — ale sprawdź, nie zakładaj.
+
+### 10.6 Pełna chronologia (tl;dr)
+
+1. Próba uniwersalnego DMG + code signing z entitlements → apka crashuje na M1 macOS 12.
+2. Usunęliśmy entitlements i cały `codesign` z workflow → "damaged" dialog.
+3. Założyliśmy że to quarantine → `xattr -dr com.apple.quarantine` → dalej "damaged".
+4. `spctl --assess` pokazało: `code has no resources but signature indicates they must be present`. `ls .../_CodeSignature/` pokazało: `No such file`.
+5. Dodaliśmy `macdeployqt -codesign=-` + final `codesign --force --sign -`. Codesign się wywalił na `Contents/Info.plist-e`.
+6. `grep -r "sed -i" platforms/macos/` zdradziło bug BSD sed w CMakeLists.
+7. Fix w trzech warstwach. CI zielone. DMG otwiera się po prawy‑klik → Otwórz.
+
+---
+
+## 11. Przydatne linki
 
 - Twój fork: https://github.com/filipolszewsk/qlcplus
 - Twoje Actions: https://github.com/filipolszewsk/qlcplus/actions
