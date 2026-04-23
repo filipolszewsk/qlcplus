@@ -21,6 +21,13 @@
 #define LTCTIMECODEENGINE_H
 
 #include <QObject>
+#include "timecodesource.h"
+
+class Doc;
+class Function;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+
 #include <QMutex>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -28,13 +35,7 @@
 #include <QAudioDevice>
 #include <QMediaDevices>
 #include <QIODevice>
-
 #include <ltc.h>
-
-#include "timecodesource.h"
-
-class Doc;
-class Function;
 
 /**
  * LTCTimecodeEngine — decodes SMPTE LTC (Linear Timecode) from an audio input
@@ -135,5 +136,34 @@ private:
     // Diagnostics
     QString         m_smpteString;
 };
+
+#else // Qt < 6.2 — LTC timecode requires QAudioSource/QAudioDevice (Qt 6.2+)
+      // Provide a no-op stub so the rest of the codebase compiles unmodified.
+
+class LTCTimecodeEngine : public QObject, public TimeCodeSource
+{
+    Q_OBJECT
+public:
+    explicit LTCTimecodeEngine(Doc *, QObject *parent = nullptr) : QObject(parent) {}
+
+    // TimeCodeSource
+    bool    isLocked()      const override { return false; }
+    quint32 currentTimeMs() const override { return 0; }
+
+    // Capture control (always inactive)
+    void    stopCapture() {}
+    bool    isCapturing() const { return false; }
+    int     offsetMs()    const { return 0; }
+    void    setOffsetMs(int) {}
+    QString smpteString() const { return {}; }
+    int     detectedFps() const { return 0; }
+
+signals:
+    void lockChanged(bool);
+    void timeCodeUpdated(QString);
+    void captureStopped();
+};
+
+#endif // QT_VERSION >= 6.2.0
 
 #endif // LTCTIMECODEENGINE_H

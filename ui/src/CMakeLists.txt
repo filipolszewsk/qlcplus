@@ -130,8 +130,6 @@ add_library(${module_name}
     showmanager/showeditor.cpp showmanager/showeditor.h showmanager/showeditor.ui
     showmanager/showitem.cpp showmanager/showitem.h
     showmanager/showmanager.cpp showmanager/showmanager.h
-    showmanager/ltctimecodeengine.cpp showmanager/ltctimecodeengine.h
-    showmanager/ltctimecodewidget.cpp showmanager/ltctimecodewidget.h
     showmanager/timingstool.cpp showmanager/timingstool.h
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
@@ -207,13 +205,24 @@ target_include_directories(${module_name} PUBLIC
 target_link_libraries(${module_name} PUBLIC
     Qt${QT_MAJOR_VERSION}::Core
     Qt${QT_MAJOR_VERSION}::Gui
-    Qt${QT_MAJOR_VERSION}::Multimedia
-    Qt${QT_MAJOR_VERSION}::MultimediaWidgets
     Qt${QT_MAJOR_VERSION}::Network
     Qt${QT_MAJOR_VERSION}::Widgets
     qlcplusengine
     ${LIBLTC_LIBRARIES}
 )
+
+# LTC Timecode engine requires Qt >= 6.2 (QAudioSource, QAudioDevice, QMediaDevices).
+# On Qt 5 the engine/widget are stubbed out in their headers; .cpp files are excluded.
+if(QT_VERSION_MAJOR GREATER 5)
+    target_sources(${module_name} PRIVATE
+        showmanager/ltctimecodeengine.cpp showmanager/ltctimecodeengine.h
+        showmanager/ltctimecodewidget.cpp showmanager/ltctimecodewidget.h
+    )
+    target_link_libraries(${module_name} PUBLIC
+        Qt${QT_MAJOR_VERSION}::Multimedia
+        Qt${QT_MAJOR_VERSION}::MultimediaWidgets
+    )
+endif()
 
 # Add resources and RGB Script deps
 if(QT_VERSION_MAJOR GREATER 5)

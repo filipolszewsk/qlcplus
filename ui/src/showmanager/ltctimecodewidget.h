@@ -21,9 +21,13 @@
 #define LTCTIMECODEWIDGET_H
 
 #include <QDialog>
-#include <QAudioDevice>
 
 class LTCTimecodeEngine;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+
+#include <QAudioDevice>
+
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -74,5 +78,17 @@ private:
 
     QList<QAudioDevice> m_devices;
 };
+
+#else // Qt < 6.2 stub
+
+class LTCTimecodeWidget : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit LTCTimecodeWidget(LTCTimecodeEngine *, QWidget *parent = nullptr)
+        : QDialog(parent) {}
+};
+
+#endif // QT_VERSION >= 6.2.0
 
 #endif // LTCTIMECODEWIDGET_H
