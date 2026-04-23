@@ -37,7 +37,7 @@
  * Keep this SECRET - this binary should NOT be open source.
  */
 const QString ActivatorWindow::MASTER_CONTENT_KEY =
-    "3bc2ddf5148fdf2bff59e14935675cf4e525752cbd95c4a8a882274ee14afa6d";
+    "6cf1c35cd4adeb450c15ce9b0630a3f3e9d2e7904b4974d517995b3522605f3d";
 
 ActivatorWindow::ActivatorWindow(QWidget *parent)
     : QWidget(parent)

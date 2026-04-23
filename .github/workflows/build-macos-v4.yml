@@ -18,10 +18,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # x86_64: macos-13 (Intel hardware, native x86_64 build)
-          - arch: x86_64
-            runner: macos-13
           # arm64: macos-14 (Apple Silicon hardware, native arm64 build)
+          # x86_64 (Intel) intentionally disabled — psuje release'y.
+          # Jak zajdzie potrzeba przywrocenia, dodaj ponizej:
+          #   - arch: x86_64
+          #     runner: macos-13
           - arch: arm64
             runner: macos-14
 

@@ -61,3 +61,19 @@ CPackConfig.cmake
 CPackSourceConfig.cmake
 cmake_install.cmake
 cmake_uninstall.cmake
+
+# Filip's local docs (not tracked on git)
+/CHANGELOG_DETAILED.md
+/CHANGELOG_SUMMARY.md
+/DMG_BUILD_NOTES.md
+/GRIDQLC_INSTALL_mac.md
+/INSTALACJA_macOS_Apple_Silicon.md
+/QUICK_INSTALL_macOS.md
+/WINDOWS_BUILD_INSTRUCTIONS.md
+/WORKFLOW.md
+/analysis.md
+/propozycja modyfikacji efx.md
+/qmake2cmake.md
+/timecodeimplementation.md
+/vcmultiput.md
+
