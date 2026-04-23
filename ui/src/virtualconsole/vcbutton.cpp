@@ -47,6 +47,7 @@
 
 #include "qlcinputsource.h"
 #include "qlcmacros.h"
+#include "qlcconfig.h"
 #include "qlcfile.h"
 
 #include "vcbuttonproperties.h"
@@ -1185,21 +1186,37 @@ bool VCButton::loadXML(QXmlStreamReader &root)
 
     /* Icon */
     {
-        QString iconPath = m_doc->denormalizeComponentPath(
-            root.attributes().value(KXMLQLCVCButtonIcon).toString());
-
-        // Fallback for old projects: absolute path may be from a different
-        // machine/OS. Look for a file with the same name in workspace/scribbles/.
-        if (!iconPath.isEmpty() && !QFileInfo::exists(iconPath))
+        QString stored = root.attributes().value(KXMLQLCVCButtonIcon).toString();
+        QString resolvedIconPath;
+        if (!stored.isEmpty())
         {
-            QString candidate = m_doc->workspacePath()
-                + "/scribbles/"
-                + QFileInfo(iconPath).fileName();
-            if (QFileInfo::exists(candidate))
-                iconPath = candidate;
-        }
+            if (!stored.contains('/') && !stored.contains('\\'))
+            {
+                // Just a filename — look it up in the global scribbles directory.
+                // This is the canonical format for scribbles (like RGB scripts use
+                // only their name, resolved against USERRGBSCRIPTDIR at runtime).
+                QString scribbleDir = QLCFile::userDirectory(
+                    QString(USERSCRIBBLEDIR), QString(USERSCRIBBLEDIR),
+                    QStringList()).absolutePath();
+                resolvedIconPath = scribbleDir + "/" + stored;
+            }
+            else
+            {
+                resolvedIconPath = m_doc->denormalizeComponentPath(stored);
 
-        setIconPath(iconPath);
+                // Fallback for old projects: absolute path may be from a different
+                // machine/OS. Look for a file with the same name in workspace/scribbles/.
+                if (!QFileInfo::exists(resolvedIconPath))
+                {
+                    QString candidate = m_doc->workspacePath()
+                        + "/scribbles/"
+                        + QFileInfo(resolvedIconPath).fileName();
+                    if (QFileInfo::exists(candidate))
+                        resolvedIconPath = candidate;
+                }
+            }
+        }
+        setIconPath(resolvedIconPath);
     }
 
     /* Children */
@@ -1279,7 +1296,20 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
     saveXMLCommon(doc);
 
     /* Icon */
-    doc->writeAttribute(KXMLQLCVCButtonIcon, m_doc->normalizeComponentPath(iconPath()));
+    {
+        QString iconAttr;
+        if (!iconPath().isEmpty())
+        {
+            QString scribbleDir = QLCFile::userDirectory(
+                QString(USERSCRIBBLEDIR), QString(USERSCRIBBLEDIR),
+                QStringList()).absolutePath();
+            if (!scribbleDir.isEmpty() && iconPath().startsWith(scribbleDir))
+                iconAttr = QFileInfo(iconPath()).fileName();
+            else
+                iconAttr = m_doc->normalizeComponentPath(iconPath());
+        }
+        doc->writeAttribute(KXMLQLCVCButtonIcon, iconAttr);
+    }
 
     /* Window state */
     saveXMLWindowState(doc);
