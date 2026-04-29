@@ -159,6 +159,15 @@ jobs:
           cd build
           ninja install
 
+      - name: Copy OpenSSL DLLs for TLS support
+        shell: msys2 {0}
+        run: |
+          OPENSSL_BIN="/d/a/_temp/msys64/mingw64/bin"
+          echo "=== Searching for OpenSSL DLLs in $OPENSSL_BIN ==="
+          ls "$OPENSSL_BIN"/libssl*.dll "$OPENSSL_BIN"/libcrypto*.dll 2>/dev/null || echo "WARNING: no OpenSSL DLLs found"
+          cp "$OPENSSL_BIN"/libssl*.dll /c/qlcplus/ 2>/dev/null && echo "libssl copied" || echo "WARNING: libssl DLL not found"
+          cp "$OPENSSL_BIN"/libcrypto*.dll /c/qlcplus/ 2>/dev/null && echo "libcrypto copied" || echo "WARNING: libcrypto DLL not found"
+
       - name: Run windeployqt for v4
         shell: msys2 {0}
         run: |-
