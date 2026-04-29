@@ -88,6 +88,7 @@ Section
 	File /r imageformats
 	File /r multimedia
 	File /r styles
+	File /r tls
 	File Sample.qxw
 	File *.qm
 	File /r Fixtures
@@ -128,6 +129,7 @@ Section "Uninstall"
         RMDir /r $INSTDIR\imageformats
 	RMDir /r $INSTDIR\multimedia
 	RMDir /r $INSTDIR\styles
+	RMDir /r $INSTDIR\tls
 	Delete $INSTDIR\Sample.qxw
 	Delete $INSTDIR\*.qm
 	RMDir /r $INSTDIR\Fixtures

@@ -90,6 +90,7 @@ Section
 	File /r platforms
 	File /r qml
 	File /r renderers
+	File /r tls
 	File /r sceneparsers
 	File /r ColorFilters
 	File /r Fixtures
@@ -130,6 +131,7 @@ Section "Uninstall"
 	RMDir /r $INSTDIR\imageformats
 	RMDir /r $INSTDIR\multimedia
 	RMDir /r $INSTDIR\platforms
+	RMDir /r $INSTDIR\tls
 	RMDir /r $INSTDIR\renderers
 	RMDir /r $INSTDIR\sceneparsers
 	RMDir /r $INSTDIR\qml
