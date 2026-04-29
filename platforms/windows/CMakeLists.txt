@@ -19,6 +19,8 @@ endfunction()
 # MSYS2 libraries
 set(msys_path "${INSTALLROOT}/${LIBSDIR}")
 copy_system_library(msys_files "libusb-1.0.dll")
+copy_system_library(msys_files "libssl-3.dll")
+copy_system_library(msys_files "libcrypto-3.dll")
 install(FILES ${msys_files} DESTINATION ${msys_path})
 
 # audio libraries

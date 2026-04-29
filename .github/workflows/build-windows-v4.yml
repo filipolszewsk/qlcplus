@@ -89,6 +89,7 @@ jobs:
             mingw-w64-x86_64-libusb
             mingw-w64-x86_64-python-lxml
             mingw-w64-x86_64-nsis
+            mingw-w64-x86_64-openssl
 
       - name: Build and install libltc from source
         shell: msys2 {0}
