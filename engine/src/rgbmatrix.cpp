@@ -1294,6 +1294,14 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 {
     uint fadeTime = (overrideFadeInSpeed() == defaultSpeed()) ? fadeInSpeed() : overrideFadeInSpeed();
 
+    // Cache paramCount once per call — it is a script property that never changes
+    // during playback. Calling it inside the fixture loop caused N blocking
+    // cross-thread IPC calls per tick (N = fixture count), each waiting on the
+    // JS thread semaphore.
+    const int cachedParamCount = (m_enablePerFixtureMapping && m_runAlgorithm != NULL)
+                                     ? m_runAlgorithm->paramCount()
+                                     : 1;
+
     // Create/modify fade channels for ALL heads in the group
     QMapIterator<QLCPoint, GroupHead> it(grp->headsMap());
     while (it.hasNext())
@@ -1357,7 +1365,6 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
             QList<ChannelMapping> mappings = m_fixtureDefChannelMap.value(defKey);
-            int paramCount = m_runAlgorithm->paramCount();
 
             foreach (const ChannelMapping &mapping, mappings)
             {
@@ -1366,7 +1373,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     // "Auto" entry: use its offset to select the source row for the
                     // standard ControlMode path (RGB/RGBW/Dimmer/…) that runs below.
                     // The last Auto entry wins if there are multiple.
-                    int sourceRow = scriptRow * paramCount + mapping.valueIndex;
+                    int sourceRow = scriptRow * cachedParamCount + mapping.valueIndex;
                     if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
                         col = map[sourceRow][scriptPos.x()];
                     hasAutoMapping = true;
@@ -1379,7 +1386,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 {
                     // Use Virtual Dimmer as normal FadeChannel with special channel 0xFFFE
                     int offset = mapping.valueIndex;
-                    int sourceRow = scriptRow * paramCount + offset;
+                    int sourceRow = scriptRow * cachedParamCount + offset;
 
                     uint sourceCol = col;
                     if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
@@ -1410,7 +1417,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 {
                     // Use Virtual Strobe as normal FadeChannel with special channel 0xFFFC
                     int offset = mapping.valueIndex;
-                    int sourceRow = scriptRow * paramCount + offset;
+                    int sourceRow = scriptRow * cachedParamCount + offset;
 
                     uint sourceCol = col;
                     if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
@@ -1436,7 +1443,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 else if (channelIdx != QLCChannel::invalid())
                 {
                     int offset = mapping.valueIndex;
-                    int sourceRow = scriptRow * paramCount + offset;
+                    int sourceRow = scriptRow * cachedParamCount + offset;
 
                     uint sourceCol = col;
                     if (sourceRow >= 0 && sourceRow < map.count() && scriptPos.x() < map[sourceRow].count())
