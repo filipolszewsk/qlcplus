@@ -210,6 +210,7 @@ bool RGBScript::evaluate()
     m_rgbMapStepCount = QJSValue();
     m_rgbMapSetColors = QJSValue();
     m_apiVersion = 0;
+    m_cachedParamCount = -1;
 
     if (m_fileName.isEmpty() || m_contents.isEmpty())
     {
@@ -474,18 +475,20 @@ int RGBScript::acceptColors() const
 
 int RGBScript::paramCount() const
 {
+    if (m_cachedParamCount >= 0)
+        return m_cachedParamCount;
+
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
     {
         int retVal;
         QMetaObject::invokeMethod(s_jsThread->engine, [this]{ return paramCount();}, Qt::BlockingQueuedConnection, &retVal);
-        return retVal;
+        m_cachedParamCount = retVal;
+        return m_cachedParamCount;
     }
 
     QJSValue count = m_script.property(QStringLiteral("paramCount"));
-    if (!count.isUndefined() && count.isNumber())
-        return count.toInt();
-    
-    return 1; // Default = 1 for backward compatibility
+    m_cachedParamCount = (!count.isUndefined() && count.isNumber()) ? count.toInt() : 1;
+    return m_cachedParamCount;
 }
 
 bool RGBScript::loadXML(QXmlStreamReader &root)
