@@ -22,6 +22,7 @@
 
 #include <QHash>
 #include <QJSValue>
+#include <QReadWriteLock>
 
 #include "rgbalgorithm.h"
 #include "rgbscriptproperty.h"
@@ -74,6 +75,9 @@ private:
 
     /** Handle an error after evaluate() or call() of a script */
     static void displayError(QJSValue e, const QString& fileName);
+
+    /** Compute rgbMap on the JS thread and store result in m_lastMap. Must be called on s_jsThread. */
+    void computeMapOnJSThread(const QSize& size, uint rgb, int step);
 
 private:
     QString m_fileName;             //! The file name that contains this script
@@ -131,6 +135,8 @@ private:
     QJSValue m_rgbMapSetColors;         //! rgbMapSetColors() function
     QJSValue m_rgbMapGetColors;         //! rgbMapSetColors() function
     mutable int m_cachedParamCount = -1;//! Cached result of paramCount() — -1 = not yet read
+    RGBMap m_lastMap;                   //! Last successfully computed map (async double buffer)
+    mutable QReadWriteLock m_mapLock;   //! Protects m_lastMap for cross-thread access
 
     /************************************************************************
      * Properties
