@@ -2,7 +2,7 @@ name: Build macOS DMG (QLC+ 4.14)
 
 on:
   push:
-    branches: [ main, master, fix/vcslider-properties-perf, perf/cache-paramcount-per-tick, perf/cache-paramcount-in-rgbscript, perf/async-rgbmap-nonblocking ]
+    branches: [ main, master, fix/vcslider-properties-perf, perf/cache-paramcount-per-tick, perf/cache-paramcount-in-rgbscript ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:

@@ -79,11 +79,6 @@ RGBScript::RGBScript(const RGBScript& s)
 
 RGBScript::~RGBScript()
 {
-    // Flush any pending async computations queued on the JS thread that still
-    // hold a pointer to this object. The blocking no-op ensures all previously
-    // queued lambdas have finished before the destructor continues.
-    if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
-        QMetaObject::invokeMethod(s_jsThread->engine, [](){}, Qt::BlockingQueuedConnection);
 }
 
 RGBScript &RGBScript::operator=(const RGBScript &s)
@@ -216,7 +211,6 @@ bool RGBScript::evaluate()
     m_rgbMapSetColors = QJSValue();
     m_apiVersion = 0;
     m_cachedParamCount = -1;
-    { QWriteLocker wl(&m_mapLock); m_lastMap = RGBMap(); }
 
     if (m_fileName.isEmpty() || m_contents.isEmpty())
     {
@@ -370,82 +364,46 @@ QVector<uint> RGBScript::rgbMapGetColors()
     return colArray;
 }
 
-void RGBScript::computeMapOnJSThread(const QSize& size, uint rgb, int step)
+void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 {
-    if (m_rgbMap.isUndefined())
+    if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
+    {
+        QMetaObject::invokeMethod(s_jsThread->engine, [this, size, rgb, step, &map]{ rgbMap(size, rgb, step, map);}, Qt::BlockingQueuedConnection);
+        return;
+    }
+
+    if (m_rgbMap.isUndefined() == true)
         return;
 
+    // Call the rgbMap function
     QJSValueList args;
     args << size.width() << size.height() << rgb << step;
 
     QJSValue yarray(m_rgbMap.call(args));
     if (yarray.isError())
-    {
         displayError(yarray, m_fileName);
-        return;
-    }
 
-    if (!yarray.isArray())
+    // Check the matrix to be a valid matrix
+    if (yarray.isArray())
+    {
+        QVariantList yvArray = yarray.toVariant().toList();
+        int ylen = yvArray.length();
+        map.resize(ylen);
+
+        for (int y = 0; y < ylen && y < size.height(); y++)
+        {
+            QVariantList xvArray = yvArray.at(y).toList();
+            int xlen = xvArray.length();
+            map[y].resize(xlen);
+
+            for (int x = 0; x < xlen && x < size.width(); x++)
+                map[y][x] = xvArray.at(x).toUInt();
+        }
+    }
+    else
     {
         qWarning() << "Returned value is not an array within an array!";
-        return;
     }
-
-    QVariantList yvArray = yarray.toVariant().toList();
-    int ylen = yvArray.length();
-    RGBMap newMap;
-    newMap.resize(ylen);
-
-    for (int y = 0; y < ylen && y < size.height(); y++)
-    {
-        QVariantList xvArray = yvArray.at(y).toList();
-        int xlen = xvArray.length();
-        newMap[y].resize(xlen);
-
-        for (int x = 0; x < xlen && x < size.width(); x++)
-            newMap[y][x] = xvArray.at(x).toUInt();
-    }
-
-    QWriteLocker wl(&m_mapLock);
-    m_lastMap = std::move(newMap);
-}
-
-void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
-{
-    if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
-    {
-        bool hasCachedMap;
-        {
-            QReadLocker rl(&m_mapLock);
-            hasCachedMap = !m_lastMap.isEmpty();
-        }
-
-        if (hasCachedMap)
-        {
-            // Non-blocking path: queue next computation on JS thread and return
-            // the last known good map immediately. Max visual lag: 1 tick (20 ms).
-            QMetaObject::invokeMethod(s_jsThread->engine,
-                [this, size, rgb, step]{ computeMapOnJSThread(size, rgb, step); },
-                Qt::QueuedConnection);
-            QReadLocker rl(&m_mapLock);
-            map = m_lastMap;
-        }
-        else
-        {
-            // First call: block once so the initial frame is never blank.
-            QMetaObject::invokeMethod(s_jsThread->engine,
-                [this, size, rgb, step]{ computeMapOnJSThread(size, rgb, step); },
-                Qt::BlockingQueuedConnection);
-            QReadLocker rl(&m_mapLock);
-            map = m_lastMap;
-        }
-        return;
-    }
-
-    // Already on the JS thread (e.g. preview calls): compute synchronously.
-    computeMapOnJSThread(size, rgb, step);
-    QReadLocker rl(&m_mapLock);
-    map = m_lastMap;
 }
 
 void RGBScript::postRun()
