@@ -169,7 +169,7 @@ void LicenseDialog::slotActivate()
     m_activateBtn->setEnabled(false);
     setActivationStatus(tr("Activating..."), false);
 
-    QNetworkRequest req(QUrl("https://qlcplus-license-backend.vercel.app/api/activate"));
+    QNetworkRequest req(QUrl("https://qlcplus-license-backend-silk.vercel.app/api/activate"));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
     req.setRawHeader("X-QLC-Client", "1");
 
@@ -253,7 +253,7 @@ void LicenseDialog::slotDeactivate()
     m_deactivateBtn->setEnabled(false);
     setActivationStatus(tr("Deactivating..."), false);
 
-    QNetworkRequest req(QUrl("https://qlcplus-license-backend.vercel.app/api/deactivate"));
+    QNetworkRequest req(QUrl("https://qlcplus-license-backend-silk.vercel.app/api/deactivate"));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     QJsonObject payload;
