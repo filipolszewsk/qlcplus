@@ -551,6 +551,10 @@ void App::initDoc()
     /* Load license */
     m_doc->licenseManager()->loadLicense();
 
+    /* Reload premium scripts whenever license status changes (activation/deactivation at runtime) */
+    connect(m_doc->licenseManager(), &LicenseManager::licenseChanged,
+            this, &App::slotReloadPremiumScripts);
+
     /* Load RGB scripts */
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::systemScriptsDirectory());
     m_doc->rgbScriptsCache()->load(RGBScriptsCache::userScriptsDirectory());
@@ -1357,6 +1361,12 @@ void App::slotLicenseDialog()
 
     /* Refresh window title after license change */
     slotDocModified(m_doc->isModified());
+}
+
+void App::slotReloadPremiumScripts()
+{
+    m_doc->rgbScriptsCache()->loadPremium(RGBScriptsCache::systemScriptsDirectory());
+    m_doc->rgbScriptsCache()->loadPremium(RGBScriptsCache::userScriptsDirectory());
 }
 
 void App::slotRecentFileClicked(QAction *recent)
