@@ -62,8 +62,33 @@ CPackSourceConfig.cmake
 cmake_install.cmake
 cmake_uninstall.cmake
 
+# Qt MOC autogen directories and dependency files
+*_autogen/
+*.cpp.d
+
+# Build logs
+aqtinstall.log
+
 # Standalone license activator tool (replaced by in-app LicenseDialog in ui/src/)
 /tools/license-activator/
+
+# Encryption tool – build artifacts (build with qmake locally, never commit binary)
+/tools/encrypt-content/qlc-encrypt-content
+/tools/encrypt-content/build/
+/tools/encrypt-content/*.o
+/tools/encrypt-content/Makefile
+
+# Premium encrypted scripts and their plaintext sources (distributed separately, not open source)
+/tools/test-premium-content/*.qlcscript
+/tools/test-premium-content/*.js
+
+# User license file (machine-specific, never commit)
+*.qlckey
+
+# Secrets / environment files
+.env
+.env.*
+*.env
 
 # Filip's local docs (not tracked on git)
 /CHANGELOG_DETAILED.md
