@@ -62,6 +62,9 @@ CPackSourceConfig.cmake
 cmake_install.cmake
 cmake_uninstall.cmake
 
+# Standalone license activator tool (replaced by in-app LicenseDialog in ui/src/)
+/tools/license-activator/
+
 # Filip's local docs (not tracked on git)
 /CHANGELOG_DETAILED.md
 /CHANGELOG_SUMMARY.md
