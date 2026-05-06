@@ -210,6 +210,7 @@ bool RGBScript::evaluate()
     m_rgbMapStepCount = QJSValue();
     m_rgbMapSetColors = QJSValue();
     m_apiVersion = 0;
+    m_cachedParamCount = -1;
 
     if (m_fileName.isEmpty() || m_contents.isEmpty())
     {
@@ -382,21 +383,23 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
     if (yarray.isError())
         displayError(yarray, m_fileName);
 
-    // Check the matrix to be a valid matrix
+    // Walk the returned JS array directly — avoids building a full QVariantList
+    // copy of the entire grid (toVariant().toList() allocates O(cells) QVariants).
     if (yarray.isArray())
     {
-        QVariantList yvArray = yarray.toVariant().toList();
-        int ylen = yvArray.length();
-        map.resize(ylen);
+        const int ylen = yarray.property(QStringLiteral("length")).toInt();
+        const int ybound = qMin(ylen, size.height());
+        map.resize(ybound);
 
-        for (int y = 0; y < ylen && y < size.height(); y++)
+        for (int y = 0; y < ybound; y++)
         {
-            QVariantList xvArray = yvArray.at(y).toList();
-            int xlen = xvArray.length();
-            map[y].resize(xlen);
+            QJSValue xarray = yarray.property(y);
+            const int xlen = xarray.property(QStringLiteral("length")).toInt();
+            const int xbound = qMin(xlen, size.width());
+            map[y].resize(xbound);
 
-            for (int x = 0; x < xlen && x < size.width(); x++)
-                map[y][x] = xvArray.at(x).toUInt();
+            for (int x = 0; x < xbound; x++)
+                map[y][x] = xarray.property(x).toUInt();
         }
     }
     else
@@ -474,18 +477,20 @@ int RGBScript::acceptColors() const
 
 int RGBScript::paramCount() const
 {
+    if (m_cachedParamCount >= 0)
+        return m_cachedParamCount;
+
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
     {
         int retVal;
         QMetaObject::invokeMethod(s_jsThread->engine, [this]{ return paramCount();}, Qt::BlockingQueuedConnection, &retVal);
-        return retVal;
+        m_cachedParamCount = retVal;
+        return m_cachedParamCount;
     }
 
     QJSValue count = m_script.property(QStringLiteral("paramCount"));
-    if (!count.isUndefined() && count.isNumber())
-        return count.toInt();
-    
-    return 1; // Default = 1 for backward compatibility
+    m_cachedParamCount = (!count.isUndefined() && count.isNumber()) ? count.toInt() : 1;
+    return m_cachedParamCount;
 }
 
 bool RGBScript::loadXML(QXmlStreamReader &root)

@@ -124,12 +124,13 @@ public:
     bool saveXML(QXmlStreamWriter *doc) const;
 
 private:
-    int m_apiVersion;           //! The API version that the script uses
-    QJSValue m_script;          //! The script itself
-    QJSValue m_rgbMap;          //! rgbMap() function
-    QJSValue m_rgbMapStepCount; //! rgbMapStepCount() function
-    QJSValue m_rgbMapSetColors; //! rgbMapSetColors() function
-    QJSValue m_rgbMapGetColors; //! rgbMapSetColors() function
+    int m_apiVersion;                   //! The API version that the script uses
+    QJSValue m_script;                  //! The script itself
+    QJSValue m_rgbMap;                  //! rgbMap() function
+    QJSValue m_rgbMapStepCount;         //! rgbMapStepCount() function
+    QJSValue m_rgbMapSetColors;         //! rgbMapSetColors() function
+    QJSValue m_rgbMapGetColors;         //! rgbMapSetColors() function
+    mutable int m_cachedParamCount = -1;//! Cached result of paramCount() — -1 = not yet read
 
     /************************************************************************
      * Properties

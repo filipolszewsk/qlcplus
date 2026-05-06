@@ -42,6 +42,9 @@ QString LicenseManager::licenseFilePath()
 #else
     QString path = QDir::homePath() + "/.qlcplus";
 #endif
+    QDir dir(path);
+    if (!dir.exists())
+        dir.mkpath(".");
     return path + QDir::separator() + QLCKEY_FILENAME;
 }
 
