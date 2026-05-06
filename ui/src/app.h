@@ -181,6 +181,7 @@ public slots:
     void slotHelpIndex();
     void slotHelpAbout();
     void slotLicenseDialog();
+    void slotReloadPremiumScripts();
 
     void slotRecentFileClicked(QAction *recent);
 
