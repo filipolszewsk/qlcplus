@@ -383,21 +383,23 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
     if (yarray.isError())
         displayError(yarray, m_fileName);
 
-    // Check the matrix to be a valid matrix
+    // Walk the returned JS array directly — avoids building a full QVariantList
+    // copy of the entire grid (toVariant().toList() allocates O(cells) QVariants).
     if (yarray.isArray())
     {
-        QVariantList yvArray = yarray.toVariant().toList();
-        int ylen = yvArray.length();
-        map.resize(ylen);
+        const int ylen = yarray.property(QStringLiteral("length")).toInt();
+        const int ybound = qMin(ylen, size.height());
+        map.resize(ybound);
 
-        for (int y = 0; y < ylen && y < size.height(); y++)
+        for (int y = 0; y < ybound; y++)
         {
-            QVariantList xvArray = yvArray.at(y).toList();
-            int xlen = xvArray.length();
-            map[y].resize(xlen);
+            QJSValue xarray = yarray.property(y);
+            const int xlen = xarray.property(QStringLiteral("length")).toInt();
+            const int xbound = qMin(xlen, size.width());
+            map[y].resize(xbound);
 
-            for (int x = 0; x < xlen && x < size.width(); x++)
-                map[y][x] = xvArray.at(x).toUInt();
+            for (int x = 0; x < xbound; x++)
+                map[y][x] = xarray.property(x).toUInt();
         }
     }
     else

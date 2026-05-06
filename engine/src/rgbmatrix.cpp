@@ -1047,6 +1047,34 @@ void RGBMatrix::preRun(MasterTimer *timer)
         }
     }
 
+    // Pre-resolve channel name → index for every fixture definition in the mapping.
+    // findChannelByName() does a linear string scan per fixture per step; caching it
+    // here (once at start) reduces updateMapChannels() to a single hash lookup.
+    m_resolvedChannelIndices.clear();
+    if (m_enablePerFixtureMapping && m_group != NULL)
+    {
+        QMapIterator<QLCPoint, GroupHead> headIt(m_group->headsMap());
+        while (headIt.hasNext())
+        {
+            headIt.next();
+            Fixture *fxi = doc()->fixture(headIt.value().fxi);
+            if (fxi == NULL) continue;
+
+            QString defKey = getFixtureDefKey(fxi->fixtureDef());
+            if (defKey.isEmpty() || m_resolvedChannelIndices.contains(defKey)) continue;
+
+            const QList<ChannelMapping> &mappings = m_fixtureDefChannelMap.value(defKey);
+            if (mappings.isEmpty()) continue;
+
+            QVector<quint32> indices;
+            indices.reserve(mappings.size());
+            for (const ChannelMapping &mapping : mappings)
+                indices.append(findChannelByName(fxi->fixtureMode(), mapping.channelName));
+
+            m_resolvedChannelIndices.insert(defKey, indices);
+        }
+    }
+
     m_roundTime.restart();
 
     Function::preRun(timer);
@@ -1364,10 +1392,12 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL && m_runAlgorithm != NULL)
         {
             QString defKey = getFixtureDefKey(fxi->fixtureDef());
-            QList<ChannelMapping> mappings = m_fixtureDefChannelMap.value(defKey);
+            const QList<ChannelMapping> &mappings = m_fixtureDefChannelMap.value(defKey);
+            const QVector<quint32> &resolvedIdx = m_resolvedChannelIndices.value(defKey);
 
-            foreach (const ChannelMapping &mapping, mappings)
+            for (int mi = 0; mi < mappings.size(); mi++)
             {
+                const ChannelMapping &mapping = mappings[mi];
                 if (mapping.channelName.isEmpty())
                 {
                     // "Auto" entry: use its offset to select the source row for the
@@ -1380,8 +1410,11 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     continue;
                 }
 
-                // Named channel: append it with its own offset value
-                quint32 channelIdx = findChannelByName(fxi->fixtureMode(), mapping.channelName);
+                // Named channel: use the channel index pre-resolved in preRun() to avoid
+                // per-step linear string scan across all fixture channels.
+                quint32 channelIdx = (mi < resolvedIdx.size())
+                                         ? resolvedIdx[mi]
+                                         : findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx == RGBMATRIX_VIRTUAL_DIMMER_CHANNEL)
                 {
                     // Use Virtual Dimmer as normal FadeChannel with special channel 0xFFFE

@@ -447,7 +447,11 @@ private slots:
 private:
     /** Map of fixture definition key (manufacturer|model) to list of channel mappings */
     QMap<QString, QList<ChannelMapping>> m_fixtureDefChannelMap;
-    
+
+    /** Pre-resolved channel indices: defKey → vector of channel indices (one per mapping).
+     *  Built in preRun() to avoid per-step string scanning in updateMapChannels(). */
+    QHash<QString, QVector<quint32>> m_resolvedChannelIndices;
+
     /** Enable per-fixture mapping mode (false = AUTO/normal RGB) */
     bool m_enablePerFixtureMapping;
     
