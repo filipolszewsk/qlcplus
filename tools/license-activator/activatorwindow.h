@@ -3,7 +3,6 @@
   activatorwindow.h
 
   Copyright (c) Filip Olszewski
-  PROPRIETARY - NOT OPEN SOURCE
 */
 
 #ifndef ACTIVATORWINDOW_H
@@ -33,7 +32,8 @@ private slots:
 
 private:
     void generateKeyFile(const QString &customerName, const QString &customerEmail,
-                         const QString &licenseKey, const QString &instanceId);
+                         const QString &licenseKey, const QString &instanceId,
+                         const QString &contentKeyHex);
     QString readInstanceIdFromKeyFile() const;
     void updateStatus();
     QString keyFilePath() const;
@@ -46,8 +46,6 @@ private:
     QPushButton *m_activateBtn;
     QPushButton *m_deactivateBtn;
     QNetworkAccessManager *m_nam;
-
-    static const QString MASTER_CONTENT_KEY;
 };
 
 #endif // ACTIVATORWINDOW_H

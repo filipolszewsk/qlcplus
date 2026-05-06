@@ -3,7 +3,10 @@
   activatorwindow.cpp
 
   Copyright (c) Filip Olszewski
-  PROPRIETARY - NOT OPEN SOURCE
+
+  MASTER_CONTENT_KEY is NOT stored here. It lives exclusively in the Vercel
+  backend environment variables and is returned over HTTPS after license
+  validation. See: https://github.com/filipolszewsk/qlcplus-license-backend
 */
 
 #include <QVBoxLayout>
@@ -18,11 +21,9 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QUrlQuery>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDateTime>
-#include <QHostInfo>
 #include <QFile>
 #include <QDir>
 #include <QStandardPaths>
@@ -30,14 +31,8 @@
 #include "activatorwindow.h"
 #include "qlccrypto.h"
 
-/*
- * IMPORTANT: Replace this with your actual master content key.
- * This is the AES-256 key used to encrypt premium files.
- * Generate with: openssl rand -hex 32
- * Keep this SECRET - this binary should NOT be open source.
- */
-const QString ActivatorWindow::MASTER_CONTENT_KEY =
-    "6cf1c35cd4adeb450c15ce9b0630a3f3e9d2e7904b4974d517995b3522605f3d";
+// Backend URL — no secrets here, just the endpoint address
+static const QString BACKEND_URL = QStringLiteral("https://qlcplus-license-backend.vercel.app");
 
 ActivatorWindow::ActivatorWindow(QWidget *parent)
     : QWidget(parent)
@@ -182,15 +177,16 @@ void ActivatorWindow::slotActivate()
     setStatus(tr("Contacting activation server..."), true);
     m_activateBtn->setEnabled(false);
 
-    QNetworkRequest req(QUrl("https://api.lemonsqueezy.com/v1/licenses/activate"));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    // POST to our backend which validates with LemonSqueezy and returns content_key
+    QNetworkRequest req(QUrl(BACKEND_URL + "/api/activate"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Accept", "application/json");
 
-    QUrlQuery params;
-    params.addQueryItem("license_key", licenseKey);
-    params.addQueryItem("instance_name", QHostInfo::localHostName());
+    QJsonObject body;
+    body["license_key"] = licenseKey;
+    body["hw_fingerprint"] = m_fullHwId;
 
-    QNetworkReply *reply = m_nam->post(req, params.toString(QUrl::FullyEncoded).toUtf8());
+    QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         slotActivateReply(reply);
     });
@@ -216,25 +212,27 @@ void ActivatorWindow::slotActivateReply(QNetworkReply *reply)
     QJsonDocument doc = QJsonDocument::fromJson(body);
     QJsonObject root = doc.object();
 
-    bool activated = root.value("activated").toBool();
-    if (!activated)
+    if (!root.value("ok").toBool())
     {
-        QString error = root.value("error").toString();
-        setStatus(tr("Activation failed: %1").arg(error), false);
+        setStatus(tr("Activation failed: %1").arg(root.value("error").toString()), false);
         return;
     }
 
-    QJsonObject meta = root.value("meta").toObject();
-    QString customerName = meta.value("customer_name").toString();
-    QString customerEmail = meta.value("customer_email").toString();
+    QString contentKeyHex = root.value("content_key").toString();
+    QString customerName  = root.value("customer_name").toString();
+    QString customerEmail = root.value("customer_email").toString();
+    QString instanceId    = root.value("instance_id").toString();
 
-    QJsonObject instance = root.value("instance").toObject();
-    QString instanceId = instance.value("id").toString();
+    if (contentKeyHex.length() != 64)
+    {
+        setStatus(tr("Activation failed: server returned invalid key."), false);
+        return;
+    }
 
     if (customerName.isEmpty())
         customerName = "Licensed User";
 
-    generateKeyFile(customerName, customerEmail, m_keyInput->text().trimmed(), instanceId);
+    generateKeyFile(customerName, customerEmail, m_keyInput->text().trimmed(), instanceId, contentKeyHex);
 
     setStatus(tr("✔  Activated for: %1 (%2)\nYou can now use premium content in QLC+.")
               .arg(customerName, customerEmail), true);
@@ -260,15 +258,15 @@ void ActivatorWindow::slotDeactivate()
     setStatus(tr("Deactivating..."), true);
     m_deactivateBtn->setEnabled(false);
 
-    QNetworkRequest req(QUrl("https://api.lemonsqueezy.com/v1/licenses/deactivate"));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+    QNetworkRequest req(QUrl(BACKEND_URL + "/api/deactivate"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Accept", "application/json");
 
-    QUrlQuery params;
-    params.addQueryItem("license_key", licenseKey);
-    params.addQueryItem("instance_id", instanceId);
+    QJsonObject body;
+    body["license_key"] = licenseKey;
+    body["instance_id"] = instanceId;
 
-    QNetworkReply *reply = m_nam->post(req, params.toString(QUrl::FullyEncoded).toUtf8());
+    QNetworkReply *reply = m_nam->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         slotDeactivateReply(reply);
     });
@@ -285,7 +283,6 @@ void ActivatorWindow::slotDeactivateReply(QNetworkReply *reply)
 
     setStatus(tr("License deactivated. This machine is now free."), false);
 }
-
 
 QString ActivatorWindow::readInstanceIdFromKeyFile() const
 {
@@ -324,18 +321,19 @@ QString ActivatorWindow::readInstanceIdFromKeyFile() const
 void ActivatorWindow::generateKeyFile(const QString &customerName,
                                        const QString &customerEmail,
                                        const QString &licenseKey,
-                                       const QString &instanceId)
+                                       const QString &instanceId,
+                                       const QString &contentKeyHex)
 {
     QString hwFingerprint = QLCCrypto::generateHardwareFingerprint();
 
     QJsonObject payload;
-    payload["magic"] = QString("QLCPLUS_LICENSE");
-    payload["content_key"] = MASTER_CONTENT_KEY;
+    payload["magic"]         = QString("QLCPLUS_LICENSE");
+    payload["content_key"]   = contentKeyHex;           // received from backend over HTTPS
     payload["customer_name"] = customerName;
-    payload["customer_email"] = customerEmail;
-    payload["license_key"] = licenseKey;
-    payload["instance_id"] = instanceId;
-    payload["activated_at"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    payload["customer_email"]= customerEmail;
+    payload["license_key"]   = licenseKey;
+    payload["instance_id"]   = instanceId;
+    payload["activated_at"]  = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
     QByteArray jsonData = QJsonDocument(payload).toJson(QJsonDocument::Compact);
     QByteArray encryptionKey = QLCCrypto::deriveKey(hwFingerprint);
