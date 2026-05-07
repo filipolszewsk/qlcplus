@@ -591,6 +591,8 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
         }
     }
 
+    m_grp->beginUpdate();
+
     QMap<QLCPoint, GroupHead> currentMap = m_grp->headsMap();
     
     // Calculate target positions
@@ -679,4 +681,6 @@ void FixtureGroupEditor::moveSelectedHeads(int deltaX, int deltaY)
             qDebug() << "Warning: No free position for displaced head at" << targetPt;
         }
     }
+
+    m_grp->endUpdate();
 }

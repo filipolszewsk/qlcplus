@@ -39,6 +39,8 @@
 FixtureGroup::FixtureGroup(Doc* parent)
     : QObject(parent)
     , m_id(FixtureGroup::invalidId())
+    , m_updateDepth(0)
+    , m_pendingChanged(false)
 {
     Q_ASSERT(parent != NULL);
 
@@ -49,6 +51,23 @@ FixtureGroup::FixtureGroup(Doc* parent)
 
 FixtureGroup::~FixtureGroup()
 {
+}
+
+void FixtureGroup::beginUpdate()
+{
+    m_updateDepth++;
+}
+
+void FixtureGroup::endUpdate()
+{
+    if (m_updateDepth > 0)
+        m_updateDepth--;
+
+    if (m_updateDepth == 0 && m_pendingChanged)
+    {
+        m_pendingChanged = false;
+        emit changed(this->id());
+    }
 }
 
 void FixtureGroup::copyFrom(const FixtureGroup* grp)
@@ -173,7 +192,10 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
                         if (tmp.y() >= m_size.height())
                             m_size.setHeight(tmp.y() + 1);
                         locker.unlock();
-                        emit changed(this->id());
+                        if (m_updateDepth > 0)
+                            m_pendingChanged = true;
+                        else
+                            emit changed(this->id());
                         return true;
                     }
                 }
@@ -184,7 +206,10 @@ bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
     }
 
     locker.unlock();
-    emit changed(this->id());
+    if (m_updateDepth > 0)
+        m_pendingChanged = true;
+    else
+        emit changed(this->id());
     return true;
 }
 
@@ -212,7 +237,12 @@ bool FixtureGroup::resignHead(const QLCPoint& pt)
     const int removed = m_heads.remove(pt);
     locker.unlock();
     if (removed)
-        emit changed(this->id());
+    {
+        if (m_updateDepth > 0)
+            m_pendingChanged = true;
+        else
+            emit changed(this->id());
+    }
 
     return removed;
 }

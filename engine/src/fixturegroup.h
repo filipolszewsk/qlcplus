@@ -62,7 +62,21 @@ signals:
     /** Emitted whenever a fixture group's properties are changed */
     void changed(quint32 id);
 
+public:
+    /**
+     * Suppress individual changed() emissions during a batch of head
+     * operations (resign/assign).  Call endUpdate() when done — it
+     * re-enables the signal and emits changed() exactly once.
+     * Calls can be nested; the signal fires only when the outermost
+     * endUpdate() is reached.
+     */
+    void beginUpdate();
+    void endUpdate();
+
 private:
+    int m_updateDepth; // 0 = not batching; >0 = batching
+    bool m_pendingChanged;
+
     Doc* doc() const;
 
     /************************************************************************
