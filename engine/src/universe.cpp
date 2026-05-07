@@ -1300,6 +1300,30 @@ bool Universe::writeRelative(int address, quint32 value, int channelCount)
     return true;
 }
 
+bool Universe::writeRelativeSplit(int msbAddr, int lsbAddr, quint32 delta16)
+{
+    if (msbAddr < 0 || msbAddr >= UNIVERSE_SIZE || lsbAddr < 0 || lsbAddr >= UNIVERSE_SIZE)
+        return false;
+
+    int maxAddr = qMax(msbAddr, lsbAddr);
+    if (maxAddr + 1 > m_usedChannels)
+        m_usedChannels = maxAddr + 1;
+
+    quint32 cur16 = ((quint32)uchar(m_preGMValues->at(msbAddr)) << 8)
+                  | ((quint32)uchar(m_preGMValues->at(lsbAddr)));
+    qint32 new16 = CLAMP((qint32)cur16 + (qint32)delta16 - RELATIVE_ZERO_16BIT, 0, 0xFFFF);
+
+    (*m_preGMValues)[msbAddr]  = char(new16 >> 8);
+    (*m_blackoutValues)[msbAddr] = char(new16 >> 8);
+    (*m_preGMValues)[lsbAddr]  = char(new16 & 0xFF);
+    (*m_blackoutValues)[lsbAddr] = char(new16 & 0xFF);
+
+    updatePostGMValue(msbAddr);
+    updatePostGMValue(lsbAddr);
+
+    return true;
+}
+
 bool Universe::writeBlended(int address, quint32 value, int channelCount, Universe::BlendMode blend)
 {
     if (address + channelCount >= m_usedChannels)

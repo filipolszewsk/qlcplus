@@ -678,6 +678,20 @@ public:
     bool writeRelative(int address, quint32 value, int channelCount);
 
     /**
+     * Write a relative 16-bit value to a non-contiguous MSB/LSB channel pair.
+     * Reads both bytes from preGM, applies the 16-bit delta (centred at
+     * RELATIVE_ZERO_16BIT = 0x7F00), and writes the result back.
+     * Unlike writeRelative(), the two addresses need not be adjacent.
+     *
+     * @param msbAddr Universe-relative address of the MSB (coarse) channel
+     * @param lsbAddr Universe-relative address of the LSB (fine) channel
+     * @param delta16 16-bit delta centred at 0x7F00 (i.e. 0x7F00 = no movement)
+     *
+     * @return true if successful, otherwise false
+     */
+    bool writeRelativeSplit(int msbAddr, int lsbAddr, quint32 delta16);
+
+    /**
      * Write DMX values with the given blend mode.
      * If blend == NormalBlend the generic write method is called
      * and all the HTP/LTP checks are performed

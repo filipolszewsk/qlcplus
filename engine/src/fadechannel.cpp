@@ -32,6 +32,7 @@ FadeChannel::FadeChannel()
     , m_universe(Universe::invalid())
     , m_primaryChannel(QLCChannel::invalid())
     , m_address(QLCChannel::invalid())
+    , m_relativeSplitLsbAddress(QLCChannel::invalid())
     , m_channelRef(NULL)
     , m_start(0)
     , m_target(0)
@@ -49,6 +50,7 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_primaryChannel(ch.m_primaryChannel)
     , m_channels(ch.m_channels)
     , m_address(ch.m_address)
+    , m_relativeSplitLsbAddress(ch.m_relativeSplitLsbAddress)
     , m_channelRef(ch.m_channelRef)
     , m_start(ch.m_start)
     , m_target(ch.m_target)
@@ -63,6 +65,7 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
 FadeChannel::FadeChannel(const Doc *doc, quint32 fxi, quint32 channel)
     : m_flags(0)
     , m_fixture(fxi)
+    , m_relativeSplitLsbAddress(QLCChannel::invalid())
     , m_channelRef(NULL)
     , m_start(0)
     , m_target(0)
@@ -90,6 +93,7 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
         m_channels = fc.m_channels;
         m_channelRef = fc.m_channelRef;
         m_address = fc.m_address;
+        m_relativeSplitLsbAddress = fc.m_relativeSplitLsbAddress;
         m_start = fc.m_start;
         m_target = fc.m_target;
         m_current = fc.m_current;
@@ -99,6 +103,16 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
     }
 
     return *this;
+}
+
+quint32 FadeChannel::relativeSplitLsbAddress() const
+{
+    return m_relativeSplitLsbAddress;
+}
+
+void FadeChannel::setRelativeSplitLsbAddress(quint32 addr)
+{
+    m_relativeSplitLsbAddress = addr;
 }
 
 bool FadeChannel::operator==(const FadeChannel& ch) const

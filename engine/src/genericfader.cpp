@@ -278,9 +278,20 @@ void GenericFader::write(Universe *universe)
             continue;
         }
         
+        if (flags & FadeChannel::RelativeSplitLsb)
+        {
+            // LSB is written atomically by its paired MSB channel via writeRelativeSplit; skip here.
+            continue;
+        }
+
         if (flags & FadeChannel::Override)
         {
             universe->write(address, value, true);
+            continue;
+        }
+        else if (flags & FadeChannel::RelativeSplit)
+        {
+            universe->writeRelativeSplit(address, fc.relativeSplitLsbAddress(), value);
             continue;
         }
         else if (flags & FadeChannel::Relative)

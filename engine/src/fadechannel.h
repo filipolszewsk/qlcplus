@@ -55,7 +55,9 @@ public:
         CrossFade   = (1 << 10),    /** Channel subject to crossfade */
         ForceLTP      = (1 << 11),  /** Force LTP for flashing scenes */
         VirtualDimmer = (1 << 12), /** Virtual Dimmer channel (0xFFFE) */
-        VirtualStrobe = (1 << 13)  /** Virtual Strobe channel (0xFFFD) */
+        VirtualStrobe = (1 << 13), /** Virtual Strobe channel (0xFFFD) */
+        RelativeSplit    = (1 << 14), /** MSB of non-contiguous 16-bit relative pair; value holds the 16-bit delta; LSB address stored in m_relativeSplitLsbAddress */
+        RelativeSplitLsb = (1 << 15)  /** LSB of non-contiguous 16-bit relative pair; write is handled by its paired MSB channel via writeRelativeSplit */
     };
 
     /** Create a new FadeChannel with empty/invalid values */
@@ -82,6 +84,11 @@ public:
     /** Add/Remove a single flag */
     void addFlag(int flag);
     void removeFlag(int flag);
+
+    /** For RelativeSplit channels: universe-relative address of the paired LSB channel.
+     *  Set alongside the RelativeSplit flag; consumed by Universe::writeRelativeSplit. */
+    quint32 relativeSplitLsbAddress() const;
+    void setRelativeSplitLsbAddress(quint32 addr);
 
     /** Get the Fixture that is being controlled. */
     quint32 fixture() const;
@@ -125,6 +132,7 @@ private:
     quint32 m_primaryChannel;
     QVector<quint32> m_channels;
     quint32 m_address;
+    quint32 m_relativeSplitLsbAddress;
 
     /** Cache channel reference for faster lookup */
     const QLCChannel *m_channelRef;
