@@ -456,7 +456,13 @@ void VCXYPad::slotFixtureGroupContentChanged(quint32 id)
 {
     if (m_fixtureGroupID != id)
         return;  // Not our group
-    
+
+    // Release active faders before rebuilding — without this, FadeChannels of
+    // fixtures that were removed from the group stay frozen in DMX output.
+    foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+        if (!fader.isNull()) fader->requestDelete();
+    m_fadersMap.clear();
+
     // Our fixture group changed (fixtures moved in grid) - rebuild fixtures
     clearFixtures();
     

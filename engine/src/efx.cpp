@@ -905,7 +905,8 @@ bool EFX::removeFixture(quint32 fxi, int head)
 
 void EFX::removeAllFixtures()
 {
-    m_fixtures.clear();
+    while (!m_fixtures.isEmpty())
+        delete m_fixtures.takeFirst();
     emit changed(this->id());
 }
 
@@ -1485,6 +1486,12 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
     if (group == NULL)
         return false;
 
+    // If EFX is running, dismiss all faders before rebuilding so that
+    // orphaned FadeChannels of removed fixtures stop writing to DMX.
+    bool wasRunning = isRunning();
+    if (wasRunning)
+        dismissAllFaders();
+
     QMap<QPair<quint32, int>, int> savedOffsets;
     if (preserveOffsets)
     {
@@ -1556,6 +1563,19 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
         applyOffsetTemplate();
     else if (missingOffset)
         markOffsetTemplateDirty();
+
+    // If the EFX was running when the group changed, reinitialise serial
+    // numbers and reset state so the new fixtures start cleanly on the next
+    // write() tick (analogous to preRun()).
+    if (wasRunning)
+    {
+        int serialNumber = 0;
+        foreach (EFXFixture *ef, m_fixtures)
+        {
+            ef->setSerialNumber(serialNumber++);
+            ef->reset();
+        }
+    }
 
     emit changed(id());
     return true;

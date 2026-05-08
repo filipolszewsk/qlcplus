@@ -501,6 +501,7 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
     {
         int row = m_row;
         int col = m_column;
+        m_grp->beginUpdate();
         foreach (GroupHead gh, fs.selectedHeads())
         {
             m_grp->assignHead(QLCPoint(col, row), gh);
@@ -541,6 +542,7 @@ void FixtureGroupEditor::addFixtureHeads(Qt::ArrowType direction)
                 }
             }
         }
+        m_grp->endUpdate();
 
         updateTable();
         m_table->setCurrentCell(row, col);
