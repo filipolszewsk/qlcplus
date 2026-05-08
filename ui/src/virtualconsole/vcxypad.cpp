@@ -504,6 +504,21 @@ void VCXYPad::slotFixtureGroupContentChanged(quint32 id)
             }
         }
     }
+
+    // Arm new fixtures immediately if we are in Operate mode. Without this
+    // the cached channel numbers (m_xMSB / m_yMSB) stay invalid and
+    // VCXYPadFixture::writeDMX() bails out, leaving the pad inert until
+    // the user toggles Design/Operate.
+    if (m_doc->mode() == Doc::Operate)
+    {
+        QMutableListIterator<VCXYPadFixture> it(m_fixtures);
+        while (it.hasNext())
+        {
+            VCXYPadFixture fxi = it.next();
+            fxi.arm();
+            it.setValue(fxi);
+        }
+    }
 }
 
 void VCXYPad::setExcludedColumns(const QList<int>& cols)
