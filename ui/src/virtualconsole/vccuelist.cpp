@@ -2027,23 +2027,14 @@ void VCCueList::setSecondaryIndex(int index)
             item->setBackground(COL_NUM, QColor("#FF8000"));
     }
 
-    // Stop the old secondary step if it is still running but is no longer primary or secondary.
-    // Without this, changing the crossfade target mid-fade leaves an orphan running step
-    // that never gets stopped, creating 3+ concurrent running steps and breaking
-    // stopStepIfNeeded() which expects exactly 2 (it bails out for any other count).
-    if (!ch->stopped() &&
-        oldSecondary != m_primaryIndex &&
-        oldSecondary != m_secondaryIndex)
-    {
-        ChaserAction stopAction;
-        stopAction.m_action = ChaserStopStep;
-        stopAction.m_stepIndex = oldSecondary;
-        ch->setAction(stopAction);
-    }
-
     // If a crossfade is already in progress (slider not at an extreme), immediately
-    // bring the new secondary up to the current slider position so the transition
-    // is seamless — no pop, no jump to black.
+    // bring the new secondary up to the current slider position.
+    //
+    // IMPORTANT: this must happen BEFORE stopping the old secondary so that
+    // startNewStep() sees oldSecondary still in m_runnerSteps and uses it as the
+    // blend source (setBlendFunctionID).  If we stop first, m_runnerSteps=[primary]
+    // only and startNewStep() blends from primary — every other switch produces the
+    // wrong blend and lights jump to an unexpected position.
     int v = m_sideFader->value();
     if (!ch->stopped() &&
         m_secondaryIndex != m_primaryIndex &&
@@ -2053,6 +2044,19 @@ void VCCueList::setSecondaryIndex(int index)
                                                : qreal(v) / 100.0;
         ch->adjustStepIntensity(secondaryFraction, m_secondaryIndex,
                                 Chaser::FadeControlMode(getFadeMode()));
+    }
+
+    // Now stop the old secondary (it is no longer primary or the new secondary).
+    // newSecondary has already started above, so m_runnerSteps now contains it and
+    // the stop() call will cleanly reduce the list to [primary, newSecondary].
+    if (!ch->stopped() &&
+        oldSecondary != m_primaryIndex &&
+        oldSecondary != m_secondaryIndex)
+    {
+        ChaserAction stopAction;
+        stopAction.m_action    = ChaserStopStep;
+        stopAction.m_stepIndex = oldSecondary;
+        ch->setAction(stopAction);
     }
 
     emit sideFaderValueChanged();
