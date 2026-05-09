@@ -248,6 +248,13 @@ void ChaserRunner::setAction(ChaserAction &action)
                 {
                     qDebug() << "[ChaserRunner] Stopping step idx:" << action.m_stepIndex << "(running:" << m_runnerSteps.count() << ")";
                     m_lastFunctionID = step->m_function->type() == Function::SceneType ? step->m_function->id() : Function::invalidId();
+                    // Force instant stop so residual fade-out faders don't linger
+                    // in the universe and interfere with the next startNewStep call.
+                    // This matters for mid-fade target switching in VCCueList crossfade
+                    // where stop() is immediately followed by adjustStepIntensity() on
+                    // a new secondary — without this, multiple target switches in a row
+                    // leave ghost intensities that corrupt the blended output.
+                    step->m_function->setOverrideFadeOutSpeed(0);
                     step->m_function->stop(functionParent());
                     m_runnerSteps.removeOne(step);
                     delete step;
