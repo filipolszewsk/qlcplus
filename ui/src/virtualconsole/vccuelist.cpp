@@ -2002,6 +2002,8 @@ void VCCueList::setSecondaryIndex(int index)
     else if (index >= stepsCount)
         index = 0;
 
+    int oldSecondary = m_secondaryIndex;
+
     // Reset any previously set background
     QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
     if (item != NULL)
@@ -2023,6 +2025,34 @@ void VCCueList::setSecondaryIndex(int index)
         item = m_tree->topLevelItem(m_secondaryIndex);
         if (item != NULL)
             item->setBackground(COL_NUM, QColor("#FF8000"));
+    }
+
+    // Stop the old secondary step if it is still running but is no longer primary or secondary.
+    // Without this, changing the crossfade target mid-fade leaves an orphan running step
+    // that never gets stopped, creating 3+ concurrent running steps and breaking
+    // stopStepIfNeeded() which expects exactly 2 (it bails out for any other count).
+    if (!ch->stopped() &&
+        oldSecondary != m_primaryIndex &&
+        oldSecondary != m_secondaryIndex)
+    {
+        ChaserAction stopAction;
+        stopAction.m_action = ChaserStopStep;
+        stopAction.m_stepIndex = oldSecondary;
+        ch->setAction(stopAction);
+    }
+
+    // If a crossfade is already in progress (slider not at an extreme), immediately
+    // bring the new secondary up to the current slider position so the transition
+    // is seamless — no pop, no jump to black.
+    int v = m_sideFader->value();
+    if (!ch->stopped() &&
+        m_secondaryIndex != m_primaryIndex &&
+        v > 0 && v < 100)
+    {
+        qreal secondaryFraction = m_primaryTop ? qreal(100 - v) / 100.0
+                                               : qreal(v) / 100.0;
+        ch->adjustStepIntensity(secondaryFraction, m_secondaryIndex,
+                                Chaser::FadeControlMode(getFadeMode()));
     }
 
     emit sideFaderValueChanged();
