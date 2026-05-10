@@ -168,8 +168,8 @@ if __name__ == "__main__":
     scripts_dir    = os.path.expanduser("~/Library/Application Support/QLC+/RGBScripts")
     decoded_dir    = os.path.join(scripts_dir, "_decoded")
 
-    js_path        = os.path.join(decoded_dir,  "GRIDqlc_Crossfade_Toggle_v6.js")
-    qlcscript_path = os.path.join(scripts_dir,  "GRIDqlc_Crossfade_Toggle_v6.qlcscript")
+    js_path        = os.path.join(decoded_dir,  "GRIDqlc_Crossfade_Toggle.js")
+    qlcscript_path = os.path.join(scripts_dir,  "GRIDqlc_Crossfade_Toggle.qlcscript")
 
     print("[step 1] Loading content key from license...")
     key = load_content_key(license_path)
