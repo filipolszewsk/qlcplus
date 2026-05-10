@@ -72,8 +72,9 @@ aqtinstall.log
 # Standalone license activator tool (replaced by in-app LicenseDialog in ui/src/)
 /tools/license-activator/
 
-# Encryption tool – build artifacts (build with qmake locally, never commit binary)
+# Encryption tool – build artifacts and Python implementation (private, not open source)
 /tools/encrypt-content/qlc-encrypt-content
+/tools/encrypt-content/encrypt_v2.py
 /tools/encrypt-content/build/
 /tools/encrypt-content/*.o
 /tools/encrypt-content/Makefile

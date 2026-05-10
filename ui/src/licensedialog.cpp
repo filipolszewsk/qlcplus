@@ -169,6 +169,8 @@ void LicenseDialog::slotActivate()
     m_activateBtn->setEnabled(false);
     setActivationStatus(tr("Activating..."), false);
 
+    // NOTE: This backend is operated privately by GRIDqlc (gridqlc.com).
+    // To run your own instance, replace this URL with your own Vercel deployment.
     QNetworkRequest req(QUrl("https://qlcplus-license-backend-silk.vercel.app/api/activate"));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
     req.setRawHeader("X-QLC-Client", "1");
@@ -253,6 +255,8 @@ void LicenseDialog::slotDeactivate()
     m_deactivateBtn->setEnabled(false);
     setActivationStatus(tr("Deactivating..."), false);
 
+    // NOTE: This backend is operated privately by GRIDqlc (gridqlc.com).
+    // To run your own instance, replace this URL with your own Vercel deployment.
     QNetworkRequest req(QUrl("https://qlcplus-license-backend-silk.vercel.app/api/deactivate"));
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
