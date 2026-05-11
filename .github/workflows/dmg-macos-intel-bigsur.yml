@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-macos-intel-qt5:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     name: Build QLC+ 4.14 macOS DMG (x86_64, Big Sur, Qt 5.15.2)
 
     env:
