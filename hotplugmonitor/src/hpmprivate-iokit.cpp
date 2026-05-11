@@ -124,8 +124,12 @@ void HPMPrivate::run()
     io_iterator_t rawAddedIter = 0;
     io_iterator_t rawRemovedIter = 0;
 
-    // Create an IOMainPort for accessing IOKit
+    // IOMainPort introduced in macOS 12; use IOMasterPort on older targets (Big Sur).
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
     kern_return_t kr = IOMainPort(MACH_PORT_NULL, &masterPort);
+#else
+    kern_return_t kr = IOMasterPort(MACH_PORT_NULL, &masterPort);
+#endif
     if (kr || !masterPort)
     {
         qWarning() << Q_FUNC_INFO << "Unable to create a master I/O Kit port" << kr;

@@ -50,8 +50,14 @@ QString QLCCrypto::generateHardwareFingerprint()
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     // Use IOPlatformUUID - a stable, unique per-board identifier that never changes
     // even across OS reinstalls, VPN connections, or Wi-Fi MAC randomization.
+    // kIOMainPortDefault introduced in macOS 12; use kIOMasterPortDefault on older targets.
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
     io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
                                                        IOServiceMatching("IOPlatformExpertDevice"));
+#else
+    io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
+                                                       IOServiceMatching("IOPlatformExpertDevice"));
+#endif
     if (service)
     {
         CFStringRef uuidRef = (CFStringRef)IORegistryEntryCreateCFProperty(
@@ -107,8 +113,13 @@ QString QLCCrypto::generateLegacyHardwareFingerprint()
     QString data;
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 120000
     io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
                                                        IOServiceMatching("IOPlatformExpertDevice"));
+#else
+    io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
+                                                       IOServiceMatching("IOPlatformExpertDevice"));
+#endif
     if (service)
     {
         CFStringRef uuidRef = (CFStringRef)IORegistryEntryCreateCFProperty(
