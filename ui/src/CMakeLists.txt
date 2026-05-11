@@ -215,11 +215,18 @@ target_link_libraries(${module_name} PUBLIC
 
 # LTC Timecode engine requires Qt >= 6.2 (QAudioSource, QAudioDevice, QMediaDevices).
 # On Qt 5 the engine/widget are stubbed out in their headers; .cpp files are excluded
-# (they use Qt 6 audio APIs unconditionally).
+# (they use Qt 6 audio APIs unconditionally) — ale .h MUSI byc w target_sources,
+# zeby AUTOMOC wygenerowal staticMetaObject/vtable dla klas Q_OBJECT (inaczej linker
+# wywala "Undefined symbols: LTCTimecodeEngine::staticMetaObject / vtable").
 if(QT_VERSION_MAJOR GREATER 5)
     target_sources(${module_name} PRIVATE
         showmanager/ltctimecodeengine.cpp showmanager/ltctimecodeengine.h
         showmanager/ltctimecodewidget.cpp showmanager/ltctimecodewidget.h
+    )
+else()
+    target_sources(${module_name} PRIVATE
+        showmanager/ltctimecodeengine.h
+        showmanager/ltctimecodewidget.h
     )
 endif()
 
