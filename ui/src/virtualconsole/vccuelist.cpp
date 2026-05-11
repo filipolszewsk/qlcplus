@@ -3332,7 +3332,7 @@ void VCCueList::recordLiveCue()
             else
             {
                 if (absAddress < (quint32)recordMask.length())
-                    shouldRecord = (recordMask[absAddress] == 1);
+                    shouldRecord = (recordMask.at(absAddress) == '\x01');
             }
 
             if (shouldRecord)
@@ -3489,7 +3489,7 @@ void VCCueList::overwriteSelectedCue()
             else
             {
                 if (absAddress < (quint32)recordMask.length())
-                    shouldOverwrite = (recordMask[absAddress] == 1);
+                    shouldOverwrite = (recordMask.at(absAddress) == '\x01');
             }
 
             if (shouldOverwrite)
@@ -3672,7 +3672,7 @@ void VCCueList::buildChannelColumns()
     // Iterate through the recording mask and find fixtures for each enabled address
     for (int addr = 0; addr < m_recordChannelsMask.size(); addr++)
     {
-        if (m_recordChannelsMask[addr] == 0)
+        if (m_recordChannelsMask.at(addr) == '\0')
             continue;
 
         // Find fixture and channel for this absolute address
@@ -3694,7 +3694,7 @@ void VCCueList::syncChannelColumnsWithMask()
     // Step 2: iterate over new mask — activate existing or add new columns
     for (int addr = 0; addr < m_recordChannelsMask.size(); addr++)
     {
-        if (m_recordChannelsMask[addr] == 0)
+        if (m_recordChannelsMask.at(addr) == '\0')
             continue;
 
         quint32 absAddr = static_cast<quint32>(addr);
@@ -3776,7 +3776,12 @@ void VCCueList::remapCueListFixtureChannels(quint32 fixtureId,
     // Extend mask if the new range goes beyond current size
     quint32 requiredSize = newAbsBase + channels;
     if (requiredSize > (quint32)m_recordChannelsMask.size())
-        m_recordChannelsMask.resize((int)requiredSize, 0);
+    {
+        int oldSize = m_recordChannelsMask.size();
+        m_recordChannelsMask.resize((int)requiredSize);
+        for (int i = oldSize; i < (int)requiredSize; ++i)
+            m_recordChannelsMask[i] = '\0';
+    }
 
     // Clear old mask positions for this fixture
     for (quint32 offset = 0; offset < channels; ++offset)
@@ -4306,7 +4311,7 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
                     quint32 addr = m_channelColumns[i].absoluteAddress;
                     m_channelColumns[i].activeInMask =
                         (addr < (quint32)m_recordChannelsMask.size()
-                         && m_recordChannelsMask[(int)addr] != 0);
+                         && m_recordChannelsMask.at((int)addr) != '\0');
                 }
             }
 

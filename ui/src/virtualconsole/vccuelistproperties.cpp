@@ -534,7 +534,7 @@ void VCCueListProperties::slotSelectChannelsClicked()
             for (quint32 channel = 0; channel < fxi->channels(); channel++)
             {
                 quint32 absAddress = baseAddress + channel;
-                if (absAddress < (quint32)mask.length() && mask[absAddress] == 1)
+                if (absAddress < (quint32)mask.length() && mask.at(absAddress) == '\x01')
                 {
                     selectedChannels.append(SceneValue(fxID, channel, 0));
                 }
