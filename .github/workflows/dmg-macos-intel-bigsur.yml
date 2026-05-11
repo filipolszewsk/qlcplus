@@ -114,10 +114,12 @@ jobs:
       - name: Ad-hoc codesign app bundle
         shell: bash
         run: |
-          # BEZ --deep (deprecated), BEZ --options runtime (psuje na Intel Big Sur).
-          # Uzytkownik przy pierwszym uruchomieniu: prawy-klik -> Otworz
-          # lub: xattr -dr com.apple.quarantine /Applications/QLC+.app
-          codesign --force --sign - --timestamp=none ~/QLC+.app
+          # Qt 5: macdeployqt nie pre-podpisuje frameworkow (w Qt 6 robi to -codesign=-).
+          # macOS 15 wymaga podpisanych subkomponentow zanim podpisze caly bundle.
+          # --deep rekurencyjnie podpisuje wszystko w srodku, potem bundle — jedyna
+          # opcja dla Qt 5 (deprecated w Qt 6, ale wciaz dziala na macOS 15).
+          # BEZ --options runtime (psuje na Intel Big Sur).
+          codesign --force --deep --sign - --timestamp=none ~/QLC+.app
           echo "--- verify bundle signature ---"
           codesign --verify --verbose=2 ~/QLC+.app || true
           echo "--- spctl assessment (expected: rejected, source=Unsigned — OK dla ad-hoc) ---"
