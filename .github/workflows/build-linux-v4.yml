@@ -1,0 +1,134 @@
+name: Build Linux AppImage (QLC+ 4.14)
+
+on:
+  push:
+    branches: [ main, master, fix/vcslider-properties-perf, perf/cache-paramcount-per-tick, perf/cache-paramcount-in-rgbscript, perf/direct-jsvalue-iteration, fix/efx-relative-noncontig, fix/fixturegroup-batch-update, fix/efx-fader-cleanup-on-group-rebuild, fix/vcxypad-arm-on-rebuild ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux-v4:
+    runs-on: ubuntu-22.04
+    name: Build QLC+ 4.14 Linux AppImage (x86_64)
+
+    env:
+      QT_VERSION: "6.8.1"
+      QT_INSTALL_DIR: /opt
+      INSTALL_ROOT: ${{ github.workspace }}/install_root
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set ENV variables
+        run: |
+          echo "CI_BRANCH=$(echo $GITHUB_REF | cut -d '/' -f 3)" >> $GITHUB_ENV
+          echo "APPVERSION=$(grep '^!qmlui' variables.pri | grep APPVERSION | sed 's/^.*= *//;s/ /_/g')" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u '+%Y%m%d')" >> $GITHUB_ENV
+          echo "GIT_REV=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "NPROC=$(nproc)" >> $GITHUB_ENV
+          echo "QTDIR=/opt/Qt/${{ env.QT_VERSION }}/gcc_64" >> $GITHUB_ENV
+
+      - name: Install system dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
+        with:
+          packages: >-
+            libasound2-dev
+            libusb-1.0-0-dev
+            libftdi1-dev
+            libmad0-dev
+            libsndfile1-dev
+            liblo-dev
+            libfftw3-dev
+            libgl1-mesa-dev
+            libudev-dev
+            shared-mime-info
+            chrpath
+            libfuse2
+            wget
+          version: ubuntu22-apt
+
+      - name: Install Qt 6.8.1
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          dir: ${{ env.QT_INSTALL_DIR }}
+          modules: 'qt5compat qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          cache: true
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ github.job }}-build-linux-v4-qt6
+
+      - name: Print ENV vars
+        run: |
+          echo "CI_BRANCH: ${CI_BRANCH}"
+          echo "APPVERSION: ${APPVERSION}"
+          echo "BUILD_DATE: ${BUILD_DATE}"
+          echo "GIT_REV: ${GIT_REV}"
+          echo "QTDIR: ${QTDIR}"
+          echo "NPROC: ${NPROC}"
+          ${QTDIR}/bin/qmake -query QT_VERSION || true
+
+      - name: Configure build
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+            -Dappimage=ON \
+            -DINSTALL_ROOT="${INSTALL_ROOT}" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -Dqmlui=OFF
+
+      - name: Build
+        run: cmake --build build -j${NPROC}
+
+      - name: Install
+        run: |
+          cmake --build build --target install
+          cp -v resources/icons/svg/qlcplus.svg "${INSTALL_ROOT}"
+          cp -v platforms/linux/qlcplus.desktop "${INSTALL_ROOT}"
+
+      - name: Fix rpath for AppImage
+        run: chrpath -r "../lib" "${INSTALL_ROOT}/usr/bin/qlcplus"
+
+      - name: Strip binaries
+        run: |
+          strip -v "${INSTALL_ROOT}/usr/bin/qlcplus"
+          find "${INSTALL_ROOT}/usr/lib/" -name 'libqlcplusengine.so*' -exec strip -v {} \;
+
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/AppRun-x86_64 \
+            -O "${INSTALL_ROOT}/AppRun"
+          chmod a+x "${INSTALL_ROOT}/AppRun"
+
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -O ./appimagetool-x86_64.AppImage
+          chmod a+x ./appimagetool-x86_64.AppImage
+
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage -v "${INSTALL_ROOT}"
+
+          # appimagetool generuje nazwę z pliku .desktop; rename do czytelnej formy
+          mv -v Q_Light_Controller_Plus_-_QLC+-x86_64.AppImage \
+            "QLC+_${APPVERSION}_x86_64.AppImage"
+
+      - name: Store AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QLC+_${{ env.APPVERSION }}_x86_64.AppImage
+          path: QLC+_${{ env.APPVERSION }}_x86_64.AppImage
+          retention-days: 30
