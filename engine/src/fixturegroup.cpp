@@ -38,9 +38,9 @@
 
 FixtureGroup::FixtureGroup(Doc* parent)
     : QObject(parent)
+    , m_id(FixtureGroup::invalidId())
     , m_updateDepth(0)
     , m_pendingChanged(false)
-    , m_id(FixtureGroup::invalidId())
 {
     Q_ASSERT(parent != NULL);
 

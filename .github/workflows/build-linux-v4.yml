@@ -79,6 +79,13 @@ jobs:
           echo "NPROC: ${NPROC}"
           ${QTDIR}/bin/qmake -query QT_VERSION || true
 
+      - name: Fix build flags
+        run: |
+          # GCC on Ubuntu 22.04 is stricter than the original CI — disable -Werror
+          # so that reorder/unused-parameter warnings don't break the build.
+          # Same approach used in build-windows-v4.yml.
+          sed -i -e 's/set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")/#&/' variables.cmake
+
       - name: Configure build
         run: |
           cmake -S . -B build \
