@@ -41,6 +41,7 @@ jobs:
             libusb-1.0-0-dev
             libftdi1-dev
             libltc-dev
+            libssl-dev
             libmad0-dev
             libsndfile1-dev
             liblo-dev

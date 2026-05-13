@@ -184,6 +184,25 @@ if(appimage)
         DESTINATION ${PLUGINS_DESTINATION}/imageformats
     )
 
+    # Qt TLS backend plugin — required for HTTPS (license activation, etc.)
+    if(EXISTS ${QT_PLUGINS_PATH}/tls/libqopensslbackend.so)
+        install(
+            FILES ${QT_PLUGINS_PATH}/tls/libqopensslbackend.so
+            DESTINATION ${PLUGINS_DESTINATION}/tls
+        )
+    endif()
+
+    # OpenSSL runtime libs — loaded by libqopensslbackend.so at runtime
+    foreach(_ssl_lib libssl.so.3 libcrypto.so.3)
+        find_file(_ssl_path ${_ssl_lib}
+            PATHS /usr/lib/x86_64-linux-gnu /usr/lib64 /usr/lib
+            NO_DEFAULT_PATH)
+        if(_ssl_path)
+            install(FILES ${_ssl_path} DESTINATION ${INSTALLROOT}/${LIBSDIR})
+        endif()
+        unset(_ssl_path CACHE)
+    endforeach()
+
     if(qmlui)
         install(
             FILES
