@@ -1,4 +1,4 @@
-name: Release (QLC+ Windows exe + macOS dmg)
+name: Release (QLC+ Windows exe + macOS dmg + Linux AppImage)
 
 # Uruchamia się:
 # 1. Automatycznie gdy pushujesz tag zaczynający się od "v" (np. v4.14.4-filip.1)
@@ -72,10 +72,16 @@ jobs:
     if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
     uses: ./.github/workflows/build-macos-v4.yml
 
-  # Pobierz artefakty z obu buildów i utwórz GitHub Release
+  # Wywołaj istniejący workflow Linux
+  build-linux:
+    needs: [create-tag]
+    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    uses: ./.github/workflows/build-linux-v4.yml
+
+  # Pobierz artefakty z wszystkich buildów i utwórz GitHub Release
   create-release:
-    needs: [build-windows, build-macos, create-tag]
-    if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success'
+    needs: [build-windows, build-macos, build-linux, create-tag]
+    if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-linux.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Determine tag
@@ -102,7 +108,7 @@ jobs:
         id: files
         run: |
           mkdir -p release-files
-          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' \) -exec cp -v {} release-files/ \;
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \) -exec cp -v {} release-files/ \;
           echo "Files to be attached:"
           ls -la release-files/
 
