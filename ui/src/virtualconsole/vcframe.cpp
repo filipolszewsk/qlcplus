@@ -58,6 +58,9 @@
 #include "vcclock.h"
 #include "apputil.h"
 #include "doc.h"
+#include "vcmissingpluginwidget.h"
+#include "vcwidgetpluginmanager.h"
+#include "vcwidgetplugininterface.h"
 
 /*********************************************************************
  * DetachedVCFrame implementation
@@ -1912,6 +1915,44 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
             {
                 addWidgetToPageMap(matrix);
                 matrix->show();
+            }
+        }
+        else if (root.name() == KXMLQLCVCPluginWidget)
+        {
+            const QString pluginId =
+                root.attributes().value(KXMLQLCVCPluginWidgetId).toString();
+
+            VCWidgetPluginInterface* plugin =
+                VCWidgetPluginManager::instance()->pluginById(pluginId);
+
+            VCWidget* widget = nullptr;
+
+            if (plugin != nullptr)
+            {
+                widget = plugin->createWidget(this, m_doc);
+                if (widget == nullptr)
+                {
+                    qWarning() << Q_FUNC_INFO
+                               << "Plugin" << pluginId
+                               << "returned null from createWidget — using placeholder";
+                }
+            }
+
+            if (widget == nullptr)
+            {
+                qWarning() << Q_FUNC_INFO
+                           << "Missing VC widget plugin:" << pluginId;
+                widget = new VCMissingPluginWidget(this, m_doc, pluginId);
+            }
+
+            if (widget->loadXML(root) == false)
+            {
+                delete widget;
+            }
+            else
+            {
+                addWidgetToPageMap(widget);
+                widget->show();
             }
         }
         else if (root.name() == KXMLQLCVCFrameScaleFactor)

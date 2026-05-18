@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>VCWidgetPluginManagerDialog</class>
+ <widget class="QDialog" name="VCWidgetPluginManagerDialog">
+  <property name="windowTitle">
+   <string>VC Widget Plugins</string>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>560</width>
+    <height>380</height>
+   </size>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>Installed plugins:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTreeWidget" name="pluginList">
+     <property name="alternatingRowColors">
+      <bool>true</bool>
+     </property>
+     <property name="rootIsDecorated">
+      <bool>false</bool>
+     </property>
+     <property name="uniformRowHeights">
+      <bool>true</bool>
+     </property>
+     <attribute name="headerStretchLastSection">
+      <bool>false</bool>
+     </attribute>
+     <column>
+      <property name="text">
+       <string>Name</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Version</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Author</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>Status</string>
+      </property>
+     </column>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="detailsLayout">
+     <item>
+      <layout class="QVBoxLayout" name="infoLayout">
+       <item>
+        <widget class="QLabel" name="idLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="pathLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="errorLabel">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+         <property name="styleSheet">
+          <string>color: #cc3333;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="removeButton">
+       <property name="text">
+        <string>Remove</string>
+       </property>
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="separator">
+     <property name="frameShape">
+      <enum>QFrame::HLine</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonLayout">
+     <item>
+      <widget class="QPushButton" name="installButton">
+       <property name="text">
+        <string>Install from file...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="openFolderButton">
+       <property name="text">
+        <string>Open plugins folder</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="buttonSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="buttonBox">
+       <property name="standardButtons">
+        <set>QDialogButtonBox::Close</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>buttonBox</sender>
+   <signal>rejected()</signal>
+   <receiver>VCWidgetPluginManagerDialog</receiver>
+   <slot>reject()</slot>
+  </connection>
+ </connections>
+</ui>

@@ -179,6 +179,11 @@ add_library(${module_name}
     virtualconsole/vcspeeddialpreset.cpp virtualconsole/vcspeeddialpreset.h
     virtualconsole/vcspeeddialproperties.cpp virtualconsole/vcspeeddialproperties.h virtualconsole/vcspeeddialproperties.ui
     virtualconsole/vcwidget.cpp virtualconsole/vcwidget.h
+    virtualconsole/vcwidgetplugininterface.h
+    virtualconsole/vcwidgetpluginmanager.cpp virtualconsole/vcwidgetpluginmanager.h
+    virtualconsole/vcmissingpluginwidget.cpp virtualconsole/vcmissingpluginwidget.h
+    virtualconsole/vcwidgetpluginmanagerdialog.cpp virtualconsole/vcwidgetpluginmanagerdialog.h virtualconsole/vcwidgetpluginmanagerdialog.ui
+    virtualconsole/vcwidgetplugininstaller.cpp virtualconsole/vcwidgetplugininstaller.h
     virtualconsole/vcwidgetproperties.cpp virtualconsole/vcwidgetproperties.h
     virtualconsole/vcwidgetselection.cpp virtualconsole/vcwidgetselection.h virtualconsole/vcwidgetselection.ui
     virtualconsole/vcxypad.cpp virtualconsole/vcxypad.h

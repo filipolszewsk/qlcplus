@@ -69,6 +69,9 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "vcwidgetpluginmanagerdialog.h"
+#include "vcwidgetpluginmanager.h"
+#include "vcwidgetplugininterface.h"
 
 #define SETTINGS_VC_SIZE "virtualconsole/size"
 
@@ -407,6 +410,24 @@ void VirtualConsole::initActions()
     m_addAnimationAction = new QAction(QIcon(":/animation.png"), tr("New Animation"), this);
     connect(m_addAnimationAction, SIGNAL(triggered(bool)), this, SLOT(slotAddAnimation()), Qt::QueuedConnection);
 
+    /* Dynamic entries for installed VC widget plugins */
+    const auto pluginList = VCWidgetPluginManager::instance()->plugins();
+    for (VCWidgetPluginInterface* plugin : pluginList)
+    {
+        QAction* act = new QAction(plugin->icon(),
+                                   tr("New %1").arg(plugin->name()), this);
+        connect(act, &QAction::triggered, this, [this, plugin]() {
+            slotAddPluginWidget(plugin);
+        });
+        m_addPluginActions.append(act);
+    }
+
+    /* "Get more widgets..." always appears last in the Add menu */
+    m_managePluginsAction = new QAction(QIcon(":/plugin.png"),
+                                        tr("Get more widgets..."), this);
+    connect(m_managePluginsAction, &QAction::triggered,
+            this, &VirtualConsole::slotManagePlugins);
+
     /* Put add actions under the same group */
     m_addActionGroup = new QActionGroup(this);
     m_addActionGroup->setExclusive(false);
@@ -424,6 +445,8 @@ void VirtualConsole::initActions()
     m_addActionGroup->addAction(m_addAudioTriggersAction);
     m_addActionGroup->addAction(m_addClockAction);
     m_addActionGroup->addAction(m_addAnimationAction);
+    for (QAction* act : m_addPluginActions)
+        m_addActionGroup->addAction(act);
 
     /* Tools menu actions */
     m_toolsSettingsAction = new QAction(QIcon(":/configure.png"), tr("Virtual Console Settings"), this);
@@ -619,6 +642,16 @@ void VirtualConsole::initMenuBar()
     m_addMenu->addAction(m_addSoloFrameAction);
     m_addMenu->addAction(m_addLabelAction);
     m_addMenu->addAction(m_addClockAction);
+
+    /* Plugin widgets section */
+    if (!m_addPluginActions.isEmpty())
+    {
+        m_addMenu->addSeparator();
+        for (QAction* act : m_addPluginActions)
+            m_addMenu->addAction(act);
+    }
+    m_addMenu->addSeparator();
+    m_addMenu->addAction(m_managePluginsAction);
 
     /* Edit menu */
     m_editMenu = new QMenu(this);
@@ -1211,6 +1244,30 @@ void VirtualConsole::slotAddAnimation()
     VCMatrix* matrix = new VCMatrix(parent, m_doc);
     setupWidget(matrix, parent);
     m_doc->setModified();
+}
+
+void VirtualConsole::slotAddPluginWidget(VCWidgetPluginInterface* plugin)
+{
+    VCWidget* parent = closestParent();
+    if (parent == nullptr || plugin == nullptr)
+        return;
+
+    VCWidget* widget = plugin->createWidget(parent, m_doc);
+    if (widget == nullptr)
+    {
+        qWarning() << Q_FUNC_INFO << "Plugin" << plugin->pluginId()
+                   << "returned null widget";
+        return;
+    }
+
+    setupWidget(widget, parent);
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotManagePlugins()
+{
+    VCWidgetPluginManagerDialog dialog(this);
+    dialog.exec();
 }
 
 /*****************************************************************************

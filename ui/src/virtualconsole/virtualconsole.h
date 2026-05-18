@@ -47,6 +47,7 @@ class VCFrame;
 class QAction;
 class KeyBind;
 class QMenu;
+class VCWidgetPluginInterface;
 
 /** @addtogroup ui_vc
  * @{
@@ -198,6 +199,8 @@ protected:
     QAction* m_addAudioTriggersAction;
     QAction* m_addClockAction;
     QAction* m_addAnimationAction;
+    QList<QAction*> m_addPluginActions;
+    QAction* m_managePluginsAction;
 
     QAction* m_toolsSettingsAction;
     QAction* m_functionWizardAction;
@@ -286,6 +289,8 @@ public slots:
     void slotAddAudioTriggers();
     void slotAddClock();
     void slotAddAnimation();
+    void slotAddPluginWidget(VCWidgetPluginInterface* plugin);
+    void slotManagePlugins();
 
     /*********************************************************************
      * Tools menu callbacks

@@ -58,6 +58,7 @@
 #include "qlccrypto.h"
 #include "qlcfile.h"
 #include "apputil.h"
+#include "vcwidgetpluginmanager.h"
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -317,6 +318,13 @@ void App::init()
     if (universes == 0)
         universes = 1;
     m_dumpProperties = new DmxDumpFactoryProperties(universes);
+
+    /* Load VC widget plugins before VirtualConsole is created so that
+     * initActions() can build the plugin section of the Add menu. */
+    VCWidgetPluginManager::instance()->load(
+        VCWidgetPluginManager::systemPluginDirectory());
+    VCWidgetPluginManager::instance()->load(
+        VCWidgetPluginManager::userPluginDirectory());
 
     // Create primary views.
     m_tab->setIconSize(QSize(24, 24));
