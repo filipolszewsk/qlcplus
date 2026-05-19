@@ -22,8 +22,11 @@
 #include <QDir>
 #include <QList>
 #include <QMap>
+#include <QTimer>
 
 class VCWidgetPluginInterface;
+class QPluginLoader;
+class QFileSystemWatcher;
 
 /**
  * Holds metadata about a scanned plugin file, including load errors.
@@ -34,15 +37,20 @@ struct VCWidgetPluginEntry
     QString filePath;
     VCWidgetPluginInterface* plugin = nullptr;   ///< null if load failed
     QString errorString;                         ///< populated when plugin == nullptr
+    QPluginLoader* loader = nullptr;             ///< kept alive so we can unload/reload
 };
 
 /**
  * VCWidgetPluginManager scans configured directories for VC widget plugins
  * and makes them available to the rest of the application.
  *
+ * Supports hot-reload: file system changes in the user directory are detected
+ * automatically and trigger a reload of new/changed plugins.
+ *
  * Usage:
  *   VCWidgetPluginManager::instance()->load(VCWidgetPluginManager::systemPluginDirectory());
  *   VCWidgetPluginManager::instance()->load(VCWidgetPluginManager::userPluginDirectory());
+ *   VCWidgetPluginManager::instance()->startFileWatcher();
  *
  * After loading, plugins() returns the successfully loaded plugins and
  * entries() returns all scanned files including failed ones (for UI display).
@@ -63,6 +71,27 @@ public:
      * Safe to call multiple times with different directories.
      */
     void load(const QDir& dir);
+
+    /**
+     * Reload a single plugin file (e.g. after it has been updated on disk).
+     * If the plugin was previously loaded, it is unloaded first.
+     * Emits pluginsChanged() if the set of loaded plugins changes.
+     * Returns true if the plugin was successfully loaded after the reload.
+     */
+    bool reloadFile(const QString& filePath);
+
+    /**
+     * Unload and remove a plugin entry by its file path.
+     * Does NOT delete the file from disk.
+     * Emits pluginsChanged() if the plugin was loaded.
+     */
+    void removeEntry(const QString& filePath);
+
+    /**
+     * Unload and remove a plugin by its ID.
+     * Returns false if no plugin with that ID is loaded.
+     */
+    bool unloadById(const QString& id);
 
     /** List of successfully loaded plugins, in load order. */
     QList<VCWidgetPluginInterface*> plugins() const;
@@ -95,18 +124,54 @@ public:
      */
     static QDir userPluginDirectory();
 
+    /**
+     * Start watching the user plugin directory for new/changed plugin files.
+     * When a new file appears or an existing one is modified, the plugin is
+     * automatically loaded or reloaded.
+     *
+     * This is safe to call multiple times; it will only start the watcher once.
+     */
+    void startFileWatcher();
+
+    /** Stop the file system watcher. */
+    void stopFileWatcher();
+
 signals:
     /** Emitted after load() adds one or more new plugins. */
     void pluginsChanged();
 
+    /**
+     * Emitted when a specific plugin has been reloaded (hot-reload).
+     * @p pluginId  the plugin's pluginId(), or empty string if the plugin
+     *              failed to load after the reload.
+     */
+    void pluginReloaded(const QString& pluginId);
+
+private slots:
+    void slotDirectoryChanged(const QString& path);
+    void slotFileChanged(const QString& path);
+    void slotReloadDebounced();
+
 private:
     explicit VCWidgetPluginManager(QObject* parent = nullptr);
 
+    /** Load a single file. Returns true if the plugin was newly added. */
+    bool loadFile(const QString& filePath);
+
+    /** Unload a single entry (does not remove from lists). */
+    void unloadEntry(VCWidgetPluginEntry& entry);
+
     static VCWidgetPluginManager* s_instance;
 
-    QList<VCWidgetPluginInterface*> m_plugins;
     QList<VCWidgetPluginEntry>      m_entries;
     QMap<QString, VCWidgetPluginInterface*> m_pluginById;
+
+    QFileSystemWatcher* m_watcher = nullptr;
+
+    // Debounce timer: linkers write files in multiple phases, so we wait
+    // a short time after the last file event before actually reloading.
+    QTimer  m_debounceTimer;
+    QStringList m_pendingReload;  ///< files queued for reload after debounce
 };
 
 #endif // VCWIDGETPLUGINMANAGER_H

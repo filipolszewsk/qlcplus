@@ -7,137 +7,261 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>560</width>
-    <height>380</height>
+    <width>600</width>
+    <height>440</height>
    </size>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
    <item>
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Installed plugins:</string>
+    <widget class="QTabWidget" name="tabWidget">
+     <property name="currentIndex">
+      <number>0</number>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QTreeWidget" name="pluginList">
-     <property name="alternatingRowColors">
-      <bool>true</bool>
-     </property>
-     <property name="rootIsDecorated">
-      <bool>false</bool>
-     </property>
-     <property name="uniformRowHeights">
-      <bool>true</bool>
-     </property>
-     <attribute name="headerStretchLastSection">
-      <bool>false</bool>
-     </attribute>
-     <column>
-      <property name="text">
-       <string>Name</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Version</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Author</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Status</string>
-      </property>
-     </column>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="detailsLayout">
-     <item>
-      <layout class="QVBoxLayout" name="infoLayout">
+
+     <!-- ===================== TAB: INSTALLED ===================== -->
+     <widget class="QWidget" name="installedTab">
+      <attribute name="title">
+       <string>Installed</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="installedLayout">
        <item>
-        <widget class="QLabel" name="idLabel">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="textInteractionFlags">
-          <set>Qt::TextSelectableByMouse</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="pathLabel">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="textInteractionFlags">
-          <set>Qt::TextSelectableByMouse</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="errorLabel">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="wordWrap">
+        <widget class="QTreeWidget" name="pluginList">
+         <property name="alternatingRowColors">
           <bool>true</bool>
          </property>
-         <property name="styleSheet">
-          <string>color: #cc3333;</string>
+         <property name="rootIsDecorated">
+          <bool>false</bool>
+         </property>
+         <property name="uniformRowHeights">
+          <bool>true</bool>
+         </property>
+         <attribute name="headerStretchLastSection">
+          <bool>false</bool>
+         </attribute>
+         <column>
+          <property name="text">
+           <string>Name</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Version</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Author</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Status</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="infoLayout">
+         <item>
+          <widget class="QLabel" name="idLabel">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="pathLabel">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="errorLabel">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="styleSheet">
+            <string>color: #cc3333;</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QFrame" name="separator">
+         <property name="frameShape">
+          <enum>QFrame::HLine</enum>
          </property>
         </widget>
        </item>
+       <item>
+        <layout class="QHBoxLayout" name="buttonLayout">
+         <item>
+          <widget class="QPushButton" name="installButton">
+           <property name="text">
+            <string>Install from file...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="openFolderButton">
+           <property name="text">
+            <string>Open plugins folder</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="reloadButton">
+           <property name="text">
+            <string>Reload</string>
+           </property>
+           <property name="toolTip">
+            <string>Reload the selected plugin from disk (hot-reload)</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="removeButton">
+           <property name="text">
+            <string>Remove</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="buttonSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
       </layout>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="removeButton">
-       <property name="text">
-        <string>Remove</string>
-       </property>
-       <property name="enabled">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QFrame" name="separator">
-     <property name="frameShape">
-      <enum>QFrame::HLine</enum>
-     </property>
+     </widget>
+
+     <!-- ===================== TAB: SETTINGS ===================== -->
+     <widget class="QWidget" name="settingsTab">
+      <attribute name="title">
+       <string>Settings</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="settingsLayout">
+       <item>
+        <widget class="QGroupBox" name="autoLoadGroup">
+         <property name="title">
+          <string>Automatic plugin loading</string>
+         </property>
+         <layout class="QVBoxLayout" name="autoLoadLayout">
+          <item>
+           <widget class="QCheckBox" name="autoLoadCheckBox">
+            <property name="text">
+             <string>Auto-load plugins dropped into the VCWidgets folder</string>
+            </property>
+            <property name="toolTip">
+             <string>When enabled, any plugin file (.dylib/.so/.dll) placed in the user VCWidgets folder is loaded automatically without restarting QLC+.</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="devModeGroup">
+         <property name="title">
+          <string>Developer mode</string>
+         </property>
+         <layout class="QVBoxLayout" name="devModeLayout">
+          <item>
+           <widget class="QCheckBox" name="devModeCheckBox">
+            <property name="text">
+             <string>Enable developer mode (hot-reload on file change)</string>
+            </property>
+            <property name="toolTip">
+             <string>When enabled, if a loaded plugin file changes on disk (e.g. after recompiling), QLC+ automatically reloads it. Existing widget instances are serialised to XML and restored after the reload.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="watchFolderLayout">
+            <item>
+             <widget class="QLabel" name="watchFolderLabel">
+              <property name="text">
+               <string>Watch extra folder:</string>
+              </property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="watchFolderEdit">
+              <property name="placeholderText">
+               <string>Path to plugin build directory (optional)</string>
+              </property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="watchFolderBrowseButton">
+              <property name="text">
+               <string>Browse...</string>
+              </property>
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="devModeNote">
+            <property name="text">
+             <string>&lt;small&gt;Tip: in developer mode, build your plugin and copy the .dylib to the VCWidgets folder — QLC+ will reload it automatically. No restart needed.&lt;/small&gt;</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="settingsSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="buttonLayout">
+    <layout class="QHBoxLayout" name="closeLayout">
      <item>
-      <widget class="QPushButton" name="installButton">
-       <property name="text">
-        <string>Install from file...</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="openFolderButton">
-       <property name="text">
-        <string>Open plugins folder</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="buttonSpacer">
+      <spacer name="closeSpacer">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>

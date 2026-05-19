@@ -23,9 +23,14 @@
 namespace Ui { class VCWidgetPluginManagerDialog; }
 
 /**
- * Dialog for managing VC widget plugins: shows installed plugins with their
- * load status, allows installing from a .qlcvcw package or bare binary, and
- * lets the user open the plugins folder or remove a plugin.
+ * Dialog for managing VC widget plugins.
+ *
+ * Tab "Installed": shows all installed plugins with their load status,
+ * allows installing from a .qlcvcw file or bare binary, reloading a plugin
+ * from disk without restarting QLC+, and removing a plugin.
+ *
+ * Tab "Settings": controls for auto-load (file watcher), developer mode
+ * (hot-reload on file change), and an extra watch folder for plugin developers.
  */
 class VCWidgetPluginManagerDialog : public QDialog
 {
@@ -35,15 +40,23 @@ public:
     explicit VCWidgetPluginManagerDialog(QWidget* parent = nullptr);
     ~VCWidgetPluginManagerDialog();
 
+public slots:
+    void populateList();
+
 private slots:
     void slotInstallFromFile();
     void slotOpenPluginsFolder();
+    void slotReloadPlugin();
     void slotRemovePlugin();
     void slotSelectionChanged();
 
-private:
-    void populateList();
+    // Settings tab
+    void slotAutoLoadToggled(bool enabled);
+    void slotDevModeToggled(bool enabled);
+    void slotBrowseWatchFolder();
+    void slotWatchFolderChanged(const QString& path);
 
+private:
     Ui::VCWidgetPluginManagerDialog* m_ui;
 };
 

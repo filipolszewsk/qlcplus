@@ -326,6 +326,11 @@ void App::init()
     VCWidgetPluginManager::instance()->load(
         VCWidgetPluginManager::userPluginDirectory());
 
+    /* Start watching the user plugin directory for new/changed plugins.
+     * This enables hot-reload: dropping a .dylib/.so/.dll into the
+     * VCWidgets folder automatically makes it available. */
+    VCWidgetPluginManager::instance()->startFileWatcher();
+
     // Create primary views.
     m_tab->setIconSize(QSize(24, 24));
     QWidget* w = new FixtureManager(m_tab, m_doc);

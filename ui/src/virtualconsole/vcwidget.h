@@ -319,6 +319,21 @@ public:
     virtual QString caption() const;
 
     /*********************************************************************
+     * Plugin identity (set by VCFrame when the widget is created from a plugin)
+     *********************************************************************/
+public:
+    /**
+     * The pluginId() of the VCWidgetPluginInterface that created this widget.
+     * Empty for built-in widgets. Used by the plugin manager to find all
+     * live instances of a plugin when hot-reloading.
+     */
+    void setPluginId(const QString& id);
+    QString pluginId() const;
+
+protected:
+    QString m_pluginId;
+
+    /*********************************************************************
      * Frame style
      *********************************************************************/
 public:

@@ -200,6 +200,7 @@ protected:
     QAction* m_addClockAction;
     QAction* m_addAnimationAction;
     QList<QAction*> m_addPluginActions;
+    QAction* m_pluginSectionSeparator;   ///< separator before plugin actions, or nullptr
     QAction* m_managePluginsAction;
 
     QAction* m_toolsSettingsAction;
@@ -291,6 +292,7 @@ public slots:
     void slotAddAnimation();
     void slotAddPluginWidget(VCWidgetPluginInterface* plugin);
     void slotManagePlugins();
+    void slotPluginsChanged();
 
     /*********************************************************************
      * Tools menu callbacks

@@ -185,6 +185,10 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)),
             this, SLOT(slotModeChanged(Doc::Mode)));
 
+    // Refresh Add menu when plugins are hot-loaded or updated
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::pluginsChanged,
+            this, &VirtualConsole::slotPluginsChanged);
+
     // Use the initial mode
     slotModeChanged(m_doc->mode());
 
@@ -422,6 +426,8 @@ void VirtualConsole::initActions()
         m_addPluginActions.append(act);
     }
 
+    m_pluginSectionSeparator = nullptr;
+
     /* "Get more widgets..." always appears last in the Add menu */
     m_managePluginsAction = new QAction(QIcon(":/plugin.png"),
                                         tr("Get more widgets..."), this);
@@ -646,7 +652,7 @@ void VirtualConsole::initMenuBar()
     /* Plugin widgets section */
     if (!m_addPluginActions.isEmpty())
     {
-        m_addMenu->addSeparator();
+        m_pluginSectionSeparator = m_addMenu->addSeparator();
         for (QAction* act : m_addPluginActions)
             m_addMenu->addAction(act);
     }
@@ -1260,6 +1266,7 @@ void VirtualConsole::slotAddPluginWidget(VCWidgetPluginInterface* plugin)
         return;
     }
 
+    widget->setPluginId(plugin->pluginId());
     setupWidget(widget, parent);
     m_doc->setModified();
 }
@@ -1268,6 +1275,62 @@ void VirtualConsole::slotManagePlugins()
 {
     VCWidgetPluginManagerDialog dialog(this);
     dialog.exec();
+}
+
+void VirtualConsole::slotPluginsChanged()
+{
+    // Remove old plugin section separator (if any)
+    if (m_pluginSectionSeparator)
+    {
+        m_addMenu->removeAction(m_pluginSectionSeparator);
+        m_pluginSectionSeparator->deleteLater();
+        m_pluginSectionSeparator = nullptr;
+    }
+
+    // Remove old plugin actions from menu and action group
+    for (QAction* act : m_addPluginActions)
+    {
+        m_addMenu->removeAction(act);
+        m_addActionGroup->removeAction(act);
+        act->deleteLater();
+    }
+    m_addPluginActions.clear();
+
+    // Rebuild plugin actions from current manager state
+    const auto pluginList = VCWidgetPluginManager::instance()->plugins();
+    for (VCWidgetPluginInterface* plugin : pluginList)
+    {
+        QAction* act = new QAction(plugin->icon(),
+                                   tr("New %1").arg(plugin->name()), this);
+        connect(act, &QAction::triggered, this, [this, plugin]() {
+            slotAddPluginWidget(plugin);
+        });
+        m_addPluginActions.append(act);
+        m_addActionGroup->addAction(act);
+    }
+
+    // Find the separator immediately before m_managePluginsAction and insert
+    // plugin section before it (insert separator + actions before that separator)
+    if (!m_addPluginActions.isEmpty())
+    {
+        QList<QAction*> menuActions = m_addMenu->actions();
+        QAction* separatorBeforeManage = nullptr;
+        for (int i = 0; i < menuActions.size(); ++i)
+        {
+            if (menuActions[i] == m_managePluginsAction && i > 0
+                && menuActions[i - 1]->isSeparator())
+            {
+                separatorBeforeManage = menuActions[i - 1];
+                break;
+            }
+        }
+
+        QAction* anchor = separatorBeforeManage ? separatorBeforeManage
+                                                : m_managePluginsAction;
+        m_pluginSectionSeparator = m_addMenu->insertSeparator(anchor);
+        for (QAction* act : m_addPluginActions)
+            m_addMenu->insertAction(anchor, act);
+    }
 }
 
 /*****************************************************************************

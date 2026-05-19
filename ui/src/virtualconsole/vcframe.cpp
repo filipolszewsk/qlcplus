@@ -1936,6 +1936,10 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
                                << "Plugin" << pluginId
                                << "returned null from createWidget — using placeholder";
                 }
+                else
+                {
+                    widget->setPluginId(pluginId);
+                }
             }
 
             if (widget == nullptr)
