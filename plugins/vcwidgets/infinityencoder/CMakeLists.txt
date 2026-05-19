@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
-project(dmxnumeric_vcwidget)
+project(infinityencoder_vcwidget)
 
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
-# -----------------------------------------------------------------------
-# Locate QLC+ libraries from its build directory
-# -----------------------------------------------------------------------
 if(NOT DEFINED QLCPLUS_SRC_DIR)
     message(FATAL_ERROR "Pass -DQLCPLUS_SRC_DIR=/path/to/qlcplus/source")
 endif()
@@ -29,24 +26,19 @@ find_library(QLCPLUSENGINE_LIB
 message(STATUS "qlcplusui:     ${QLCPLUSUI_LIB}")
 message(STATUS "qlcplusengine: ${QLCPLUSENGINE_LIB}")
 
-# -----------------------------------------------------------------------
-# Plugin target
-# -----------------------------------------------------------------------
-add_library(dmxnumeric_vcwidget MODULE
-    dmxnumericplugin.cpp dmxnumericplugin.h
-    dmxnumericwidget.cpp dmxnumericwidget.h
-    dmxnumericconfigdialog.cpp dmxnumericconfigdialog.h
+add_library(infinityencoder_vcwidget MODULE
+    infinityencoderplugin.cpp infinityencoderplugin.h
+    infinityencoderwidget.cpp infinityencoderwidget.h
+    infinityencoderconfigdialog.cpp infinityencoderconfigdialog.h
 )
 
-target_compile_features(dmxnumeric_vcwidget PRIVATE cxx_std_14)
+target_compile_features(infinityencoder_vcwidget PRIVATE cxx_std_17)
 
-# Use platform-specific shared library suffix expected by QLC+'s plugin loader:
-# .dylib on macOS, .so on Linux, .dll on Windows.
 if(APPLE)
-    set_target_properties(dmxnumeric_vcwidget PROPERTIES SUFFIX ".dylib")
+    set_target_properties(infinityencoder_vcwidget PROPERTIES SUFFIX ".dylib")
 endif()
 
-target_link_libraries(dmxnumeric_vcwidget
+target_link_libraries(infinityencoder_vcwidget
     PRIVATE
         Qt6::Core
         Qt6::Widgets
@@ -54,14 +46,14 @@ target_link_libraries(dmxnumeric_vcwidget
         ${QLCPLUSENGINE_LIB}
 )
 
-target_include_directories(dmxnumeric_vcwidget
+target_include_directories(infinityencoder_vcwidget
     PRIVATE
         "${QLCPLUS_SRC_DIR}/ui/src"
         "${QLCPLUS_SRC_DIR}/ui/src/virtualconsole"
         "${QLCPLUS_SRC_DIR}/engine/src"
 )
 
-install(TARGETS dmxnumeric_vcwidget
+install(TARGETS infinityencoder_vcwidget
     LIBRARY DESTINATION vcwidgets
     RUNTIME DESTINATION vcwidgets
 )

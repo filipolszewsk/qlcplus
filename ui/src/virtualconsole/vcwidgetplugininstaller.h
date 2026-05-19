@@ -60,6 +60,7 @@ public:
     QString lastError() const;
 
 private:
+    Result installPackage(const QString& filePath);
     Result installBinary(const QString& filePath);
 
     QString m_lastError;

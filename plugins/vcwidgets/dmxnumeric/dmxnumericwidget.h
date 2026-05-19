@@ -1,9 +1,6 @@
 /*
   QLC+ VC Widget Plugin — DMX Numeric Input
   dmxnumericwidget.h — Apache 2.0 / public domain
-
-  Widget that lets the user type or scroll a DMX value (0–255)
-  directly to a configured universe + channel.
 */
 
 #pragma once
@@ -11,43 +8,40 @@
 #include <QMutex>
 #include <QSpinBox>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
+#include <QSharedPointer>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QPaintEvent>
 
 #include "vcwidget.h"
 #include "dmxsource.h"
+#include "genericfader.h"
 
 class Doc;
 
-/**
- * DMXNumericWidget — enter a DMX value (0-255) numerically for one channel.
- *
- * Implements DMXSource so it registers on MasterTimer and writes
- * the configured value to universe/channel on every tick while
- * in Operate mode.
- */
 class DMXNumericWidget : public VCWidget, public DMXSource
 {
     Q_OBJECT
 
 public:
+    static const quint8 valueInputSourceId = 0;
+    static const quint8 applyInputSourceId = 1;
+
     DMXNumericWidget(QWidget* parent, Doc* doc);
     ~DMXNumericWidget() override;
 
     // ---- Configuration -----------------------------------------------
-    void setUniverse(int universe);   ///< 0-based universe index
-    int  universe() const;
-
-    void setAddress(int address);     ///< 0-based DMX address (0–511)
-    int  address() const;
+    void    setFixtureChannel(quint32 fixtureId, quint32 channel);
+    quint32 fixtureId() const { return m_fixtureId; }
+    quint32 channel()   const { return m_channel; }
 
     // ---- Clipboard ---------------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
 
-    // ---- External input ----------------------------------------------
-    void updateFeedback() override {}
+    // ---- External input / feedback -----------------------------------
+    void updateFeedback() override;
 
     // ---- DMXSource ---------------------------------------------------
     void writeDMX(MasterTimer* timer, QList<Universe*> universes) override;
@@ -61,26 +55,31 @@ public:
 
 protected slots:
     void slotModeChanged(Doc::Mode mode) override;
+    void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
 
 private slots:
-    void slotValueChanged(int value);
+    void slotSpinChanged(int value);
+    void slotApply();
 
 protected:
     void paintEvent(QPaintEvent* e) override;
 
 private:
     void updateAddressLabel();
-    // Configuration (GUI thread only for reads from UI, also read in timer thread)
-    int  m_universe = 0;
-    int  m_address  = 0;
+    void updateApplyButtonStyle();
 
-    // DMX value — written from GUI thread, read from timer thread
-    QMutex  m_valueMutex;
-    uchar   m_dmxValue      = 0;
-    bool    m_valueChanged  = false;
+    quint32 m_fixtureId = UINT_MAX;
+    quint32 m_channel   = 0;
 
-    // UI elements embedded in the widget
-    QVBoxLayout* m_layout   = nullptr;
-    QLabel*      m_addrLabel = nullptr;
-    QSpinBox*    m_spinBox   = nullptr;
+    // Applied DMX value — shared between GUI thread and MasterTimer thread
+    QMutex m_valueMutex;
+    uchar  m_dmxValue = 0;   // what is actually sent to output (after Apply)
+
+    QSharedPointer<GenericFader> m_fader;
+
+    // UI
+    QVBoxLayout* m_layout      = nullptr;
+    QLabel*      m_addrLabel   = nullptr;
+    QSpinBox*    m_spinBox     = nullptr;  // pending value
+    QPushButton* m_applyButton = nullptr;
 };

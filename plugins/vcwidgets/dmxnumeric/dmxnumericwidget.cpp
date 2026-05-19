@@ -5,25 +5,36 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
-#include <QInputDialog>
 #include <QPaintEvent>
-#include <QMessageBox>
 #include <QPainter>
 #include <QMutexLocker>
 #include <QDebug>
 
+#include "dmxnumericconfigdialog.h"
 #include "dmxnumericwidget.h"
+
+#include "genericfader.h"
+#include "fadechannel.h"
 #include "inputoutputmap.h"
 #include "mastertimer.h"
 #include "universe.h"
+#include "fixture.h"
+#include "qlcinputsource.h"
 #include "doc.h"
 
-static const QString KXMLDMXNumeric    = QStringLiteral("PluginWidget");
-static const QString KXMLDMXPluginId   = QStringLiteral("PluginId");
+static const QString KXMLDMXNumeric     = QStringLiteral("PluginWidget");
+static const QString KXMLDMXPluginId    = QStringLiteral("PluginId");
 static const QString KXMLDMXPluginIdVal = QStringLiteral("org.qlcplus.dmxnumeric");
-static const QString KXMLDMXUniverse   = QStringLiteral("Universe");
-static const QString KXMLDMXAddress    = QStringLiteral("Address");
-static const QString KXMLDMXValue      = QStringLiteral("Value");
+static const QString KXMLDMXFixtureID   = QStringLiteral("FixtureID");
+static const QString KXMLDMXChannel     = QStringLiteral("Channel");
+static const QString KXMLDMXValue       = QStringLiteral("Value");
+static const QString KXMLDMXValueInput  = QStringLiteral("ValueInput");
+static const QString KXMLDMXApplyInput  = QStringLiteral("ApplyInput");
+// Legacy
+static const QString KXMLDMXUniverse    = QStringLiteral("Universe");
+static const QString KXMLDMXAddress     = QStringLiteral("Address");
+
+// ---- Construction ------------------------------------------------------------
 
 DMXNumericWidget::DMXNumericWidget(QWidget* parent, Doc* doc)
     : VCWidget(parent, doc)
@@ -31,14 +42,13 @@ DMXNumericWidget::DMXNumericWidget(QWidget* parent, Doc* doc)
     setObjectName(DMXNumericWidget::staticMetaObject.className());
     setType(VCWidget::UnknownWidget);
     setCaption(tr("DMX Numeric"));
-    resize(QSize(120, 80));
+    resize(QSize(150, 100));
 
-    // Build embedded UI
     m_layout = new QVBoxLayout(this);
     m_layout->setContentsMargins(4, 4, 4, 4);
-    m_layout->setSpacing(2);
+    m_layout->setSpacing(3);
 
-    m_addrLabel = new QLabel(tr("U1 / CH1"), this);
+    m_addrLabel = new QLabel(tr("No channel"), this);
     m_addrLabel->setAlignment(Qt::AlignCenter);
     QFont f = m_addrLabel->font();
     f.setPointSize(8);
@@ -49,13 +59,19 @@ DMXNumericWidget::DMXNumericWidget(QWidget* parent, Doc* doc)
     m_spinBox->setRange(0, 255);
     m_spinBox->setValue(0);
     m_spinBox->setAlignment(Qt::AlignCenter);
-    m_spinBox->setEnabled(false);   // enabled only in Operate mode
+    m_spinBox->setEnabled(false);
     m_layout->addWidget(m_spinBox);
+
+    m_applyButton = new QPushButton(tr("Apply"), this);
+    m_applyButton->setEnabled(false);
+    m_layout->addWidget(m_applyButton);
 
     setLayout(m_layout);
 
     connect(m_spinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &DMXNumericWidget::slotValueChanged);
+            this, &DMXNumericWidget::slotSpinChanged);
+    connect(m_applyButton, &QPushButton::clicked,
+            this, &DMXNumericWidget::slotApply);
 
     updateAddressLabel();
 }
@@ -64,30 +80,17 @@ DMXNumericWidget::~DMXNumericWidget()
 {
     if (m_doc && m_doc->masterTimer())
         m_doc->masterTimer()->unregisterDMXSource(this);
+    if (!m_fader.isNull())
+        m_fader->requestDelete();
 }
 
 // ---- Configuration -----------------------------------------------------------
 
-void DMXNumericWidget::setUniverse(int universe)
+void DMXNumericWidget::setFixtureChannel(quint32 fixtureId, quint32 channel)
 {
-    m_universe = universe;
+    m_fixtureId = fixtureId;
+    m_channel   = channel;
     updateAddressLabel();
-}
-
-int DMXNumericWidget::universe() const
-{
-    return m_universe;
-}
-
-void DMXNumericWidget::setAddress(int address)
-{
-    m_address = address;
-    updateAddressLabel();
-}
-
-int DMXNumericWidget::address() const
-{
-    return m_address;
 }
 
 // ---- Clipboard ---------------------------------------------------------------
@@ -101,8 +104,9 @@ VCWidget* DMXNumericWidget::createCopy(VCWidget* parent)
         delete copy;
         return nullptr;
     }
-    copy->setUniverse(m_universe);
-    copy->setAddress(m_address);
+    copy->setFixtureChannel(m_fixtureId, m_channel);
+    copy->setInputSource(inputSource(valueInputSourceId), valueInputSourceId);
+    copy->setInputSource(inputSource(applyInputSourceId), applyInputSourceId);
     {
         QMutexLocker lk(&m_valueMutex);
         copy->m_dmxValue = m_dmxValue;
@@ -118,49 +122,107 @@ void DMXNumericWidget::slotModeChanged(Doc::Mode mode)
     if (mode == Doc::Operate)
     {
         m_spinBox->setEnabled(true);
+        m_applyButton->setEnabled(true);
         m_doc->masterTimer()->registerDMXSource(this);
     }
     else
     {
         m_spinBox->setEnabled(false);
+        m_applyButton->setEnabled(false);
         m_doc->masterTimer()->unregisterDMXSource(this);
-        // Release fader so the universe stops outputting our value
-        m_fader.clear();
+        if (!m_fader.isNull())
+        {
+            m_fader->requestDelete();
+            m_fader.clear();
+        }
     }
     VCWidget::slotModeChanged(mode);
     update();
 }
 
-// ---- DMXSource ---------------------------------------------------------------
+// ---- UI slots ----------------------------------------------------------------
 
-void DMXNumericWidget::slotValueChanged(int value)
+void DMXNumericWidget::slotSpinChanged(int value)
 {
-    // Called from GUI thread. Update shared value and set dirty flag.
-    QMutexLocker lk(&m_valueMutex);
-    m_dmxValue     = static_cast<uchar>(value);
-    m_valueChanged = true;
+    // Spinbox changed — just update button highlight to show pending state.
+    Q_UNUSED(value);
+    updateApplyButtonStyle();
 }
 
-void DMXNumericWidget::writeDMX(MasterTimer* /*timer*/,
-                                 QList<Universe*> universes)
+void DMXNumericWidget::slotApply()
 {
-    // Called from MasterTimer thread — do NOT touch any QWidget here.
+    // Push pending spinbox value to the applied DMX value (read by timer thread).
+    {
+        QMutexLocker lk(&m_valueMutex);
+        m_dmxValue = static_cast<uchar>(m_spinBox->value());
+    }
+    // Send feedback to any motorised/LED controller bound to Value input.
+    sendFeedback(m_spinBox->value(), valueInputSourceId);
+    updateApplyButtonStyle();
+}
+
+// ---- External input ----------------------------------------------------------
+
+void DMXNumericWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
+{
+    if (acceptsInput() == false)
+        return;
+
+    quint32 pagedCh = (page() << 16) | channel;
+
+    if (checkInputSource(universe, pagedCh, value, sender(), valueInputSourceId))
+    {
+        // External device controls the pending value (spinbox) — does not apply yet.
+        m_spinBox->setValue(int(value));
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), applyInputSourceId))
+    {
+        // Any non-zero value on the apply input triggers Apply.
+        if (value > 0)
+            slotApply();
+    }
+}
+
+void DMXNumericWidget::updateFeedback()
+{
+    // Called by QLC+ when the widget becomes visible / page changes.
+    // Send current applied value back to motorised faders / LED indicators.
+    QMutexLocker lk(&m_valueMutex);
+    sendFeedback(int(m_dmxValue), valueInputSourceId);
+}
+
+// ---- DMXSource ---------------------------------------------------------------
+
+void DMXNumericWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
+{
     QMutexLocker lk(&m_valueMutex);
 
-    if (!m_valueChanged)
+    if (m_fixtureId == UINT_MAX)
         return;
 
-    if (m_universe < 0 || m_universe >= universes.size())
+    Fixture* fxi = m_doc->fixture(m_fixtureId);
+    if (fxi == nullptr || m_channel >= fxi->channels())
         return;
 
-    if (m_address < 0 || m_address >= UNIVERSE_SIZE)
+    quint32 uni = fxi->universe();
+    if ((int)uni >= universes.size())
         return;
 
-    // Write directly to the universe at the raw address.
-    // forceLTP = true so the value overrides HTP precedence.
-    universes[m_universe]->write(m_address, m_dmxValue, true);
+    if (m_fader.isNull())
+        m_fader = universes[uni]->requestFader(Universe::Auto);
 
-    m_valueChanged = false;
+    FadeChannel* fc = m_fader->getChannelFader(m_doc, universes[uni],
+                                                m_fixtureId, m_channel);
+    if (fc->universe() == Universe::invalid())
+    {
+        m_fader->remove(fc);
+        return;
+    }
+
+    fc->setStart(fc->current());
+    fc->setTarget(m_dmxValue);
+    fc->setReady(false);
+    fc->setElapsed(0);
 }
 
 // ---- Properties --------------------------------------------------------------
@@ -170,24 +232,18 @@ void DMXNumericWidget::editProperties()
     if (mode() != Doc::Design)
         return;
 
-    // Simple two-step dialog: universe then address
-    bool ok = false;
+    DMXNumericConfigDialog dlg(m_doc,
+                               m_fixtureId, m_channel,
+                               inputSource(valueInputSourceId),
+                               inputSource(applyInputSourceId),
+                               page(),
+                               this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
 
-    int u = QInputDialog::getInt(this,
-        tr("DMX Numeric — Universe"),
-        tr("Universe (1–%1):").arg(m_doc->inputOutputMap()->universesCount()),
-        m_universe + 1, 1,
-        m_doc->inputOutputMap()->universesCount(), 1, &ok);
-    if (!ok) return;
-
-    int ch = QInputDialog::getInt(this,
-        tr("DMX Numeric — Channel"),
-        tr("DMX channel (1–512):"),
-        m_address + 1, 1, 512, 1, &ok);
-    if (!ok) return;
-
-    setUniverse(u - 1);
-    setAddress(ch - 1);
+    setFixtureChannel(dlg.fixtureId(), dlg.channel());
+    setInputSource(dlg.valueInputSource(), valueInputSourceId);
+    setInputSource(dlg.applyInputSource(), applyInputSourceId);
     m_doc->setModified();
 }
 
@@ -203,6 +259,9 @@ bool DMXNumericWidget::loadXML(QXmlStreamReader& root)
 
     loadXMLCommon(root);
 
+    int legacyUniverse = -1;
+    int legacyAddress  = -1;
+
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLQLCWindowState)
@@ -216,13 +275,13 @@ bool DMXNumericWidget::loadXML(QXmlStreamReader& root)
         {
             loadXMLAppearance(root);
         }
-        else if (root.name() == KXMLDMXUniverse)
+        else if (root.name() == KXMLDMXFixtureID)
         {
-            setUniverse(root.readElementText().toInt());
+            m_fixtureId = root.readElementText().toUInt();
         }
-        else if (root.name() == KXMLDMXAddress)
+        else if (root.name() == KXMLDMXChannel)
         {
-            setAddress(root.readElementText().toInt());
+            m_channel = root.readElementText().toUInt();
         }
         else if (root.name() == KXMLDMXValue)
         {
@@ -232,7 +291,23 @@ bool DMXNumericWidget::loadXML(QXmlStreamReader& root)
             m_spinBox->blockSignals(false);
             QMutexLocker lk(&m_valueMutex);
             m_dmxValue = static_cast<uchar>(v);
-            m_valueChanged = false;
+        }
+        else if (root.name() == KXMLDMXValueInput)
+        {
+            loadXMLSources(root, valueInputSourceId);
+        }
+        else if (root.name() == KXMLDMXApplyInput)
+        {
+            loadXMLSources(root, applyInputSourceId);
+        }
+        // Legacy
+        else if (root.name() == KXMLDMXUniverse)
+        {
+            legacyUniverse = root.readElementText().toInt();
+        }
+        else if (root.name() == KXMLDMXAddress)
+        {
+            legacyAddress = root.readElementText().toInt();
         }
         else
         {
@@ -240,6 +315,23 @@ bool DMXNumericWidget::loadXML(QXmlStreamReader& root)
         }
     }
 
+    // Migrate legacy universe/address
+    if (m_fixtureId == UINT_MAX && legacyUniverse >= 0 && legacyAddress >= 0)
+    {
+        for (Fixture* fx : m_doc->fixtures())
+        {
+            if ((int)fx->universe() == legacyUniverse
+                && legacyAddress >= (int)fx->address()
+                && legacyAddress < (int)(fx->address() + fx->channels()))
+            {
+                m_fixtureId = fx->id();
+                m_channel   = quint32(legacyAddress - (int)fx->address());
+                break;
+            }
+        }
+    }
+
+    updateAddressLabel();
     return true;
 }
 
@@ -254,9 +346,27 @@ bool DMXNumericWidget::saveXML(QXmlStreamWriter* doc)
     saveXMLWindowState(doc);
     saveXMLAppearance(doc);
 
-    doc->writeTextElement(KXMLDMXUniverse, QString::number(m_universe));
-    doc->writeTextElement(KXMLDMXAddress,  QString::number(m_address));
-    doc->writeTextElement(KXMLDMXValue,    QString::number(m_spinBox->value()));
+    doc->writeTextElement(KXMLDMXFixtureID, QString::number(m_fixtureId));
+    doc->writeTextElement(KXMLDMXChannel,   QString::number(m_channel));
+    doc->writeTextElement(KXMLDMXValue,     QString::number(m_spinBox->value()));
+
+    // Value input binding
+    auto valueSrc = inputSource(valueInputSourceId);
+    if (!valueSrc.isNull() && valueSrc->isValid())
+    {
+        doc->writeStartElement(KXMLDMXValueInput);
+        saveXMLInput(doc, valueSrc);
+        doc->writeEndElement();
+    }
+
+    // Apply input binding
+    auto applySrc = inputSource(applyInputSourceId);
+    if (!applySrc.isNull() && applySrc->isValid())
+    {
+        doc->writeStartElement(KXMLDMXApplyInput);
+        saveXMLInput(doc, applySrc);
+        doc->writeEndElement();
+    }
 
     doc->writeEndElement();
     return true;
@@ -266,20 +376,49 @@ bool DMXNumericWidget::saveXML(QXmlStreamWriter* doc)
 
 void DMXNumericWidget::updateAddressLabel()
 {
-    if (m_addrLabel)
-        m_addrLabel->setText(
-            tr("U%1 / CH%2").arg(m_universe + 1).arg(m_address + 1));
+    if (!m_addrLabel)
+        return;
+
+    if (m_fixtureId == UINT_MAX)
+    {
+        m_addrLabel->setText(tr("No channel"));
+        return;
+    }
+
+    Fixture* fx = m_doc ? m_doc->fixture(m_fixtureId) : nullptr;
+    if (fx == nullptr)
+    {
+        m_addrLabel->setText(tr("Missing fixture"));
+        return;
+    }
+
+    const QLCChannel* ch = fx->channel(m_channel);
+    QString chName = ch ? ch->name() : tr("ch%1").arg(m_channel + 1);
+    m_addrLabel->setText(
+        QString("U%1 | CH%2\n%3")
+            .arg(fx->universe() + 1)
+            .arg(fx->address() + m_channel + 1)
+            .arg(chName));
+}
+
+void DMXNumericWidget::updateApplyButtonStyle()
+{
+    if (!m_applyButton || !m_spinBox)
+        return;
+
+    QMutexLocker lk(&m_valueMutex);
+    bool pending = (static_cast<uchar>(m_spinBox->value()) != m_dmxValue);
+    // Highlight when spinbox differs from what's actually on output
+    m_applyButton->setStyleSheet(pending
+        ? QStringLiteral("QPushButton { background-color: #cc6600; color: white; font-weight: bold; }")
+        : QString());
 }
 
 void DMXNumericWidget::paintEvent(QPaintEvent* e)
 {
     QPainter painter(this);
-
-    QColor bg = (mode() == Doc::Operate)
-                ? QColor(20, 40, 20)
-                : QColor(30, 30, 30);
+    QColor bg = (mode() == Doc::Operate) ? QColor(20, 40, 20) : QColor(30, 30, 30);
     painter.fillRect(rect(), bg);
-
     painter.end();
     VCWidget::paintEvent(e);
 }
