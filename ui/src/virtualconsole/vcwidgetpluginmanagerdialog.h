@@ -19,8 +19,12 @@
 #define VCWIDGETPLUGINMANAGERDIALOG_H
 
 #include <QDialog>
+#include <QList>
+
+#include "pluginregistry.h"
 
 namespace Ui { class VCWidgetPluginManagerDialog; }
+class GitHubPluginRegistry;
 
 /**
  * Dialog for managing VC widget plugins.
@@ -56,8 +60,25 @@ private slots:
     void slotBrowseWatchFolder();
     void slotWatchFolderChanged(const QString& path);
 
+    // Browse Library tab
+    void slotBrowseRefresh();
+    void slotBrowseIndexReady(QList<RegistryEntry> entries);
+    void slotBrowseIndexFailed(QString error);
+    void slotBrowseSelectionChanged();
+    void slotBrowseFilterChanged();
+    void slotBrowseInstall();
+    void slotBrowseDownloadProgress(QString pluginId, int percent);
+    void slotBrowseDownloadReady(QString pluginId, QString localPath);
+    void slotBrowseDownloadFailed(QString pluginId, QString error);
+
 private:
+    void populateBrowseList();
+    QString statusForEntry(const RegistryEntry& entry) const;
+
     Ui::VCWidgetPluginManagerDialog* m_ui;
+    GitHubPluginRegistry*            m_registry = nullptr;
+    QList<RegistryEntry>             m_registryEntries;
+    QString                          m_downloadingId;
 };
 
 #endif // VCWIDGETPLUGINMANAGERDIALOG_H

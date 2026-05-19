@@ -184,6 +184,8 @@ add_library(${module_name}
     virtualconsole/vcmissingpluginwidget.cpp virtualconsole/vcmissingpluginwidget.h
     virtualconsole/vcwidgetpluginmanagerdialog.cpp virtualconsole/vcwidgetpluginmanagerdialog.h virtualconsole/vcwidgetpluginmanagerdialog.ui
     virtualconsole/vcwidgetplugininstaller.cpp virtualconsole/vcwidgetplugininstaller.h
+    virtualconsole/pluginregistry.h
+    virtualconsole/githubpluginregistry.cpp virtualconsole/githubpluginregistry.h
     virtualconsole/vcwidgetproperties.cpp virtualconsole/vcwidgetproperties.h
     virtualconsole/vcwidgetselection.cpp virtualconsole/vcwidgetselection.h virtualconsole/vcwidgetselection.ui
     virtualconsole/vcxypad.cpp virtualconsole/vcxypad.h
