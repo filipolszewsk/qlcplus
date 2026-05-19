@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QLC+ VC Widget Registry Index",
+  "type": "object",
+  "required": ["schema_version", "plugins"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["plugin_id", "name", "version", "author", "platforms"],
+        "properties": {
+          "plugin_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$",
+            "description": "Globally unique reverse-domain identifier. Must never change between versions."
+          },
+          "name":            { "type": "string", "minLength": 1 },
+          "version":         { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "author":          { "type": "string", "minLength": 1 },
+          "category":        { "type": "string" },
+          "description":     { "type": "string" },
+          "homepage":        { "type": "string", "format": "uri" },
+          "min_qlc_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "platforms": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "enum": ["macos_arm64", "macos_x64", "linux_x64", "windows_x64"]
+            },
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

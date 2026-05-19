@@ -1011,6 +1011,125 @@ Trzeci przykład — widget sterujący **funkcjami** QLC+ (nie DMX bezpośrednio
 
 ---
 
+---
+
+## 15. Developer Mode — hot-reload bez restartu
+
+### Folder użytkownika
+
+Wszystkie user data (fixtures, scribbles, pluginy VC) są trzymane w jednym katalogu:
+
+| System | Folder użytkownika |
+|---|---|
+| macOS | `~/Library/Application Support/QLC+/VCWidgets/` |
+| Linux | `~/.qlcplus/vcwidgets/` |
+| Windows | `%UserProfile%\QLC+\VCWidgets\` |
+
+**Automatyczne ładowanie:** QLC+ monitoruje ten folder. Wrzucenie `.qlcvcw` lub `.dylib`/`.so`/`.dll` **automatycznie ładuje plugin** (bez restartu). Wystarczy skopiować plik.
+
+### Developer Mode — workflow dla autorów pluginów
+
+Włącz Developer Mode w: **Virtual Console → Get more widgets... → Settings → Developer mode**.
+
+W Developer Mode:
+1. Budujesz plugin: `cmake --build build`
+2. Kopiujesz binarię do folderu użytkownika (jedno polecenie, np. skrypt)
+3. QLC+ **automatycznie przeładowuje plugin** po wykryciu zmiany pliku
+4. Istniejące instancje widgetu w Virtual Console są **serializowane do XML → plugin unload → reload → odtworzenie z XML**
+5. Widget wraca dokładnie w to samo miejsce z tymi samymi ustawieniami
+
+### Przykładowy skrypt dev build (macOS)
+
+```bash
+#!/usr/bin/env bash
+# dev_install.sh — umieść w katalogu pluginu
+
+PLUGIN_NAME="dmxnumeric"
+BUILD_DIR="build"
+BUNDLE="$HOME/QLC+.app"
+DEST="$HOME/Library/Application Support/QLC+/VCWidgets"
+
+# Build
+cmake --build "$BUILD_DIR" || exit 1
+
+DYLIB="$BUILD_DIR/lib${PLUGIN_NAME}_vcwidget.dylib"
+
+# Naprawa rpath i codesign (wymagane po buildzie na macOS)
+install_name_tool -add_rpath "$BUNDLE/Contents/Frameworks" "$DYLIB" 2>/dev/null || true
+for fw in QtCore QtGui QtWidgets; do
+  install_name_tool -change \
+    "/opt/homebrew/opt/qtbase/lib/$fw.framework/Versions/A/$fw" \
+    "/opt/homebrew/lib/$fw.framework/Versions/A/$fw" \
+    "$DYLIB" 2>/dev/null || true
+done
+codesign --force --sign - "$DYLIB"
+
+# Kopiuj — QLC+ wykryje zmianę i przeładuje w tle
+cp "$DYLIB" "$DEST/"
+echo "Installed $PLUGIN_NAME → QLC+ will hot-reload in ~1s"
+```
+
+### Folder "Watch extra folder" w Settings
+
+Alternatywnie: w Settings podaj ścieżkę do katalogu build. QLC+ załaduje z niego pluginy i będzie je monitorować (plugin nie musi trafiać do folderu użytkownika).
+
+---
+
+## 16. Publikacja w globalnej bibliotece pluginów
+
+### Jak działa biblioteka
+
+QLC+ pobiera listę dostępnych pluginów z publicznego repozytorium GitHub:
+`https://github.com/qlcplus/vcwidget-registry`
+
+W dialogu **Get more widgets... → Browse Library** użytkownicy mogą przeglądać, instalować i aktualizować pluginy jednym kliknięciem.
+
+### Jak zgłosić swój plugin
+
+1. **Przygotuj binarki** dla każdej platformy (`.qlcvcw` z `manifest.json`)
+2. **Utwórz release** na swoim GitHub z binarkami jako assets
+3. **Otwórz Pull Request** do `qlcplus/vcwidget-registry` dodając entry do `index.json`:
+
+```json
+{
+  "plugin_id": "org.twojadomena.vcwidgets.mojanazwa",
+  "name": "Mój Widget",
+  "version": "1.0.0",
+  "author": "Imię Nazwisko",
+  "category": "DMX Control",
+  "description": "Krótki opis co robi widget.",
+  "homepage": "https://github.com/ty/twoj-plugin",
+  "min_qlc_version": "4.14.0",
+  "platforms": {
+    "macos_arm64": "https://github.com/ty/twoj-plugin/releases/download/v1.0.0/widget-1.0.0-macos-arm64.qlcvcw",
+    "macos_x64":   "https://github.com/ty/twoj-plugin/releases/download/v1.0.0/widget-1.0.0-macos-x64.qlcvcw",
+    "linux_x64":   "https://github.com/ty/twoj-plugin/releases/download/v1.0.0/widget-1.0.0-linux-x64.qlcvcw",
+    "windows_x64": "https://github.com/ty/twoj-plugin/releases/download/v1.0.0/widget-1.0.0-windows-x64.qlcvcw"
+  }
+}
+```
+
+### GitHub Actions CI — automatyczna walidacja PR
+
+Repozytorium `vcwidget-registry` zawiera GitHub Action który przy każdym PR:
+- Waliduje JSON schema (`plugin_id`, `platforms` jako obiekt, wymagane pola)
+- Sprawdza unikalność `plugin_id` w całym `index.json`
+- Weryfikuje że URLe platform są osiągalne (HEAD request)
+
+### Struktura repozytorium registry
+
+```
+qlcplus/vcwidget-registry/
+├── index.json          ← lista wszystkich pluginów
+├── schema.json         ← JSON Schema do walidacji
+├── .github/
+│   └── workflows/
+│       └── validate.yml ← GitHub Action walidujący PR
+└── README.md           ← instrukcja dla autorów
+```
+
+---
+
 ## Checklist przed wydaniem pluginu
 
 - [ ] `pluginId()` jest globalnie unikalny (reverse-domain)
