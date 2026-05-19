@@ -29,6 +29,7 @@
 #include <QList>
 #include <QSet>
 #include <QMap>
+#include <QByteArray>
 
 #include "vcproperties.h"
 #include "doc.h"
@@ -203,6 +204,14 @@ protected:
     QAction* m_pluginSectionSeparator;   ///< separator before plugin actions, or nullptr
     QAction* m_managePluginsAction;
 
+    /** Saved XML + parent + geometry for widgets being hot-reloaded. */
+    struct SavedPluginWidget {
+        QByteArray xml;
+        VCFrame*   parent;
+        QRect      geometry;
+    };
+    QMap<QString, QList<SavedPluginWidget>> m_pendingPluginRestore;
+
     QAction* m_toolsSettingsAction;
     QAction* m_functionWizardAction;
 
@@ -293,6 +302,8 @@ public slots:
     void slotAddPluginWidget(VCWidgetPluginInterface* plugin);
     void slotManagePlugins();
     void slotPluginsChanged();
+    void slotAboutToReloadPlugin(const QString& pluginId);
+    void slotPluginReloaded(const QString& pluginId);
 
     /*********************************************************************
      * Tools menu callbacks

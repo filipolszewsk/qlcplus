@@ -20,6 +20,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QBuffer>
 #include <QApplication>
 #include <QClipboard>
 #include <QJsonDocument>
@@ -188,6 +189,13 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     // Refresh Add menu when plugins are hot-loaded or updated
     connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::pluginsChanged,
             this, &VirtualConsole::slotPluginsChanged);
+
+    // Smart save/restore on hot-reload: direct connection is critical so
+    // widget destruction happens synchronously before the library is unloaded.
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::aboutToReloadPlugin,
+            this, &VirtualConsole::slotAboutToReloadPlugin, Qt::DirectConnection);
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::pluginReloaded,
+            this, &VirtualConsole::slotPluginReloaded);
 
     // Use the initial mode
     slotModeChanged(m_doc->mode());
@@ -1275,6 +1283,128 @@ void VirtualConsole::slotManagePlugins()
 {
     VCWidgetPluginManagerDialog dialog(this);
     dialog.exec();
+}
+
+void VirtualConsole::slotAboutToReloadPlugin(const QString& pluginId)
+{
+    if (!m_contents)
+        return;
+
+    // Find all live widget instances created by this plugin
+    QList<VCWidget*> toSave = m_contents->findChildren<VCWidget*>();
+
+    QList<SavedPluginWidget> savedWidgets;
+
+    for (VCWidget* w : toSave)
+    {
+        if (w->pluginId() != pluginId)
+            continue;
+
+        // Serialize to XML
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter writer(&buf);
+        writer.setAutoFormatting(false);
+        bool ok = w->saveXML(&writer);
+        buf.close();
+
+        if (!ok)
+        {
+            qWarning() << Q_FUNC_INFO << "saveXML failed for plugin widget"
+                       << pluginId << "— widget will not be restored";
+            continue;
+        }
+
+        SavedPluginWidget saved;
+        saved.xml      = buf.data();
+        saved.parent   = qobject_cast<VCFrame*>(w->parent());
+        saved.geometry = w->geometry();
+        savedWidgets.append(saved);
+
+        // Remove from parent's widget map before deletion
+        if (saved.parent)
+            saved.parent->removeWidgetFromPageMap(w);
+
+        // Delete immediately — library will be unloaded after this slot returns
+        delete w;
+    }
+
+    if (!savedWidgets.isEmpty())
+        m_pendingPluginRestore[pluginId] = savedWidgets;
+}
+
+void VirtualConsole::slotPluginReloaded(const QString& pluginId)
+{
+    if (pluginId.isEmpty() || !m_pendingPluginRestore.contains(pluginId))
+        return;
+
+    VCWidgetPluginInterface* plugin =
+        VCWidgetPluginManager::instance()->pluginById(pluginId);
+
+    const QList<SavedPluginWidget> savedWidgets =
+        m_pendingPluginRestore.take(pluginId);
+
+    if (!plugin)
+    {
+        QMessageBox::warning(this, tr("Plugin reload failed"),
+            tr("Plugin \"%1\" could not be loaded after update.\n\n"
+               "%2 widget instance(s) could not be restored.\n"
+               "Please restart QLC+ to try again.")
+                .arg(pluginId)
+                .arg(savedWidgets.size()));
+        return;
+    }
+
+    int restored = 0;
+    int failed   = 0;
+
+    for (const SavedPluginWidget& saved : savedWidgets)
+    {
+        VCFrame* parent = saved.parent ? saved.parent : m_contents;
+
+        VCWidget* newWidget = plugin->createWidget(parent, m_doc);
+        if (!newWidget)
+        {
+            ++failed;
+            continue;
+        }
+
+        newWidget->setPluginId(pluginId);
+
+        QBuffer buf;
+        buf.setData(saved.xml);
+        buf.open(QIODevice::ReadOnly);
+        QXmlStreamReader reader(&buf);
+
+        // Advance to the first start element (the PluginWidget element)
+        while (!reader.atEnd() && !reader.isStartElement())
+            reader.readNext();
+
+        if (reader.atEnd() || !newWidget->loadXML(reader))
+        {
+            // loadXML failed (plugin changed XML format) — fall back to
+            // using saved geometry and showing the widget as-is
+            newWidget->setGeometry(saved.geometry);
+            qWarning() << Q_FUNC_INFO
+                       << "loadXML failed for reloaded plugin" << pluginId
+                       << "— widget restored with default state";
+        }
+
+        parent->addWidgetToPageMap(newWidget);
+        newWidget->show();
+        addWidgetInMap(newWidget);
+        ++restored;
+    }
+
+    if (failed > 0)
+    {
+        QMessageBox::information(this, tr("Plugin reloaded"),
+            tr("Plugin \"%1\" reloaded.\n"
+               "%2 widget(s) restored, %3 could not be recreated.")
+                .arg(plugin->name())
+                .arg(restored)
+                .arg(failed));
+    }
 }
 
 void VirtualConsole::slotPluginsChanged()

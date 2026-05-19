@@ -180,6 +180,11 @@ bool VCWidgetPluginManager::reloadFile(const QString& filePath)
         if (existing.plugin)
             previousId = existing.plugin->pluginId();
 
+        // Notify observers BEFORE unloading so they can destroy live instances.
+        // Must be a synchronous (direct) connection — library unload follows immediately.
+        if (!previousId.isEmpty())
+            emit aboutToReloadPlugin(previousId);
+
         unloadEntry(existing);
         m_entries.removeAt(idx);
     }

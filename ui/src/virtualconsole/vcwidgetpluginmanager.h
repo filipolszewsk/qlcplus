@@ -141,7 +141,18 @@ signals:
     void pluginsChanged();
 
     /**
+     * Emitted BEFORE unloading the old plugin library during a hot-reload.
+     * Any observer that holds live instances of widgets created by this plugin
+     * MUST destroy them synchronously in response to this signal (connect with
+     * Qt::DirectConnection) before the library is actually unloaded.
+     *
+     * @p pluginId  the plugin ID that is about to be reloaded.
+     */
+    void aboutToReloadPlugin(const QString& pluginId);
+
+    /**
      * Emitted when a specific plugin has been reloaded (hot-reload).
+     * The new plugin is fully loaded and ready when this signal is received.
      * @p pluginId  the plugin's pluginId(), or empty string if the plugin
      *              failed to load after the reload.
      */
