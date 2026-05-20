@@ -8,10 +8,10 @@
       "author": "Filip Olszewski",
       "category": "DMX Control",
       "description": "Numeric DMX channel writer. Assign a fixture channel, type the value or use a MIDI encoder. Supports Apply button and MIDI/OSC/HID input bindings.",
-      "homepage": "https://github.com/Hpforfilm/qlcplus",
+      "homepage": "https://github.com/filipolszewsk/qlcplus",
       "min_qlc_version": "4.14.0",
       "platforms": {
-        "macos_arm64": "https://github.com/Hpforfilm/qlcplus/releases/download/vcwidgets-v1.3.0/dmxnumeric-1.3.0.qlcvcw"
+        "macos_arm64": "https://github.com/filipolszewsk/qlcplus/releases/download/vcwidgets-v1.3.0/dmxnumeric-1.3.0.qlcvcw"
       }
     },
     {
@@ -21,10 +21,10 @@
       "author": "Filip Olszewski",
       "category": "DMX Control",
       "description": "Relative rotary encoder controlling 4 independent DMX channels (banks A/B/C/D). Three sensitivity levels. Circular drag interaction.",
-      "homepage": "https://github.com/Hpforfilm/qlcplus",
+      "homepage": "https://github.com/filipolszewsk/qlcplus",
       "min_qlc_version": "4.14.0",
       "platforms": {
-        "macos_arm64": "https://github.com/Hpforfilm/qlcplus/releases/download/vcwidgets-v1.0.1/infinityencoder-1.0.1.qlcvcw"
+        "macos_arm64": "https://github.com/filipolszewsk/qlcplus/releases/download/vcwidgets-v1.0.1/infinityencoder-1.0.1.qlcvcw"
       }
     },
     {
@@ -34,10 +34,10 @@
       "author": "Filip Olszewski",
       "category": "Functions",
       "description": "Cyclic multi-function launcher. Each button cycles through a list of QLC+ functions. Supports long-press context menu, optional OFF step, channel monitoring, per-entry icons.",
-      "homepage": "https://github.com/Hpforfilm/qlcplus",
+      "homepage": "https://github.com/filipolszewsk/qlcplus",
       "min_qlc_version": "4.14.0",
       "platforms": {
-        "macos_arm64": "https://github.com/Hpforfilm/qlcplus/releases/download/vcwidgets-v1.2.3/multibutton-1.2.3.qlcvcw"
+        "macos_arm64": "https://github.com/filipolszewsk/qlcplus/releases/download/vcwidgets-v1.2.3/multibutton-1.2.3.qlcvcw"
       }
     }
   ]

@@ -63,7 +63,8 @@ const QString GitHubPluginRegistry::defaultIndexUrl()
 {
     return QStringLiteral(
         "https://raw.githubusercontent.com/"
-        "qlcplus/vcwidget-registry/main/index.json");
+        "filipolszewsk/qlcplus/feature/vc-widget-plugin-hub"
+        "/plugins/vcwidgets/registry-template/index.json");
 }
 
 GitHubPluginRegistry::GitHubPluginRegistry(const QString& indexUrl,
