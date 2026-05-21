@@ -231,19 +231,27 @@ PresetTableWidget::PresetTableWidget(QWidget* parent, Doc* doc)
     m_toolbar->setIconSize(QSize(16, 16));
     m_toolbar->setMovable(false);
 
-    QAction* actAddRow = m_toolbar->addAction(tr("+ Row"));
-    QAction* actRemRow = m_toolbar->addAction(tr("- Row"));
-    m_toolbar->addSeparator();
+    QAction* actAddRow    = m_toolbar->addAction(tr("+ Row"));
+    QAction* actRemRow    = m_toolbar->addAction(tr("- Row"));
+    QAction* actRenameRow = m_toolbar->addAction(tr("Rename Row..."));
+    m_actColSep  = m_toolbar->addSeparator();
     QAction* actAddCol = m_toolbar->addAction(tr("+ Col"));
     QAction* actRemCol = m_toolbar->addAction(tr("- Col"));
-    m_toolbar->addSeparator();
+    m_actPropSep = m_toolbar->addSeparator();
     QAction* actProps  = m_toolbar->addAction(tr("Properties..."));
 
-    connect(actAddRow, &QAction::triggered, this, &PresetTableWidget::slotAddRow);
-    connect(actRemRow, &QAction::triggered, this, &PresetTableWidget::slotRemoveRow);
-    connect(actAddCol, &QAction::triggered, this, &PresetTableWidget::slotAddColumn);
-    connect(actRemCol, &QAction::triggered, this, &PresetTableWidget::slotRemoveColumn);
-    connect(actProps,  &QAction::triggered, this, &PresetTableWidget::slotProperties);
+    m_actAddCol    = actAddCol;
+    m_actRemCol    = actRemCol;
+    m_actProps     = actProps;
+    m_actRenameRow = actRenameRow;
+    m_actRenameRow->setVisible(false);   // shown only in Operate mode
+
+    connect(actAddRow,    &QAction::triggered, this, &PresetTableWidget::slotAddRow);
+    connect(actRemRow,    &QAction::triggered, this, &PresetTableWidget::slotRemoveRow);
+    connect(actRenameRow, &QAction::triggered, this, &PresetTableWidget::slotRenameRow);
+    connect(actAddCol,    &QAction::triggered, this, &PresetTableWidget::slotAddColumn);
+    connect(actRemCol,    &QAction::triggered, this, &PresetTableWidget::slotRemoveColumn);
+    connect(actProps,     &QAction::triggered, this, &PresetTableWidget::slotProperties);
 
     m_layout->addWidget(m_toolbar);
 
@@ -346,13 +354,27 @@ void PresetTableWidget::slotModeChanged(Doc::Mode newMode)
 {
     if (newMode == Doc::Operate)
     {
-        m_toolbar->setVisible(false);
+        m_toolbar->setVisible(true);
+        // Hide structural actions not appropriate during a live show
+        if (m_actAddCol)    m_actAddCol->setVisible(false);
+        if (m_actRemCol)    m_actRemCol->setVisible(false);
+        if (m_actProps)     m_actProps->setVisible(false);
+        if (m_actColSep)    m_actColSep->setVisible(false);
+        if (m_actPropSep)   m_actPropSep->setVisible(false);
+        if (m_actRenameRow) m_actRenameRow->setVisible(true);
+        m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
         m_statusBar->setVisible(true);
         m_doc->masterTimer()->registerDMXSource(this);
     }
     else
     {
         m_toolbar->setVisible(true);
+        if (m_actAddCol)    m_actAddCol->setVisible(true);
+        if (m_actRemCol)    m_actRemCol->setVisible(true);
+        if (m_actProps)     m_actProps->setVisible(true);
+        if (m_actColSep)    m_actColSep->setVisible(true);
+        if (m_actPropSep)   m_actPropSep->setVisible(true);
+        if (m_actRenameRow) m_actRenameRow->setVisible(false);
         m_statusBar->setVisible(false);
         m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
         m_doc->masterTimer()->unregisterDMXSource(this);
@@ -419,6 +441,30 @@ void PresetTableWidget::slotRemoveRow()
             if (ar >= m_rows.size()) ar = -1;
     }
     rebuildTable();
+    m_doc->setModified();
+}
+
+void PresetTableWidget::slotRenameRow()
+{
+    int row = m_table->currentRow();
+    if (row < 0 || row >= m_rows.size()) return;
+
+    bool ok = false;
+    QString name = QInputDialog::getText(this, tr("Rename Row"),
+                       tr("New name:"), QLineEdit::Normal,
+                       m_rows[row].name, &ok);
+    if (!ok || name.isEmpty()) return;
+
+    {
+        QMutexLocker lk(&m_stateMutex);
+        m_rows[row].name = name;
+    }
+    m_table->blockSignals(true);
+    if (auto* item = m_table->item(row, 0))
+        item->setText(name);
+    m_table->blockSignals(false);
+
+    refreshRowHighlights();
     m_doc->setModified();
 }
 
@@ -601,7 +647,7 @@ void PresetTableWidget::pasteValueToItem(QTableWidgetItem* item, const QString& 
 void PresetTableWidget::syncAllDataFromTable()
 {
     QMutexLocker lk(&m_stateMutex);
-    bool syncNames = (mode() == Doc::Design);
+    bool syncNames = true;
     for (int r = 0; r < m_table->rowCount() && r < m_rows.size(); ++r)
     {
         if (syncNames)
@@ -706,10 +752,7 @@ void PresetTableWidget::rebuildTable()
 
         // Name column — always plain text item
         QTableWidgetItem* nameItem = new QTableWidgetItem(row.name);
-        if (mode() == Doc::Design)
-            nameItem->setFlags(nameItem->flags() | Qt::ItemIsEditable);
-        else
-            nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
+        nameItem->setFlags(nameItem->flags() | Qt::ItemIsEditable);
         m_table->setItem(r, 0, nameItem);
 
         // Value columns
@@ -759,7 +802,7 @@ void PresetTableWidget::slotCellChanged(int row, int col)
 
     if (col == 0)
     {
-        if (mode() != Doc::Design) return;
+        // refreshRowHighlights uses blockSignals so badge text never reaches here
         m_rows[row].name = item->text();
     }
     else
@@ -1058,8 +1101,6 @@ void PresetTableWidget::updateFeedback()
 
 void PresetTableWidget::editProperties()
 {
-    if (mode() != Doc::Design) return;
-
     syncAllDataFromTable();
 
     QVector<PTColumn> colsCopy;

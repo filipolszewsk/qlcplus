@@ -134,6 +134,7 @@ protected:
 private slots:
     void slotAddRow();
     void slotRemoveRow();
+    void slotRenameRow();
     void slotAddColumn();
     void slotRemoveColumn();
     void slotProperties();
@@ -178,6 +179,15 @@ private:
     QTableWidget*         m_table      = nullptr;
     QLabel*               m_statusBar  = nullptr;
     PresetTableDelegate*  m_delegate   = nullptr;
+
+    // Actions hidden in Operate mode (structural/column/props)
+    QAction* m_actAddCol    = nullptr;
+    QAction* m_actRemCol    = nullptr;
+    QAction* m_actProps     = nullptr;
+    QAction* m_actColSep    = nullptr;
+    QAction* m_actPropSep   = nullptr;
+    // Action visible only in Operate mode
+    QAction* m_actRenameRow = nullptr;
 
     bool m_rebuildingTable  = false;   // guard against recursive slotCellChanged
     bool m_resizingColumns  = false;
