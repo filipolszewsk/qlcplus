@@ -47,6 +47,7 @@ struct PTColumn {
     Type           type    = Numeric;
     bool           fade    = true;   // true=interpolate, false=snap at 127
     QVector<PTOption> options;  // used when type == Dropdown
+    int            width   = -1;     // persisted pixel width; -1 = Qt default
 };
 
 struct PTRow {
@@ -134,7 +135,6 @@ protected:
 private slots:
     void slotAddRow();
     void slotRemoveRow();
-    void slotRenameRow();
     void slotAddColumn();
     void slotRemoveColumn();
     void slotProperties();
@@ -181,16 +181,15 @@ private:
     PresetTableDelegate*  m_delegate   = nullptr;
 
     // Actions hidden in Operate mode (structural/column/props)
-    QAction* m_actAddCol    = nullptr;
-    QAction* m_actRemCol    = nullptr;
-    QAction* m_actProps     = nullptr;
-    QAction* m_actColSep    = nullptr;
-    QAction* m_actPropSep   = nullptr;
-    // Action visible only in Operate mode
-    QAction* m_actRenameRow = nullptr;
+    QAction* m_actAddCol  = nullptr;
+    QAction* m_actRemCol  = nullptr;
+    QAction* m_actProps   = nullptr;
+    QAction* m_actColSep  = nullptr;
+    QAction* m_actPropSep = nullptr;
 
     bool m_rebuildingTable  = false;   // guard against recursive slotCellChanged
     bool m_resizingColumns  = false;
+    int  m_nameColWidth     = -1;      // persisted width of Name column (col 0)
 
     // Badge colors for up to 8 outputs
     static const QColor s_outputColors[8];

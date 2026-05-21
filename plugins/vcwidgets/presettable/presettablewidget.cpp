@@ -68,6 +68,8 @@ static const QString KXMLOutFxId    = QStringLiteral("FixtureID");
 static const QString KXMLOutInput        = QStringLiteral("OutInput");
 static const QString KXMLCrossfadeEn     = QStringLiteral("CrossfadeEnabled");
 static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
+static const QString KXMLColWidth        = QStringLiteral("Width");
+static const QString KXMLNameColWidth    = QStringLiteral("NameColWidth");
 
 // ==========================================================================
 // PresetTableDelegate
@@ -84,16 +86,12 @@ void PresetTableDelegate::setColumns(const QVector<PTColumn>* columns)
 }
 
 QWidget* PresetTableDelegate::createEditor(QWidget* parent,
-                                            const QStyleOptionViewItem& /*option*/,
+                                            const QStyleOptionViewItem& option,
                                             const QModelIndex& index) const
 {
     int col = index.column();
     if (col == 0)
-    {
-        // Row name — plain line edit provided by Qt default delegate is fine,
-        // but we handle it ourselves with QTableWidgetItem editable flag.
-        return nullptr;
-    }
+        return QStyledItemDelegate::createEditor(parent, option, index);
 
     int valCol = col - 1;  // value column index
     if (!m_columns || valCol < 0 || valCol >= m_columns->size())
@@ -120,7 +118,11 @@ QWidget* PresetTableDelegate::createEditor(QWidget* parent,
 void PresetTableDelegate::setEditorData(QWidget* editor, const QModelIndex& index) const
 {
     int col = index.column();
-    if (col == 0) return;
+    if (col == 0)
+    {
+        QStyledItemDelegate::setEditorData(editor, index);
+        return;
+    }
 
     int valCol = col - 1;
     if (!m_columns || valCol < 0 || valCol >= m_columns->size())
@@ -155,7 +157,11 @@ void PresetTableDelegate::setModelData(QWidget* editor, QAbstractItemModel* mode
                                         const QModelIndex& index) const
 {
     int col = index.column();
-    if (col == 0) return;
+    if (col == 0)
+    {
+        QStyledItemDelegate::setModelData(editor, model, index);
+        return;
+    }
 
     int valCol = col - 1;
     if (!m_columns || valCol < 0 || valCol >= m_columns->size())
@@ -233,25 +239,21 @@ PresetTableWidget::PresetTableWidget(QWidget* parent, Doc* doc)
 
     QAction* actAddRow    = m_toolbar->addAction(tr("+ Row"));
     QAction* actRemRow    = m_toolbar->addAction(tr("- Row"));
-    QAction* actRenameRow = m_toolbar->addAction(tr("Rename Row..."));
     m_actColSep  = m_toolbar->addSeparator();
     QAction* actAddCol = m_toolbar->addAction(tr("+ Col"));
     QAction* actRemCol = m_toolbar->addAction(tr("- Col"));
     m_actPropSep = m_toolbar->addSeparator();
     QAction* actProps  = m_toolbar->addAction(tr("Properties..."));
 
-    m_actAddCol    = actAddCol;
-    m_actRemCol    = actRemCol;
-    m_actProps     = actProps;
-    m_actRenameRow = actRenameRow;
-    m_actRenameRow->setVisible(false);   // shown only in Operate mode
+    m_actAddCol = actAddCol;
+    m_actRemCol = actRemCol;
+    m_actProps  = actProps;
 
-    connect(actAddRow,    &QAction::triggered, this, &PresetTableWidget::slotAddRow);
-    connect(actRemRow,    &QAction::triggered, this, &PresetTableWidget::slotRemoveRow);
-    connect(actRenameRow, &QAction::triggered, this, &PresetTableWidget::slotRenameRow);
-    connect(actAddCol,    &QAction::triggered, this, &PresetTableWidget::slotAddColumn);
-    connect(actRemCol,    &QAction::triggered, this, &PresetTableWidget::slotRemoveColumn);
-    connect(actProps,     &QAction::triggered, this, &PresetTableWidget::slotProperties);
+    connect(actAddRow, &QAction::triggered, this, &PresetTableWidget::slotAddRow);
+    connect(actRemRow, &QAction::triggered, this, &PresetTableWidget::slotRemoveRow);
+    connect(actAddCol, &QAction::triggered, this, &PresetTableWidget::slotAddColumn);
+    connect(actRemCol, &QAction::triggered, this, &PresetTableWidget::slotRemoveColumn);
+    connect(actProps,  &QAction::triggered, this, &PresetTableWidget::slotProperties);
 
     m_layout->addWidget(m_toolbar);
 
@@ -361,7 +363,6 @@ void PresetTableWidget::slotModeChanged(Doc::Mode newMode)
         if (m_actProps)     m_actProps->setVisible(false);
         if (m_actColSep)    m_actColSep->setVisible(false);
         if (m_actPropSep)   m_actPropSep->setVisible(false);
-        if (m_actRenameRow) m_actRenameRow->setVisible(true);
         m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
         m_statusBar->setVisible(true);
         m_doc->masterTimer()->registerDMXSource(this);
@@ -374,7 +375,6 @@ void PresetTableWidget::slotModeChanged(Doc::Mode newMode)
         if (m_actProps)     m_actProps->setVisible(true);
         if (m_actColSep)    m_actColSep->setVisible(true);
         if (m_actPropSep)   m_actPropSep->setVisible(true);
-        if (m_actRenameRow) m_actRenameRow->setVisible(false);
         m_statusBar->setVisible(false);
         m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
         m_doc->masterTimer()->unregisterDMXSource(this);
@@ -441,30 +441,6 @@ void PresetTableWidget::slotRemoveRow()
             if (ar >= m_rows.size()) ar = -1;
     }
     rebuildTable();
-    m_doc->setModified();
-}
-
-void PresetTableWidget::slotRenameRow()
-{
-    int row = m_table->currentRow();
-    if (row < 0 || row >= m_rows.size()) return;
-
-    bool ok = false;
-    QString name = QInputDialog::getText(this, tr("Rename Row"),
-                       tr("New name:"), QLineEdit::Normal,
-                       m_rows[row].name, &ok);
-    if (!ok || name.isEmpty()) return;
-
-    {
-        QMutexLocker lk(&m_stateMutex);
-        m_rows[row].name = name;
-    }
-    m_table->blockSignals(true);
-    if (auto* item = m_table->item(row, 0))
-        item->setText(name);
-    m_table->blockSignals(false);
-
-    refreshRowHighlights();
     m_doc->setModified();
 }
 
@@ -646,6 +622,12 @@ void PresetTableWidget::pasteValueToItem(QTableWidgetItem* item, const QString& 
 
 void PresetTableWidget::syncAllDataFromTable()
 {
+    // Capture column widths from GUI before taking the mutex
+    int nameColW = m_table->columnWidth(0);
+    QVector<int> colWidths(m_columns.size());
+    for (int c = 0; c < m_columns.size(); ++c)
+        colWidths[c] = m_table->columnWidth(c + 1);
+
     QMutexLocker lk(&m_stateMutex);
     bool syncNames = true;
     for (int r = 0; r < m_table->rowCount() && r < m_rows.size(); ++r)
@@ -663,6 +645,11 @@ void PresetTableWidget::syncAllDataFromTable()
                 m_rows[r].values[c] = uchar(item->data(Qt::UserRole).toInt());
         }
     }
+
+    // Persist current column widths
+    m_nameColWidth = (nameColW > 0) ? nameColW : -1;
+    for (int c = 0; c < m_columns.size() && c < colWidths.size(); ++c)
+        m_columns[c].width = (colWidths[c] > 0) ? colWidths[c] : -1;
 }
 
 void PresetTableWidget::slotPasteSelection()
@@ -780,6 +767,13 @@ void PresetTableWidget::rebuildTable()
         }
     }
 
+    // Apply persisted column widths
+    if (m_nameColWidth > 0)
+        m_table->setColumnWidth(0, m_nameColWidth);
+    for (int c = 0; c < m_columns.size(); ++c)
+        if (m_columns[c].width > 0)
+            m_table->setColumnWidth(c + 1, m_columns[c].width);
+
     m_table->blockSignals(false);
     m_rebuildingTable = false;
 
@@ -878,9 +872,6 @@ void PresetTableWidget::refreshRowHighlights()
         QColor bg = tint;
         bg.setAlpha(60);
         item->setBackground(bg);
-
-        QString badges = it.value().join(QLatin1Char(' '));
-        item->setText(QString("[%1] %2").arg(badges, m_rows[r].name));
     }
 
     // Update status bar
@@ -1255,6 +1246,7 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
     loadXMLCommon(root);
 
     bool xfEnabled = (root.attributes().value(KXMLCrossfadeEn).toString() == QLatin1String("True"));
+    int  nameColW  = root.attributes().value(KXMLNameColWidth).toInt();
 
     QVector<PTColumn> cols;
     QVector<PTRow>    rows;
@@ -1276,10 +1268,12 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
         {
             auto attrs = root.attributes();
             PTColumn col;
-            col.name = attrs.value(KXMLColName).toString();
-            col.type = (attrs.value(KXMLColType).toString() == QLatin1String("Dropdown"))
+            col.name  = attrs.value(KXMLColName).toString();
+            col.type  = (attrs.value(KXMLColType).toString() == QLatin1String("Dropdown"))
                         ? PTColumn::Dropdown : PTColumn::Numeric;
-            col.fade = (attrs.value(KXMLColFade).toString() != QLatin1String("False"));
+            col.fade  = (attrs.value(KXMLColFade).toString() != QLatin1String("False"));
+            col.width = attrs.value(KXMLColWidth).toInt();  // 0 if absent → stays -1 below
+            if (col.width <= 0) col.width = -1;
 
             // Read child <Option> elements
             while (root.readNextStartElement())
@@ -1358,6 +1352,7 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
         m_crossfadeEnabled   = xfEnabled;
         m_crossfadeGlobalPos = 0;
         m_crossfadeStartPos  = 0;
+        m_nameColWidth = (nameColW > 0) ? nameColW : -1;
     }
 
     rebuildTable();
@@ -1375,6 +1370,8 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
     {
         QMutexLocker lk2(&m_stateMutex);
         doc->writeAttribute(KXMLCrossfadeEn, m_crossfadeEnabled ? QLatin1String("True") : QLatin1String("False"));
+        if (m_nameColWidth > 0)
+            doc->writeAttribute(KXMLNameColWidth, QString::number(m_nameColWidth));
     }
 
     saveXMLCommon(doc);
@@ -1392,6 +1389,8 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLColType,
             col.type == PTColumn::Dropdown ? QLatin1String("Dropdown") : QLatin1String("Numeric"));
         doc->writeAttribute(KXMLColFade,  col.fade ? QLatin1String("True") : QLatin1String("False"));
+        if (col.width > 0)
+            doc->writeAttribute(KXMLColWidth, QString::number(col.width));
 
         for (const PTOption& opt : col.options)
         {
