@@ -1,0 +1,13 @@
+{
+  "plugin_id": "org.qlcplus.vcwidgets.presettable",
+  "name": "Preset Table",
+  "version": "1.0.0",
+  "author": "QLC+ Community",
+  "description": "A DMX preset table: rows of named presets, columns of channels, multiple outputs selectable via external input.",
+  "platforms": {
+    "macos_arm64": "libpresettable_vcwidget.dylib",
+    "macos_x64":   "libpresettable_vcwidget.dylib",
+    "linux_x64":   "libpresettable_vcwidget.so",
+    "windows_x64": "presettable_vcwidget.dll"
+  }
+}
