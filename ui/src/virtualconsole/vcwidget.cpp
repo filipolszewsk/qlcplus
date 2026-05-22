@@ -529,12 +529,12 @@ QString VCWidget::caption() const
 
 void VCWidget::setPluginId(const QString& id)
 {
-    m_pluginId = id;
+    setProperty("_qlcpluginId", id);
 }
 
 QString VCWidget::pluginId() const
 {
-    return m_pluginId;
+    return property("_qlcpluginId").toString();
 }
 
 /*****************************************************************************

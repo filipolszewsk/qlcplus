@@ -357,7 +357,7 @@ void PresetTableConfigDialog::slotEditColumn()
     int idx = m_colList->currentRow();
     if (idx < 0 || idx >= m_columns.size()) return;
 
-    PresetTableColumnDialog dlg(m_columns[idx], this);
+    PresetTableColumnDialog dlg(m_doc, m_columns[idx], this);
     if (dlg.exec() != QDialog::Accepted) return;
 
     m_columns[idx] = dlg.column();

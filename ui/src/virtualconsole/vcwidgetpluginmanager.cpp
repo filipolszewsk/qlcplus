@@ -82,6 +82,11 @@ void VCWidgetPluginManager::load(const QDir& dir)
 
 bool VCWidgetPluginManager::loadFile(const QString& filePath)
 {
+    // Skip directories and non-plugin files (e.g. manifest.json, bundle dirs)
+    QFileInfo fi(filePath);
+    if (!fi.isFile() || !fi.fileName().endsWith(KExtPlugin, Qt::CaseInsensitive))
+        return false;
+
     // Skip if this path is already tracked (loaded or failed)
     for (const VCWidgetPluginEntry& e : m_entries)
     {

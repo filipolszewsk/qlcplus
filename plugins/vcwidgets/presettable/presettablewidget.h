@@ -37,7 +37,8 @@ class Doc;
 
 struct PTOption {
     QString name;
-    uchar   value = 0;
+    uchar   value    = 0;
+    QString resource; // image path (Picture cap) or "#RRGGBB" (SingleColor); empty = no icon
 };
 
 struct PTColumn {

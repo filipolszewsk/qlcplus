@@ -17,6 +17,8 @@
 #include "doc.h"
 
 #include <QPainter>
+#include <QPixmap>
+#include <QIcon>
 #include <QMutexLocker>
 #include <QSpinBox>
 #include <QComboBox>
@@ -55,8 +57,9 @@ static const QString KXMLColName    = QStringLiteral("Name");
 static const QString KXMLColType    = QStringLiteral("Type");
 static const QString KXMLColFade    = QStringLiteral("Fade");
 static const QString KXMLOption     = QStringLiteral("Option");
-static const QString KXMLOptName    = QStringLiteral("Name");
-static const QString KXMLOptValue   = QStringLiteral("Value");
+static const QString KXMLOptName     = QStringLiteral("Name");
+static const QString KXMLOptValue    = QStringLiteral("Value");
+static const QString KXMLOptResource = QStringLiteral("Resource");
 static const QString KXMLRow        = QStringLiteral("Row");
 static const QString KXMLRowIndex   = QStringLiteral("Index");
 static const QString KXMLRowName    = QStringLiteral("Name");
@@ -103,7 +106,23 @@ QWidget* PresetTableDelegate::createEditor(QWidget* parent,
     {
         QComboBox* cb = new QComboBox(parent);
         for (const PTOption& opt : ptcol.options)
-            cb->addItem(opt.name, int(opt.value));
+        {
+            QIcon ico;
+            if (!opt.resource.isEmpty())
+            {
+                if (opt.resource.startsWith('#'))
+                {
+                    QPixmap pm(16, 16);
+                    pm.fill(QColor(opt.resource));
+                    ico = QIcon(pm);
+                }
+                else
+                {
+                    ico = QIcon(opt.resource);
+                }
+            }
+            cb->addItem(ico, opt.name, int(opt.value));
+        }
         return cb;
     }
     else
@@ -206,8 +225,23 @@ void PresetTableDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
         painter->fillRect(option.rect, option.backgroundBrush);
 
     QString text = index.data(Qt::DisplayRole).toString();
+    QIcon   ico  = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
+
+    const int iconSize = 16;
+    const int iconPad  = 2;
+    int textLeft = 4;
+
+    if (!ico.isNull())
+    {
+        QPixmap pm = ico.pixmap(iconSize, iconSize);
+        int y = option.rect.top() + (option.rect.height() - pm.height()) / 2;
+        painter->drawPixmap(option.rect.left() + 2, y, pm);
+        textLeft = 2 + iconSize + iconPad + 2;
+    }
+
     painter->setPen(option.palette.color(QPalette::Text));
-    painter->drawText(option.rect.adjusted(4, 0, -2, 0), Qt::AlignVCenter | Qt::AlignLeft, text);
+    painter->drawText(option.rect.adjusted(textLeft, 0, -2, 0),
+                      Qt::AlignVCenter | Qt::AlignLeft, text);
 }
 
 QSize PresetTableDelegate::sizeHint(const QStyleOptionViewItem& option,
@@ -498,7 +532,7 @@ void PresetTableWidget::slotColumnHeaderDoubleClicked(int logicalIndex)
     int valCol = logicalIndex - 1;
     if (valCol < 0 || valCol >= m_columns.size()) return;
 
-    PresetTableColumnDialog dlg(m_columns[valCol], this);
+    PresetTableColumnDialog dlg(m_doc, m_columns[valCol], this);
     if (dlg.exec() != QDialog::Accepted) return;
 
     {
@@ -749,12 +783,19 @@ void PresetTableWidget::rebuildTable()
             const PTColumn& ptcol = m_columns[c];
 
             QString displayText;
+            QString matchedResource;
             if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
             {
-                // Find matching option name
-                displayText = ptcol.options[0].name;
+                // Find matching option
+                displayText      = ptcol.options[0].name;
+                matchedResource  = ptcol.options[0].resource;
                 for (const PTOption& opt : ptcol.options)
-                    if (opt.value == dmxVal) { displayText = opt.name; break; }
+                    if (opt.value == dmxVal)
+                    {
+                        displayText     = opt.name;
+                        matchedResource = opt.resource;
+                        break;
+                    }
             }
             else
             {
@@ -763,6 +804,23 @@ void PresetTableWidget::rebuildTable()
 
             QTableWidgetItem* item = new QTableWidgetItem(displayText);
             item->setData(Qt::UserRole, int(dmxVal));
+            if (!matchedResource.isEmpty())
+            {
+                QPixmap pm;
+                if (matchedResource.startsWith('#'))
+                {
+                    pm = QPixmap(16, 16);
+                    pm.fill(QColor(matchedResource));
+                }
+                else
+                {
+                    pm.load(matchedResource);
+                    if (!pm.isNull())
+                        pm = pm.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                }
+                if (!pm.isNull())
+                    item->setIcon(QIcon(pm));
+            }
             m_table->setItem(r, c + 1, item);
         }
     }
@@ -1281,8 +1339,9 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
                 if (root.name() == KXMLOption)
                 {
                     PTOption opt;
-                    opt.name  = root.attributes().value(KXMLOptName).toString();
-                    opt.value = uchar(root.attributes().value(KXMLOptValue).toUInt());
+                    opt.name     = root.attributes().value(KXMLOptName).toString();
+                    opt.value    = uchar(root.attributes().value(KXMLOptValue).toUInt());
+                    opt.resource = root.attributes().value(KXMLOptResource).toString();
                     col.options.append(opt);
                     root.skipCurrentElement();
                 }
@@ -1397,6 +1456,8 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
             doc->writeStartElement(KXMLOption);
             doc->writeAttribute(KXMLOptName,  opt.name);
             doc->writeAttribute(KXMLOptValue, QString::number(opt.value));
+            if (!opt.resource.isEmpty())
+                doc->writeAttribute(KXMLOptResource, opt.resource);
             doc->writeEndElement();
         }
         doc->writeEndElement();  // Column
