@@ -1646,6 +1646,12 @@ void PresetTableWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["mode"] = (m_mode == PTMode::FixtureGroup) ? QStringLiteral("FixtureGroup")
                                                     : QStringLiteral("Legacy");
 
+    if (m_mode == PTMode::FixtureGroup)
+    {
+        FixtureGroup *grp = doc->fixtureGroup(m_fixtureGroupId);
+        obj["fixtureGroupName"] = grp ? grp->name() : QString();
+    }
+
     /* Columns */
     QJsonArray cols;
     for (const PTColumn &col : m_columns)
@@ -1733,6 +1739,23 @@ void PresetTableWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_crossfadeEnabled = obj["crossfadeEnabled"].toBool(false);
     m_mode = (obj["mode"].toString() == QLatin1String("FixtureGroup"))
              ? PTMode::FixtureGroup : PTMode::Legacy;
+
+    m_fixtureGroupId = UINT_MAX;
+    if (m_mode == PTMode::FixtureGroup)
+    {
+        const QString gName = obj["fixtureGroupName"].toString();
+        if (!gName.isEmpty())
+        {
+            for (FixtureGroup *grp : doc->fixtureGroups())
+            {
+                if (grp && grp->name() == gName)
+                {
+                    m_fixtureGroupId = grp->id();
+                    break;
+                }
+            }
+        }
+    }
 
     /* Columns */
     m_columns.clear();
