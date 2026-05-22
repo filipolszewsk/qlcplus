@@ -493,7 +493,9 @@ void VirtualConsole::initActions()
     m_editPasteFromClipboardAction = new QAction(QIcon(":/pasteproject.png"),
                                                  tr("Paste from system clipboard (cross-project)"), this);
     m_editPasteFromClipboardAction->setToolTip(
-        tr("Paste widgets previously copied from another QLC+ project"));
+        tr("Paste widgets previously copied from another QLC+ project. "
+           "If a widget of the same type is currently selected, a dialog "
+           "lets you choose which properties to apply instead of creating a new widget."));
     connect(m_editPasteFromClipboardAction, SIGNAL(triggered(bool)),
             this, SLOT(slotEditPasteFromClipboard()));
 
@@ -1630,6 +1632,36 @@ void VirtualConsole::slotEditPasteFromClipboard()
                 return;
             }
         }
+    }
+
+    /* --- Paste Properties hint ---
+     * If the clipboard holds exactly one widget but no matching target was
+     * selected, inform the user how Paste Properties works and let them
+     * choose: paste as new widget or cancel (to first click a target). */
+    if (clipWidgets.size() == 1)
+    {
+        int srcType = clipWidgets.first().toObject()["widgetType"].toInt(-1);
+        QString typeName = VCWidget::typeToString(
+            static_cast<VCWidget::WidgetType>(srcType));
+
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Information);
+        box.setWindowTitle(tr("Paste from Clipboard"));
+        box.setText(tr("Clipboard contains a single %1 widget.").arg(typeName));
+        box.setInformativeText(tr(
+            "To apply only selected properties to an existing widget, "
+            "click a %1 in this project first (to select it), then paste again.\n\n"
+            "To create a new copy of the widget here, click \"Paste as New\".")
+            .arg(typeName));
+        QPushButton *bNew    = box.addButton(tr("Paste as New"),
+                                             QMessageBox::AcceptRole);
+        QPushButton *bCancel = box.addButton(tr("Cancel"),
+                                             QMessageBox::RejectRole);
+        Q_UNUSED(bCancel)
+        box.setDefaultButton(bNew);
+        box.exec();
+        if (box.clickedButton() != bNew)
+            return;
     }
 
     /* --- Import Widgets branch (default: create new widgets) --- */
