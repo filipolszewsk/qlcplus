@@ -13,6 +13,7 @@
 #include "qlccapability.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -95,8 +96,10 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
     QVBoxLayout* typeLayout = new QVBoxLayout(typeGrp);
     m_rbNumeric  = new QRadioButton(tr("Numeric  (0 - 255 spinbox)"), typeGrp);
     m_rbDropdown = new QRadioButton(tr("Dropdown (named options mapped to values)"), typeGrp);
+    m_rbScaler   = new QRadioButton(tr("Scaler   (range mapped to DMX 0-255)"), typeGrp);
     typeLayout->addWidget(m_rbNumeric);
     typeLayout->addWidget(m_rbDropdown);
+    typeLayout->addWidget(m_rbScaler);
     root->addWidget(typeGrp);
 
     // ---- Dropdown options -------------------------------------------
@@ -124,6 +127,22 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
     optLayout->addLayout(btnRow);
     root->addWidget(optGrp);
 
+    // ---- Scaler options ---------------------------------------------
+    m_scalerGrp = new QGroupBox(tr("Scaler options"), this);
+    QFormLayout* scalerForm = new QFormLayout(m_scalerGrp);
+    m_scalerMin    = new QSpinBox(m_scalerGrp);
+    m_scalerMin->setRange(-100000, 100000);
+    m_scalerMin->setValue(0);
+    m_scalerMax    = new QSpinBox(m_scalerGrp);
+    m_scalerMax->setRange(-100000, 100000);
+    m_scalerMax->setValue(360);
+    m_scalerSuffix = new QLineEdit(m_scalerGrp);
+    m_scalerSuffix->setPlaceholderText(tr("e.g. °"));
+    scalerForm->addRow(tr("Min:"),    m_scalerMin);
+    scalerForm->addRow(tr("Max:"),    m_scalerMax);
+    scalerForm->addRow(tr("Suffix:"), m_scalerSuffix);
+    root->addWidget(m_scalerGrp);
+
     // ---- Crossfade behavior -----------------------------------------
     QGroupBox* xfGrp = new QGroupBox(tr("Crossfade behavior"), this);
     QVBoxLayout* xfLayout = new QVBoxLayout(xfGrp);
@@ -140,8 +159,15 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
     // ---- Populate ---------------------------------------------------
     if (column.type == PTColumn::Dropdown)
         m_rbDropdown->setChecked(true);
+    else if (column.type == PTColumn::Scaler)
+        m_rbScaler->setChecked(true);
     else
         m_rbNumeric->setChecked(true);
+
+    // Scaler fields
+    m_scalerMin->setValue(column.scalerMin);
+    m_scalerMax->setValue(column.scalerMax);
+    m_scalerSuffix->setText(column.scalerSuffix);
 
     if (column.fade)
         m_rbFade->setChecked(true);
@@ -208,6 +234,7 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
     // ---- Connections ------------------------------------------------
     connect(m_rbNumeric,  &QRadioButton::toggled, this, &PresetTableColumnDialog::slotTypeChanged);
     connect(m_rbDropdown, &QRadioButton::toggled, this, &PresetTableColumnDialog::slotTypeChanged);
+    connect(m_rbScaler,   &QRadioButton::toggled, this, &PresetTableColumnDialog::slotTypeChanged);
     connect(m_addOptBtn,  &QPushButton::clicked,  this, &PresetTableColumnDialog::slotAddOption);
     connect(m_remOptBtn,  &QPushButton::clicked,  this, &PresetTableColumnDialog::slotRemoveOption);
     connect(m_importBtn,  &QPushButton::clicked,  this, &PresetTableColumnDialog::slotImportFromChannel);
@@ -215,6 +242,14 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_fxTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &PresetTableColumnDialog::slotFixtureTypeChanged);
+    connect(m_channelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &PresetTableColumnDialog::slotChannelComboChanged);
+
+    // If opened with Dropdown already selected but no options yet (e.g. type was
+    // changed inline in the table before opening the dialog), auto-import now that
+    // the binding combos are fully populated.
+    if (column.type == PTColumn::Dropdown && column.options.isEmpty())
+        autoImportFromBinding(/*onlyIfEmpty=*/true);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,21 +336,35 @@ void PresetTableColumnDialog::populateChannelCombo(int fixtureTypeIndex)
 
     if (!fxMode) return;
 
-    // Populate combo with channel names
+    // Show ALL channels; label each with its head ([H0], [H1], [shared])
     int nChannels = fxMode->channels().size();
-
-    // For multi-head fixtures, show only channels of one head
-    int nHeads = fxMode->heads().size();
-    if (nHeads > 1)
-        nChannels = nChannels / nHeads;
+    const QVector<QLCFixtureHead>& heads = fxMode->heads();
 
     for (int ci = 0; ci < nChannels; ++ci)
     {
         QLCChannel* ch = fxMode->channel(ci);
-        QString label = ch
+
+        // Find which head owns this channel (if heads are defined)
+        int headIdx = -1;
+        for (int hi = 0; hi < heads.size(); ++hi)
+        {
+            if (heads[hi].channels().contains(quint32(ci)))
+            {
+                headIdx = hi;
+                break;
+            }
+        }
+
+        QString prefix;
+        if (!heads.isEmpty())
+            prefix = (headIdx >= 0) ? QString("[H%1] ").arg(headIdx)
+                                    : tr("[shared] ");
+
+        QString label = prefix + (ch
             ? QString("%1: %2").arg(ci + 1).arg(ch->name())
-            : tr("Ch %1").arg(ci + 1);
-        m_channelCombo->addItem(label, ci);
+            : tr("Ch %1").arg(ci + 1));
+
+        m_channelCombo->addItem(label, ci);  // data = absolute channel index
     }
 }
 
@@ -327,8 +376,17 @@ PTColumn PresetTableColumnDialog::column() const
 {
     PTColumn col;
     col.name = m_nameEdit->text().trimmed();
-    col.type = m_rbDropdown->isChecked() ? PTColumn::Dropdown : PTColumn::Numeric;
+    col.type = m_rbDropdown->isChecked() ? PTColumn::Dropdown :
+               m_rbScaler->isChecked()   ? PTColumn::Scaler   :
+                                           PTColumn::Numeric;
     col.fade = m_rbFade->isChecked();
+
+    if (col.type == PTColumn::Scaler)
+    {
+        col.scalerMin    = m_scalerMin->value();
+        col.scalerMax    = m_scalerMax->value();
+        col.scalerSuffix = m_scalerSuffix->text();
+    }
 
     if (col.type == PTColumn::Dropdown)
     {
@@ -374,6 +432,97 @@ PTColumn PresetTableColumnDialog::column() const
 void PresetTableColumnDialog::slotTypeChanged()
 {
     updateOptionsEnabled();
+    autoImportFromBinding(/*onlyIfEmpty=*/true);
+}
+
+void PresetTableColumnDialog::autoImportFromBinding(bool onlyIfEmpty)
+{
+    if (!m_rbDropdown->isChecked()) return;
+    if (onlyIfEmpty && m_optTable->rowCount() > 0) return;
+
+    if (m_fxTypeEntries.isEmpty() || !m_group || !m_doc) return;
+    int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
+    int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
+                  ? m_channelCombo->currentData().toInt() : -1;
+    if (typeIdx < 0 || chanIdx < 0) return;
+
+    const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
+
+    // Find a representative fixture mode for this binding type
+    QLCFixtureMode* fxMode = nullptr;
+    for (quint32 fxiId : m_group->fixtureList())
+    {
+        Fixture* fxi = m_doc->fixture(fxiId);
+        if (!fxi) continue;
+        QLCFixtureDef*  def  = fxi->fixtureDef();
+        QLCFixtureMode* mode = fxi->fixtureMode();
+        if (!def || !mode) continue;
+        if (def->manufacturer() == e.manufacturer &&
+            def->model()        == e.model        &&
+            mode->name()        == e.modeName)
+        { fxMode = mode; break; }
+    }
+    if (!fxMode) return;
+
+    const QLCChannel* chan = fxMode->channel(quint32(chanIdx));
+    if (!chan || chan->capabilities().isEmpty()) return;
+
+    // Clear and repopulate options from channel capabilities
+    m_optTable->setRowCount(0);
+    for (QLCCapability* cap : chan->capabilities())
+    {
+        int r = m_optTable->rowCount();
+        m_optTable->insertRow(r);
+
+        QString resource;
+        if (cap->presetType() == QLCCapability::Picture)
+            resource = cap->resource(0).toString();
+        else if (cap->presetType() == QLCCapability::SingleColor)
+            resource = cap->resource(0).value<QColor>().name();
+
+        auto* nameItem = new QTableWidgetItem(cap->name());
+        nameItem->setData(Qt::UserRole, resource);
+        if (!resource.isEmpty())
+            nameItem->setIcon(makeResourceIcon(resource));
+        m_optTable->setItem(r, 0, nameItem);
+
+        auto* valItem = new QTableWidgetItem(QString::number(cap->min()));
+        valItem->setData(Qt::EditRole, int(cap->min()));
+        m_optTable->setItem(r, 1, valItem);
+    }
+}
+
+void PresetTableColumnDialog::slotChannelComboChanged(int /*index*/)
+{
+    // Auto-set column name from the bound channel
+    if (!m_fxTypeEntries.isEmpty() && m_group && m_doc)
+    {
+        int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
+        int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
+                      ? m_channelCombo->currentData().toInt() : -1;
+        if (typeIdx >= 0 && chanIdx >= 0)
+        {
+            const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
+            for (quint32 fxiId : m_group->fixtureList())
+            {
+                Fixture* fxi = m_doc->fixture(fxiId);
+                if (!fxi) continue;
+                QLCFixtureDef*  def  = fxi->fixtureDef();
+                QLCFixtureMode* mode = fxi->fixtureMode();
+                if (!def || !mode) continue;
+                if (def->manufacturer() == e.manufacturer &&
+                    def->model()        == e.model        &&
+                    mode->name()        == e.modeName)
+                {
+                    const QLCChannel* ch = mode->channel(quint32(chanIdx));
+                    if (ch && m_nameEdit)
+                        m_nameEdit->setText(ch->name());
+                    break;
+                }
+            }
+        }
+    }
+    autoImportFromBinding(/*onlyIfEmpty=*/false);
 }
 
 void PresetTableColumnDialog::slotFixtureTypeChanged(int index)
@@ -510,8 +659,11 @@ void PresetTableColumnDialog::slotImportFromChannel()
 void PresetTableColumnDialog::updateOptionsEnabled()
 {
     bool dropdown = m_rbDropdown->isChecked();
+    bool scaler   = m_rbScaler   && m_rbScaler->isChecked();
     m_optTable->setEnabled(dropdown);
     m_addOptBtn->setEnabled(dropdown);
     m_remOptBtn->setEnabled(dropdown);
     m_importBtn->setEnabled(dropdown && m_doc != nullptr);
+    if (m_scalerGrp)
+        m_scalerGrp->setVisible(scaler);
 }

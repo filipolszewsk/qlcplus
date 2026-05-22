@@ -16,6 +16,7 @@
 #include "grouphead.h"
 #include "qlcpoint.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcinputsource.h"
@@ -32,6 +33,7 @@
 #include <QAction>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QMenu>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QDebug>
@@ -87,6 +89,54 @@ static const QString KXMLBindMfg        = QStringLiteral("BindMfg");
 static const QString KXMLBindModel      = QStringLiteral("BindModel");
 static const QString KXMLBindMode       = QStringLiteral("BindMode");
 static const QString KXMLBindChan       = QStringLiteral("BindChan");
+static const QString KXMLColScalerMin   = QStringLiteral("ScalerMin");
+static const QString KXMLColScalerMax   = QStringLiteral("ScalerMax");
+static const QString KXMLColScalerSfx   = QStringLiteral("ScalerSuffix");
+
+// ==========================================================================
+// Static display helpers (shared by delegate + rebuildTable + pasteValueToItem)
+// ==========================================================================
+
+// Returns (displayText, resource) for a Dropdown column given a raw DMX value.
+// Exact match in options → that option's name + resource.
+// No match → bare number as string + empty resource.
+static QPair<QString,QString> optionLabelFor(const PTColumn& col, int dmxVal)
+{
+    for (const PTOption& opt : col.options)
+        if (int(opt.value) == dmxVal)
+            return { opt.name, opt.resource };
+    return { QString::number(dmxVal), QString() };
+}
+
+// Builds a 16×16 QIcon from a resource string ("#rrggbb" colour or image path).
+static QIcon makeItemIcon(const QString& resource)
+{
+    if (resource.isEmpty()) return QIcon();
+    QPixmap pm;
+    if (resource.startsWith(QLatin1Char('#')))
+    {
+        pm = QPixmap(16, 16);
+        pm.fill(QColor(resource));
+    }
+    else
+    {
+        pm.load(resource);
+        if (!pm.isNull())
+            pm = pm.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+    return pm.isNull() ? QIcon() : QIcon(pm);
+}
+
+// Scaler ↔ DMX conversion
+static inline int dmxToScaler(int dmx, int sMin, int sMax)
+{
+    return sMin + qRound(dmx * double(sMax - sMin) / 255.0);
+}
+static inline int scalerToDmx(int v, int sMin, int sMax)
+{
+    if (sMax == sMin) return 0;
+    return qBound(0, qRound((v - sMin) * 255.0 / (sMax - sMin)), 255);
+}
 
 // ==========================================================================
 // PresetTableDelegate
@@ -100,6 +150,11 @@ PresetTableDelegate::PresetTableDelegate(QObject* parent)
 void PresetTableDelegate::setColumns(const QVector<PTColumn>* columns)
 {
     m_columns = columns;
+}
+
+void PresetTableDelegate::setOwner(const PresetTableWidget* owner)
+{
+    m_owner = owner;
 }
 
 QWidget* PresetTableDelegate::createEditor(QWidget* parent,
@@ -116,36 +171,53 @@ QWidget* PresetTableDelegate::createEditor(QWidget* parent,
 
     const PTColumn& ptcol = (*m_columns)[valCol];
 
-    if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
-    {
-        QComboBox* cb = new QComboBox(parent);
-        for (const PTOption& opt : ptcol.options)
-        {
-            QIcon ico;
-            if (!opt.resource.isEmpty())
-            {
-                if (opt.resource.startsWith('#'))
-                {
-                    QPixmap pm(16, 16);
-                    pm.fill(QColor(opt.resource));
-                    ico = QIcon(pm);
-                }
-                else
-                {
-                    ico = QIcon(opt.resource);
-                }
-            }
-            cb->addItem(ico, opt.name, int(opt.value));
-        }
-        return cb;
-    }
-    else
+    // Scaler: dedicated range spinbox with optional suffix
+    if (ptcol.type == PTColumn::Scaler)
     {
         QSpinBox* sb = new QSpinBox(parent);
-        sb->setRange(0, 255);
+        sb->setRange(ptcol.scalerMin, ptcol.scalerMax);
+        if (!ptcol.scalerSuffix.isEmpty())
+            sb->setSuffix(ptcol.scalerSuffix);
         sb->setFrame(false);
         return sb;
     }
+
+    if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
+    {
+        QComboBox* cb = new QComboBox(parent);
+        cb->setEditable(true);
+        cb->lineEdit()->setValidator(new QIntValidator(0, 255, cb));
+        cb->setInsertPolicy(QComboBox::NoInsert);
+        for (const PTOption& opt : ptcol.options)
+            cb->addItem(makeItemIcon(opt.resource), opt.name, int(opt.value));
+        return cb;
+    }
+
+    // Capability-aware editable combo: only in Dropdown mode, with a resolved channel
+    const QLCChannel* chan = (ptcol.type == PTColumn::Dropdown && m_owner)
+                             ? m_owner->resolveBoundChannel(ptcol) : nullptr;
+    if (chan && !chan->capabilities().isEmpty())
+    {
+        QComboBox* cb = new QComboBox(parent);
+        cb->setEditable(true);
+        cb->lineEdit()->setValidator(new QIntValidator(0, 255, cb));
+        cb->setInsertPolicy(QComboBox::NoInsert);
+        for (QLCCapability* cap : chan->capabilities())
+        {
+            QString label = QString("%1-%2: %3")
+                .arg(int(cap->min()), 3, 10, QChar('0'))
+                .arg(int(cap->max()), 3, 10, QChar('0'))
+                .arg(cap->name());
+            cb->addItem(label, int(cap->min()));
+        }
+        return cb;
+    }
+
+    // Fallback: plain numeric spinbox
+    QSpinBox* sb = new QSpinBox(parent);
+    sb->setRange(0, 255);
+    sb->setFrame(false);
+    return sb;
 }
 
 void PresetTableDelegate::setEditorData(QWidget* editor, const QModelIndex& index) const
@@ -164,26 +236,51 @@ void PresetTableDelegate::setEditorData(QWidget* editor, const QModelIndex& inde
     const PTColumn& ptcol = (*m_columns)[valCol];
     int stored = index.data(Qt::UserRole).toInt();
 
+    if (ptcol.type == PTColumn::Scaler)
+    {
+        QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
+        if (sb) sb->setValue(dmxToScaler(stored, ptcol.scalerMin, ptcol.scalerMax));
+        return;
+    }
+
     if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
     {
         QComboBox* cb = qobject_cast<QComboBox*>(editor);
         if (!cb) return;
-        // Select entry matching the stored DMX value
+        // Pre-select the matching option (for visual context)
         for (int i = 0; i < cb->count(); ++i)
         {
             if (cb->itemData(i).toInt() == stored)
             {
                 cb->setCurrentIndex(i);
-                return;
+                break;
             }
         }
-        cb->setCurrentIndex(0);
+        // Show exact DMX value so user sees / edits the precise number
+        cb->lineEdit()->setText(QString::number(stored));
+        return;
     }
-    else
+
+    // Capability editable combo: show the exact stored DMX value in the line edit
+    QComboBox* cb = qobject_cast<QComboBox*>(editor);
+    if (cb && cb->isEditable())
     {
-        QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
-        if (sb) sb->setValue(stored);
+        for (int i = 0; i < cb->count(); ++i)
+        {
+            int capMin = cb->itemData(i).toInt();
+            int capMax = (i + 1 < cb->count()) ? cb->itemData(i + 1).toInt() - 1 : 255;
+            if (stored >= capMin && stored <= capMax)
+            {
+                cb->setCurrentIndex(i);
+                break;
+            }
+        }
+        cb->lineEdit()->setText(QString::number(stored));
+        return;
     }
+
+    QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
+    if (sb) sb->setValue(stored);
 }
 
 void PresetTableDelegate::setModelData(QWidget* editor, QAbstractItemModel* model,
@@ -202,23 +299,66 @@ void PresetTableDelegate::setModelData(QWidget* editor, QAbstractItemModel* mode
 
     const PTColumn& ptcol = (*m_columns)[valCol];
 
+    // ---- Scaler --------------------------------------------------------
+    if (ptcol.type == PTColumn::Scaler)
+    {
+        QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
+        if (!sb) return;
+        int dmx = scalerToDmx(sb->value(), ptcol.scalerMin, ptcol.scalerMax);
+        model->setData(index, dmx, Qt::UserRole);
+        model->setData(index,
+            QString("%1%2").arg(sb->value()).arg(ptcol.scalerSuffix),
+            Qt::DisplayRole);
+        model->setData(index, QVariant(), Qt::DecorationRole);
+        return;
+    }
+
+    // ---- Dropdown with PTOption list -----------------------------------
     if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
     {
         QComboBox* cb = qobject_cast<QComboBox*>(editor);
         if (!cb) return;
-        int dmxVal = cb->currentData().toInt();
-        // Set UserRole (DMX int) FIRST so slotCellChanged reads the correct value
-        model->setData(index, dmxVal, Qt::UserRole);
-        model->setData(index, cb->currentText(), Qt::DisplayRole);
+        bool ok = false;
+        int val = cb->lineEdit()->text().toInt(&ok);
+        if (!ok) val = cb->currentData().toInt();
+        val = qBound(0, val, 255);
+
+        auto lbl = optionLabelFor(ptcol, val);
+        model->setData(index, val, Qt::UserRole);
+        model->setData(index, lbl.first, Qt::DisplayRole);
+        QIcon ico = makeItemIcon(lbl.second);
+        model->setData(index, ico.isNull() ? QVariant() : QVariant(ico), Qt::DecorationRole);
+        return;
     }
-    else
+
+    // ---- Capability editable combo (no PTOption, binding has caps) -----
+    QComboBox* cb = qobject_cast<QComboBox*>(editor);
+    if (cb && cb->isEditable())
     {
-        QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
-        if (!sb) return;
-        // Set UserRole (DMX int) FIRST so slotCellChanged reads the correct value
-        model->setData(index, sb->value(), Qt::UserRole);
-        model->setData(index, QString::number(sb->value()), Qt::DisplayRole);
+        bool ok = false;
+        int val = cb->lineEdit()->text().toInt(&ok);
+        if (!ok) val = cb->currentData().toInt();
+        val = qBound(0, val, 255);
+
+        const QLCChannel* chan = m_owner ? m_owner->resolveBoundChannel(ptcol) : nullptr;
+        QString display = QString::number(val);
+        if (chan)
+        {
+            QLCCapability* cap = chan->searchCapability(uchar(val));
+            if (cap) display = cap->name();
+        }
+        model->setData(index, val, Qt::UserRole);
+        model->setData(index, display, Qt::DisplayRole);
+        model->setData(index, QVariant(), Qt::DecorationRole);
+        return;
     }
+
+    // ---- Numeric spinbox -----------------------------------------------
+    QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
+    if (!sb) return;
+    model->setData(index, sb->value(), Qt::UserRole);
+    model->setData(index, QString::number(sb->value()), Qt::DisplayRole);
+    model->setData(index, QVariant(), Qt::DecorationRole);
 }
 
 void PresetTableDelegate::updateEditorGeometry(QWidget* editor,
@@ -308,6 +448,7 @@ PresetTableWidget::PresetTableWidget(QWidget* parent, Doc* doc)
     // ---- Table -----------------------------------------------------------
     m_delegate = new PresetTableDelegate(this);
     m_delegate->setColumns(&m_columns);
+    m_delegate->setOwner(this);
 
     m_table = new QTableWidget(0, 1, this);  // start: 0 rows, 1 col (Name)
     m_table->setHorizontalHeaderLabels(QStringList() << tr("Name"));
@@ -321,12 +462,20 @@ PresetTableWidget::PresetTableWidget(QWidget* parent, Doc* doc)
     m_table->setItemDelegate(m_delegate);
     m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 
+    // Intercept ShortcutOverride so Ctrl+C/V reach us instead of VC's widget-copy actions
+    m_table->installEventFilter(this);
+    m_table->viewport()->installEventFilter(this);
+
+    m_table->setContextMenuPolicy(Qt::CustomContextMenu);
+
     connect(m_table, &QTableWidget::cellChanged,
             this, &PresetTableWidget::slotCellChanged);
     connect(m_table->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
             this, &PresetTableWidget::slotColumnHeaderDoubleClicked);
     connect(m_table->horizontalHeader(), &QHeaderView::sectionResized,
             this, &PresetTableWidget::slotHeaderSectionResized);
+    connect(m_table, &QTableWidget::customContextMenuRequested,
+            this, &PresetTableWidget::slotTableContextMenu);
 
     m_layout->addWidget(m_table, 1);
 
@@ -574,6 +723,26 @@ void PresetTableWidget::slotColumnHeaderDoubleClicked(int logicalIndex)
 
 bool PresetTableWidget::eventFilter(QObject* obj, QEvent* ev)
 {
+    if (m_table && (obj == m_table || obj == m_table->viewport()))
+    {
+        // Accept ShortcutOverride to prevent VirtualConsole's Ctrl+C/V QActions
+        // from firing the widget-copy menu instead of our cell copy/paste.
+        if (ev->type() == QEvent::ShortcutOverride)
+        {
+            auto* ke = static_cast<QKeyEvent*>(ev);
+            if (ke->matches(QKeySequence::Copy) || ke->matches(QKeySequence::Paste))
+            {
+                ke->accept();
+                return true;
+            }
+        }
+        if (ev->type() == QEvent::KeyPress)
+        {
+            auto* ke = static_cast<QKeyEvent*>(ev);
+            if (ke->matches(QKeySequence::Copy))  { slotCopySelection();  return true; }
+            if (ke->matches(QKeySequence::Paste)) { slotPasteSelection(); return true; }
+        }
+    }
     return VCWidget::eventFilter(obj, ev);
 }
 
@@ -659,10 +828,21 @@ void PresetTableWidget::pasteValueToItem(QTableWidgetItem* item, const QString& 
         }
         if (!found) dmxVal = qBound(0, raw.toInt(), 255);
 
-        QString disp = col.options[0].name;
-        for (const PTOption& opt : col.options)
-            if (opt.value == uchar(dmxVal)) { disp = opt.name; break; }
-        item->setText(disp);
+        auto lbl = optionLabelFor(col, dmxVal);
+        item->setText(lbl.first);
+        item->setIcon(makeItemIcon(lbl.second));
+    }
+    else if (col.type == PTColumn::Scaler)
+    {
+        // Accept either a scaler value or raw DMX
+        bool ok = false;
+        int sv = raw.toInt(&ok);
+        if (ok)
+            dmxVal = scalerToDmx(sv, col.scalerMin, col.scalerMax);
+        else
+            dmxVal = qBound(0, raw.toInt(), 255);
+        int displayed = dmxToScaler(dmxVal, col.scalerMin, col.scalerMax);
+        item->setText(QString("%1%2").arg(displayed).arg(col.scalerSuffix));
     }
     else
     {
@@ -677,6 +857,20 @@ void PresetTableWidget::pasteValueToItem(QTableWidgetItem* item, const QString& 
     QMutexLocker lk(&m_stateMutex);
     if (row < m_rows.size() && valCol < m_rows[row].values.size())
         m_rows[row].values[valCol] = uchar(dmxVal);
+}
+
+void PresetTableWidget::slotTableContextMenu(const QPoint& pos)
+{
+    QMenu menu(this);
+    QAction* copyAct  = menu.addAction(tr("Copy cells"));
+    QAction* pasteAct = menu.addAction(tr("Paste cells"));
+    copyAct->setShortcut(QKeySequence::Copy);
+    pasteAct->setShortcut(QKeySequence::Paste);
+    pasteAct->setEnabled(!QApplication::clipboard()->text().isEmpty());
+
+    QAction* chosen = menu.exec(m_table->viewport()->mapToGlobal(pos));
+    if (chosen == copyAct)  slotCopySelection();
+    if (chosen == pasteAct) slotPasteSelection();
 }
 
 void PresetTableWidget::syncAllDataFromTable()
@@ -808,19 +1002,17 @@ void PresetTableWidget::rebuildTable()
             const PTColumn& ptcol = m_columns[c];
 
             QString displayText;
-            QString matchedResource;
+            QIcon   displayIcon;
             if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
             {
-                // Find matching option
-                displayText      = ptcol.options[0].name;
-                matchedResource  = ptcol.options[0].resource;
-                for (const PTOption& opt : ptcol.options)
-                    if (opt.value == dmxVal)
-                    {
-                        displayText     = opt.name;
-                        matchedResource = opt.resource;
-                        break;
-                    }
+                auto lbl = optionLabelFor(ptcol, int(dmxVal));
+                displayText = lbl.first;
+                displayIcon = makeItemIcon(lbl.second);
+            }
+            else if (ptcol.type == PTColumn::Scaler)
+            {
+                int sv = dmxToScaler(int(dmxVal), ptcol.scalerMin, ptcol.scalerMax);
+                displayText = QString("%1%2").arg(sv).arg(ptcol.scalerSuffix);
             }
             else
             {
@@ -829,23 +1021,8 @@ void PresetTableWidget::rebuildTable()
 
             QTableWidgetItem* item = new QTableWidgetItem(displayText);
             item->setData(Qt::UserRole, int(dmxVal));
-            if (!matchedResource.isEmpty())
-            {
-                QPixmap pm;
-                if (matchedResource.startsWith('#'))
-                {
-                    pm = QPixmap(16, 16);
-                    pm.fill(QColor(matchedResource));
-                }
-                else
-                {
-                    pm.load(matchedResource);
-                    if (!pm.isNull())
-                        pm = pm.scaled(16, 16, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                }
-                if (!pm.isNull())
-                    item->setIcon(QIcon(pm));
-            }
+            if (!displayIcon.isNull())
+                item->setIcon(displayIcon);
             m_table->setItem(r, c + 1, item);
         }
     }
@@ -1063,6 +1240,36 @@ void PresetTableWidget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEffe
     }
 }
 
+const QLCChannel* PresetTableWidget::resolveBoundChannel(const PTColumn& col) const
+{
+    if (m_mode != PTMode::FixtureGroup) return nullptr;
+    if (!col.binding.isValid()) return nullptr;
+    if (!m_doc) return nullptr;
+
+    FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
+    if (!grp) return nullptr;
+
+    // Find the first fixture in the group that matches the binding's manufacturer/model/mode
+    const QMap<QLCPoint, GroupHead> headsMap = grp->headsMap();
+    for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
+    {
+        Fixture* fxi = m_doc->fixture(it.value().fxi);
+        if (!fxi) continue;
+
+        QLCFixtureDef*  fxDef  = fxi->fixtureDef();
+        QLCFixtureMode* fxMode = fxi->fixtureMode();
+        if (!fxDef || !fxMode) continue;
+
+        if (fxDef->manufacturer() != col.binding.manufacturer) continue;
+        if (fxDef->model()        != col.binding.model)        continue;
+        if (fxMode->name()        != col.binding.modeName)     continue;
+
+        // Found a matching fixture — return the channel at the absolute index
+        return fxMode->channel(quint32(col.binding.channelIndex));
+    }
+    return nullptr;
+}
+
 void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar xfEffective)
 {
     FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
@@ -1119,30 +1326,22 @@ void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar 
                 if (fxDef->model()        != col.binding.model)        continue;
                 if (fxMode->name()        != col.binding.modeName)     continue;
 
-                // Channel index: offset by head for multi-head fixtures
-                int chPerHead = (int)fxMode->channels().size();
-                if (chPerHead == 0) continue;
-                if (fxMode->heads().size() > 0)
-                {
-                    // Multi-head: each head occupies (chPerHead / nHeads) channels
-                    int nHeads = fxMode->heads().size();
-                    int chPerSingleHead = chPerHead / nHeads;
-                    if (chPerSingleHead > 0 && col.binding.channelIndex < chPerSingleHead)
-                        chPerHead = col.binding.channelIndex + head.head * chPerSingleHead;
-                    else
-                        chPerHead = col.binding.channelIndex;  // fallback: use as-is
-                }
-                else
-                {
-                    chPerHead = col.binding.channelIndex;
-                }
+                // Absolute channel index stored in binding (0-based within fixture mode)
+                quint32 absChannel = quint32(col.binding.channelIndex);
+                if (absChannel >= fxi->channels()) continue;
 
-                if (chPerHead < 0 || chPerHead >= (int)fxi->channels()) continue;
+                // Multi-head: only write to the GroupHead that owns this channel.
+                // Single-head (no heads defined): write to all matching GroupHeads.
+                if (!fxMode->heads().isEmpty())
+                {
+                    if (head.head < 0 || head.head >= (int)fxMode->heads().size()) continue;
+                    if (!fxMode->heads()[head.head].channels().contains(absChannel)) continue;
+                }
 
                 uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
                 uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
                 applyFadeValue(fader.data(), m_doc, universes[uni],
-                               head.fxi, quint32(chPerHead),
+                               head.fxi, absChannel,
                                aVal, bVal,
                                m_crossfadeEnabled, (stagedRow >= 0),
                                col.fade, xfEffective);
@@ -1486,8 +1685,15 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
             auto attrs = root.attributes();
             PTColumn col;
             col.name  = attrs.value(KXMLColName).toString();
-            col.type  = (attrs.value(KXMLColType).toString() == QLatin1String("Dropdown"))
-                        ? PTColumn::Dropdown : PTColumn::Numeric;
+            {
+                QString typeStr = attrs.value(KXMLColType).toString();
+                if (typeStr == QLatin1String("Dropdown"))
+                    col.type = PTColumn::Dropdown;
+                else if (typeStr == QLatin1String("Scaler"))
+                    col.type = PTColumn::Scaler;
+                else
+                    col.type = PTColumn::Numeric;
+            }
             col.fade  = (attrs.value(KXMLColFade).toString() != QLatin1String("False"));
             col.width = attrs.value(KXMLColWidth).toInt();
             if (col.width <= 0) col.width = -1;
@@ -1503,6 +1709,15 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
                 col.binding.model        = bindMod;
                 col.binding.modeName     = bindMode;
                 col.binding.channelIndex = bindChan;
+            }
+
+            // Scaler attributes (absent in older files → defaults kept)
+            if (col.type == PTColumn::Scaler)
+            {
+                col.scalerMin = attrs.value(KXMLColScalerMin).toInt();  // 0 if absent
+                QString maxStr = attrs.value(KXMLColScalerMax).toString();
+                col.scalerMax = maxStr.isEmpty() ? 360 : maxStr.toInt();
+                col.scalerSuffix = attrs.value(KXMLColScalerSfx).toString();
             }
 
             // Read child <Option> elements
@@ -1635,7 +1850,16 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLColIndex, QString::number(c));
         doc->writeAttribute(KXMLColName,  col.name);
         doc->writeAttribute(KXMLColType,
-            col.type == PTColumn::Dropdown ? QLatin1String("Dropdown") : QLatin1String("Numeric"));
+            col.type == PTColumn::Dropdown ? QLatin1String("Dropdown") :
+            col.type == PTColumn::Scaler   ? QLatin1String("Scaler")   :
+                                             QLatin1String("Numeric"));
+        if (col.type == PTColumn::Scaler)
+        {
+            doc->writeAttribute(KXMLColScalerMin, QString::number(col.scalerMin));
+            doc->writeAttribute(KXMLColScalerMax, QString::number(col.scalerMax));
+            if (!col.scalerSuffix.isEmpty())
+                doc->writeAttribute(KXMLColScalerSfx, col.scalerSuffix);
+        }
         doc->writeAttribute(KXMLColFade,  col.fade ? QLatin1String("True") : QLatin1String("False"));
         if (col.width > 0)
             doc->writeAttribute(KXMLColWidth, QString::number(col.width));

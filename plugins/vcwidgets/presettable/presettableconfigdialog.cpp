@@ -14,6 +14,9 @@
 #include "doc.h"
 #include "fixture.h"
 #include "qlcchannel.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -23,6 +26,9 @@
 #include <QMessageBox>
 #include <QScrollArea>
 #include <QFrame>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QDialogButtonBox>
 #include <algorithm>
 
 // ==========================================================================
@@ -386,37 +392,29 @@ PresetTableConfigDialog::PresetTableConfigDialog(Doc* doc,
     QWidget* colTab = new QWidget(tabs);
     QVBoxLayout* colLayout = new QVBoxLayout(colTab);
 
-    {
-        QFont hf;
-        hf.setItalic(true);
-        QLabel* colHint = new QLabel(
-            tr("Double-click a column header in the widget to edit it directly, "
-               "or select a column here and click Edit."), colTab);
-        colHint->setWordWrap(true);
-        colHint->setFont(hf);
-        colLayout->addWidget(colHint);
-    }
-
-    m_colList = new QListWidget(colTab);
-    m_colList->setSelectionMode(QAbstractItemView::SingleSelection);
-    colLayout->addWidget(m_colList, 1);
+    m_colTable = new QTableWidget(0, 4, colTab);
+    m_colTable->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Fade"), tr("Binding")});
+    m_colTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_colTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_colTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    m_colTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    m_colTable->verticalHeader()->setVisible(false);
+    m_colTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_colTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_colTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    colLayout->addWidget(m_colTable, 1);
 
     QHBoxLayout* colBtnRow = new QHBoxLayout;
-    m_editColBtn = new QPushButton(tr("Edit Column..."), colTab);
+    m_editColBtn        = new QPushButton(tr("Edit..."), colTab);
+    m_addColBtn         = new QPushButton(tr("+ Column"), colTab);
+    m_remColsBtn        = new QPushButton(tr("- Column"), colTab);
+    m_addChFromGrpBtn   = new QPushButton(tr("+ Channels from Group..."), colTab);
     colBtnRow->addWidget(m_editColBtn);
+    colBtnRow->addWidget(m_addColBtn);
+    colBtnRow->addWidget(m_remColsBtn);
+    colBtnRow->addWidget(m_addChFromGrpBtn);
     colBtnRow->addStretch();
     colLayout->addLayout(colBtnRow);
-
-    for (const PTColumn& c : m_columns)
-    {
-        QString typeStr = (c.type == PTColumn::Dropdown)
-            ? tr("Dropdown (%1 options)").arg(c.options.size())
-            : tr("Numeric");
-        QString bindStr;
-        if (c.binding.isValid())
-            bindStr = QString(" [%1 ch%2]").arg(c.binding.model).arg(c.binding.channelIndex + 1);
-        m_colList->addItem(QString("%1  [%2]%3").arg(c.name, typeStr, bindStr));
-    }
 
     tabs->addTab(colTab, tr("Columns"));
     root->addWidget(tabs);
@@ -488,11 +486,30 @@ PresetTableConfigDialog::PresetTableConfigDialog(Doc* doc,
 
     updateHintLabel();
 
+    // ---- Populate column table ----------------------------------------------
+    rebuildColumnTable();
+    updateColumnButtons();
+
     // ---- Connections --------------------------------------------------------
     connect(m_addOutBtn,  &QPushButton::clicked, this, &PresetTableConfigDialog::slotAddOutput);
     connect(m_remOutBtn,  &QPushButton::clicked, this, &PresetTableConfigDialog::slotRemoveOutput);
-    connect(m_editColBtn, &QPushButton::clicked, this, &PresetTableConfigDialog::slotEditColumn);
-    connect(m_colList, &QListWidget::itemDoubleClicked, this, &PresetTableConfigDialog::slotEditColumn);
+
+    // Column tab
+    connect(m_editColBtn,       &QPushButton::clicked,
+            this, &PresetTableConfigDialog::slotEditColumn);
+    connect(m_addColBtn,        &QPushButton::clicked,
+            this, &PresetTableConfigDialog::slotColumnsAddBlank);
+    connect(m_remColsBtn,       &QPushButton::clicked,
+            this, &PresetTableConfigDialog::slotColumnsRemoveSelected);
+    connect(m_addChFromGrpBtn,  &QPushButton::clicked,
+            this, &PresetTableConfigDialog::slotColumnsAddFromChannels);
+    connect(m_colTable, &QTableWidget::cellDoubleClicked,
+            this, [this](int /*row*/, int /*col*/) { slotEditColumn(); });
+    connect(m_colTable, &QTableWidget::cellChanged,
+            this, &PresetTableConfigDialog::slotColTableCellChanged);
+    connect(m_colTable, &QTableWidget::itemChanged,
+            this, &PresetTableConfigDialog::slotColTableItemChanged);
+
     connect(m_buttons, &QDialogButtonBox::accepted, this, &PresetTableConfigDialog::slotValidate);
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_modeCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -625,6 +642,7 @@ void PresetTableConfigDialog::slotModeComboChanged(int /*index*/)
 
     m_groupRow->setVisible(isFG);
     updateHintLabel();
+    updateColumnButtons();
 
     // Warn about clearing outputs when switching modes
     if (m_outputList->count() > 0)
@@ -650,6 +668,7 @@ void PresetTableConfigDialog::slotModeComboChanged(int /*index*/)
 void PresetTableConfigDialog::slotGroupComboChanged(int /*index*/)
 {
     updateHintLabel();
+    updateColumnButtons();
 
     // Update existing FG output rows with new group
     FixtureGroup* grp = currentFixtureGroup();
@@ -722,7 +741,7 @@ void PresetTableConfigDialog::slotRemoveOutput()
 
 void PresetTableConfigDialog::slotEditColumn()
 {
-    int idx = m_colList->currentRow();
+    int idx = m_colTable->currentRow();
     if (idx < 0 || idx >= m_columns.size()) return;
 
     PTMode   curMode = widgetMode();
@@ -732,24 +751,327 @@ void PresetTableConfigDialog::slotEditColumn()
     if (dlg.exec() != QDialog::Accepted) return;
 
     m_columns[idx] = dlg.column();
+    rebuildColumnTable();
 
-    // Refresh column list display
-    const PTColumn& c = m_columns[idx];
-    QString typeStr = (c.type == PTColumn::Dropdown)
-        ? tr("Dropdown (%1 options)").arg(c.options.size())
-        : tr("Numeric");
-    QString bindStr;
-    if (c.binding.isValid())
-        bindStr = QString(" [%1 ch%2]").arg(c.binding.model).arg(c.binding.channelIndex + 1);
-    m_colList->item(idx)->setText(QString("%1  [%2]%3").arg(c.name, typeStr, bindStr));
+    // Keep same row selected
+    m_colTable->selectRow(idx);
 
     updateHintLabel();
-
-    // Update required channel count in legacy output rows
     if (curMode == PTMode::Legacy)
     {
         for (auto* row : m_outputRows)
             row->setRequiredChannels(m_columns.size());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Column table helpers
+// ---------------------------------------------------------------------------
+
+void PresetTableConfigDialog::rebuildColumnTable()
+{
+    if (!m_colTable) return;
+    m_updatingColTable = true;
+    m_colTable->blockSignals(true);
+
+    m_colTable->setRowCount(0);
+    for (int r = 0; r < m_columns.size(); ++r)
+    {
+        const PTColumn& col = m_columns[r];
+        m_colTable->insertRow(r);
+
+        // Col 0: Name — editable text
+        QTableWidgetItem* nameItem = new QTableWidgetItem(col.name);
+        nameItem->setFlags(nameItem->flags() | Qt::ItemIsEditable);
+        m_colTable->setItem(r, 0, nameItem);
+
+        // Col 1: Type — inline QComboBox
+        QComboBox* typeCombo = new QComboBox(m_colTable);
+        typeCombo->addItem(tr("Numeric"),  int(PTColumn::Numeric));
+        typeCombo->addItem(tr("Dropdown"), int(PTColumn::Dropdown));
+        typeCombo->addItem(tr("Scaler"),   int(PTColumn::Scaler));
+        typeCombo->setCurrentIndex(int(col.type));
+        int capturedRow = r;
+        connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this, capturedRow](int comboIdx) {
+                    if (m_updatingColTable) return;
+                    if (capturedRow < 0 || capturedRow >= m_columns.size()) return;
+                    m_columns[capturedRow].type = PTColumn::Type(comboIdx);
+                    // Refresh the Binding cell summary
+                    if (auto* bi = m_colTable->item(capturedRow, 3))
+                        bi->setText(bindingSummary(m_columns[capturedRow]));
+                });
+        m_colTable->setCellWidget(r, 1, typeCombo);
+
+        // Col 2: Fade — checkable item
+        QTableWidgetItem* fadeItem = new QTableWidgetItem();
+        fadeItem->setFlags((fadeItem->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
+        fadeItem->setCheckState(col.fade ? Qt::Checked : Qt::Unchecked);
+        m_colTable->setItem(r, 2, fadeItem);
+
+        // Col 3: Binding — read-only summary
+        QTableWidgetItem* bindItem = new QTableWidgetItem(bindingSummary(col));
+        bindItem->setFlags(bindItem->flags() & ~Qt::ItemIsEditable);
+        m_colTable->setItem(r, 3, bindItem);
+    }
+
+    m_colTable->blockSignals(false);
+    m_updatingColTable = false;
+}
+
+QString PresetTableConfigDialog::bindingSummary(const PTColumn& col) const
+{
+    if (!col.binding.isValid()) return tr("—");
+
+    // Try to resolve the channel name from the group
+    if (m_doc)
+    {
+        FixtureGroup* grp = currentFixtureGroup();
+        if (grp)
+        {
+            for (quint32 fxiId : grp->fixtureList())
+            {
+                Fixture* fxi = m_doc->fixture(fxiId);
+                if (!fxi) continue;
+                QLCFixtureDef*  def  = fxi->fixtureDef();
+                QLCFixtureMode* mode = fxi->fixtureMode();
+                if (!def || !mode) continue;
+                if (def->manufacturer() == col.binding.manufacturer &&
+                    def->model()        == col.binding.model &&
+                    mode->name()        == col.binding.modeName)
+                {
+                    QLCChannel* ch = mode->channel(quint32(col.binding.channelIndex));
+                    if (ch)
+                        return QString("ch%1: %2").arg(col.binding.channelIndex + 1).arg(ch->name());
+                    break;
+                }
+            }
+        }
+    }
+    return QString("%1 ch%2").arg(col.binding.model).arg(col.binding.channelIndex + 1);
+}
+
+void PresetTableConfigDialog::updateColumnButtons()
+{
+    bool fgMode = (widgetMode() == PTMode::FixtureGroup);
+    bool hasGrp = (currentFixtureGroup() != nullptr);
+    if (m_addChFromGrpBtn)
+        m_addChFromGrpBtn->setEnabled(fgMode && hasGrp);
+}
+
+// ---------------------------------------------------------------------------
+// Column table inline-edit slots
+// ---------------------------------------------------------------------------
+
+void PresetTableConfigDialog::slotColTableCellChanged(int row, int col)
+{
+    if (m_updatingColTable) return;
+    if (row < 0 || row >= m_columns.size()) return;
+    if (col == 0)
+    {
+        auto* item = m_colTable->item(row, 0);
+        if (item) m_columns[row].name = item->text();
+    }
+}
+
+void PresetTableConfigDialog::slotColTableItemChanged(QTableWidgetItem* item)
+{
+    if (m_updatingColTable) return;
+    if (!item || item->column() != 2) return;
+    int row = item->row();
+    if (row < 0 || row >= m_columns.size()) return;
+    m_columns[row].fade = (item->checkState() == Qt::Checked);
+}
+
+// ---------------------------------------------------------------------------
+// Column toolbar button slots
+// ---------------------------------------------------------------------------
+
+void PresetTableConfigDialog::slotColumnsAddBlank()
+{
+    PTColumn col;
+    col.name = tr("Column %1").arg(m_columns.size() + 1);
+    col.type = PTColumn::Numeric;
+    col.fade = true;
+    m_columns.append(col);
+    rebuildColumnTable();
+    m_colTable->selectRow(m_columns.size() - 1);
+    if (widgetMode() == PTMode::Legacy)
+        for (auto* row : m_outputRows)
+            row->setRequiredChannels(m_columns.size());
+    updateHintLabel();
+}
+
+void PresetTableConfigDialog::slotColumnsRemoveSelected()
+{
+    QList<int> rows;
+    const auto selected = m_colTable->selectionModel()->selectedRows();
+    for (const QModelIndex& idx : selected)
+        rows.append(idx.row());
+    if (rows.isEmpty()) return;
+    std::sort(rows.begin(), rows.end(), std::greater<int>());
+    for (int r : rows)
+        if (r >= 0 && r < m_columns.size())
+            m_columns.removeAt(r);
+    rebuildColumnTable();
+    if (widgetMode() == PTMode::Legacy)
+        for (auto* row : m_outputRows)
+            row->setRequiredChannels(m_columns.size());
+    updateHintLabel();
+}
+
+void PresetTableConfigDialog::slotColumnsAddFromChannels()
+{
+    FixtureGroup* grp = currentFixtureGroup();
+    if (!grp || !m_doc) return;
+
+    // Build deduplicated fixture-type list from the group
+    struct FxEntry {
+        QString manufacturer, model, modeName;
+        QLCFixtureMode* mode = nullptr;
+    };
+    QList<FxEntry> fxTypes;
+    for (quint32 fxiId : grp->fixtureList())
+    {
+        Fixture* fxi = m_doc->fixture(fxiId);
+        if (!fxi) continue;
+        QLCFixtureDef*  def  = fxi->fixtureDef();
+        QLCFixtureMode* mode = fxi->fixtureMode();
+        if (!def || !mode) continue;
+        bool found = false;
+        for (const FxEntry& e : fxTypes)
+            if (e.manufacturer == def->manufacturer() &&
+                e.model        == def->model() &&
+                e.modeName     == mode->name())
+            { found = true; break; }
+        if (!found)
+            fxTypes.append({def->manufacturer(), def->model(), mode->name(), mode});
+    }
+    if (fxTypes.isEmpty())
+    {
+        QMessageBox::information(this, tr("No fixtures"),
+            tr("The selected fixture group contains no fixture types with definitions."));
+        return;
+    }
+
+    // ---- Build inline picker dialog ----------------------------------------
+    QDialog picker(this);
+    picker.setWindowTitle(tr("Add columns from group channels"));
+    picker.resize(520, 440);
+    QVBoxLayout* pl = new QVBoxLayout(&picker);
+
+    // Fixture type row
+    QHBoxLayout* typeRow = new QHBoxLayout;
+    typeRow->addWidget(new QLabel(tr("Fixture type:"), &picker));
+    QComboBox* typeCombo = new QComboBox(&picker);
+    for (const FxEntry& e : fxTypes)
+        typeCombo->addItem(QString("%1 %2 — %3").arg(e.manufacturer, e.model, e.modeName));
+    typeRow->addWidget(typeCombo, 1);
+    pl->addLayout(typeRow);
+
+    // Channel list
+    QListWidget* chanList = new QListWidget(&picker);
+    chanList->setSelectionMode(QAbstractItemView::NoSelection);
+    pl->addWidget(chanList, 1);
+
+    // Lambda: rebuild channel list for the chosen fixture type
+    auto populateChannels = [&](int typeIdx)
+    {
+        chanList->clear();
+        if (typeIdx < 0 || typeIdx >= fxTypes.size()) return;
+        QLCFixtureMode* fxMode = fxTypes[typeIdx].mode;
+        if (!fxMode) return;
+
+        const QVector<QLCFixtureHead>& heads = fxMode->heads();
+        int nCh = fxMode->channels().size();
+        for (int ci = 0; ci < nCh; ++ci)
+        {
+            QLCChannel* ch = fxMode->channel(quint32(ci));
+
+            // Determine head label
+            int headIdx = -1;
+            for (int hi = 0; hi < heads.size(); ++hi)
+                if (heads[hi].channels().contains(quint32(ci))) { headIdx = hi; break; }
+
+            QString prefix;
+            if (!heads.isEmpty())
+                prefix = (headIdx >= 0) ? QString("[H%1] ").arg(headIdx) : tr("[shared] ");
+
+            QString label = prefix + (ch
+                ? QString("%1: %2").arg(ci + 1).arg(ch->name())
+                : tr("Ch %1").arg(ci + 1));
+
+            QListWidgetItem* item = new QListWidgetItem(label, chanList);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(Qt::Unchecked);
+            item->setData(Qt::UserRole, ci);
+        }
+    };
+    populateChannels(0);
+
+    connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            &picker, [&](int idx) { populateChannels(idx); });
+
+    // Select-all / Clear row
+    QHBoxLayout* selRow = new QHBoxLayout;
+    QPushButton* selAll  = new QPushButton(tr("Select all"), &picker);
+    QPushButton* selNone = new QPushButton(tr("Clear"),      &picker);
+    selRow->addWidget(selAll);
+    selRow->addWidget(selNone);
+    selRow->addStretch();
+    pl->addLayout(selRow);
+
+    connect(selAll,  &QPushButton::clicked, &picker, [&] {
+        for (int i = 0; i < chanList->count(); ++i)
+            chanList->item(i)->setCheckState(Qt::Checked);
+    });
+    connect(selNone, &QPushButton::clicked, &picker, [&] {
+        for (int i = 0; i < chanList->count(); ++i)
+            chanList->item(i)->setCheckState(Qt::Unchecked);
+    });
+
+    QDialogButtonBox* pb = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &picker);
+    pl->addWidget(pb);
+    connect(pb, &QDialogButtonBox::accepted, &picker, &QDialog::accept);
+    connect(pb, &QDialogButtonBox::rejected, &picker, &QDialog::reject);
+
+    if (picker.exec() != QDialog::Accepted) return;
+
+    // ---- Collect selected channels and append PTColumns --------------------
+    int typeIdx = typeCombo->currentIndex();
+    if (typeIdx < 0 || typeIdx >= fxTypes.size()) return;
+    const FxEntry& fxEntry = fxTypes[typeIdx];
+    QLCFixtureMode* fxMode = fxEntry.mode;
+
+    bool anyAdded = false;
+    for (int i = 0; i < chanList->count(); ++i)
+    {
+        QListWidgetItem* item = chanList->item(i);
+        if (item->checkState() != Qt::Checked) continue;
+
+        int chanIdx = item->data(Qt::UserRole).toInt();
+        QLCChannel* ch = fxMode ? fxMode->channel(quint32(chanIdx)) : nullptr;
+
+        PTColumn col;
+        col.name               = ch ? ch->name() : tr("Ch %1").arg(chanIdx + 1);
+        col.type               = PTColumn::Numeric;
+        col.fade               = true;
+        col.binding.manufacturer = fxEntry.manufacturer;
+        col.binding.model        = fxEntry.model;
+        col.binding.modeName     = fxEntry.modeName;
+        col.binding.channelIndex = chanIdx;
+        m_columns.append(col);
+        anyAdded = true;
+    }
+
+    if (anyAdded)
+    {
+        rebuildColumnTable();
+        if (widgetMode() == PTMode::Legacy)
+            for (auto* row : m_outputRows)
+                row->setRequiredChannels(m_columns.size());
+        updateHintLabel();
     }
 }
 
@@ -763,21 +1085,20 @@ void PresetTableConfigDialog::slotAutoCreateColumns(quint32 fixtureId)
     if (!fx || fx->channels() == 0) return;
 
     m_columns.clear();
-    m_colList->clear();
-
     for (quint32 ch = 0; ch < fx->channels(); ++ch)
     {
         PTColumn col;
         const QLCChannel* qlcCh = fx->channel(ch);
         col.name = qlcCh ? qlcCh->name() : tr("Ch %1").arg(ch + 1);
         col.type = PTColumn::Numeric;
+        col.fade = true;
         m_columns.append(col);
-        m_colList->addItem(QString("%1  [Numeric]").arg(col.name));
     }
 
-    int n = m_columns.size();
+    rebuildColumnTable();
     updateHintLabel();
 
+    int n = m_columns.size();
     for (auto* row : m_outputRows)
         row->setRequiredChannels(n);
 }

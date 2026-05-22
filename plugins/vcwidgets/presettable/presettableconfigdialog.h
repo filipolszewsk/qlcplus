@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QTabWidget>
 #include <QListWidget>
+#include <QTableWidget>
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
@@ -137,21 +138,32 @@ private slots:
     void slotModeComboChanged(int index);
     void slotGroupComboChanged(int index);
 
+    // Column table slots
+    void slotColTableCellChanged(int row, int col);
+    void slotColTableItemChanged(QTableWidgetItem* item);
+    void slotColumnsAddBlank();
+    void slotColumnsRemoveSelected();
+    void slotColumnsAddFromChannels();
+
 private:
     void rebuildOutputList();
     void rebuildGroupCombo();
     void updateHintLabel();
+    void rebuildColumnTable();
+    void updateColumnButtons();
+    QString bindingSummary(const PTColumn& col) const;
     FixtureGroup* currentFixtureGroup() const;
 
     Doc*   m_doc;
     int    m_widgetPage;
 
     QVector<PTColumn>   m_columns;
+    bool                m_updatingColTable = false;
 
     // Mode selection
-    QComboBox*  m_modeCombo      = nullptr;  // Legacy / Fixture Group
-    QWidget*    m_groupRow       = nullptr;  // row containing group combo (shown in FG mode)
-    QComboBox*  m_groupCombo     = nullptr;  // fixture group selector
+    QComboBox*  m_modeCombo      = nullptr;
+    QWidget*    m_groupRow       = nullptr;
+    QComboBox*  m_groupCombo     = nullptr;
 
     // Tab: Outputs
     QListWidget*   m_outputList     = nullptr;
@@ -165,8 +177,11 @@ private:
     QList<FGOutputEditorRow*> m_fgOutputRows;
 
     // Tab: Columns
-    QListWidget*    m_colList        = nullptr;
-    QPushButton*    m_editColBtn     = nullptr;
+    QTableWidget*   m_colTable           = nullptr;
+    QPushButton*    m_editColBtn         = nullptr;
+    QPushButton*    m_addColBtn          = nullptr;
+    QPushButton*    m_remColsBtn         = nullptr;
+    QPushButton*    m_addChFromGrpBtn    = nullptr;
 
     QDialogButtonBox* m_buttons      = nullptr;
     QLabel*           m_errorLabel   = nullptr;

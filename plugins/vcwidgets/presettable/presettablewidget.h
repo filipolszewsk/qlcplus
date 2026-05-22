@@ -29,6 +29,7 @@
 #include "dmxsource.h"
 #include "genericfader.h"
 #include "qlcinputsource.h"
+#include "qlcchannel.h"
 
 class Doc;
 class FixtureGroup;
@@ -58,14 +59,18 @@ struct PTColumnTypeBinding {
 };
 
 struct PTColumn {
-    enum Type { Numeric, Dropdown };
+    enum Type { Numeric, Dropdown, Scaler };
 
-    QString        name;
-    Type           type    = Numeric;
-    bool           fade    = true;   // true=interpolate, false=snap at 127
-    QVector<PTOption> options;  // used when type == Dropdown
-    int            width   = -1;     // persisted pixel width; -1 = Qt default
-    PTColumnTypeBinding binding;     // used only in PTMode::FixtureGroup
+    QString           name;
+    Type              type         = Numeric;
+    bool              fade         = true;    // true=interpolate, false=snap at 127
+    QVector<PTOption> options;                // used when type == Dropdown
+    int               width        = -1;      // persisted pixel width; -1 = Qt default
+    PTColumnTypeBinding binding;              // used only in PTMode::FixtureGroup
+    // Scaler type fields
+    int               scalerMin    = 0;
+    int               scalerMax    = 360;
+    QString           scalerSuffix;           // e.g. "°"
 };
 
 struct PTRow {
@@ -83,6 +88,8 @@ struct PTOutput {
 // Delegate — SpinBox for Numeric, ComboBox for Dropdown
 // ---------------------------------------------------------------------------
 
+class PresetTableWidget;  // forward decl
+
 class PresetTableDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
@@ -91,6 +98,8 @@ public:
 
     // Column definitions provided by the widget (pointer, not owned)
     void setColumns(const QVector<PTColumn>* columns);
+    // Back-pointer to owner widget (for capability lookup)
+    void setOwner(const PresetTableWidget* owner);
 
     QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option,
                           const QModelIndex& index) const override;
@@ -105,7 +114,8 @@ public:
                    const QModelIndex& index) const override;
 
 private:
-    const QVector<PTColumn>* m_columns = nullptr;
+    const QVector<PTColumn>*    m_columns = nullptr;
+    const PresetTableWidget*    m_owner   = nullptr;
 };
 
 // ---------------------------------------------------------------------------
@@ -168,6 +178,7 @@ private slots:
     // ---- Copy / paste ----------------------------------------------------
     void slotCopySelection();
     void slotPasteSelection();
+    void slotTableContextMenu(const QPoint& pos);
 
 private:
     void rebuildTable();
@@ -183,6 +194,10 @@ private:
     // writeDMX helpers
     void writeDMXLegacy(QList<Universe*>& universes, uchar xfEffective);
     void writeDMXFixtureGroup(QList<Universe*>& universes, uchar xfEffective);
+
+public:
+    // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
+    const QLCChannel* resolveBoundChannel(const PTColumn& col) const;
 
     // ---- Shared state (mutex-protected, read in writeDMX) ----------------
     mutable QMutex   m_stateMutex;

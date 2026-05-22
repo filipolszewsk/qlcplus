@@ -15,6 +15,7 @@
 #include <QGroupBox>
 #include <QComboBox>
 #include <QLabel>
+#include <QSpinBox>
 
 #include "presettablewidget.h"
 
@@ -42,11 +43,13 @@ private slots:
     void slotRemoveOption();
     void slotImportFromChannel();
     void slotFixtureTypeChanged(int index);
+    void slotChannelComboChanged(int index);
 
 private:
     void updateOptionsEnabled();
     void populateFixtureTypeCombo();
     void populateChannelCombo(int fixtureTypeIndex);
+    void autoImportFromBinding(bool onlyIfEmpty);
     static QIcon makeResourceIcon(const QString& resource);
 
     Doc*          m_doc   = nullptr;
@@ -69,14 +72,19 @@ private:
     };
     QList<FxTypeEntry> m_fxTypeEntries;
 
-    QLineEdit*        m_nameEdit    = nullptr;
-    QRadioButton*     m_rbNumeric   = nullptr;
-    QRadioButton*     m_rbDropdown  = nullptr;
-    QTableWidget*     m_optTable    = nullptr;
-    QPushButton*      m_addOptBtn   = nullptr;
-    QPushButton*      m_remOptBtn   = nullptr;
-    QPushButton*      m_importBtn   = nullptr;
-    QRadioButton*     m_rbFade      = nullptr;
-    QRadioButton*     m_rbSnap      = nullptr;
-    QDialogButtonBox* m_buttons     = nullptr;
+    QLineEdit*        m_nameEdit      = nullptr;
+    QRadioButton*     m_rbNumeric     = nullptr;
+    QRadioButton*     m_rbDropdown    = nullptr;
+    QRadioButton*     m_rbScaler      = nullptr;
+    QTableWidget*     m_optTable      = nullptr;
+    QPushButton*      m_addOptBtn     = nullptr;
+    QPushButton*      m_remOptBtn     = nullptr;
+    QPushButton*      m_importBtn     = nullptr;
+    QGroupBox*        m_scalerGrp     = nullptr;
+    QSpinBox*         m_scalerMin     = nullptr;
+    QSpinBox*         m_scalerMax     = nullptr;
+    QLineEdit*        m_scalerSuffix  = nullptr;
+    QRadioButton*     m_rbFade        = nullptr;
+    QRadioButton*     m_rbSnap        = nullptr;
+    QDialogButtonBox* m_buttons       = nullptr;
 };
