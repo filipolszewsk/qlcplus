@@ -54,6 +54,7 @@ target_include_directories(multibutton_vcwidget
         "${QLCPLUS_SRC_DIR}/ui/src"
         "${QLCPLUS_SRC_DIR}/ui/src/virtualconsole"
         "${QLCPLUS_SRC_DIR}/engine/src"
+        "${QLCPLUS_BUILD_DIR}/ui/src/qlcplusui_autogen/include"
 )
 
 install(TARGETS multibutton_vcwidget
