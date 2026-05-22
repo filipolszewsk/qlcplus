@@ -19,6 +19,8 @@
   limitations under the License.
 */
 
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QWidgetAction>
@@ -350,6 +352,84 @@ void VCSlider::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups f
 
     VCWidget::applyPropertiesFrom(source, flags);
     m_doc->setModified();
+}
+
+void VCSlider::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    obj["widgetStyle"]      = (int)widgetStyle();
+    obj["levelLow"]         = (int)levelLowLimit();
+    obj["levelHigh"]        = (int)levelHighLimit();
+    obj["valueDisplayStyle"]= (int)valueDisplayStyle();
+    obj["invertedAppearance"]= invertedAppearance();
+    obj["cngType"]          = (int)clickAndGoType();
+    /* Click&Go preset source: fixture by name + channel index */
+    quint32 cngFxi = clickAndGoPresetFixture();
+    Fixture *fxi = doc->fixture(cngFxi);
+    obj["cngFixtureName"]   = fxi ? fxi->name() : QString();
+    obj["cngChannel"]       = (int)clickAndGoPresetChannel();
+    obj["sliderMode"]       = (int)sliderMode();
+    obj["sliderValue"]      = (int)sliderValue();
+    obj["monitorEnabled"]   = channelsMonitorEnabled();
+    obj["playbackFlash"]    = playbackFlashEnable();
+    /* Playback function by name */
+    Function *pf = doc->function(m_playbackFunction);
+    obj["playbackFuncName"] = pf ? pf->name() : QString();
+    /* Level channels: serialize as {fixtureName, channel} */
+    QJsonArray chArr;
+    for (const LevelChannel &lc : m_levelChannels)
+    {
+        Fixture *f = doc->fixture(lc.fixture);
+        if (!f) continue;
+        QJsonObject co;
+        co["fixtureName"] = f->name();
+        co["channel"]     = (int)lc.channel;
+        chArr.append(co);
+    }
+    obj["levelChannels"] = chArr;
+}
+
+void VCSlider::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    setWidgetStyle(static_cast<SliderWidgetStyle>(obj["widgetStyle"].toInt()));
+    setLevelLowLimit((uchar)obj["levelLow"].toInt());
+    setLevelHighLimit((uchar)obj["levelHigh"].toInt());
+    setValueDisplayStyle(static_cast<ValueDisplayStyle>(obj["valueDisplayStyle"].toInt()));
+    setInvertedAppearance(obj["invertedAppearance"].toBool());
+    setClickAndGoType(static_cast<ClickAndGoWidget::ClickAndGo>(obj["cngType"].toInt()));
+    /* Resolve click&go preset fixture by name */
+    quint32 cngFxiId = Fixture::invalidId();
+    QString cngFxiName = obj["cngFixtureName"].toString();
+    if (!cngFxiName.isEmpty())
+    {
+        for (Fixture *fxi : doc->fixtures())
+            if (fxi && fxi->name() == cngFxiName) { cngFxiId = fxi->id(); break; }
+    }
+    setClickAndGoPresetSource(cngFxiId, (quint32)obj["cngChannel"].toInt());
+    setSliderMode(static_cast<SliderMode>(obj["sliderMode"].toInt()));
+    setSliderValue((uchar)obj["sliderValue"].toInt(), false);
+    setChannelsMonitorEnabled(obj["monitorEnabled"].toBool());
+    setPlaybackFlashEnable(obj["playbackFlash"].toBool());
+    /* Playback function by name */
+    Function *pf = VCWidget::resolveFunctionByName(obj["playbackFuncName"].toString(), doc);
+    m_playbackFunction = pf ? pf->id() : Function::invalidId();
+    /* Level channels: resolve fixture by name */
+    clearLevelChannels();
+    for (const QJsonValue &v : obj["levelChannels"].toArray())
+    {
+        QJsonObject co = v.toObject();
+        QString fxiName = co["fixtureName"].toString();
+        quint32 ch      = (quint32)co["channel"].toInt();
+        for (Fixture *fxi : doc->fixtures())
+        {
+            if (fxi && fxi->name() == fxiName)
+            {
+                addLevelChannel(fxi->id(), ch);
+                break;
+            }
+        }
+    }
 }
 
 /*****************************************************************************

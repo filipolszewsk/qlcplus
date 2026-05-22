@@ -311,6 +311,33 @@ if (ANDROID OR IOS)
     set(AUDIOPLUGINDIR "${PLUGINDIR}/Audio")
 endif ()
 
+# VC Widget Plugins (system — inside bundle/install)
+if (WIN32)
+    set(VCWIDGETPLUGINDIR "${PLUGINDIR}/VCWidgets")
+elseif (APPLE)
+    set(VCWIDGETPLUGINDIR "${PLUGINDIR}/VCWidgets")
+elseif (UNIX)
+    set(VCWIDGETPLUGINDIR "${PLUGINDIR}/vcwidgets")
+endif ()
+
+if (ANDROID OR IOS)
+    set(VCWIDGETPLUGINDIR "${PLUGINDIR}/VCWidgets")
+endif ()
+
+# User VC Widget Plugins (writable, per-user)
+if (WIN32)
+    set(USERVCWIDGETPLUGINDIR "${USERDATADIR}/VCWidgets")
+elseif (APPLE)
+    set(USERVCWIDGETPLUGINDIR "${USERDATADIR}/VCWidgets")
+elseif (UNIX)
+    set(USERVCWIDGETPLUGINDIR "${USERDATADIR}/vcwidgets")
+endif ()
+
+if (ANDROID)
+    set(USERVCWIDGETPLUGINDIR "${USERDATADIR}/vcwidgets")
+elseif (IOS)
+    set(USERVCWIDGETPLUGINDIR "${USERDATADIR}/VCWidgets")
+endif ()
 
 # Translations
 if (WIN32)

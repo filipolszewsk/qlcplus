@@ -31,6 +31,8 @@
 #include "virtualconsole.h"
 #include "vcwidget.h"
 #include "vcframe.h"
+#include "vcwidgetpluginmanager.h"
+#include "vcwidgetplugininterface.h"
 #include "function.h"
 #include "doc.h"
 
@@ -90,31 +92,87 @@ void ImportVCWidgetsDialog::populateTree(const QJsonArray &widgets, QTreeWidgetI
         QString typeName;
         int wType = w["widgetType"].toInt(-1);
         if (wType >= 0)
+        {
             typeName = VCWidget::typeToString(static_cast<VCWidget::WidgetType>(wType));
+            if (static_cast<VCWidget::WidgetType>(wType) == VCWidget::UnknownWidget)
+            {
+                const QString pid = w["pluginId"].toString();
+                if (!pid.isEmpty())
+                {
+                    VCWidgetPluginInterface *plugin =
+                        VCWidgetPluginManager::instance()->pluginById(pid);
+                    if (plugin)
+                        typeName = plugin->name();
+                    else
+                        typeName = tr("[PLUGIN NOT INSTALLED: %1]").arg(pid);
+                }
+            }
+        }
 
         QString caption = w["caption"].toString();
         if (caption.isEmpty())
             caption = tr("(no caption)");
 
-        /* Collect function refs */
+        /* Collect function refs — check all widget-specific function name fields */
         QStringList funcRefs;
-        if (w.contains("functionName"))
+        static const QStringList kFuncKeys = {
+            QStringLiteral("functionName"),
+            QStringLiteral("funcName"),
+            QStringLiteral("playbackFuncName"),
+            QStringLiteral("matrixFuncName"),
+            QStringLiteral("chaserName"),
+        };
+        for (const QString &key : kFuncKeys)
         {
-            QString fName = w["functionName"].toString();
-            if (!fName.isEmpty())
+            if (!w.contains(key)) continue;
+            QString fName = w[key].toString();
+            if (fName.isEmpty()) continue;
+            bool found = false;
+            for (Function *f : m_doc->functions())
             {
+                if (f && f->name() == fName) { found = true; break; }
+            }
+            funcRefs << (found
+                         ? QString("%1 [OK]").arg(fName)
+                         : QString("%1 [NOT FOUND]").arg(fName));
+        }
+        /* SpeedDial: list of functions */
+        if (w.contains("functions"))
+        {
+            for (const QJsonValue &fv : w["functions"].toArray())
+            {
+                QString fName = fv.toObject()["funcName"].toString();
+                if (fName.isEmpty()) continue;
                 bool found = false;
                 for (Function *f : m_doc->functions())
-                {
-                    if (f->name() == fName)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                funcRefs << (found
-                             ? QString("%1 [OK]").arg(fName)
-                             : QString("%1 [NOT FOUND]").arg(fName));
+                    if (f && f->name() == fName) { found = true; break; }
+                funcRefs << (found ? QString("%1 [OK]").arg(fName) : QString("%1 [NOT FOUND]").arg(fName));
+            }
+        }
+        /* XYPad presets: function refs */
+        if (w.contains("presets"))
+        {
+            for (const QJsonValue &pv : w["presets"].toArray())
+            {
+                QString fName = pv.toObject()["funcName"].toString();
+                if (fName.isEmpty()) continue;
+                bool found = false;
+                for (Function *f : m_doc->functions())
+                    if (f && f->name() == fName) { found = true; break; }
+                funcRefs << (found ? QString("%1 [OK]").arg(fName) : QString("%1 [NOT FOUND]").arg(fName));
+            }
+        }
+        /* Clock schedule */
+        if (w.contains("schedules"))
+        {
+            for (const QJsonValue &sv : w["schedules"].toArray())
+            {
+                QString fName = sv.toObject()["funcName"].toString();
+                if (fName.isEmpty()) continue;
+                bool found = false;
+                for (Function *f : m_doc->functions())
+                    if (f && f->name() == fName) { found = true; break; }
+                funcRefs << (found ? QString("%1 [OK]").arg(fName) : QString("%1 [NOT FOUND]").arg(fName));
             }
         }
 

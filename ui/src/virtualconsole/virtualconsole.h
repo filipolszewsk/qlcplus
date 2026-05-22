@@ -29,6 +29,7 @@
 #include <QList>
 #include <QSet>
 #include <QMap>
+#include <QByteArray>
 
 #include "vcproperties.h"
 #include "doc.h"
@@ -47,6 +48,7 @@ class VCFrame;
 class QAction;
 class KeyBind;
 class QMenu;
+class VCWidgetPluginInterface;
 
 /** @addtogroup ui_vc
  * @{
@@ -198,6 +200,17 @@ protected:
     QAction* m_addAudioTriggersAction;
     QAction* m_addClockAction;
     QAction* m_addAnimationAction;
+    QList<QAction*> m_addPluginActions;
+    QAction* m_pluginSectionSeparator;   ///< separator before plugin actions, or nullptr
+    QAction* m_managePluginsAction;
+
+    /** Saved XML + parent + geometry for widgets being hot-reloaded. */
+    struct SavedPluginWidget {
+        QByteArray xml;
+        VCFrame*   parent;
+        QRect      geometry;
+    };
+    QMap<QString, QList<SavedPluginWidget>> m_pendingPluginRestore;
 
     QAction* m_toolsSettingsAction;
     QAction* m_functionWizardAction;
@@ -286,6 +299,11 @@ public slots:
     void slotAddAudioTriggers();
     void slotAddClock();
     void slotAddAnimation();
+    void slotAddPluginWidget(VCWidgetPluginInterface* plugin);
+    void slotManagePlugins();
+    void slotPluginsChanged();
+    void slotAboutToReloadPlugin(const QString& pluginId);
+    void slotPluginReloaded(const QString& pluginId);
 
     /*********************************************************************
      * Tools menu callbacks
@@ -298,6 +316,11 @@ public:
     /** Create widgets from @p widgets JSON array under @p parentFrame.
      *  Increments @p count for each widget created. */
     void importWidgetsFromJson(const QJsonArray &widgets, VCFrame *parentFrame, int &count);
+
+    /** Allocate a ghost widget of the correct type from clipboard JSON and
+     *  call fromClipboardJson() on it. The widget is not added to any parent
+     *  or widget map — caller must delete it after use. */
+    VCWidget* createGhostFromJson(const QJsonObject &obj);
 
     /*********************************************************************
      * Edit menu callbacks

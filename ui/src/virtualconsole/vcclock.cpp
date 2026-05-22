@@ -429,6 +429,48 @@ void VCClock::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups fl
     m_doc->setModified();
 }
 
+void VCClock::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    obj["clockType"]   = const_cast<VCClock*>(this)->typeToString(m_clocktype);
+    obj["countdownH"]  = m_hh;
+    obj["countdownM"]  = m_mm;
+    obj["countdownS"]  = m_ss;
+    obj["playKeySeq"]  = playKeySequence().toString();
+    obj["resetKeySeq"] = resetKeySequence().toString();
+    /* Schedule: function by name */
+    QJsonArray sArr;
+    for (const VCClockSchedule &sch : const_cast<VCClock*>(this)->schedules())
+    {
+        Function *f = doc->function(sch.function());
+        QJsonObject so;
+        so["funcName"] = f ? f->name() : QString();
+        so["time"]     = sch.time().toString(Qt::ISODate);
+        sArr.append(so);
+    }
+    obj["schedules"] = sArr;
+}
+
+void VCClock::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    setClockType(stringToType(obj["clockType"].toString()));
+    setCountdown(obj["countdownH"].toInt(), obj["countdownM"].toInt(), obj["countdownS"].toInt());
+    setPlayKeySequence(QKeySequence(obj["playKeySeq"].toString()));
+    setResetKeySequence(QKeySequence(obj["resetKeySeq"].toString()));
+    removeAllSchedule();
+    for (const QJsonValue &v : obj["schedules"].toArray())
+    {
+        QJsonObject so = v.toObject();
+        Function *f = VCWidget::resolveFunctionByName(so["funcName"].toString(), doc);
+        if (!f) continue;
+        VCClockSchedule sch;
+        sch.setFunction(f->id());
+        sch.setTime(QDateTime::fromString(so["time"].toString(), Qt::ISODate));
+        addSchedule(sch);
+    }
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/

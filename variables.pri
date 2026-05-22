@@ -194,6 +194,20 @@ macx:AUDIOPLUGINDIR       = $$PLUGINDIR/Audio
 android:AUDIOPLUGINDIR    = $$PLUGINDIR/Audio
 ios:AUDIOPLUGINDIR        = $$PLUGINDIR/Audio
 
+# VC Widget Plugins (system — inside bundle/install)
+win32:VCWIDGETPLUGINDIR      = $$PLUGINDIR/VCWidgets
+unix:!macx:VCWIDGETPLUGINDIR = $$PLUGINDIR/vcwidgets
+macx:VCWIDGETPLUGINDIR       = PlugIns/VCWidgets
+android:VCWIDGETPLUGINDIR    = $$PLUGINDIR/VCWidgets
+ios:VCWIDGETPLUGINDIR        = PlugIns/VCWidgets
+
+# User VC Widget Plugins (writable, per-user)
+win32:USERVCWIDGETPLUGINDIR      = $$USERDATADIR/VCWidgets
+unix:!macx:USERVCWIDGETPLUGINDIR = $$USERDATADIR/vcwidgets
+macx:USERVCWIDGETPLUGINDIR       = $$USERDATADIR/VCWidgets
+android:USERVCWIDGETPLUGINDIR    = $$USERDATADIR/vcwidgets
+ios:USERVCWIDGETPLUGINDIR        = $$USERDATADIR/VCWidgets
+
 # Translations
 win32:TRANSLATIONDIR      =
 unix:!macx:TRANSLATIONDIR = $$DATADIR/translations

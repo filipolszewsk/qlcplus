@@ -329,6 +329,159 @@ void VCXYPad::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups fl
     m_doc->setModified();
 }
 
+void VCXYPad::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    /* Fixtures: serialize by fixture name + head index + X/Y ranges */
+    QJsonArray fxArr;
+    for (const VCXYPadFixture &fxi : m_fixtures)
+    {
+        quint32 fid = fxi.head().fxi;
+        Fixture *f = doc->fixture(fid);
+        if (!f) continue;
+        QJsonObject fo;
+        fo["fixtureName"] = f->name();
+        fo["headIndex"]   = fxi.head().head;
+        fo["xMin"]        = fxi.xMin();
+        fo["xMax"]        = fxi.xMax();
+        fo["xReverse"]    = fxi.xReverse();
+        fo["yMin"]        = fxi.yMin();
+        fo["yMax"]        = fxi.yMax();
+        fo["yReverse"]    = fxi.yReverse();
+        fo["displayMode"] = (int)fxi.displayMode();
+        fxArr.append(fo);
+    }
+    obj["fixtures"] = fxArr;
+    /* Column ranges */
+    QJsonArray crArr;
+    for (auto it = m_columnRanges.constBegin(); it != m_columnRanges.constEnd(); ++it)
+    {
+        QJsonObject cr;
+        cr["col"]      = it.key();
+        cr["xMin"]     = it.value().xMin;
+        cr["xMax"]     = it.value().xMax;
+        cr["xReverse"] = it.value().xReverse;
+        cr["yMin"]     = it.value().yMin;
+        cr["yMax"]     = it.value().yMax;
+        cr["yReverse"] = it.value().yReverse;
+        crArr.append(cr);
+    }
+    obj["columnRanges"] = crArr;
+    /* Excluded columns */
+    QJsonArray excArr;
+    for (int c : m_excludedColumns) excArr.append(c);
+    obj["excludedColumns"] = excArr;
+    /* Selected rows */
+    QJsonArray rowArr;
+    for (int r : m_selectedRows) rowArr.append(r);
+    obj["selectedRows"] = rowArr;
+    /* Presets: serialize function refs by name */
+    QList<VCXYPadPreset*> sortedPresets = m_presets.values();
+    std::sort(sortedPresets.begin(), sortedPresets.end(), VCXYPadPreset::compare);
+    QJsonArray prArr;
+    for (const VCXYPadPreset *pr : sortedPresets)
+    {
+        QJsonObject po;
+        po["id"]    = (int)pr->m_id;
+        po["type"]  = (int)pr->m_type;
+        po["name"]  = pr->m_name;
+        po["posX"]  = pr->m_dmxPos.x();
+        po["posY"]  = pr->m_dmxPos.y();
+        po["keySeq"]= pr->m_keySequence.toString();
+        Function *f = doc->function(pr->m_funcID);
+        po["funcName"] = f ? f->name() : QString();
+        /* FixtureGroup heads */
+        QJsonArray hArr;
+        for (const GroupHead &gh : pr->m_fxGroup)
+        {
+            Fixture *fxi = doc->fixture(gh.fxi);
+            if (!fxi) continue;
+            QJsonObject ho;
+            ho["fixtureName"] = fxi->name();
+            ho["head"] = gh.head;
+            hArr.append(ho);
+        }
+        po["fixtureGroup"] = hArr;
+        prArr.append(po);
+    }
+    obj["presets"] = prArr;
+}
+
+void VCXYPad::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    /* Fixtures */
+    m_fixtures.clear();
+    for (const QJsonValue &v : obj["fixtures"].toArray())
+    {
+        QJsonObject fo = v.toObject();
+        QString fxiName = fo["fixtureName"].toString();
+        quint32 fxiId = Fixture::invalidId();
+        for (Fixture *f : doc->fixtures())
+            if (f && f->name() == fxiName) { fxiId = f->id(); break; }
+        if (fxiId == Fixture::invalidId()) continue;
+        VCXYPadFixture fxi(doc);
+        GroupHead gh(fxiId, fo["headIndex"].toInt(0));
+        fxi.setHead(gh);
+        fxi.setX(fo["xMin"].toDouble(0.0), fo["xMax"].toDouble(1.0), fo["xReverse"].toBool());
+        fxi.setY(fo["yMin"].toDouble(0.0), fo["yMax"].toDouble(1.0), fo["yReverse"].toBool());
+        fxi.setDisplayMode(static_cast<VCXYPadFixture::DisplayMode>(fo["displayMode"].toInt()));
+        appendFixture(fxi);
+    }
+    /* Column ranges */
+    m_columnRanges.clear();
+    for (const QJsonValue &v : obj["columnRanges"].toArray())
+    {
+        QJsonObject cr = v.toObject();
+        ColumnRanges ranges;
+        ranges.xMin = cr["xMin"].toDouble(0.0);
+        ranges.xMax = cr["xMax"].toDouble(1.0);
+        ranges.xReverse = cr["xReverse"].toBool();
+        ranges.yMin = cr["yMin"].toDouble(0.0);
+        ranges.yMax = cr["yMax"].toDouble(1.0);
+        ranges.yReverse = cr["yReverse"].toBool();
+        m_columnRanges[cr["col"].toInt()] = ranges;
+    }
+    /* Excluded columns */
+    m_excludedColumns.clear();
+    for (const QJsonValue &v : obj["excludedColumns"].toArray())
+        m_excludedColumns.append(v.toInt());
+    /* Selected rows */
+    m_selectedRows.clear();
+    for (const QJsonValue &v : obj["selectedRows"].toArray())
+        m_selectedRows.append(v.toInt());
+    /* Presets */
+    resetPresets();
+    for (const QJsonValue &v : obj["presets"].toArray())
+    {
+        QJsonObject po = v.toObject();
+        VCXYPadPreset pr((quint8)po["id"].toInt());
+        pr.m_type = static_cast<VCXYPadPreset::PresetType>(po["type"].toInt());
+        pr.m_name = po["name"].toString();
+        pr.m_dmxPos = QPointF(po["posX"].toDouble(), po["posY"].toDouble());
+        pr.m_keySequence = QKeySequence(po["keySeq"].toString());
+        Function *f = VCWidget::resolveFunctionByName(po["funcName"].toString(), doc);
+        pr.m_funcID = f ? f->id() : Function::invalidId();
+        /* Fixture group heads */
+        QList<GroupHead> heads;
+        for (const QJsonValue &hv : po["fixtureGroup"].toArray())
+        {
+            QJsonObject ho = hv.toObject();
+            QString fxiName = ho["fixtureName"].toString();
+            for (Fixture *fxi : doc->fixtures())
+            {
+                if (fxi && fxi->name() == fxiName)
+                {
+                    heads.append(GroupHead(fxi->id(), ho["head"].toInt(0)));
+                    break;
+                }
+            }
+        }
+        pr.setFixtureGroup(heads);
+        addPreset(pr);
+    }
+}
+
 QList<quint32> VCXYPad::referencedFunctions() const
 {
     QList<quint32> ids;

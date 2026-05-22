@@ -302,6 +302,57 @@ void VCMatrix::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups f
     m_doc->setModified();
 }
 
+void VCMatrix::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    Function *f = doc->function(m_matrixID);
+    obj["matrixFuncName"]  = f ? f->name() : QString();
+    obj["instantChanges"]  = instantChanges();
+    obj["visibilityMask"]  = (int)visibilityMask();
+    /* Custom controls: serialize type, color, resource, properties + input source + key seq */
+    QJsonArray ctrlArr;
+    QList<VCMatrixControl*> controls = customControls();
+    std::sort(controls.begin(), controls.end(), VCMatrixControl::compare);
+    for (const VCMatrixControl *ctrl : controls)
+    {
+        QJsonObject co;
+        co["id"]       = (int)ctrl->m_id;
+        co["type"]     = VCMatrixControl::typeToString(ctrl->m_type);
+        co["color"]    = ctrl->m_color.name();
+        co["resource"] = ctrl->m_resource;
+        co["keySeq"]   = ctrl->m_keySequence.toString();
+        QJsonObject props;
+        for (auto it = ctrl->m_properties.constBegin(); it != ctrl->m_properties.constEnd(); ++it)
+            props[it.key()] = it.value();
+        co["properties"] = props;
+        ctrlArr.append(co);
+    }
+    obj["customControls"] = ctrlArr;
+}
+
+void VCMatrix::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    Function *f = VCWidget::resolveFunctionByName(obj["matrixFuncName"].toString(), doc);
+    setFunction(f ? f->id() : Function::invalidId());
+    setInstantChanges(obj["instantChanges"].toBool());
+    setVisibilityMask((quint32)obj["visibilityMask"].toInt());
+    resetCustomControls();
+    for (const QJsonValue &v : obj["customControls"].toArray())
+    {
+        QJsonObject co = v.toObject();
+        VCMatrixControl ctrl((quint8)co["id"].toInt());
+        ctrl.m_type     = VCMatrixControl::stringToType(co["type"].toString());
+        ctrl.m_color    = QColor(co["color"].toString());
+        ctrl.m_resource = co["resource"].toString();
+        ctrl.m_keySequence = QKeySequence(co["keySeq"].toString());
+        QJsonObject props = co["properties"].toObject();
+        for (auto it = props.constBegin(); it != props.constEnd(); ++it)
+            ctrl.m_properties[it.key()] = it.value().toString();
+        addCustomControl(ctrl);
+    }
+}
+
 /*********************************************************************
  * GUI
  *********************************************************************/

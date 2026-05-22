@@ -837,6 +837,79 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
     m_doc->setModified();
 }
 
+void VCCueList::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    /* Chaser by name */
+    Function *f = doc->function(m_chaserID);
+    obj["chaserName"]            = f ? f->name() : QString();
+    /* Key sequences */
+    obj["nextKeySeq"]            = nextKeySequence().toString();
+    obj["prevKeySeq"]            = previousKeySequence().toString();
+    obj["playbackKeySeq"]        = playbackKeySequence().toString();
+    obj["stopKeySeq"]            = stopKeySequence().toString();
+    obj["recordKeySeq"]          = recordKeySequence().toString();
+    obj["overwriteKeySeq"]       = overwriteKeySequence().toString();
+    obj["deleteKeySeq"]          = deleteKeySequence().toString();
+    obj["renameKeySeq"]          = renameKeySequence().toString();
+    obj["nextPrevControlsSec"]   = nextPrevControlsSecondary();
+    /* Side fader */
+    obj["sideFaderMode"]         = (int)sideFaderMode();
+    /* Recording settings */
+    obj["recordAllChannels"]     = recordAllChannels();
+    obj["recordNonZeroOnly"]     = recordNonZeroOnly();
+    obj["recordChannelsMask"]    = QString::fromLatin1(recordChannelsMask().toHex());
+    obj["recordCuePrefix"]       = recordCuePrefix();
+    obj["autoStartInOperate"]    = autoStartInOperate();
+    obj["autoStartOffset"]       = autoStartOffset();
+    obj["hideButtons"]           = hideButtons();
+    /* Step index output — fixture by name */
+    obj["stepIndexEnabled"]      = stepIndexOutputEnabled();
+    quint32 siFxi = stepIndexOutputFixture();
+    Fixture *sif = doc->fixture(siFxi);
+    obj["stepIndexFixtureName"]  = sif ? sif->name() : QString();
+    obj["stepIndexChannel"]      = (int)stepIndexOutputChannel();
+}
+
+void VCCueList::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    /* Chaser by name */
+    Function *f = VCWidget::resolveFunctionByName(obj["chaserName"].toString(), doc);
+    setChaser(f ? f->id() : Function::invalidId());
+    /* Key sequences */
+    setNextKeySequence(QKeySequence(obj["nextKeySeq"].toString()));
+    setPreviousKeySequence(QKeySequence(obj["prevKeySeq"].toString()));
+    setPlaybackKeySequence(QKeySequence(obj["playbackKeySeq"].toString()));
+    setStopKeySequence(QKeySequence(obj["stopKeySeq"].toString()));
+    setRecordKeySequence(QKeySequence(obj["recordKeySeq"].toString()));
+    setOverwriteKeySequence(QKeySequence(obj["overwriteKeySeq"].toString()));
+    setDeleteKeySequence(QKeySequence(obj["deleteKeySeq"].toString()));
+    setRenameKeySequence(QKeySequence(obj["renameKeySeq"].toString()));
+    setNextPrevControlsSecondary(obj["nextPrevControlsSec"].toBool());
+    /* Side fader */
+    setSideFaderMode(static_cast<FaderMode>(obj["sideFaderMode"].toInt()));
+    /* Recording settings */
+    setRecordAllChannels(obj["recordAllChannels"].toBool());
+    setRecordNonZeroOnly(obj["recordNonZeroOnly"].toBool());
+    QString maskHex = obj["recordChannelsMask"].toString();
+    if (!maskHex.isEmpty())
+        setRecordChannelsMask(QByteArray::fromHex(maskHex.toLatin1()));
+    setRecordCuePrefix(obj["recordCuePrefix"].toString());
+    setAutoStartInOperate(obj["autoStartInOperate"].toBool());
+    setAutoStartOffset(obj["autoStartOffset"].toInt());
+    setHideButtons(obj["hideButtons"].toBool());
+    /* Step index output */
+    setStepIndexOutputEnabled(obj["stepIndexEnabled"].toBool());
+    quint32 siFxiId = Fixture::invalidId();
+    QString siFxiName = obj["stepIndexFixtureName"].toString();
+    if (!siFxiName.isEmpty())
+        for (Fixture *fxi : doc->fixtures())
+            if (fxi && fxi->name() == siFxiName) { siFxiId = fxi->id(); break; }
+    setStepIndexOutputFixture(siFxiId);
+    setStepIndexOutputChannel((quint32)obj["stepIndexChannel"].toInt());
+}
+
 /*****************************************************************************
  * Cue list
  *****************************************************************************/

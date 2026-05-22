@@ -238,6 +238,40 @@ void VCButton::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups f
     m_doc->setModified();
 }
 
+void VCButton::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    Function *f = doc->function(m_function);
+    obj["funcName"]               = f ? f->name() : QString();
+    obj["iconPath"]               = m_iconPath;
+    obj["keySeq"]                 = m_keySequence.toString();
+    obj["action"]                 = (int)m_action;
+    obj["stopAllFadeTime"]        = m_blackoutFadeOutTime;
+    obj["state"]                  = (int)m_state;
+    obj["startupIntensityEnabled"]= m_startupIntensityEnabled;
+    obj["startupIntensity"]       = m_startupIntensity;
+    obj["flashForceLTP"]          = m_flashForceLTP;
+    obj["flashOverrides"]         = m_flashOverrides;
+    obj["monitorChannelValues"]   = m_monitorChannelValues;
+}
+
+void VCButton::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    Function *f = VCWidget::resolveFunctionByName(obj["funcName"].toString(), doc);
+    setFunction(f ? f->id() : Function::invalidId());
+    setIconPath(obj["iconPath"].toString());
+    setKeySequence(QKeySequence(obj["keySeq"].toString()));
+    setAction(static_cast<Action>(obj["action"].toInt((int)Toggle)));
+    setStopAllFadeOutTime(obj["stopAllFadeTime"].toInt());
+    m_state = static_cast<ButtonState>(obj["state"].toInt((int)Inactive));
+    enableStartupIntensity(obj["startupIntensityEnabled"].toBool());
+    setStartupIntensity(obj["startupIntensity"].toDouble(1.0));
+    m_flashForceLTP  = obj["flashForceLTP"].toBool();
+    m_flashOverrides = obj["flashOverrides"].toBool();
+    setMonitorChannelValues(obj["monitorChannelValues"].toBool());
+}
+
 /*****************************************************************************
  * Properties
  *****************************************************************************/

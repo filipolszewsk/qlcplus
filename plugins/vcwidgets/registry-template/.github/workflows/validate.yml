@@ -1,0 +1,85 @@
+name: Validate index.json
+
+on:
+  pull_request:
+    paths:
+      - 'index.json'
+  push:
+    branches: [main]
+    paths:
+      - 'index.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ajv-cli
+        run: npm install -g ajv-cli ajv-formats
+
+      - name: Validate schema
+        run: ajv validate -s schema.json -d index.json --spec=draft7
+
+      - name: Check for duplicate plugin_id
+        run: |
+          DUPES=$(node -e "
+            const idx = require('./index.json');
+            const ids = idx.plugins.map(p => p.plugin_id);
+            const seen = new Set();
+            const dupes = [];
+            for (const id of ids) {
+              if (seen.has(id)) dupes.push(id);
+              seen.add(id);
+            }
+            if (dupes.length) {
+              console.error('Duplicate plugin_id(s):', dupes.join(', '));
+              process.exit(1);
+            }
+            console.log('All plugin_ids are unique (' + ids.length + ' plugins)');
+          ")
+          echo "$DUPES"
+
+      - name: Check platform URLs are reachable (HEAD requests)
+        run: |
+          node -e "
+            const https = require('https');
+            const http = require('http');
+            const idx = require('./index.json');
+
+            const urls = [];
+            for (const p of idx.plugins) {
+              for (const [platform, url] of Object.entries(p.platforms || {})) {
+                urls.push({ plugin: p.plugin_id, platform, url });
+              }
+            }
+
+            let failed = 0;
+            let pending = urls.length;
+
+            if (pending === 0) process.exit(0);
+
+            for (const { plugin, platform, url } of urls) {
+              const mod = url.startsWith('https') ? https : http;
+              const req = mod.request(url, { method: 'HEAD' }, (res) => {
+                if (res.statusCode >= 400) {
+                  console.error('FAIL ' + res.statusCode + ' ' + plugin + ' [' + platform + ']: ' + url);
+                  failed++;
+                } else {
+                  console.log('OK   ' + res.statusCode + ' ' + plugin + ' [' + platform + ']');
+                }
+                if (--pending === 0) process.exit(failed > 0 ? 1 : 0);
+              });
+              req.on('error', (e) => {
+                console.error('ERROR ' + plugin + ' [' + platform + ']: ' + e.message + ' (' + url + ')');
+                failed++;
+                if (--pending === 0) process.exit(failed > 0 ? 1 : 0);
+              });
+              req.end();
+            }
+          "

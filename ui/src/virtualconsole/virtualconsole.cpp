@@ -20,6 +20,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QBuffer>
 #include <QApplication>
 #include <QClipboard>
 #include <QJsonDocument>
@@ -69,6 +70,9 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "vcwidgetpluginmanagerdialog.h"
+#include "vcwidgetpluginmanager.h"
+#include "vcwidgetplugininterface.h"
 
 #define SETTINGS_VC_SIZE "virtualconsole/size"
 
@@ -181,6 +185,17 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     // Propagate mode changes to all widgets
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)),
             this, SLOT(slotModeChanged(Doc::Mode)));
+
+    // Refresh Add menu when plugins are hot-loaded or updated
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::pluginsChanged,
+            this, &VirtualConsole::slotPluginsChanged);
+
+    // Smart save/restore on hot-reload: direct connection is critical so
+    // widget destruction happens synchronously before the library is unloaded.
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::aboutToReloadPlugin,
+            this, &VirtualConsole::slotAboutToReloadPlugin, Qt::DirectConnection);
+    connect(VCWidgetPluginManager::instance(), &VCWidgetPluginManager::pluginReloaded,
+            this, &VirtualConsole::slotPluginReloaded);
 
     // Use the initial mode
     slotModeChanged(m_doc->mode());
@@ -407,6 +422,26 @@ void VirtualConsole::initActions()
     m_addAnimationAction = new QAction(QIcon(":/animation.png"), tr("New Animation"), this);
     connect(m_addAnimationAction, SIGNAL(triggered(bool)), this, SLOT(slotAddAnimation()), Qt::QueuedConnection);
 
+    /* Dynamic entries for installed VC widget plugins */
+    const auto pluginList = VCWidgetPluginManager::instance()->plugins();
+    for (VCWidgetPluginInterface* plugin : pluginList)
+    {
+        QAction* act = new QAction(plugin->icon(),
+                                   tr("New %1").arg(plugin->name()), this);
+        connect(act, &QAction::triggered, this, [this, plugin]() {
+            slotAddPluginWidget(plugin);
+        });
+        m_addPluginActions.append(act);
+    }
+
+    m_pluginSectionSeparator = nullptr;
+
+    /* "Get more widgets..." always appears last in the Add menu */
+    m_managePluginsAction = new QAction(QIcon(":/plugin.png"),
+                                        tr("Get more widgets..."), this);
+    connect(m_managePluginsAction, &QAction::triggered,
+            this, &VirtualConsole::slotManagePlugins);
+
     /* Put add actions under the same group */
     m_addActionGroup = new QActionGroup(this);
     m_addActionGroup->setExclusive(false);
@@ -424,6 +459,8 @@ void VirtualConsole::initActions()
     m_addActionGroup->addAction(m_addAudioTriggersAction);
     m_addActionGroup->addAction(m_addClockAction);
     m_addActionGroup->addAction(m_addAnimationAction);
+    for (QAction* act : m_addPluginActions)
+        m_addActionGroup->addAction(act);
 
     /* Tools menu actions */
     m_toolsSettingsAction = new QAction(QIcon(":/configure.png"), tr("Virtual Console Settings"), this);
@@ -456,7 +493,9 @@ void VirtualConsole::initActions()
     m_editPasteFromClipboardAction = new QAction(QIcon(":/pasteproject.png"),
                                                  tr("Paste from system clipboard (cross-project)"), this);
     m_editPasteFromClipboardAction->setToolTip(
-        tr("Paste widgets previously copied from another QLC+ project"));
+        tr("Paste widgets previously copied from another QLC+ project. "
+           "If a widget of the same type is currently selected, a dialog "
+           "lets you choose which properties to apply instead of creating a new widget."));
     connect(m_editPasteFromClipboardAction, SIGNAL(triggered(bool)),
             this, SLOT(slotEditPasteFromClipboard()));
 
@@ -619,6 +658,16 @@ void VirtualConsole::initMenuBar()
     m_addMenu->addAction(m_addSoloFrameAction);
     m_addMenu->addAction(m_addLabelAction);
     m_addMenu->addAction(m_addClockAction);
+
+    /* Plugin widgets section */
+    if (!m_addPluginActions.isEmpty())
+    {
+        m_pluginSectionSeparator = m_addMenu->addSeparator();
+        for (QAction* act : m_addPluginActions)
+            m_addMenu->addAction(act);
+    }
+    m_addMenu->addSeparator();
+    m_addMenu->addAction(m_managePluginsAction);
 
     /* Edit menu */
     m_editMenu = new QMenu(this);
@@ -1213,6 +1262,209 @@ void VirtualConsole::slotAddAnimation()
     m_doc->setModified();
 }
 
+void VirtualConsole::slotAddPluginWidget(VCWidgetPluginInterface* plugin)
+{
+    VCWidget* parent = closestParent();
+    if (parent == nullptr || plugin == nullptr)
+        return;
+
+    VCWidget* widget = plugin->createWidget(parent, m_doc);
+    if (widget == nullptr)
+    {
+        qWarning() << Q_FUNC_INFO << "Plugin" << plugin->pluginId()
+                   << "returned null widget";
+        return;
+    }
+
+    widget->setPluginId(plugin->pluginId());
+    setupWidget(widget, parent);
+    m_doc->setModified();
+}
+
+void VirtualConsole::slotManagePlugins()
+{
+    VCWidgetPluginManagerDialog dialog(this);
+    dialog.exec();
+}
+
+void VirtualConsole::slotAboutToReloadPlugin(const QString& pluginId)
+{
+    if (!m_contents)
+        return;
+
+    // Find all live widget instances created by this plugin
+    QList<VCWidget*> toSave = m_contents->findChildren<VCWidget*>();
+
+    QList<SavedPluginWidget> savedWidgets;
+
+    for (VCWidget* w : toSave)
+    {
+        if (w->pluginId() != pluginId)
+            continue;
+
+        // Serialize to XML
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter writer(&buf);
+        writer.setAutoFormatting(false);
+        bool ok = w->saveXML(&writer);
+        buf.close();
+
+        if (!ok)
+        {
+            qWarning() << Q_FUNC_INFO << "saveXML failed for plugin widget"
+                       << pluginId << "— widget will not be restored";
+            continue;
+        }
+
+        SavedPluginWidget saved;
+        saved.xml      = buf.data();
+        saved.parent   = qobject_cast<VCFrame*>(w->parent());
+        saved.geometry = w->geometry();
+        savedWidgets.append(saved);
+
+        // Remove from parent's widget map before deletion
+        if (saved.parent)
+            saved.parent->removeWidgetFromPageMap(w);
+
+        // Delete immediately — library will be unloaded after this slot returns
+        delete w;
+    }
+
+    if (!savedWidgets.isEmpty())
+        m_pendingPluginRestore[pluginId] = savedWidgets;
+}
+
+void VirtualConsole::slotPluginReloaded(const QString& pluginId)
+{
+    if (pluginId.isEmpty() || !m_pendingPluginRestore.contains(pluginId))
+        return;
+
+    VCWidgetPluginInterface* plugin =
+        VCWidgetPluginManager::instance()->pluginById(pluginId);
+
+    const QList<SavedPluginWidget> savedWidgets =
+        m_pendingPluginRestore.take(pluginId);
+
+    if (!plugin)
+    {
+        QMessageBox::warning(this, tr("Plugin reload failed"),
+            tr("Plugin \"%1\" could not be loaded after update.\n\n"
+               "%2 widget instance(s) could not be restored.\n"
+               "Please restart QLC+ to try again.")
+                .arg(pluginId)
+                .arg(savedWidgets.size()));
+        return;
+    }
+
+    int restored = 0;
+    int failed   = 0;
+
+    for (const SavedPluginWidget& saved : savedWidgets)
+    {
+        VCFrame* parent = saved.parent ? saved.parent : m_contents;
+
+        VCWidget* newWidget = plugin->createWidget(parent, m_doc);
+        if (!newWidget)
+        {
+            ++failed;
+            continue;
+        }
+
+        newWidget->setPluginId(pluginId);
+
+        QBuffer buf;
+        buf.setData(saved.xml);
+        buf.open(QIODevice::ReadOnly);
+        QXmlStreamReader reader(&buf);
+
+        // Advance to the first start element (the PluginWidget element)
+        while (!reader.atEnd() && !reader.isStartElement())
+            reader.readNext();
+
+        if (reader.atEnd() || !newWidget->loadXML(reader))
+        {
+            // loadXML failed (plugin changed XML format) — fall back to
+            // using saved geometry and showing the widget as-is
+            newWidget->setGeometry(saved.geometry);
+            qWarning() << Q_FUNC_INFO
+                       << "loadXML failed for reloaded plugin" << pluginId
+                       << "— widget restored with default state";
+        }
+
+        parent->addWidgetToPageMap(newWidget);
+        newWidget->show();
+        addWidgetInMap(newWidget);
+        ++restored;
+    }
+
+    if (failed > 0)
+    {
+        QMessageBox::information(this, tr("Plugin reloaded"),
+            tr("Plugin \"%1\" reloaded.\n"
+               "%2 widget(s) restored, %3 could not be recreated.")
+                .arg(plugin->name())
+                .arg(restored)
+                .arg(failed));
+    }
+}
+
+void VirtualConsole::slotPluginsChanged()
+{
+    // Remove old plugin section separator (if any)
+    if (m_pluginSectionSeparator)
+    {
+        m_addMenu->removeAction(m_pluginSectionSeparator);
+        m_pluginSectionSeparator->deleteLater();
+        m_pluginSectionSeparator = nullptr;
+    }
+
+    // Remove old plugin actions from menu and action group
+    for (QAction* act : m_addPluginActions)
+    {
+        m_addMenu->removeAction(act);
+        m_addActionGroup->removeAction(act);
+        act->deleteLater();
+    }
+    m_addPluginActions.clear();
+
+    // Rebuild plugin actions from current manager state
+    const auto pluginList = VCWidgetPluginManager::instance()->plugins();
+    for (VCWidgetPluginInterface* plugin : pluginList)
+    {
+        QAction* act = new QAction(plugin->icon(),
+                                   tr("New %1").arg(plugin->name()), this);
+        connect(act, &QAction::triggered, this, [this, plugin]() {
+            slotAddPluginWidget(plugin);
+        });
+        m_addPluginActions.append(act);
+        m_addActionGroup->addAction(act);
+    }
+
+    // Find the separator immediately before m_managePluginsAction and insert
+    // plugin section before it (insert separator + actions before that separator)
+    if (!m_addPluginActions.isEmpty())
+    {
+        QList<QAction*> menuActions = m_addMenu->actions();
+        QAction* separatorBeforeManage = nullptr;
+        for (int i = 0; i < menuActions.size(); ++i)
+        {
+            if (menuActions[i] == m_managePluginsAction && i > 0
+                && menuActions[i - 1]->isSeparator())
+            {
+                separatorBeforeManage = menuActions[i - 1];
+                break;
+            }
+        }
+
+        QAction* anchor = separatorBeforeManage ? separatorBeforeManage
+                                                : m_managePluginsAction;
+        m_pluginSectionSeparator = m_addMenu->insertSeparator(anchor);
+        for (QAction* act : m_addPluginActions)
+            m_addMenu->insertAction(anchor, act);
+    }
+}
+
 /*****************************************************************************
  * Tools menu callbacks
  *****************************************************************************/
@@ -1342,7 +1594,77 @@ void VirtualConsole::slotEditPasteFromClipboard()
         return;
     }
 
-    /* Find the target frame -- prefer selected frame, fall back to root */
+    const QJsonArray clipWidgets = root["widgets"].toArray();
+
+    /* --- Paste Properties branch ---
+     * Triggered when clipboard has exactly one widget whose type matches ALL
+     * selected widgets (and none of them accept children). */
+    if (clipWidgets.size() == 1
+        && !m_selectedWidgets.isEmpty())
+    {
+        int srcType = clipWidgets.first().toObject()["widgetType"].toInt(-1);
+        bool allSameLeaf = (srcType >= 0);
+        for (VCWidget *w : m_selectedWidgets)
+        {
+            if (w->type() != srcType || w->allowChildren())
+            {
+                allSameLeaf = false;
+                break;
+            }
+        }
+        if (allSameLeaf)
+        {
+            VCWidget *ghost = createGhostFromJson(clipWidgets.first().toObject());
+            if (ghost)
+            {
+                VCPastePropertiesDialog dlg(ghost, m_selectedWidgets.first(), this);
+                if (dlg.exec() == QDialog::Accepted)
+                {
+                    VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
+                    if (flags != 0)
+                    {
+                        foreach (VCWidget *w, m_selectedWidgets)
+                            w->applyPropertiesFrom(ghost, flags);
+                        m_doc->setModified();
+                    }
+                }
+                delete ghost;
+                return;
+            }
+        }
+    }
+
+    /* --- Paste Properties hint ---
+     * If the clipboard holds exactly one widget but no matching target was
+     * selected, inform the user how Paste Properties works and let them
+     * choose: paste as new widget or cancel (to first click a target). */
+    if (clipWidgets.size() == 1)
+    {
+        int srcType = clipWidgets.first().toObject()["widgetType"].toInt(-1);
+        QString typeName = VCWidget::typeToString(
+            static_cast<VCWidget::WidgetType>(srcType));
+
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Information);
+        box.setWindowTitle(tr("Paste from Clipboard"));
+        box.setText(tr("Clipboard contains a single %1 widget.").arg(typeName));
+        box.setInformativeText(tr(
+            "To apply only selected properties to an existing widget, "
+            "click a %1 in this project first (to select it), then paste again.\n\n"
+            "To create a new copy of the widget here, click \"Paste as New\".")
+            .arg(typeName));
+        QPushButton *bNew    = box.addButton(tr("Paste as New"),
+                                             QMessageBox::AcceptRole);
+        QPushButton *bCancel = box.addButton(tr("Cancel"),
+                                             QMessageBox::RejectRole);
+        Q_UNUSED(bCancel)
+        box.setDefaultButton(bNew);
+        box.exec();
+        if (box.clickedButton() != bNew)
+            return;
+    }
+
+    /* --- Import Widgets branch (default: create new widgets) --- */
     VCFrame *targetFrame = nullptr;
     for (VCWidget *w : m_selectedWidgets)
     {
@@ -1360,6 +1682,43 @@ void VirtualConsole::slotEditPasteFromClipboard()
     dlg.exec();
 }
 
+VCWidget* VirtualConsole::createGhostFromJson(const QJsonObject &obj)
+{
+    int wType = obj["widgetType"].toInt(-1);
+    if (wType < 0)
+        return nullptr;
+
+    VCWidget *widget = nullptr;
+    switch (static_cast<VCWidget::WidgetType>(wType))
+    {
+        case VCWidget::ButtonWidget:    widget = new VCButton(m_contents, m_doc);    break;
+        case VCWidget::SliderWidget:    widget = new VCSlider(m_contents, m_doc);    break;
+        case VCWidget::LabelWidget:     widget = new VCLabel(m_contents, m_doc);     break;
+        case VCWidget::FrameWidget:     widget = new VCFrame(m_contents, m_doc);     break;
+        case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(m_contents, m_doc); break;
+        case VCWidget::XYPadWidget:     widget = new VCXYPad(m_contents, m_doc);     break;
+        case VCWidget::CueListWidget:   widget = new VCCueList(m_contents, m_doc);   break;
+        case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(m_contents, m_doc); break;
+        case VCWidget::AnimationWidget: widget = new VCMatrix(m_contents, m_doc);    break;
+        case VCWidget::ClockWidget:     widget = new VCClock(m_contents, m_doc);     break;
+        default:
+        {
+            const QString pid = obj["pluginId"].toString();
+            if (pid.isEmpty())
+                return nullptr;
+            VCWidgetPluginInterface *plugin =
+                VCWidgetPluginManager::instance()->pluginById(pid);
+            if (!plugin)
+                return nullptr;
+            widget = plugin->createWidget(m_contents, m_doc);
+            break;
+        }
+    }
+
+    widget->fromClipboardJson(obj, m_doc);
+    return widget;
+}
+
 void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
                                             VCFrame *parentFrame, int &count)
 {
@@ -1374,88 +1733,35 @@ void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
 
         switch (static_cast<VCWidget::WidgetType>(wType))
         {
-            case VCWidget::ButtonWidget:
-            {
-                widget = new VCButton(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SliderWidget:
-            {
-                widget = new VCSlider(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::LabelWidget:
-            {
-                widget = new VCLabel(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::FrameWidget:
-            {
-                widget = new VCFrame(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SoloFrameWidget:
-            {
-                widget = new VCSoloFrame(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::XYPadWidget:
-            {
-                widget = new VCXYPad(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::CueListWidget:
-            {
-                widget = new VCCueList(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SpeedDialWidget:
-            {
-                widget = new VCSpeedDial(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::AnimationWidget:
-            {
-                widget = new VCMatrix(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::ClockWidget:
-            {
-                widget = new VCClock(parentFrame, m_doc);
-            }
-            break;
+            case VCWidget::ButtonWidget:    widget = new VCButton(parentFrame, m_doc);    break;
+            case VCWidget::SliderWidget:    widget = new VCSlider(parentFrame, m_doc);    break;
+            case VCWidget::LabelWidget:     widget = new VCLabel(parentFrame, m_doc);     break;
+            case VCWidget::FrameWidget:     widget = new VCFrame(parentFrame, m_doc);     break;
+            case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(parentFrame, m_doc); break;
+            case VCWidget::XYPadWidget:     widget = new VCXYPad(parentFrame, m_doc);     break;
+            case VCWidget::CueListWidget:   widget = new VCCueList(parentFrame, m_doc);   break;
+            case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(parentFrame, m_doc); break;
+            case VCWidget::AnimationWidget: widget = new VCMatrix(parentFrame, m_doc);    break;
+            case VCWidget::ClockWidget:     widget = new VCClock(parentFrame, m_doc);     break;
             default:
-                continue;
+            {
+                const QString pid = obj["pluginId"].toString();
+                if (pid.isEmpty())
+                    continue;
+                VCWidgetPluginInterface *plugin =
+                    VCWidgetPluginManager::instance()->pluginById(pid);
+                if (!plugin)
+                    continue;
+                widget = plugin->createWidget(parentFrame, m_doc);
+                break;
+            }
         }
 
         if (!widget)
             continue;
 
-        /* Apply common appearance from JSON */
-        widget->setCaption(obj["caption"].toString());
-        int x = obj["x"].toInt();
-        int y = obj["y"].toInt();
-        int w = obj["width"].toInt(100);
-        int h = obj["height"].toInt(50);
-        widget->setGeometry(QRect(x, y, w, h));
-
-        if (obj.contains("appearance"))
-        {
-            QJsonObject appear = obj["appearance"].toObject();
-            if (appear.contains("bgColor"))
-                widget->setBackgroundColor(QColor(appear["bgColor"].toString()));
-            if (appear.contains("bgImage"))
-                widget->setBackgroundImage(appear["bgImage"].toString());
-            if (appear.contains("fgColor"))
-                widget->setForegroundColor(QColor(appear["fgColor"].toString()));
-            if (appear.contains("font"))
-            {
-                QFont f;
-                f.fromString(appear["font"].toString());
-                widget->setFont(f);
-            }
-            widget->setFrameStyle(appear["frameStyle"].toInt());
-        }
+        /* Populate all properties (common + widget-specific) from JSON */
+        widget->fromClipboardJson(obj, m_doc);
 
         addWidgetInMap(widget);
         connectWidgetToParent(widget, parentFrame);

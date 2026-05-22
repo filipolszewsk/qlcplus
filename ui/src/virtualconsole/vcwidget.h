@@ -319,6 +319,21 @@ public:
     virtual QString caption() const;
 
     /*********************************************************************
+     * Plugin identity (set by VCFrame when the widget is created from a plugin)
+     *********************************************************************/
+public:
+    /**
+     * The pluginId() of the VCWidgetPluginInterface that created this widget.
+     * Empty for built-in widgets. Used by the plugin manager to find all
+     * live instances of a plugin when hot-reloading.
+     *
+     * Stored as a Qt dynamic property ("_qlcpluginId") so that sizeof(VCWidget)
+     * is not affected — preserving ABI compatibility with existing plugin dylibs.
+     */
+    void setPluginId(const QString& id);
+    QString pluginId() const;
+
+    /*********************************************************************
      * Frame style
      *********************************************************************/
 public:
@@ -604,11 +619,13 @@ public:
      *  Function references are stored by name (not ID). */
     virtual void toClipboardJson(QJsonObject &obj, const Doc *doc) const;
 
-    /** Create a widget of the correct type from @p obj and add it to
-     *  @p parent.  Returns nullptr if @p obj is invalid or type is
-     *  not recognised.  Function references are resolved by name in @p doc. */
-    static VCWidget* fromClipboardJson(const QJsonObject &obj,
-                                       VCWidget *parent, Doc *doc);
+    /** Populate this widget's data from a JSON clipboard object produced by
+     *  toClipboardJson().  Resolves function/fixture refs by name in @p doc.
+     *  Subclasses must call the base first, then read their own fields. */
+    virtual void fromClipboardJson(const QJsonObject &obj, Doc *doc);
+
+    /** Resolve a Function by name in @p doc; returns nullptr if not found. */
+    static Function* resolveFunctionByName(const QString &name, Doc *doc);
 
     /*********************************************************************
      * Load & Save

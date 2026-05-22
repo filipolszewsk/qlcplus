@@ -186,6 +186,12 @@ private:
 public:
     VCWidget* createCopy(VCWidget* parent);
     bool copyFrom(const VCWidget *widget);
+
+    /** @reimp */
+    void toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+    /** @reimp */
+    void fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
+
     QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
     void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
 

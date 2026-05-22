@@ -18,6 +18,8 @@
   limitations under the License.
 */
 
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QSettings>
@@ -296,6 +298,84 @@ void VCSpeedDial::applyPropertiesFrom(const VCWidget* source, PastePropertyGroup
 
     VCWidget::applyPropertiesFrom(source, flags);
     m_doc->setModified();
+}
+
+void VCSpeedDial::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+    /* Functions by name */
+    QJsonArray fArr;
+    for (const VCSpeedDialFunction &sdf : m_functions)
+    {
+        Function *f = doc->function(sdf.functionId);
+        if (!f) continue;
+        QJsonObject fo;
+        fo["funcName"]         = f->name();
+        fo["fadeInMultiplier"]  = (int)sdf.fadeInMultiplier;
+        fo["fadeOutMultiplier"] = (int)sdf.fadeOutMultiplier;
+        fo["durationMultiplier"]= (int)sdf.durationMultiplier;
+        fArr.append(fo);
+    }
+    obj["functions"]           = fArr;
+    obj["absValueMin"]         = (int)absoluteValueMin();
+    obj["absValueMax"]         = (int)absoluteValueMax();
+    obj["visibilityMask"]      = (int)visibilityMask();
+    obj["resetFactorOnDial"]   = resetFactorOnDialChange();
+    obj["tapKeySeq"]           = tapKeySequence().toString();
+    obj["multKeySeq"]          = multKeySequence().toString();
+    obj["divKeySeq"]           = divKeySequence().toString();
+    obj["multDivResetKeySeq"]  = multDivResetKeySequence().toString();
+    obj["applyKeySeq"]         = applyKeySequence().toString();
+    /* Presets */
+    QJsonArray pArr;
+    for (const VCSpeedDialPreset *pr : presets())
+    {
+        QJsonObject po;
+        po["id"]     = (int)pr->m_id;
+        po["name"]   = pr->m_name;
+        po["value"]  = pr->m_value;
+        po["keySeq"] = pr->m_keySequence.toString();
+        pArr.append(po);
+    }
+    obj["presets"] = pArr;
+}
+
+void VCSpeedDial::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+    /* Functions by name */
+    QList<VCSpeedDialFunction> funcs;
+    for (const QJsonValue &v : obj["functions"].toArray())
+    {
+        QJsonObject fo = v.toObject();
+        Function *f = VCWidget::resolveFunctionByName(fo["funcName"].toString(), doc);
+        if (!f) continue;
+        VCSpeedDialFunction sdf(f->id(),
+            static_cast<VCSpeedDialFunction::SpeedMultiplier>(fo["fadeInMultiplier"].toInt()),
+            static_cast<VCSpeedDialFunction::SpeedMultiplier>(fo["fadeOutMultiplier"].toInt()),
+            static_cast<VCSpeedDialFunction::SpeedMultiplier>(fo["durationMultiplier"].toInt((int)VCSpeedDialFunction::One)));
+        funcs.append(sdf);
+    }
+    setFunctions(funcs);
+    setAbsoluteValueRange((uint)obj["absValueMin"].toInt(), (uint)obj["absValueMax"].toInt());
+    setVisibilityMask((quint32)obj["visibilityMask"].toInt());
+    setResetFactorOnDialChange(obj["resetFactorOnDial"].toBool());
+    setTapKeySequence(QKeySequence(obj["tapKeySeq"].toString()));
+    setMultKeySequence(QKeySequence(obj["multKeySeq"].toString()));
+    setDivKeySequence(QKeySequence(obj["divKeySeq"].toString()));
+    setMultDivResetKeySequence(QKeySequence(obj["multDivResetKeySeq"].toString()));
+    setApplyKeySequence(QKeySequence(obj["applyKeySeq"].toString()));
+    /* Presets */
+    resetPresets();
+    for (const QJsonValue &v : obj["presets"].toArray())
+    {
+        QJsonObject po = v.toObject();
+        VCSpeedDialPreset pr((quint8)po["id"].toInt());
+        pr.m_name  = po["name"].toString();
+        pr.m_value = po["value"].toInt();
+        pr.m_keySequence = QKeySequence(po["keySeq"].toString());
+        addPreset(pr);
+    }
 }
 
 void VCSpeedDial::setFont(const QFont &font)
