@@ -1,0 +1,15 @@
+{
+  "plugin_id": "org.qlcplus.dmxnumeric",
+  "name": "DMX Numeric Input",
+  "version": "1.3.0",
+  "description": "Widget for entering a DMX value (0-255) with Apply button and MIDI/OSC/DMX external input support.",
+  "author": "QLC+ Community",
+  "qlcplusMinVersion": "4.14.0",
+  "qt_version": "6.8.1",
+  "platforms": {
+    "macos_arm64": "libdmxnumeric_vcwidget.dylib",
+    "macos_x64":   "libdmxnumeric_vcwidget.dylib",
+    "linux_x64":   "libdmxnumeric_vcwidget.so",
+    "windows_x64": "dmxnumeric_vcwidget.dll"
+  }
+}

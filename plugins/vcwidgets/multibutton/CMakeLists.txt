@@ -37,6 +37,9 @@ target_compile_features(multibutton_vcwidget PRIVATE cxx_std_17)
 if(APPLE)
     set_target_properties(multibutton_vcwidget PROPERTIES SUFFIX ".dylib")
 endif()
+if(WIN32)
+    set_target_properties(multibutton_vcwidget PROPERTIES PREFIX "")
+endif()
 
 target_link_libraries(multibutton_vcwidget
     PRIVATE

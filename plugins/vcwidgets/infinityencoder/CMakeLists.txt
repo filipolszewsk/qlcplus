@@ -37,6 +37,9 @@ target_compile_features(infinityencoder_vcwidget PRIVATE cxx_std_17)
 if(APPLE)
     set_target_properties(infinityencoder_vcwidget PROPERTIES SUFFIX ".dylib")
 endif()
+if(WIN32)
+    set_target_properties(infinityencoder_vcwidget PROPERTIES PREFIX "")
+endif()
 
 target_link_libraries(infinityencoder_vcwidget
     PRIVATE

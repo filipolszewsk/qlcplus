@@ -38,6 +38,9 @@ target_compile_features(presettable_vcwidget PRIVATE cxx_std_17)
 if(APPLE)
     set_target_properties(presettable_vcwidget PROPERTIES SUFFIX ".dylib")
 endif()
+if(WIN32)
+    set_target_properties(presettable_vcwidget PROPERTIES PREFIX "")
+endif()
 
 target_link_libraries(presettable_vcwidget
     PRIVATE

@@ -45,6 +45,9 @@ target_compile_features(dmxnumeric_vcwidget PRIVATE cxx_std_14)
 if(APPLE)
     set_target_properties(dmxnumeric_vcwidget PROPERTIES SUFFIX ".dylib")
 endif()
+if(WIN32)
+    set_target_properties(dmxnumeric_vcwidget PROPERTIES PREFIX "")
+endif()
 
 target_link_libraries(dmxnumeric_vcwidget
     PRIVATE

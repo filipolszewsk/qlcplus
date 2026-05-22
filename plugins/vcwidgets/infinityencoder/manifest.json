@@ -1,0 +1,14 @@
+{
+  "plugin_id": "org.qlcplus.vcwidgets.infinityencoder",
+  "name": "Infinity Encoder",
+  "version": "1.0.1",
+  "description": "Rotary infinity encoder — circular drag interaction, A/B/C/D banks, 3 sensitivity levels, MIDI signed-bit input.",
+  "author": "QLC+ Community",
+  "qt_version": "6.8.1",
+  "platforms": {
+    "macos_arm64": "libinfinityencoder_vcwidget.dylib",
+    "macos_x64":   "libinfinityencoder_vcwidget.dylib",
+    "linux_x64":   "libinfinityencoder_vcwidget.so",
+    "windows_x64": "infinityencoder_vcwidget.dll"
+  }
+}

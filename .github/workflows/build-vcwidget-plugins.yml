@@ -1,0 +1,332 @@
+name: Build VC Widget Plugins (.qlcvcw)
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'plugins/vcwidgets/**'
+      - 'ui/src/virtualconsole/vcwidget*.h'
+      - 'ui/src/virtualconsole/vcwidgetplugininterface.h'
+      - 'engine/src/*.h'
+      - '.github/workflows/build-vcwidget-plugins.yml'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: vcwidget-plugins-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: "6.8.1"
+  # Plugins to build — all that have a manifest.json
+  PLUGINS: "presettable multibutton dmxnumeric infinityencoder"
+
+jobs:
+  # ============================================================
+  # Build plugins on each platform
+  # ============================================================
+  build-plugins:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform_key: macos_arm64
+            qt_host: mac
+            qt_arch: clang_64
+            qt_dir_suffix: macos
+            lib_prefix: lib
+            lib_suffix: .dylib
+
+          - os: ubuntu-22.04
+            platform_key: linux_x64
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            qt_dir_suffix: gcc_64
+            lib_prefix: lib
+            lib_suffix: .so
+
+          - os: windows-latest
+            platform_key: windows_x64
+            qt_host: windows
+            qt_arch: win64_mingw
+            qt_dir_suffix: mingw_64
+            lib_prefix: ""
+            lib_suffix: .dll
+
+    runs-on: ${{ matrix.os }}
+    name: Build plugins (${{ matrix.platform_key }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      # ---- Qt ----
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          dir: "${{ github.workspace }}/Qt/"
+          modules: 'qt5compat qtimageformats qtmultimedia qtserialport qtwebsockets'
+          cache: true
+
+      - name: Set QTDIR + NPROC
+        shell: bash
+        run: |
+          echo "QTDIR=${{ github.workspace }}/Qt/Qt/${{ env.QT_VERSION }}/${{ matrix.qt_dir_suffix }}" >> $GITHUB_ENV
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
+          else
+            echo "NPROC=$(nproc)" >> $GITHUB_ENV
+          fi
+
+      # ---- macOS system deps ----
+      - name: Install macOS deps
+        if: runner.os == 'macOS'
+        run: brew install fftw libsndfile libftdi libltc mad
+
+      # ---- Linux system deps ----
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
+        with:
+          packages: >-
+            libasound2-dev libusb-1.0-0-dev libftdi1-dev libltc-dev
+            libssl-dev libmad0-dev libsndfile1-dev libfftw3-dev
+            libgl1-mesa-dev libudev-dev liblo-dev
+          version: ubuntu22-vcwidget
+
+      # ---- Windows: MSYS2 + system deps ----
+      - name: Install Windows deps (MSYS2)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          release: true
+          update: false
+          path-type: inherit
+          install: >-
+            wget unzip
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-libs
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-libmad
+            mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-python-lxml
+
+      - name: Build libltc from source (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          pacman -S --noconfirm autoconf automake libtool
+          wget https://github.com/x42/libltc/releases/download/v1.3.2/libltc-1.3.2.tar.gz -O /tmp/libltc.tar.gz
+          cd /tmp && tar xzf libltc.tar.gz && cd libltc-1.3.2
+          ./configure --prefix=/mingw64
+          make -j$(nproc)
+          make install
+
+      - name: Setup D2XX SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          mkdir -p /c/projects/D2XXSDK/amd64
+          cp -r "${GITHUB_WORKSPACE}/platforms/windows/D2XXSDK/." /c/projects/D2XXSDK/
+          cd /c/projects/D2XXSDK/amd64
+          gendef.exe - ftd2xx64.dll > ftd2xx.def
+          dlltool -k --input-def ftd2xx.def --dllname ftd2xx64.dll --output-lib libftd2xx.a
+
+      # ---- Disable -Werror (Linux + Windows CI is stricter than dev) ----
+      - name: Disable -Werror
+        if: runner.os != 'macOS'
+        shell: bash
+        run: sed -i -e 's/set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")/#&/' variables.cmake || true
+
+      # ---- Windows cmake fixes ----
+      - name: Apply Windows cmake fixes
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          sed -i -e 's/Debug/Release/g' CMakeLists.txt
+          sed -i -e 's/    add_subdirectory(velleman)/#    add_subdirectory(velleman)/g' plugins/CMakeLists.txt
+          sed -i -e 's/$ENV{SystemDrive}\/msys64/D:\/a\/_temp\/msys64/g' platforms/windows/CMakeLists.txt
+
+      # ---- ccache ----
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: vcwidget-${{ matrix.platform_key }}-qt${{ env.QT_VERSION }}
+
+      # ---- Build qlcplusengine + qlcplusui (needed as import libs for plugins) ----
+      - name: Build host import libs (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -Dqmlui=OFF
+          cmake --build build --target qlcplusengine qlcplusui -j${NPROC}
+
+      - name: Build host import libs (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -Dqmlui=OFF
+          cmake --build build --target qlcplusengine qlcplusui -j${NPROC}
+
+      # ---- Build each plugin (macOS / Linux) ----
+      - name: Build plugins (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          for PLUGIN in $PLUGINS; do
+            echo "=== Building $PLUGIN ==="
+            rm -rf "plugins/vcwidgets/$PLUGIN/build"
+            cmake -S "plugins/vcwidgets/$PLUGIN" \
+                  -B "plugins/vcwidgets/$PLUGIN/build" \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DQLCPLUS_SRC_DIR="$(pwd)" \
+                  -DQLCPLUS_BUILD_DIR="$(pwd)/build" \
+                  -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+                  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}
+          done
+
+      - name: Build plugins (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          for PLUGIN in $PLUGINS; do
+            echo "=== Building $PLUGIN ==="
+            rm -rf "plugins/vcwidgets/$PLUGIN/build"
+            cmake -S "plugins/vcwidgets/$PLUGIN" \
+                  -B "plugins/vcwidgets/$PLUGIN/build" \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DQLCPLUS_SRC_DIR="$(pwd)" \
+                  -DQLCPLUS_BUILD_DIR="$(pwd)/build" \
+                  -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
+                  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}
+          done
+
+      # ---- Collect binaries ----
+      - name: Collect plugin binaries
+        shell: bash
+        run: |
+          mkdir -p "plugin-binaries/${{ matrix.platform_key }}"
+          for PLUGIN in $PLUGINS; do
+            PREFIX="${{ matrix.lib_prefix }}"
+            SUFFIX="${{ matrix.lib_suffix }}"
+            SRC="plugins/vcwidgets/${PLUGIN}/build/${PREFIX}${PLUGIN}_vcwidget${SUFFIX}"
+            if [ -f "$SRC" ]; then
+              cp "$SRC" "plugin-binaries/${{ matrix.platform_key }}/"
+              echo "Collected: $(basename $SRC)"
+            else
+              echo "WARNING: not found: $SRC"
+              ls "plugins/vcwidgets/${PLUGIN}/build/" 2>/dev/null || true
+            fi
+          done
+
+      - name: Upload platform binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcwidget-binaries-${{ matrix.platform_key }}
+          path: plugin-binaries/${{ matrix.platform_key }}/
+          retention-days: 7
+
+  # ============================================================
+  # Package into .qlcvcw (ZIP with all platform binaries)
+  # ============================================================
+  package-qlcvcw:
+    needs: build-plugins
+    runs-on: ubuntu-22.04
+    name: Package .qlcvcw
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vcwidget-binaries-*
+          path: collected/
+          merge-multiple: false
+
+      - name: List collected files
+        run: find collected/ -type f | sort
+
+      - name: Package .qlcvcw files
+        shell: python3 {0}
+        run: |
+          import os, json, zipfile
+
+          PLUGINS = os.environ["PLUGINS"].split()
+          PLATFORM_DIRS = {
+              "macos_arm64": "collected/vcwidget-binaries-macos_arm64",
+              "linux_x64":   "collected/vcwidget-binaries-linux_x64",
+              "windows_x64": "collected/vcwidget-binaries-windows_x64",
+          }
+          LIB_NAMES = {
+              "macos_arm64": lambda p: f"lib{p}_vcwidget.dylib",
+              "linux_x64":   lambda p: f"lib{p}_vcwidget.so",
+              "windows_x64": lambda p: f"{p}_vcwidget.dll",
+          }
+
+          os.makedirs("qlcvcw", exist_ok=True)
+
+          for plugin in PLUGINS:
+              manifest_path = f"plugins/vcwidgets/{plugin}/manifest.json"
+              if not os.path.exists(manifest_path):
+                  print(f"SKIP {plugin}: no manifest.json")
+                  continue
+
+              with open(manifest_path) as f:
+                  manifest = json.load(f)
+
+              version = manifest.get("version", "1.0.0")
+              out_name = f"{plugin}-{version}.qlcvcw"
+              added = {}
+
+              with zipfile.ZipFile(f"qlcvcw/{out_name}", "w", zipfile.ZIP_DEFLATED) as zf:
+                  zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+                  for platform_key, lib_dir in PLATFORM_DIRS.items():
+                      lib_name = LIB_NAMES[platform_key](plugin)
+                      lib_path = os.path.join(lib_dir, lib_name)
+                      if os.path.exists(lib_path):
+                          zf.write(lib_path, lib_name)
+                          added[platform_key] = lib_name
+                          print(f"  [{platform_key}] {lib_name}")
+                      else:
+                          print(f"  [{platform_key}] MISSING: {lib_path}")
+
+              platforms_str = "+".join(added.keys()) if added else "EMPTY"
+              print(f"=> {out_name}  [{platforms_str}]")
+        env:
+          PLUGINS: ${{ env.PLUGINS }}
+
+      - name: List .qlcvcw files
+        run: ls -lh qlcvcw/
+
+      - name: Upload .qlcvcw artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcwidget-plugins-qlcvcw
+          path: qlcvcw/
+          retention-days: 90
