@@ -1,6 +1,10 @@
 name: DMG macOS Intel x86_64 Big Sur (Qt 5.15.2)
 
 on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
   workflow_call:
 
