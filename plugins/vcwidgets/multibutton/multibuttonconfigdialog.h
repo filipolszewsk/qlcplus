@@ -7,6 +7,9 @@
 
 #include <QDialog>
 #include <QListWidget>
+#include <QTableWidget>
+#include <QComboBox>
+#include <QStackedWidget>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QLabel>
@@ -18,8 +21,10 @@
 #include <QSharedPointer>
 #include <QList>
 #include <QStringList>
+#include <QHash>
 
 #include "qlcinputsource.h"
+#include "multibuttonwidget.h"
 
 class Doc;
 class InputSelectionWidget;
@@ -30,22 +35,27 @@ class MultiButtonConfigDialog : public QDialog
 
 public:
     explicit MultiButtonConfigDialog(
-        Doc*                           doc,
-        const QList<quint32>&          funcIds,
-        const QStringList&             funcLabels,
-        const QStringList&             iconPaths,
-        int                            longPressMs,
-        bool                           addOffAtEnd,
-        bool                           monitorChannelValues,
-        QSharedPointer<QLCInputSource> triggerSrc,
-        QSharedPointer<QLCInputSource> popupSrc,
-        int                            widgetPage,
-        QWidget*                       parent = nullptr);
+        Doc*                               doc,
+        MultiButtonMode                    widgetMode,
+        const QList<quint32>&              funcIds,
+        const QStringList&                 funcLabels,
+        const QStringList&                 iconPaths,
+        const QList<LevelChannelBinding>&  levelChannelBindings,
+        const QList<LevelPreset>&          levelPresets,
+        int                                longPressMs,
+        bool                               addOffAtEnd,
+        bool                               monitorChannelValues,
+        QSharedPointer<QLCInputSource>     triggerSrc,
+        QSharedPointer<QLCInputSource>     popupSrc,
+        int                                widgetPage,
+        QWidget*                           parent = nullptr);
 
-    // ---- Results --------------------------------------------------------
+    MultiButtonMode                widgetMode()            const;
     QList<quint32>                 functionIds()           const;
     QStringList                    functionLabels()        const;
     QStringList                    iconPaths()             const;
+    QList<LevelChannelBinding>     levelChannelBindings()  const;
+    QList<LevelPreset>             levelPresets()          const;
     int                            longPressMs()           const;
     bool                           addOffAtEnd()           const;
     bool                           monitorChannelValues()  const;
@@ -53,6 +63,7 @@ public:
     QSharedPointer<QLCInputSource> popupInputSource()      const;
 
 private slots:
+    void slotModeChanged(int index);
     void slotAdd();
     void slotRemove();
     void slotEditLabel();
@@ -63,17 +74,49 @@ private slots:
     void slotMoveDown();
     void slotSelectionChanged();
 
+    void slotChooseChannels();
+    void slotLevelAddPreset();
+    void slotLevelRemovePreset();
+    void slotLevelEditLabel();
+    void slotLevelScribbleIcon();
+    void slotLevelChooseIcon();
+    void slotLevelClearIcon();
+    void slotLevelChooseColor();
+    void slotLevelClearColor();
+    void slotLevelMoveUp();
+    void slotLevelMoveDown();
+    void slotLevelSelectionChanged();
+    void slotPresetTableItemChanged(QTableWidgetItem* item);
+
 private:
     void rebuildList();
+    void syncPresetTableColumns();
+    void syncPresetTableRows();
+    quint8 presetTableValue(int row, int col) const;
+    static quint8 parseDmxCell(const QString& text);
+    static QTableWidgetItem* makeValueTableItem(quint8 value);
+    void updatePresetNameCell(int row);
+    void syncPresetNameFromCell(int row, const QString& cellText);
+    QString presetNameCellText(int row) const;
+    void updateChooseChannelsButton();
+    void updateMonitorTooltip();
+    static quint64 bindingKey(quint32 fixtureId, quint32 channel);
+    static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
 
     Doc* m_doc;
 
-    // ---- Function list data (parallel) ----------------------------------
-    QList<quint32> m_ids;
-    QStringList    m_labels;
-    QStringList    m_icons;   // parallel icon paths
+    QList<quint32>             m_ids;
+    QStringList                m_labels;
+    QStringList                m_icons;
 
-    // ---- UI: function list panel ----------------------------------------
+    QList<LevelChannelBinding> m_levelChannelBindings;
+    QList<LevelPreset>         m_levelPresets;
+
+    QComboBox*       m_modeCombo    = nullptr;
+    QStackedWidget*  m_modeStack    = nullptr;
+    QWidget*         m_functionPage = nullptr;
+    QWidget*         m_levelPage    = nullptr;
+
     QListWidget*  m_listWidget    = nullptr;
     QPushButton*  m_addBtn        = nullptr;
     QPushButton*  m_removeBtn     = nullptr;
@@ -84,14 +127,29 @@ private:
     QPushButton*  m_upBtn         = nullptr;
     QPushButton*  m_downBtn       = nullptr;
 
-    // ---- UI: behavior ---------------------------------------------------
+    QPushButton*  m_chooseChannelsBtn = nullptr;
+    QTableWidget* m_presetTable      = nullptr;
+    QPushButton*  m_lvlAddBtn        = nullptr;
+    QPushButton*  m_lvlRemoveBtn     = nullptr;
+    QPushButton*  m_lvlEditLblBtn    = nullptr;
+    QPushButton*  m_lvlScribbleBtn   = nullptr;
+    QPushButton*  m_lvlChooseIconBtn = nullptr;
+    QPushButton*  m_lvlClearIconBtn  = nullptr;
+    QPushButton*  m_lvlChooseColorBtn = nullptr;
+    QPushButton*  m_lvlClearColorBtn  = nullptr;
+    QPushButton*  m_lvlUpBtn         = nullptr;
+    QPushButton*  m_lvlDownBtn       = nullptr;
+
     QSpinBox*     m_longPressSpin     = nullptr;
     QCheckBox*    m_offAtEndCheck     = nullptr;
     QCheckBox*    m_monitorCheck      = nullptr;
-
-    // ---- UI: input selection --------------------------------------------
     InputSelectionWidget* m_triggerInputSel = nullptr;
     InputSelectionWidget* m_popupInputSel   = nullptr;
-
     QDialogButtonBox* m_buttons = nullptr;
+
+    bool m_rebuildingPresetTable = false;
+
+    static constexpr int kPresetNameColumn    = 0;
+    static constexpr int kPresetFirstDmxColumn = 1;
+    static constexpr int kDataRowOffset = 0;
 };

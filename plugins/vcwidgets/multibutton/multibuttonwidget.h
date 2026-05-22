@@ -17,17 +17,46 @@
 #include <QPaintEvent>
 #include <QElapsedTimer>
 #include <QPixmap>
+#include <QColor>
 #include <QHash>
+#include <QMap>
 #include <QMenu>
+#include <QMutex>
 
 #include "vcwidget.h"
+#include "genericfader.h"
 #include "functionparent.h"
 #include "scenevalue.h"
+#include "dmxsource.h"
 
 class Doc;
 class Function;
 
-class MultiButtonWidget : public VCWidget
+enum class MultiButtonMode
+{
+    Function,
+    Level
+};
+
+struct LevelChannelBinding
+{
+    quint32 fixtureId = 0;
+    quint32 channel   = 0;
+
+    bool operator==(const LevelChannelBinding& o) const
+    { return fixtureId == o.fixtureId && channel == o.channel; }
+};
+
+struct LevelPreset
+{
+    QString       label;
+    QString       iconPath;
+    QColor        color;      // invalid = use default widget background
+    bool          hideName = false;  // true = no text on button (user cleared name)
+    QList<quint8> values;   // parallel to m_levelChannelBindings
+};
+
+class MultiButtonWidget : public VCWidget, public DMXSource
 {
     Q_OBJECT
 
@@ -38,12 +67,22 @@ public:
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
 
+    // ---- Mode ------------------------------------------------------------
+    MultiButtonMode widgetMode() const { return m_mode; }
+    void setWidgetMode(MultiButtonMode mode);
+
     // ---- Function list management ----------------------------------------
     void           setEntries(const QList<quint32>& ids, const QStringList& labels,
                               const QStringList& iconPaths = QStringList());
     QList<quint32> functionIds()    const { return m_functionIds; }
     QStringList    functionLabels() const { return m_functionLabels; }
     QStringList    iconPaths()      const { return m_iconPaths; }
+
+    // ---- Level mode ------------------------------------------------------
+    void setLevelConfig(const QList<LevelChannelBinding>& bindings,
+                        const QList<LevelPreset>& presets);
+    QList<LevelChannelBinding> levelChannelBindings() const { return m_levelChannelBindings; }
+    QList<LevelPreset>         levelPresets()         const { return m_levelPresets; }
 
     void setCurrentIndex(int idx);    // -1 = none active (calls activate internally)
     int  currentIndex()  const { return m_currentIndex; }
@@ -62,6 +101,9 @@ public:
 
     // ---- FunctionParent (required for Function::start/stop) --------------
     FunctionParent functionParent() const;
+
+    // ---- DMXSource -------------------------------------------------------
+    void writeDMX(MasterTimer* timer, QList<Universe*> universes) override;
 
     // ---- VCWidget overrides ----------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
@@ -91,22 +133,44 @@ protected:
 
 private:
     void cycleNext();
-    void activate(int idx);   // stop prev, start new
+    void activate(int idx);
     void stopCurrent();
     void showPopupMenu(const QPoint& globalPos);
 
-    void rebuildSceneCache();   // rebuild m_cachedSceneValues from m_functionIds
+    QString popupMenuTextForEntry(int idx) const;
 
-    QString   activeFunctionCaption() const;   // current function name for display
+    void addLevelPresetMenuRow(QMenu* menu, int index, bool selected);
+
+    void rebuildSceneCache();
+    void updateDmxRegistration();
+    void releaseLevelFaders();
+    void reactivateLevelPreset();
+
+    int     entryCount() const;
+    QString entryLabel(int idx) const;
+    QString levelPresetDisplayName(int idx) const;
+    QString entryIconPath(int idx) const;
+
+    QString   activeFunctionCaption() const;
     Function* functionAt(int idx) const;
-    QPixmap   iconForEntry(int idx) const;     // from cache or loaded
+    QPixmap   iconForEntry(int idx) const;
+
+    // ---- Mode ------------------------------------------------------------
+    MultiButtonMode m_mode = MultiButtonMode::Function;
 
     // ---- Function list state --------------------------------------------
     QList<quint32> m_functionIds;
-    QStringList    m_functionLabels;   // parallel; empty string = use fn->name()
-    QStringList    m_iconPaths;        // parallel; empty string = no icon
+    QStringList    m_functionLabels;
+    QStringList    m_iconPaths;
+
+    // ---- Level mode state -----------------------------------------------
+    QList<LevelChannelBinding> m_levelChannelBindings;
+    QList<LevelPreset>         m_levelPresets;
+    mutable QMutex     m_dmxMutex;
+    QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
+
     int            m_currentIndex = -1;
-    bool           m_visualOnly   = false;   // true if index set by monitor, not user action
+    bool           m_visualOnly   = false;
 
     // ---- Icon cache (keyed by entry index) ------------------------------
     mutable QHash<int, QPixmap> m_iconCache;
@@ -114,7 +178,7 @@ private:
     // ---- Monitor --------------------------------------------------------
     bool                         m_monitorChannelValues = false;
     QTimer*                      m_channelMonitorTimer  = nullptr;
-    QList<QList<SceneValue>>     m_cachedSceneValues;   // parallel to m_functionIds
+    QList<QList<SceneValue>>     m_cachedSceneValues;
     QElapsedTimer                m_lastActivationTime;
 
     // ---- Settings --------------------------------------------------------
