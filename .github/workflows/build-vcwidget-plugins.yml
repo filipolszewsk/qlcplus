@@ -1,14 +1,6 @@
 name: Build VC Widget Plugins (.qlcvcw)
 
 on:
-  push:
-    branches: [ master, main ]
-    paths:
-      - 'plugins/vcwidgets/**'
-      - 'ui/src/virtualconsole/vcwidget*.h'
-      - 'ui/src/virtualconsole/vcwidgetplugininterface.h'
-      - 'engine/src/*.h'
-      - '.github/workflows/build-vcwidget-plugins.yml'
   workflow_dispatch:
   workflow_call:
 

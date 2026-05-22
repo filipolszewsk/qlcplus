@@ -1,0 +1,45 @@
+name: CI — Build All
+
+# Jeden workflow rządzi wszystkimi buildami.
+# Każdy push → macOS DMG + Windows EXE + Linux AppImage + .qlcvcw — wszystko w jednym runie.
+# Poszczególne workflow'y (build-macos-v4.yml itp.) mają tylko workflow_dispatch i workflow_call.
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - fix/vcslider-properties-perf
+      - perf/cache-paramcount-per-tick
+      - perf/cache-paramcount-in-rgbscript
+      - perf/direct-jsvalue-iteration
+      - fix/efx-relative-noncontig
+      - fix/fixturegroup-batch-update
+      - fix/efx-fader-cleanup-on-group-rebuild
+      - fix/vcxypad-arm-on-rebuild
+      - feature/windows-installer-workflow
+      - feature/step-index-output-with-installer
+      - fix/cuelist-crossfade-reapply
+      - fix/windows-tls-openssl
+      - fix/windows-remove-openssl-dlls
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    uses: ./.github/workflows/build-macos-v4.yml
+
+  build-windows:
+    uses: ./.github/workflows/build-windows-v4.yml
+
+  build-linux:
+    uses: ./.github/workflows/build-linux-v4.yml
+
+  build-bigsur:
+    uses: ./.github/workflows/dmg-macos-intel-bigsur.yml
+
+  build-plugins:
+    uses: ./.github/workflows/build-vcwidget-plugins.yml
