@@ -1637,6 +1637,9 @@ void PresetTableWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
 {
     VCWidget::toClipboardJson(obj, doc);
 
+    /* Sync any pending UI edits to m_rows/m_columns (same as saveXML does) */
+    const_cast<PresetTableWidget*>(this)->syncAllDataFromTable();
+
     QMutexLocker lk(const_cast<QMutex*>(&m_stateMutex));
 
     obj["crossfadeEnabled"] = m_crossfadeEnabled;
@@ -1817,7 +1820,7 @@ void PresetTableWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_stagedRow.fill(-1, m_outputs.size());
 
     lk.unlock();
-    QMetaObject::invokeMethod(this, "rebuildTable", Qt::QueuedConnection);
+    rebuildTable();
 }
 
 // ==========================================================================
