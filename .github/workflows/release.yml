@@ -78,9 +78,15 @@ jobs:
     if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
     uses: ./.github/workflows/build-linux-v4.yml
 
+  # Wywołaj workflow macOS Intel Big Sur (opcjonalny — padnięcie nie blokuje release'a)
+  build-macos-bigsur:
+    needs: [create-tag]
+    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    uses: ./.github/workflows/dmg-macos-intel-bigsur.yml
+
   # Pobierz artefakty z wszystkich buildów i utwórz GitHub Release
   create-release:
-    needs: [build-windows, build-macos, build-linux, create-tag]
+    needs: [build-windows, build-macos, build-linux, build-macos-bigsur, create-tag]
     if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' && needs.build-linux.result == 'success'
     runs-on: ubuntu-latest
     steps:
