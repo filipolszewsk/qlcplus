@@ -265,13 +265,17 @@ jobs:
           retention-days: 7
 
   # ============================================================
-  # Package into .qlcvcw (ZIP with all platform binaries)
+  # Package + upload one .qlcvcw per plugin (separate artifacts)
   # ============================================================
   package-qlcvcw:
     needs: build-plugins
     if: always() && needs.build-plugins.result != 'cancelled'
     runs-on: ubuntu-22.04
-    name: Package .qlcvcw
+    name: Package ${{ matrix.plugin }}
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [presettable, multibutton, dmxnumeric, infinityencoder]
 
     steps:
       - name: Checkout
@@ -284,64 +288,69 @@ jobs:
           path: collected/
           merge-multiple: false
 
-      - name: List collected files
-        run: find collected/ -type f | sort
-
-      - name: Package .qlcvcw files
+      - name: Package .qlcvcw
+        id: pack
         shell: python3 {0}
         run: |
           import os, json, zipfile
 
-          PLUGINS = os.environ["PLUGINS"].split()
-          PLATFORM_DIRS = {
+          plugin = os.environ["PLUGIN"]
+          manifest_path = f"plugins/vcwidgets/{plugin}/manifest.json"
+          if not os.path.exists(manifest_path):
+              print(f"SKIP {plugin}: no manifest.json")
+              open(os.environ["GITHUB_OUTPUT"], "a").write("skip=true\n")
+              raise SystemExit(0)
+
+          with open(manifest_path) as f:
+              manifest = json.load(f)
+
+          version = manifest.get("version", "1.0.0")
+          out_name = f"{plugin}-{version}.qlcvcw"
+
+          platform_dirs = {
               "macos_arm64": "collected/vcwidget-binaries-macos_arm64",
               "linux_x64":   "collected/vcwidget-binaries-linux_x64",
               "windows_x64": "collected/vcwidget-binaries-windows_x64",
           }
-          LIB_NAMES = {
-              "macos_arm64": lambda p: f"lib{p}_vcwidget.dylib",
-              "linux_x64":   lambda p: f"lib{p}_vcwidget.so",
-              "windows_x64": lambda p: f"{p}_vcwidget.dll",
+          lib_names = {
+              "macos_arm64": f"lib{plugin}_vcwidget.dylib",
+              "linux_x64":   f"lib{plugin}_vcwidget.so",
+              "windows_x64": f"{plugin}_vcwidget.dll",
           }
 
-          os.makedirs("qlcvcw", exist_ok=True)
+          os.makedirs("out", exist_ok=True)
+          out_path = f"out/{out_name}"
+          added = {}
 
-          for plugin in PLUGINS:
-              manifest_path = f"plugins/vcwidgets/{plugin}/manifest.json"
-              if not os.path.exists(manifest_path):
-                  print(f"SKIP {plugin}: no manifest.json")
-                  continue
+          with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+              zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+              for platform_key, lib_dir in platform_dirs.items():
+                  lib_name = lib_names[platform_key]
+                  lib_path = os.path.join(lib_dir, lib_name)
+                  if os.path.exists(lib_path):
+                      zf.write(lib_path, lib_name)
+                      added[platform_key] = lib_name
+                      print(f"  [{platform_key}] {lib_name}")
+                  else:
+                      print(f"  [{platform_key}] MISSING: {lib_path}")
 
-              with open(manifest_path) as f:
-                  manifest = json.load(f)
+          if not added:
+              print(f"ERROR: no binaries found for {plugin}")
+              open(os.environ["GITHUB_OUTPUT"], "a").write("skip=true\n")
+              raise SystemExit(1)
 
-              version = manifest.get("version", "1.0.0")
-              out_name = f"{plugin}-{version}.qlcvcw"
-              added = {}
-
-              with zipfile.ZipFile(f"qlcvcw/{out_name}", "w", zipfile.ZIP_DEFLATED) as zf:
-                  zf.writestr("manifest.json", json.dumps(manifest, indent=2))
-                  for platform_key, lib_dir in PLATFORM_DIRS.items():
-                      lib_name = LIB_NAMES[platform_key](plugin)
-                      lib_path = os.path.join(lib_dir, lib_name)
-                      if os.path.exists(lib_path):
-                          zf.write(lib_path, lib_name)
-                          added[platform_key] = lib_name
-                          print(f"  [{platform_key}] {lib_name}")
-                      else:
-                          print(f"  [{platform_key}] MISSING: {lib_path}")
-
-              platforms_str = "+".join(added.keys()) if added else "EMPTY"
-              print(f"=> {out_name}  [{platforms_str}]")
+          platforms_str = "+".join(added.keys())
+          print(f"=> {out_name}  [{platforms_str}]")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh:
+              gh.write(f"filename={out_name}\n")
+              gh.write("skip=false\n")
         env:
-          PLUGINS: ${{ env.PLUGINS }}
+          PLUGIN: ${{ matrix.plugin }}
 
-      - name: List .qlcvcw files
-        run: ls -lh qlcvcw/
-
-      - name: Upload .qlcvcw artifacts
+      - name: Upload .qlcvcw
+        if: steps.pack.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: vcwidget-plugins-qlcvcw
-          path: qlcvcw/
+          name: ${{ steps.pack.outputs.filename }}
+          path: out/${{ steps.pack.outputs.filename }}
           retention-days: 90
