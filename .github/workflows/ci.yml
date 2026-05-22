@@ -22,6 +22,9 @@ on:
       - fix/cuelist-crossfade-reapply
       - fix/windows-tls-openssl
       - fix/windows-remove-openssl-dlls
+    paths-ignore:
+      - 'plugins/vcwidgets/**'
+      - '.github/workflows/build-vcwidget-plugins.yml'
   workflow_dispatch:
 
 concurrency:
