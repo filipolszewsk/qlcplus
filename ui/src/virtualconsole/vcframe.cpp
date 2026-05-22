@@ -1318,6 +1318,39 @@ void VCFrame::toClipboardJson(QJsonObject &obj, const Doc *doc) const
 {
     VCWidget::toClipboardJson(obj, doc);
 
+    /* Frame-specific appearance */
+    obj["showHeader"]      = m_showHeader;
+    obj["showEnableButton"]= m_showEnableButton;
+    obj["showBorder"]      = m_showBorder;
+
+    /* Multipage */
+    obj["multipageMode"]   = m_multiPageMode;
+    obj["totalPages"]      = (int)m_totalPagesNumber;
+    obj["pagesLoop"]       = m_pagesLoop;
+    obj["perPageSize"]     = m_perPageSize;
+    QJsonObject pageSzObj;
+    for (auto it = m_pageSizes.constBegin(); it != m_pageSizes.constEnd(); ++it)
+        pageSzObj[QString::number(it.key())] = QString("%1x%2").arg(it.value().width()).arg(it.value().height());
+    obj["pageSizes"] = pageSzObj;
+
+    /* Key sequences */
+    obj["enableKeySeq"]      = m_enableKeySequence.toString();
+    obj["nextPageKeySeq"]    = m_nextPageKeySequence.toString();
+    obj["prevPageKeySeq"]    = m_previousPageKeySequence.toString();
+    /* Page shortcuts */
+    QJsonArray scArr;
+    for (const VCFramePageShortcut *sc : m_pageShortcuts)
+    {
+        QJsonObject so;
+        so["id"]       = (int)sc->m_id;
+        so["page"]     = sc->m_page;
+        so["name"]     = sc->name();
+        so["keySeq"]   = sc->m_keySequence.toString();
+        so["inputVal"] = sc->m_inputValue;
+        scArr.append(so);
+    }
+    obj["pageShortcuts"] = scArr;
+
     /* Serialize direct children */
     QJsonArray children;
     const QObjectList &objs = QObject::children();
@@ -1332,6 +1365,50 @@ void VCFrame::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     }
     if (!children.isEmpty())
         obj["children"] = children;
+}
+
+void VCFrame::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+
+    /* Header/border */
+    setHeaderVisible(obj["showHeader"].toBool(true));
+    setEnableButtonVisible(obj["showEnableButton"].toBool(true));
+    setShowBorder(obj["showBorder"].toBool(true));
+
+    /* Multipage */
+    setMultipageMode(obj["multipageMode"].toBool());
+    setTotalPagesNumber(obj["totalPages"].toInt(1));
+    setPagesLoop(obj["pagesLoop"].toBool());
+    setPerPageSize(obj["perPageSize"].toBool());
+    QJsonObject pageSzObj = obj["pageSizes"].toObject();
+    m_pageSizes.clear();
+    for (auto it = pageSzObj.constBegin(); it != pageSzObj.constEnd(); ++it)
+    {
+        QStringList parts = it.value().toString().split('x');
+        if (parts.size() == 2)
+            m_pageSizes[it.key().toInt()] = QSize(parts[0].toInt(), parts[1].toInt());
+    }
+
+    /* Key sequences */
+    setEnableKeySequence(QKeySequence(obj["enableKeySeq"].toString()));
+    setNextPageKeySequence(QKeySequence(obj["nextPageKeySeq"].toString()));
+    setPreviousPageKeySequence(QKeySequence(obj["prevPageKeySeq"].toString()));
+
+    /* Page shortcuts */
+    resetShortcuts();
+    QList<VCFramePageShortcut*> newShortcuts;
+    for (const QJsonValue &v : obj["pageShortcuts"].toArray())
+    {
+        QJsonObject so = v.toObject();
+        VCFramePageShortcut *sc = new VCFramePageShortcut(so["page"].toInt(), (quint8)so["id"].toInt());
+        sc->setName(so["name"].toString());
+        sc->m_keySequence = QKeySequence(so["keySeq"].toString());
+        sc->m_inputValue  = so["inputVal"].toInt(-1);
+        newShortcuts.append(sc);
+    }
+    if (!newShortcuts.isEmpty())
+        setShortcuts(newShortcuts);
 }
 
 void VCFrame::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)

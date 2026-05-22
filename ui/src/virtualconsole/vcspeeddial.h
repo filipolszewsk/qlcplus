@@ -101,6 +101,11 @@ public:
     /** @reimp */
     VCWidget* createCopy(VCWidget* parent);
 
+    /** @reimp */
+    void toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+    /** @reimp */
+    void fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
+
 protected:
     /** @reimp */
     bool copyFrom(const VCWidget* widget);

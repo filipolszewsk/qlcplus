@@ -1592,7 +1592,47 @@ void VirtualConsole::slotEditPasteFromClipboard()
         return;
     }
 
-    /* Find the target frame -- prefer selected frame, fall back to root */
+    const QJsonArray clipWidgets = root["widgets"].toArray();
+
+    /* --- Paste Properties branch ---
+     * Triggered when clipboard has exactly one widget whose type matches ALL
+     * selected widgets (and none of them accept children). */
+    if (clipWidgets.size() == 1
+        && !m_selectedWidgets.isEmpty())
+    {
+        int srcType = clipWidgets.first().toObject()["widgetType"].toInt(-1);
+        bool allSameLeaf = (srcType >= 0);
+        for (VCWidget *w : m_selectedWidgets)
+        {
+            if (w->type() != srcType || w->allowChildren())
+            {
+                allSameLeaf = false;
+                break;
+            }
+        }
+        if (allSameLeaf)
+        {
+            VCWidget *ghost = createGhostFromJson(clipWidgets.first().toObject());
+            if (ghost)
+            {
+                VCPastePropertiesDialog dlg(ghost, m_selectedWidgets.first(), this);
+                if (dlg.exec() == QDialog::Accepted)
+                {
+                    VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
+                    if (flags != 0)
+                    {
+                        foreach (VCWidget *w, m_selectedWidgets)
+                            w->applyPropertiesFrom(ghost, flags);
+                        m_doc->setModified();
+                    }
+                }
+                delete ghost;
+                return;
+            }
+        }
+    }
+
+    /* --- Import Widgets branch (default: create new widgets) --- */
     VCFrame *targetFrame = nullptr;
     for (VCWidget *w : m_selectedWidgets)
     {
@@ -1610,6 +1650,32 @@ void VirtualConsole::slotEditPasteFromClipboard()
     dlg.exec();
 }
 
+VCWidget* VirtualConsole::createGhostFromJson(const QJsonObject &obj)
+{
+    int wType = obj["widgetType"].toInt(-1);
+    if (wType < 0)
+        return nullptr;
+
+    VCWidget *widget = nullptr;
+    switch (static_cast<VCWidget::WidgetType>(wType))
+    {
+        case VCWidget::ButtonWidget:    widget = new VCButton(nullptr, m_doc);    break;
+        case VCWidget::SliderWidget:    widget = new VCSlider(nullptr, m_doc);    break;
+        case VCWidget::LabelWidget:     widget = new VCLabel(nullptr, m_doc);     break;
+        case VCWidget::FrameWidget:     widget = new VCFrame(nullptr, m_doc);     break;
+        case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(nullptr, m_doc); break;
+        case VCWidget::XYPadWidget:     widget = new VCXYPad(nullptr, m_doc);     break;
+        case VCWidget::CueListWidget:   widget = new VCCueList(nullptr, m_doc);   break;
+        case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(nullptr, m_doc); break;
+        case VCWidget::AnimationWidget: widget = new VCMatrix(nullptr, m_doc);    break;
+        case VCWidget::ClockWidget:     widget = new VCClock(nullptr, m_doc);     break;
+        default: return nullptr;
+    }
+
+    widget->fromClipboardJson(obj, m_doc);
+    return widget;
+}
+
 void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
                                             VCFrame *parentFrame, int &count)
 {
@@ -1624,88 +1690,24 @@ void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
 
         switch (static_cast<VCWidget::WidgetType>(wType))
         {
-            case VCWidget::ButtonWidget:
-            {
-                widget = new VCButton(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SliderWidget:
-            {
-                widget = new VCSlider(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::LabelWidget:
-            {
-                widget = new VCLabel(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::FrameWidget:
-            {
-                widget = new VCFrame(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SoloFrameWidget:
-            {
-                widget = new VCSoloFrame(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::XYPadWidget:
-            {
-                widget = new VCXYPad(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::CueListWidget:
-            {
-                widget = new VCCueList(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::SpeedDialWidget:
-            {
-                widget = new VCSpeedDial(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::AnimationWidget:
-            {
-                widget = new VCMatrix(parentFrame, m_doc);
-            }
-            break;
-            case VCWidget::ClockWidget:
-            {
-                widget = new VCClock(parentFrame, m_doc);
-            }
-            break;
-            default:
-                continue;
+            case VCWidget::ButtonWidget:    widget = new VCButton(parentFrame, m_doc);    break;
+            case VCWidget::SliderWidget:    widget = new VCSlider(parentFrame, m_doc);    break;
+            case VCWidget::LabelWidget:     widget = new VCLabel(parentFrame, m_doc);     break;
+            case VCWidget::FrameWidget:     widget = new VCFrame(parentFrame, m_doc);     break;
+            case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(parentFrame, m_doc); break;
+            case VCWidget::XYPadWidget:     widget = new VCXYPad(parentFrame, m_doc);     break;
+            case VCWidget::CueListWidget:   widget = new VCCueList(parentFrame, m_doc);   break;
+            case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(parentFrame, m_doc); break;
+            case VCWidget::AnimationWidget: widget = new VCMatrix(parentFrame, m_doc);    break;
+            case VCWidget::ClockWidget:     widget = new VCClock(parentFrame, m_doc);     break;
+            default: continue;
         }
 
         if (!widget)
             continue;
 
-        /* Apply common appearance from JSON */
-        widget->setCaption(obj["caption"].toString());
-        int x = obj["x"].toInt();
-        int y = obj["y"].toInt();
-        int w = obj["width"].toInt(100);
-        int h = obj["height"].toInt(50);
-        widget->setGeometry(QRect(x, y, w, h));
-
-        if (obj.contains("appearance"))
-        {
-            QJsonObject appear = obj["appearance"].toObject();
-            if (appear.contains("bgColor"))
-                widget->setBackgroundColor(QColor(appear["bgColor"].toString()));
-            if (appear.contains("bgImage"))
-                widget->setBackgroundImage(appear["bgImage"].toString());
-            if (appear.contains("fgColor"))
-                widget->setForegroundColor(QColor(appear["fgColor"].toString()));
-            if (appear.contains("font"))
-            {
-                QFont f;
-                f.fromString(appear["font"].toString());
-                widget->setFont(f);
-            }
-            widget->setFrameStyle(appear["frameStyle"].toInt());
-        }
+        /* Populate all properties (common + widget-specific) from JSON */
+        widget->fromClipboardJson(obj, m_doc);
 
         addWidgetInMap(widget);
         connectWidgetToParent(widget, parentFrame);

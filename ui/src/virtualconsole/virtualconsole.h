@@ -317,6 +317,11 @@ public:
      *  Increments @p count for each widget created. */
     void importWidgetsFromJson(const QJsonArray &widgets, VCFrame *parentFrame, int &count);
 
+    /** Allocate a ghost widget of the correct type from clipboard JSON and
+     *  call fromClipboardJson() on it. The widget is not added to any parent
+     *  or widget map — caller must delete it after use. */
+    VCWidget* createGhostFromJson(const QJsonObject &obj);
+
     /*********************************************************************
      * Edit menu callbacks
      *********************************************************************/

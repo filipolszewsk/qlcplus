@@ -396,6 +396,8 @@ public:
 
     /** @reimp: serializes this frame and all direct children recursively. */
     void toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+    /** @reimp */
+    void fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
 
     /*********************************************************************
      * Properties

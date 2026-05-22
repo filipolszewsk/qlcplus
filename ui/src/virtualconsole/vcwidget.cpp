@@ -51,6 +51,7 @@
 #include "virtualconsole.h"
 #include "inputpatch.h"
 #include "vcwidget.h"
+#include "function.h"
 #include "doc.h"
 
 #define GRID_RESOLUTION 5
@@ -1005,15 +1006,95 @@ void VCWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
         appear["font"] = font().toString();
     appear["frameStyle"] = frameStyle();
     obj["appearance"] = appear;
+
+    /* Input sources */
+    QJsonArray inputsArr;
+    QHashIterator<quint8, QSharedPointer<QLCInputSource>> iit(m_inputs);
+    while (iit.hasNext())
+    {
+        iit.next();
+        const auto& src = iit.value();
+        if (!src || !src->isValid())
+            continue;
+        QJsonObject s;
+        s["id"]      = (int)iit.key();
+        s["universe"] = (int)src->universe();
+        s["channel"]  = (int)src->channel();
+        s["lower"]   = (int)src->feedbackValue(QLCInputFeedback::LowerValue);
+        s["upper"]   = (int)src->feedbackValue(QLCInputFeedback::UpperValue);
+        s["monitor"] = (int)src->feedbackValue(QLCInputFeedback::MonitorValue);
+        QString ep = extraParamToString(src->feedbackExtraParams(QLCInputFeedback::LowerValue));
+        if (!ep.isEmpty()) s["lowerExtra"] = ep;
+        ep = extraParamToString(src->feedbackExtraParams(QLCInputFeedback::UpperValue));
+        if (!ep.isEmpty()) s["upperExtra"] = ep;
+        ep = extraParamToString(src->feedbackExtraParams(QLCInputFeedback::MonitorValue));
+        if (!ep.isEmpty()) s["monitorExtra"] = ep;
+        inputsArr.append(s);
+    }
+    if (!inputsArr.isEmpty())
+        obj["inputs"] = inputsArr;
 }
 
-VCWidget* VCWidget::fromClipboardJson(const QJsonObject &obj, VCWidget *parent, Doc *doc)
+void VCWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
 {
-    /* This factory is implemented in vcframe.cpp to avoid circular includes.
-     * It is declared here for the API. The implementation is in VCFrame. */
-    Q_UNUSED(obj)
-    Q_UNUSED(parent)
     Q_UNUSED(doc)
+    setCaption(obj["caption"].toString());
+    int w = qMax(1, obj["width"].toInt(100));
+    int h = qMax(1, obj["height"].toInt(50));
+    setGeometry(QRect(obj["x"].toInt(), obj["y"].toInt(), w, h));
+    setPage(obj["page"].toInt());
+    m_allowResize = obj["allowResize"].toBool(true);
+
+    if (obj.contains("appearance"))
+    {
+        QJsonObject a = obj["appearance"].toObject();
+        if (a.contains("bgColor"))
+            setBackgroundColor(QColor(a["bgColor"].toString()));
+        if (a.contains("bgImage"))
+            setBackgroundImage(a["bgImage"].toString());
+        if (a.contains("fgColor"))
+            setForegroundColor(QColor(a["fgColor"].toString()));
+        if (a.contains("font"))
+        {
+            QFont f;
+            f.fromString(a["font"].toString());
+            setFont(f);
+        }
+        if (a.contains("frameStyle"))
+            m_frameStyle = a["frameStyle"].toInt();
+    }
+
+    if (obj.contains("inputs"))
+    {
+        m_inputs.clear();
+        for (const QJsonValue &v : obj["inputs"].toArray())
+        {
+            QJsonObject s = v.toObject();
+            quint8 id = (quint8)s["id"].toInt();
+            auto src = QSharedPointer<QLCInputSource>(
+                new QLCInputSource((quint32)s["universe"].toInt(),
+                                   (quint32)s["channel"].toInt()));
+            src->setFeedbackValue(QLCInputFeedback::LowerValue,   s["lower"].toInt(0));
+            src->setFeedbackValue(QLCInputFeedback::UpperValue,   s["upper"].toInt(255));
+            src->setFeedbackValue(QLCInputFeedback::MonitorValue, s["monitor"].toInt(128));
+            if (s.contains("lowerExtra"))
+                src->setFeedbackExtraParams(QLCInputFeedback::LowerValue, s["lowerExtra"].toInt());
+            if (s.contains("upperExtra"))
+                src->setFeedbackExtraParams(QLCInputFeedback::UpperValue, s["upperExtra"].toInt());
+            if (s.contains("monitorExtra"))
+                src->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, s["monitorExtra"].toInt());
+            m_inputs[id] = src;
+        }
+    }
+}
+
+Function* VCWidget::resolveFunctionByName(const QString &name, Doc *doc)
+{
+    if (name.isEmpty() || doc == nullptr)
+        return nullptr;
+    for (Function *f : doc->functions())
+        if (f && f->name() == name)
+            return f;
     return nullptr;
 }
 
