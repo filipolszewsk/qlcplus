@@ -345,8 +345,10 @@ PTColumn PresetTableColumnDialog::column() const
         }
     }
 
-    // Read binding (FG mode)
-    if (m_mode == PTMode::FixtureGroup && m_bindGrp && m_bindGrp->isVisible())
+    // Read binding (FG mode).
+    // NOTE: do NOT use m_bindGrp->isVisible() here — QDialog::accept() hides the dialog
+    // (and all children) before exec() returns, so isVisible() is always false at this point.
+    if (m_mode == PTMode::FixtureGroup && m_fxTypeCombo && !m_fxTypeEntries.isEmpty())
     {
         int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
         int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
