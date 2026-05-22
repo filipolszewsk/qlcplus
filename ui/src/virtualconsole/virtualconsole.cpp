@@ -1691,16 +1691,16 @@ VCWidget* VirtualConsole::createGhostFromJson(const QJsonObject &obj)
     VCWidget *widget = nullptr;
     switch (static_cast<VCWidget::WidgetType>(wType))
     {
-        case VCWidget::ButtonWidget:    widget = new VCButton(nullptr, m_doc);    break;
-        case VCWidget::SliderWidget:    widget = new VCSlider(nullptr, m_doc);    break;
-        case VCWidget::LabelWidget:     widget = new VCLabel(nullptr, m_doc);     break;
-        case VCWidget::FrameWidget:     widget = new VCFrame(nullptr, m_doc);     break;
-        case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(nullptr, m_doc); break;
-        case VCWidget::XYPadWidget:     widget = new VCXYPad(nullptr, m_doc);     break;
-        case VCWidget::CueListWidget:   widget = new VCCueList(nullptr, m_doc);   break;
-        case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(nullptr, m_doc); break;
-        case VCWidget::AnimationWidget: widget = new VCMatrix(nullptr, m_doc);    break;
-        case VCWidget::ClockWidget:     widget = new VCClock(nullptr, m_doc);     break;
+        case VCWidget::ButtonWidget:    widget = new VCButton(m_contents, m_doc);    break;
+        case VCWidget::SliderWidget:    widget = new VCSlider(m_contents, m_doc);    break;
+        case VCWidget::LabelWidget:     widget = new VCLabel(m_contents, m_doc);     break;
+        case VCWidget::FrameWidget:     widget = new VCFrame(m_contents, m_doc);     break;
+        case VCWidget::SoloFrameWidget: widget = new VCSoloFrame(m_contents, m_doc); break;
+        case VCWidget::XYPadWidget:     widget = new VCXYPad(m_contents, m_doc);     break;
+        case VCWidget::CueListWidget:   widget = new VCCueList(m_contents, m_doc);   break;
+        case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(m_contents, m_doc); break;
+        case VCWidget::AnimationWidget: widget = new VCMatrix(m_contents, m_doc);    break;
+        case VCWidget::ClockWidget:     widget = new VCClock(m_contents, m_doc);     break;
         default: return nullptr;
     }
 
