@@ -1,0 +1,68 @@
+---
+description: Correct macOS install process for GRIDqlc (Qt 6.8.1 LTS, Apple Silicon). ALWAYS use this when building or installing.
+alwaysApply: true
+---
+
+# GRIDqlc macOS Install — CRITICAL RULES
+
+## NEVER touch /Applications/QLC+.app
+Install ONLY to `~/QLC+.app`. Never `cp` or `sudo` to `/Applications`. The user opens the app from their home directory.
+
+## Qt is pinned to 6.8.1 LTS — DO NOT use Homebrew Qt
+Qt is installed via **aqtinstall** to `~/Qt/6.8.1/macos/`.
+**NEVER use `/opt/homebrew/opt/qt*` or `/opt/homebrew/lib/cmake/Qt6`** — Homebrew Qt is rolling (currently 6.10+) and breaks plugin compatibility.
+
+Plugin developers must use the same Qt 6.8.1 to build their `.dylib` files — this is the plugin ABI contract.
+
+## Qt 6.8.1 paths on this system (aqtinstall)
+- `~/Qt/6.8.1/macos/bin/qmake`
+- `~/Qt/6.8.1/macos/lib/cmake` ← cmake prefix path
+- `~/Qt/6.8.1/macos/plugins`   ← Qt plugins (imageformats, tls, etc.)
+- Qt is bundled into `~/QLC+.app` by `macdeployqt` — frameworks inside the bundle at `Contents/Frameworks/Qt*.framework`
+
+## Install — ALWAYS use the script
+
+```bash
+cd "/Users/filipolszewski/Documents/qlc projekty/qlcplus"
+./install.sh          # build + install + verify (Qt 6.8.1 auto-detected)
+./install.sh verify   # verify existing install (any time)
+./install.sh setup    # one-time: install Qt 6.8.1 via aqtinstall
+```
+
+`install.sh` is the SINGLE source of truth. It:
+1. Checks for Qt 6.8.1 at `~/Qt/6.8.1/macos` (or `$QTDIR` env var)
+2. Auto-reconfigures cmake if build dir has wrong Qt (e.g. old Homebrew paths)
+3. Builds qlcplus + all I/O plugins
+4. Installs to `~/QLC+.app`
+5. Runs `macdeployqt` — bundles Qt 6.8.1 frameworks into the app
+6. Codesigns
+7. Verifies — fails loudly if anything is wrong, including wrong Qt version in user plugins
+
+## One-time Qt install (if needed)
+
+```bash
+./install.sh setup
+# or manually:
+pip3 install aqtinstall
+aqt install-qt mac desktop 6.8.1 clang_64 --outputdir ~/Qt \
+    -m qt5compat qt3d qtimageformats qtmultimedia qtserialport qtwebsockets
+```
+
+## DO NOT run install_name_tool to patch Qt paths
+Qt is bundled by macdeployqt. Patching Qt framework paths manually breaks the bundle.
+
+## DO NOT use cmake --install manually
+That skips the macdeployqt step and produces an app linked to external Qt paths (broken on other machines).
+
+## Quick verification after install
+
+```bash
+./install.sh verify
+# Must show: Qt bundled: 6.8.x (Qt 6.8.x LTS)
+# Must show: No Homebrew Qt references (bundle is self-contained)
+# Must show: No Qt 5 references
+```
+
+## VC Widget plugin compatibility
+User plugins at `~/Library/Application Support/QLC+/VCWidgets/` MUST be built with Qt 6.8.1.
+`./install.sh verify` checks and warns about Qt-mismatched plugins.

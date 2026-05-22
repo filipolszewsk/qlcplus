@@ -1,6 +1,6 @@
 # VC Widget Plugin — Przewodnik dla developerów
 
-> Wersja: 1.2 | QLC+ 4.14 / GRIDqlc | Qt 6 | macOS Apple Silicon
+> Wersja: 1.3 | QLC+ 4.14 / GRIDqlc | **Qt 6.8.1 LTS** | macOS Apple Silicon
 
 ---
 
@@ -742,12 +742,43 @@ endif()
 
 ## 12. Build na macOS Apple Silicon
 
-### Jednorazowe przygotowanie
+### Wymagana wersja Qt: 6.8.1 LTS (pinned)
+
+Plugin **musi** być zbudowany dokładnie na **Qt 6.8.1** — tej samej wersji którą używa oficjalny QLC+ / GRIDqlc.
+Qt 6.8 jest LTS (Long Term Support), obsługiwanym do końca 2027.
+
+> **Dlaczego dokładna wersja ma znaczenie?**  
+> Qt wbudowuje wersję do metadanych każdej biblioteki. Loader QLC+ sprawdza zgodność minor version (6.8.x) przy ładowaniu pluginu i odrzuca niezgodne z błędem *"incompatible Qt library"*. Plugin zbudowany na Qt 6.10 nie załaduje się w GRIDqlc na Qt 6.8 i odwrotnie.
+
+### Jednorazowe: instalacja Qt 6.8.1 przez aqtinstall
 
 ```bash
-# Znajdź Qt używany przez Twój build QLC+:
-grep CMAKE_PREFIX_PATH /path/to/qlcplus/build/CMakeCache.txt
-# → /opt/homebrew/lib/cmake   (użyj tego w cmake poniżej)
+# Zainstaluj aqtinstall (jeśli nie masz)
+pip3 install aqtinstall
+
+# Zainstaluj Qt 6.8.1 LTS (~3 GB) do ~/Qt/6.8.1/macos
+aqt install-qt mac desktop 6.8.1 clang_64 \
+    --outputdir ~/Qt \
+    -m qt5compat qt3d qtimageformats qtmultimedia qtserialport qtwebsockets
+```
+
+Po instalacji: `~/Qt/6.8.1/macos/bin/qmake --version` powinno zwrócić `Qt version 6.8.1`.
+
+**Alternatywnie:** skrypt `install.sh` z repo QLC+ ma wbudowaną komendę setup:
+
+```bash
+./install.sh setup
+```
+
+### Jednorazowe: build QLC+ hosta (wymagany do kompilacji pluginu)
+
+Plugin linkuje do `libqlcplusui.dylib` i `libqlcplusengine.dylib` — musisz mieć zbudowanego hosta.
+
+```bash
+# sklonuj repo i zbuduj host
+git clone https://github.com/<twoja-org>/qlcplus.git
+cd qlcplus
+./install.sh    # build + install do ~/QLC+.app
 ```
 
 ### Build pluginu
@@ -756,12 +787,16 @@ grep CMAKE_PREFIX_PATH /path/to/qlcplus/build/CMakeCache.txt
 cd plugins/vcwidgets/myplugin
 rm -rf build && mkdir build && cd build
 
+QLCPLUS_DIR="/path/to/qlcplus"     # katalog z kodem źródłowym QLC+
+QT_DIR="$HOME/Qt/6.8.1/macos"
+
 cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
-  -DQLCPLUS_SRC_DIR="/path/to/qlcplus" \
-  -DQLCPLUS_BUILD_DIR="/path/to/qlcplus/build" \
-  -DCMAKE_PREFIX_PATH="/opt/homebrew/lib/cmake" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+  -DQLCPLUS_SRC_DIR="$QLCPLUS_DIR" \
+  -DQLCPLUS_BUILD_DIR="$QLCPLUS_DIR/build" \
+  -DCMAKE_PREFIX_PATH="$QT_DIR/lib/cmake" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+  -DCMAKE_OSX_ARCHITECTURES=arm64
 
 cmake --build .
 ```
@@ -774,20 +809,14 @@ Po każdym buildzie:
 PLUGIN="./libmyplugin_vcwidget.dylib"
 BUNDLE="$HOME/QLC+.app"
 
-# Dodaj rpath do bundlu QLC+ (żeby plugin znalazł libqlcplusui.dylib)
+# Dodaj rpath do bundlu QLC+ (żeby plugin znalazł libqlcplusui.dylib + libqlcplusengine.dylib)
 install_name_tool -add_rpath "$BUNDLE/Contents/Frameworks" "$PLUGIN" 2>/dev/null || true
 
-# Napraw ścieżki Qt do zgodności z qt.conf bundlu
-for qtfw in QtCore QtGui QtWidgets; do
-  install_name_tool -change \
-    "/opt/homebrew/opt/qtbase/lib/$qtfw.framework/Versions/A/$qtfw" \
-    "/opt/homebrew/lib/$qtfw.framework/Versions/A/$qtfw" \
-    "$PLUGIN" 2>/dev/null || true
-done
-
-# Podpisz (macOS wymaga po modyfikacji binariów)
+# Podpisz (macOS wymaga po każdej modyfikacji binarnej)
 codesign --force --sign - "$PLUGIN"
 ```
+
+> **Uwaga:** nie musisz przerabiać ścieżek Qt w pluginie. Bundle QLC+ zawiera bundlowane frameworki Qt 6.8.1 (`macdeployqt`), a plugin linkuje do tych samych Qt frameworków przez rpath bundu.
 
 ### Instalacja do katalogu użytkownika
 
@@ -797,7 +826,7 @@ mkdir -p "$DEST"
 cp "$PLUGIN" "$DEST/"
 ```
 
-Uruchom QLC+ ponownie — plugin załaduje się automatycznie.
+QLC+ wykryje zmianę i przeładuje plugin automatycznie (hot-reload). Nie trzeba restartować aplikacji.
 
 ---
 
@@ -820,11 +849,12 @@ Klucze platform rozpoznawane przez QLC+:
 
 ```json
 {
-  "plugin_id":  "org.qlcplus.vcwidgets.myplugin",
-  "name":       "My Plugin",
-  "version":    "1.0.0",
-  "author":     "Imię Nazwisko",
+  "plugin_id":   "org.qlcplus.vcwidgets.myplugin",
+  "name":        "My Plugin",
+  "version":     "1.0.0",
+  "author":      "Imię Nazwisko",
   "description": "Co robi plugin.",
+  "qt_version":  "6.8.1",
   "platforms": {
     "macos_arm64": "libmyplugin_vcwidget.dylib",
     "macos_x64":   "libmyplugin_vcwidget.dylib",
@@ -833,6 +863,8 @@ Klucze platform rozpoznawane przez QLC+:
   }
 }
 ```
+
+> Pole `qt_version` informuje użytkownika (i przyszłe wersje loadera) z jakim Qt plugin był zbudowany. Powinno zawsze odpowiadać pinowanej wersji Qt SDK: **`6.8.1`**.
 
 ### Tworzenie paczki (Python)
 
@@ -892,11 +924,13 @@ endif()
 
 ---
 
-### ❌ Qt build z innym prefixem niż QLC+
+### ❌ Qt build z inną wersją Qt niż QLC+
 
-**Objaw:** `"built for a different Qt version or compiler"`.  
-**Diagnoza:** `grep CMAKE_PREFIX_PATH qlcplus/build/CMakeCache.txt` → użyj DOKŁADNIE tego samego prefixu.  
-**Fix:** `-DCMAKE_PREFIX_PATH="/opt/homebrew/lib/cmake"` (nie `qt@5`, nie `qt@6` — sprawdź cache!).
+**Objaw:** `"The plugin ... uses incompatible Qt library (6.10.x)"` lub podobny błąd z inną wersją.  
+**Diagnoza:** `otool -L libmyplugin_vcwidget.dylib | grep QtCore` — sprawdź `current version`. Musi być `6.8.x`.  
+**Przyczyna:** plugin zbudowany z Qt innym niż 6.8.1 (np. z Homebrew Qt który jest rolling i może być 6.10+).  
+**Fix:** użyj **TYLKO** Qt 6.8.1 z aqtinstall: `-DCMAKE_PREFIX_PATH="$HOME/Qt/6.8.1/macos/lib/cmake"`.  
+Nigdy nie używaj `/opt/homebrew/lib/cmake` — Homebrew aktualizuje Qt bez ostrzeżenia.
 
 ---
 
@@ -1064,28 +1098,37 @@ W Developer Mode:
 ```bash
 #!/usr/bin/env bash
 # dev_install.sh — umieść w katalogu pluginu
+# Wymaga Qt 6.8.1 via aqtinstall (~/Qt/6.8.1/macos)
 
 PLUGIN_NAME="dmxnumeric"
+QLCPLUS_DIR="$HOME/Documents/qlcplus"   # dostosuj do swojej ścieżki
+QT_DIR="$HOME/Qt/6.8.1/macos"
 BUILD_DIR="build"
 BUNDLE="$HOME/QLC+.app"
 DEST="$HOME/Library/Application Support/QLC+/VCWidgets"
 
-# Build
+# Skonfiguruj jeśli brak build dir
+if [ ! -d "$BUILD_DIR" ]; then
+    cmake -S . -B "$BUILD_DIR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DQLCPLUS_SRC_DIR="$QLCPLUS_DIR" \
+        -DQLCPLUS_BUILD_DIR="$QLCPLUS_DIR/build" \
+        -DCMAKE_PREFIX_PATH="$QT_DIR/lib/cmake" \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+        -DCMAKE_OSX_ARCHITECTURES=arm64
+fi
+
 cmake --build "$BUILD_DIR" || exit 1
 
 DYLIB="$BUILD_DIR/lib${PLUGIN_NAME}_vcwidget.dylib"
 
-# Naprawa rpath i codesign (wymagane po buildzie na macOS)
+# Dodaj rpath do bundle (szukanie libqlcplusui.dylib)
 install_name_tool -add_rpath "$BUNDLE/Contents/Frameworks" "$DYLIB" 2>/dev/null || true
-for fw in QtCore QtGui QtWidgets; do
-  install_name_tool -change \
-    "/opt/homebrew/opt/qtbase/lib/$fw.framework/Versions/A/$fw" \
-    "/opt/homebrew/lib/$fw.framework/Versions/A/$fw" \
-    "$DYLIB" 2>/dev/null || true
-done
+# Podpisz
 codesign --force --sign - "$DYLIB"
 
 # Kopiuj — QLC+ wykryje zmianę i przeładuje w tle
+mkdir -p "$DEST"
 cp "$DYLIB" "$DEST/"
 echo "Installed $PLUGIN_NAME → QLC+ will hot-reload in ~1s"
 ```

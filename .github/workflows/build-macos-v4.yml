@@ -33,6 +33,11 @@ jobs:
       CI_REPO_SLUG: ${{ github.repository }}
       CI_BRANCH: ${{ github.head_ref }}
       CI_PULL_REQUEST: ${{ github.event.number }}
+      # Qt 6.8.1 LTS — PINNED. Zmiana wymaga też aktualizacji:
+      #   - install.sh (lokalny build)
+      #   - plugins/vcwidgets/*/manifest.json (pole qt_version)
+      #   - VC_WIDGET_PLUGIN_DEV_GUIDE.md (sekcja 12)
+      # Qt 6.8 LTS jest wspierany do końca 2027.
       QT_VERSION: "6.8.1"
 
     steps:
@@ -208,3 +213,44 @@ jobs:
           name: QLC+_${{ env.APPVERSION }}_${{ matrix.arch }}.dmg
           path: QLC+_${{ env.APPVERSION }}_${{ matrix.arch }}.dmg
           retention-days: 30
+
+      # ----------------------------------------------------------------
+      # Plugin SDK artifact — nagłówki + import libs dla developerów
+      # pluginów VC Widget. Developerzy pobierają ten artifact zamiast
+      # klonować całe repo QLC+.
+      # ----------------------------------------------------------------
+      - name: Package Plugin SDK
+        shell: bash
+        run: |
+          SDK_DIR="qlcplus-plugin-sdk-${{ env.APPVERSION }}-${{ matrix.arch }}"
+          mkdir -p "$SDK_DIR/include/virtualconsole" "$SDK_DIR/include/engine" "$SDK_DIR/libs"
+
+          # Nagłówki plugin SDK
+          cp ui/src/virtualconsole/vcwidgetplugininterface.h "$SDK_DIR/include/virtualconsole/"
+          cp ui/src/virtualconsole/vcwidget.h                "$SDK_DIR/include/virtualconsole/"
+          cp engine/src/doc.h engine/src/fixture.h engine/src/universe.h \
+             engine/src/genericfader.h engine/src/genericdmxsource.h \
+             "$SDK_DIR/include/engine/" 2>/dev/null || true
+
+          # Import libs (dla linkowania pluginu)
+          cp build/ui/src/libqlcplusui.dylib    "$SDK_DIR/libs/" 2>/dev/null || true
+          cp build/engine/src/libqlcplusengine.dylib "$SDK_DIR/libs/" 2>/dev/null || true
+
+          # Przykład CMakeLists.txt dla pluginu
+          cp plugins/vcwidgets/VC_WIDGET_PLUGIN_DEV_GUIDE.md "$SDK_DIR/"
+          cp plugins/vcwidgets/dmxnumeric/CMakeLists.txt "$SDK_DIR/example_CMakeLists.txt" 2>/dev/null || true
+
+          # Qt wersja
+          echo "qt_version=${{ env.QT_VERSION }}" > "$SDK_DIR/sdk_info.txt"
+          echo "qlcplus_version=${{ env.APPVERSION }}" >> "$SDK_DIR/sdk_info.txt"
+          echo "arch=${{ matrix.arch }}" >> "$SDK_DIR/sdk_info.txt"
+          echo "build_date=${{ env.BUILD_DATE }}" >> "$SDK_DIR/sdk_info.txt"
+
+          zip -r "${SDK_DIR}.zip" "$SDK_DIR"
+
+      - name: Store Plugin SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qlcplus-plugin-sdk-${{ env.APPVERSION }}-${{ matrix.arch }}
+          path: qlcplus-plugin-sdk-${{ env.APPVERSION }}-${{ matrix.arch }}.zip
+          retention-days: 90
