@@ -8,6 +8,7 @@
 #include <QMutex>
 #include <QHash>
 #include <QVector>
+#include <QList>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QToolBar>
@@ -30,6 +31,13 @@
 #include "qlcinputsource.h"
 
 class Doc;
+class FixtureGroup;
+
+// ---------------------------------------------------------------------------
+// Widget mode
+// ---------------------------------------------------------------------------
+
+enum class PTMode { Legacy = 0, FixtureGroup = 1 };
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -41,6 +49,14 @@ struct PTOption {
     QString resource; // image path (Picture cap) or "#RRGGBB" (SingleColor); empty = no icon
 };
 
+struct PTColumnTypeBinding {
+    QString  manufacturer;
+    QString  model;
+    QString  modeName;
+    qint32   channelIndex = -1;  // 0-based index within the fixture mode channels
+    bool isValid() const { return channelIndex >= 0 && !manufacturer.isEmpty(); }
+};
+
 struct PTColumn {
     enum Type { Numeric, Dropdown };
 
@@ -49,6 +65,7 @@ struct PTColumn {
     bool           fade    = true;   // true=interpolate, false=snap at 127
     QVector<PTOption> options;  // used when type == Dropdown
     int            width   = -1;     // persisted pixel width; -1 = Qt default
+    PTColumnTypeBinding binding;     // used only in PTMode::FixtureGroup
 };
 
 struct PTRow {
@@ -57,9 +74,9 @@ struct PTRow {
 };
 
 struct PTOutput {
-    QString  name;
-    quint32  fixtureId = UINT_MAX;
-    QSharedPointer<QLCInputSource> inputSrc;
+    QString    name;
+    quint32    fixtureId = UINT_MAX;    // used in PTMode::Legacy
+    QList<int> groupRows;               // used in PTMode::FixtureGroup: y-coords in group grid
 };
 
 // ---------------------------------------------------------------------------
@@ -109,6 +126,9 @@ public:
     const QVector<PTColumn>& columns() const { return m_columns; }
     const QVector<PTRow>&    rows()    const { return m_rows;    }
     const QVector<PTOutput>& outputs() const { return m_outputs; }
+
+    PTMode   widgetMode()      const { return m_mode; }
+    quint32  fixtureGroupId()  const { return m_fixtureGroupId; }
 
     void setColumns(const QVector<PTColumn>& cols);
     void setRows(const QVector<PTRow>& rows);
@@ -160,6 +180,10 @@ private:
     // Helper: paste a raw string value into a table item and update m_rows
     void pasteValueToItem(QTableWidgetItem* item, const QString& raw);
 
+    // writeDMX helpers
+    void writeDMXLegacy(QList<Universe*>& universes, uchar xfEffective);
+    void writeDMXFixtureGroup(QList<Universe*>& universes, uchar xfEffective);
+
     // ---- Shared state (mutex-protected, read in writeDMX) ----------------
     mutable QMutex   m_stateMutex;
     QVector<PTColumn> m_columns;
@@ -170,6 +194,9 @@ private:
     bool              m_crossfadeEnabled   = false;  // widget-level toggle
     uchar             m_crossfadeGlobalPos = 0;      // physical fader position 0-255
     uchar             m_crossfadeStartPos  = 0;      // fader position when first staging was set
+
+    PTMode            m_mode            = PTMode::Legacy;
+    quint32           m_fixtureGroupId  = UINT_MAX;  // valid only when m_mode == FixtureGroup
 
     // ---- DMX faders (per universe, lazy) ---------------------------------
     QHash<quint32, QSharedPointer<GenericFader>> m_faders;

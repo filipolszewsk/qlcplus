@@ -12,7 +12,12 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "fixture.h"
+#include "fixturegroup.h"
+#include "grouphead.h"
+#include "qlcpoint.h"
 #include "qlcchannel.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "qlcinputsource.h"
 #include "doc.h"
 
@@ -73,6 +78,15 @@ static const QString KXMLCrossfadeEn     = QStringLiteral("CrossfadeEnabled");
 static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
 static const QString KXMLColWidth        = QStringLiteral("Width");
 static const QString KXMLNameColWidth    = QStringLiteral("NameColWidth");
+
+// FixtureGroup mode XML constants
+static const QString KXMLMode           = QStringLiteral("Mode");
+static const QString KXMLFxGroupId      = QStringLiteral("FixtureGroupID");
+static const QString KXMLOutRows        = QStringLiteral("Rows");
+static const QString KXMLBindMfg        = QStringLiteral("BindMfg");
+static const QString KXMLBindModel      = QStringLiteral("BindModel");
+static const QString KXMLBindMode       = QStringLiteral("BindMode");
+static const QString KXMLBindChan       = QStringLiteral("BindChan");
 
 // ==========================================================================
 // PresetTableDelegate
@@ -532,7 +546,18 @@ void PresetTableWidget::slotColumnHeaderDoubleClicked(int logicalIndex)
     int valCol = logicalIndex - 1;
     if (valCol < 0 || valCol >= m_columns.size()) return;
 
-    PresetTableColumnDialog dlg(m_doc, m_columns[valCol], this);
+    PTMode colMode;
+    quint32 groupId;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        colMode = m_mode;
+        groupId = m_fixtureGroupId;
+    }
+
+    FixtureGroup* grp = (colMode == PTMode::FixtureGroup)
+        ? m_doc->fixtureGroup(groupId) : nullptr;
+
+    PresetTableColumnDialog dlg(m_doc, m_columns[valCol], colMode, grp, this);
     if (dlg.exec() != QDialog::Accepted) return;
 
     {
@@ -952,31 +977,49 @@ void PresetTableWidget::refreshRowHighlights()
 }
 
 // ==========================================================================
-// writeDMX (MasterTimer thread)
+// writeDMX helpers
 // ==========================================================================
 
-void PresetTableWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
+// Apply a DMX value to a fade channel, with optional crossfade blending.
+// aVal = active row value, bVal = staged row value (ignored when !xfEnabled or stagedRow < 0)
+static void applyFadeValue(GenericFader* fader, Doc* doc, Universe* uni,
+                            quint32 fxiId, quint32 chanIdx,
+                            uchar aVal, uchar bVal,
+                            bool xfEnabled, bool hasStaged,
+                            bool colFade, uchar xfEffective)
 {
-    QMutexLocker lk(&m_stateMutex);
-
-    const bool  xfEnabled  = m_crossfadeEnabled;
-    const uchar xfPos      = m_crossfadeGlobalPos;
-    const uchar xfStartPos = m_crossfadeStartPos;
-
-    // Direction-locked: compute effectivePos (0=A, 255=B) from how far fader
-    // has traveled from startPos toward the target (furthest extreme)
-    const uchar xfTarget = (xfStartPos < 128) ? 255 : 0;
-    qint16 xfTraveled, xfMaxTravel;
-    if (xfTarget == 255) {
-        xfTraveled   = qint16(xfPos) - qint16(xfStartPos);
-        xfMaxTravel  = qint16(255)   - qint16(xfStartPos);
-    } else {
-        xfTraveled   = qint16(xfStartPos) - qint16(xfPos);
-        xfMaxTravel  = qint16(xfStartPos);
+    FadeChannel* fc = fader->getChannelFader(doc, uni, fxiId, chanIdx);
+    if (fc->universe() == Universe::invalid())
+    {
+        fader->remove(fc);
+        return;
     }
-    if (xfMaxTravel <= 0) xfMaxTravel = 1;
-    const uchar xfEffective = uchar(qBound(qint16(0), qint16(xfTraveled * 255 / xfMaxTravel), qint16(255)));
 
+    if (!xfEnabled || !hasStaged)
+    {
+        fc->setStart(fc->current());
+        fc->setTarget(aVal);
+        fc->setReady(false);
+        fc->setElapsed(0);
+    }
+    else
+    {
+        uchar finalVal;
+        if (colFade)
+            finalVal = uchar(aVal + qint16(bVal - aVal) * qint16(xfEffective) / 255);
+        else
+            finalVal = (xfEffective > 127) ? bVal : aVal;
+
+        fc->setStart(finalVal);
+        fc->setTarget(finalVal);
+        fc->setFadeTime(0);
+        fc->setReady(false);
+        fc->setElapsed(0);
+    }
+}
+
+void PresetTableWidget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEffective)
+{
     for (int o = 0; o < m_outputs.size(); ++o)
     {
         const int activeRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
@@ -1003,52 +1046,143 @@ void PresetTableWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
 
         if (activeRow >= m_rows.size()) continue;
 
+        const QVector<uchar>& aVals = m_rows[activeRow].values;
+        const QVector<uchar>* bVals = (stagedRow >= 0 && stagedRow < m_rows.size())
+            ? &m_rows[stagedRow].values : nullptr;
+
         for (int c = 0; c < m_columns.size(); ++c)
         {
-            FadeChannel* fc = fader->getChannelFader(
-                m_doc, universes[uni], out.fixtureId, quint32(c));
-
-            if (fc->universe() == Universe::invalid())
-            {
-                fader->remove(fc);
-                continue;
-            }
-
-            const QVector<uchar>& aVals = m_rows[activeRow].values;
             uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
+            uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
+            applyFadeValue(fader.data(), m_doc, universes[uni],
+                           out.fixtureId, quint32(c),
+                           aVal, bVal,
+                           m_crossfadeEnabled, (stagedRow >= 0),
+                           m_columns[c].fade, xfEffective);
+        }
+    }
+}
 
-            if (!xfEnabled || stagedRow < 0)
+void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar xfEffective)
+{
+    FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
+    if (!grp) return;
+
+    const QMap<QLCPoint, GroupHead> headsMap = grp->headsMap();
+
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        const int activeRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
+        const int stagedRow = (o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
+
+        if (activeRow < 0 || activeRow >= m_rows.size()) continue;
+
+        const PTOutput& out = m_outputs[o];
+        if (out.groupRows.isEmpty()) continue;
+
+        const QVector<uchar>& aVals = m_rows[activeRow].values;
+        const QVector<uchar>* bVals = (stagedRow >= 0 && stagedRow < m_rows.size())
+            ? &m_rows[stagedRow].values : nullptr;
+
+        // Iterate all group head positions, keep only those in out.groupRows
+        for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
+        {
+            const QLCPoint&  pt   = it.key();
+            const GroupHead& head = it.value();
+
+            if (!out.groupRows.contains(pt.y())) continue;
+
+            Fixture* fxi = m_doc->fixture(head.fxi);
+            if (!fxi) continue;
+
+            QLCFixtureDef*  fxDef  = fxi->fixtureDef();
+            QLCFixtureMode* fxMode = fxi->fixtureMode();
+            if (!fxDef || !fxMode) continue;
+
+            quint32 uni = fxi->universe();
+            if ((int)uni >= universes.size()) continue;
+
+            auto fader = m_faders.value(uni);
+            if (fader.isNull())
             {
-                // Direct path: instant output of current row
-                fc->setStart(fc->current());
-                fc->setTarget(aVal);
-                fc->setReady(false);
-                fc->setElapsed(0);
+                fader = universes[uni]->requestFader(Universe::Auto);
+                m_faders.insert(uni, fader);
             }
-            else
+
+            // Match each column by type binding
+            for (int c = 0; c < m_columns.size(); ++c)
             {
-                // Crossfade path: blend A → B using effectivePos
-                uchar bVal = aVal;
-                if (stagedRow < m_rows.size())
+                const PTColumn& col = m_columns[c];
+                if (!col.binding.isValid()) continue;
+
+                if (fxDef->manufacturer() != col.binding.manufacturer) continue;
+                if (fxDef->model()        != col.binding.model)        continue;
+                if (fxMode->name()        != col.binding.modeName)     continue;
+
+                // Channel index: offset by head for multi-head fixtures
+                int chPerHead = (int)fxMode->channels().size();
+                if (chPerHead == 0) continue;
+                if (fxMode->heads().size() > 0)
                 {
-                    const QVector<uchar>& bVals = m_rows[stagedRow].values;
-                    bVal = (c < bVals.size()) ? bVals[c] : 0;
+                    // Multi-head: each head occupies (chPerHead / nHeads) channels
+                    int nHeads = fxMode->heads().size();
+                    int chPerSingleHead = chPerHead / nHeads;
+                    if (chPerSingleHead > 0 && col.binding.channelIndex < chPerSingleHead)
+                        chPerHead = col.binding.channelIndex + head.head * chPerSingleHead;
+                    else
+                        chPerHead = col.binding.channelIndex;  // fallback: use as-is
+                }
+                else
+                {
+                    chPerHead = col.binding.channelIndex;
                 }
 
-                uchar finalVal;
-                if (m_columns[c].fade)
-                    finalVal = uchar(aVal + qint16(bVal - aVal) * qint16(xfEffective) / 255);
-                else
-                    finalVal = (xfEffective > 127) ? bVal : aVal;
+                if (chPerHead < 0 || chPerHead >= (int)fxi->channels()) continue;
 
-                fc->setStart(finalVal);
-                fc->setTarget(finalVal);
-                fc->setFadeTime(0);
-                fc->setReady(false);
-                fc->setElapsed(0);
+                uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
+                uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
+                applyFadeValue(fader.data(), m_doc, universes[uni],
+                               head.fxi, quint32(chPerHead),
+                               aVal, bVal,
+                               m_crossfadeEnabled, (stagedRow >= 0),
+                               col.fade, xfEffective);
             }
         }
     }
+}
+
+// ==========================================================================
+// writeDMX (MasterTimer thread)
+// ==========================================================================
+
+void PresetTableWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
+{
+    QMutexLocker lk(&m_stateMutex);
+
+    const bool  xfEnabled  = m_crossfadeEnabled;
+    const uchar xfPos      = m_crossfadeGlobalPos;
+    const uchar xfStartPos = m_crossfadeStartPos;
+
+    // Direction-locked: compute effectivePos (0=A, 255=B) from how far fader
+    // has traveled from startPos toward the target (furthest extreme)
+    const uchar xfTarget = (xfStartPos < 128) ? 255 : 0;
+    qint16 xfTraveled, xfMaxTravel;
+    if (xfTarget == 255) {
+        xfTraveled   = qint16(xfPos) - qint16(xfStartPos);
+        xfMaxTravel  = qint16(255)   - qint16(xfStartPos);
+    } else {
+        xfTraveled   = qint16(xfStartPos) - qint16(xfPos);
+        xfMaxTravel  = qint16(xfStartPos);
+    }
+    if (xfMaxTravel <= 0) xfMaxTravel = 1;
+    const uchar xfEffective = uchar(qBound(qint16(0), qint16(xfTraveled * 255 / xfMaxTravel), qint16(255)));
+
+    Q_UNUSED(xfEnabled);
+
+    if (m_mode == PTMode::FixtureGroup)
+        writeDMXFixtureGroup(universes, xfEffective);
+    else
+        writeDMXLegacy(universes, xfEffective);
 }
 
 // ==========================================================================
@@ -1154,10 +1288,14 @@ void PresetTableWidget::editProperties()
 
     QVector<PTColumn> colsCopy;
     QVector<PTOutput>  outsCopy;
+    PTMode   modeCopy;
+    quint32  groupIdCopy;
     {
         QMutexLocker lk(&m_stateMutex);
-        colsCopy = m_columns;
-        outsCopy = m_outputs;
+        colsCopy    = m_columns;
+        outsCopy    = m_outputs;
+        modeCopy    = m_mode;
+        groupIdCopy = m_fixtureGroupId;
     }
 
     // Collect current input sources per output
@@ -1173,12 +1311,16 @@ void PresetTableWidget::editProperties()
     }
     xfSrc = inputSource(quint8(255));
 
-    PresetTableConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy, xfEnabled, xfSrc, page(), this);
+    PresetTableConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy,
+                                xfEnabled, xfSrc, page(),
+                                modeCopy, groupIdCopy, this);
 
     if (dlg.exec() != QDialog::Accepted) return;
 
     QVector<PTColumn> newCols = dlg.columns();
     QVector<PTOutput>  newOuts = dlg.outputs();
+    PTMode   newMode    = dlg.widgetMode();
+    quint32  newGroupId = dlg.selectedFixtureGroupId();
 
     {
         QMutexLocker lk(&m_stateMutex);
@@ -1198,6 +1340,9 @@ void PresetTableWidget::editProperties()
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
+
+        m_mode          = newMode;
+        m_fixtureGroupId = newGroupId;
     }
 
     // Apply new input sources
@@ -1216,9 +1361,6 @@ void PresetTableWidget::editProperties()
             m_crossfadeStartPos  = 0;
         }
     }
-
-    // Clear old input sources beyond new output count
-    // (sources at indices >= newOuts.size() can be left; VCWidget handles them)
 
     rebuildTable();
     m_doc->setModified();
@@ -1246,6 +1388,8 @@ VCWidget* PresetTableWidget::createCopy(VCWidget* parent)
     bool              xfEnabledCopy;
     uchar             xfPosCopy;
     uchar             xfStartPosCopy;
+    PTMode            modeCopy;
+    quint32           groupIdCopy;
 
     {
         QMutexLocker lk(&m_stateMutex);
@@ -1257,6 +1401,8 @@ VCWidget* PresetTableWidget::createCopy(VCWidget* parent)
         xfEnabledCopy   = m_crossfadeEnabled;
         xfPosCopy       = m_crossfadeGlobalPos;
         xfStartPosCopy  = m_crossfadeStartPos;
+        modeCopy        = m_mode;
+        groupIdCopy     = m_fixtureGroupId;
     }
 
     {
@@ -1269,6 +1415,8 @@ VCWidget* PresetTableWidget::createCopy(VCWidget* parent)
         copy->m_crossfadeEnabled   = xfEnabledCopy;
         copy->m_crossfadeGlobalPos = xfPosCopy;
         copy->m_crossfadeStartPos  = xfStartPosCopy;
+        copy->m_mode               = modeCopy;
+        copy->m_fixtureGroupId     = groupIdCopy;
     }
 
     // Copy input sources
@@ -1306,6 +1454,17 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
     bool xfEnabled = (root.attributes().value(KXMLCrossfadeEn).toString() == QLatin1String("True"));
     int  nameColW  = root.attributes().value(KXMLNameColWidth).toInt();
 
+    // Mode (default = Legacy for backward compat)
+    PTMode loadedMode = PTMode::Legacy;
+    QString modeStr = root.attributes().value(KXMLMode).toString();
+    if (modeStr == QLatin1String("FixtureGroup"))
+        loadedMode = PTMode::FixtureGroup;
+
+    quint32 loadedGroupId = UINT_MAX;
+    QString groupIdStr = root.attributes().value(KXMLFxGroupId).toString();
+    if (!groupIdStr.isEmpty())
+        loadedGroupId = groupIdStr.toUInt();
+
     QVector<PTColumn> cols;
     QVector<PTRow>    rows;
     QVector<PTOutput> outs;
@@ -1330,8 +1489,21 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
             col.type  = (attrs.value(KXMLColType).toString() == QLatin1String("Dropdown"))
                         ? PTColumn::Dropdown : PTColumn::Numeric;
             col.fade  = (attrs.value(KXMLColFade).toString() != QLatin1String("False"));
-            col.width = attrs.value(KXMLColWidth).toInt();  // 0 if absent → stays -1 below
+            col.width = attrs.value(KXMLColWidth).toInt();
             if (col.width <= 0) col.width = -1;
+
+            // FixtureGroup binding (absent in legacy files → isValid() returns false)
+            QString bindMfg  = attrs.value(KXMLBindMfg).toString();
+            QString bindMod  = attrs.value(KXMLBindModel).toString();
+            QString bindMode = attrs.value(KXMLBindMode).toString();
+            int     bindChan = attrs.value(KXMLBindChan).toInt() - 1;  // stored as 1-based, 0 if absent
+            if (!bindMfg.isEmpty() && bindChan >= 0)
+            {
+                col.binding.manufacturer = bindMfg;
+                col.binding.model        = bindMod;
+                col.binding.modeName     = bindMode;
+                col.binding.channelIndex = bindChan;
+            }
 
             // Read child <Option> elements
             while (root.readNextStartElement())
@@ -1375,6 +1547,14 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
             out.name      = attrs.value(KXMLOutName).toString();
             out.fixtureId = attrs.value(KXMLOutFxId).toUInt();
 
+            // FixtureGroup rows (absent in legacy files)
+            QString rowsStr = attrs.value(KXMLOutRows).toString();
+            if (!rowsStr.isEmpty())
+            {
+                for (const QString& rStr : rowsStr.split(QLatin1Char(','), Qt::SkipEmptyParts))
+                    out.groupRows.append(rStr.trimmed().toInt());
+            }
+
             while (root.readNextStartElement())
             {
                 if (root.name() == KXMLOutInput)
@@ -1412,6 +1592,8 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
         m_crossfadeGlobalPos = 0;
         m_crossfadeStartPos  = 0;
         m_nameColWidth = (nameColW > 0) ? nameColW : -1;
+        m_mode           = loadedMode;
+        m_fixtureGroupId = loadedGroupId;
     }
 
     rebuildTable();
@@ -1431,6 +1613,13 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLCrossfadeEn, m_crossfadeEnabled ? QLatin1String("True") : QLatin1String("False"));
         if (m_nameColWidth > 0)
             doc->writeAttribute(KXMLNameColWidth, QString::number(m_nameColWidth));
+
+        // Write mode (only write explicit tag for FixtureGroup; Legacy is default for old files)
+        if (m_mode == PTMode::FixtureGroup)
+        {
+            doc->writeAttribute(KXMLMode,    QLatin1String("FixtureGroup"));
+            doc->writeAttribute(KXMLFxGroupId, QString::number(m_fixtureGroupId));
+        }
     }
 
     saveXMLCommon(doc);
@@ -1450,6 +1639,15 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLColFade,  col.fade ? QLatin1String("True") : QLatin1String("False"));
         if (col.width > 0)
             doc->writeAttribute(KXMLColWidth, QString::number(col.width));
+
+        // FixtureGroup binding — stored as 1-based channelIndex so 0 means "absent"
+        if (col.binding.isValid())
+        {
+            doc->writeAttribute(KXMLBindMfg,   col.binding.manufacturer);
+            doc->writeAttribute(KXMLBindModel, col.binding.model);
+            doc->writeAttribute(KXMLBindMode,  col.binding.modeName);
+            doc->writeAttribute(KXMLBindChan,  QString::number(col.binding.channelIndex + 1));
+        }
 
         for (const PTOption& opt : col.options)
         {
@@ -1475,12 +1673,17 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
     }
 
     // Collect output data under lock, then write outside
-    struct OutData { QString name; quint32 fixtureId; };
+    struct OutData {
+        QString    name;
+        quint32    fixtureId;
+        QList<int> groupRows;
+    };
     QVector<OutData> outData;
     outData.reserve(m_outputs.size());
     for (const PTOutput& out : m_outputs)
-        outData.append({out.name, out.fixtureId});
+        outData.append({out.name, out.fixtureId, out.groupRows});
 
+    bool isFGMode = (m_mode == PTMode::FixtureGroup);
     lk.unlock();
 
     for (int o = 0; o < outData.size(); ++o)
@@ -1488,7 +1691,18 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeStartElement(KXMLOutput);
         doc->writeAttribute(KXMLOutIndex, QString::number(o));
         doc->writeAttribute(KXMLOutName,  outData[o].name);
-        doc->writeAttribute(KXMLOutFxId,  QString::number(outData[o].fixtureId));
+
+        if (!isFGMode)
+        {
+            doc->writeAttribute(KXMLOutFxId, QString::number(outData[o].fixtureId));
+        }
+        else if (!outData[o].groupRows.isEmpty())
+        {
+            QStringList rowParts;
+            for (int row : outData[o].groupRows)
+                rowParts << QString::number(row);
+            doc->writeAttribute(KXMLOutRows, rowParts.join(QLatin1Char(',')));
+        }
 
         auto src = inputSource(quint8(o));
         if (!src.isNull() && src->isValid())

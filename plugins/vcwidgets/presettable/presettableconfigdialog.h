@@ -11,18 +11,22 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QVBoxLayout>
 #include <QSharedPointer>
 #include <QVector>
+#include <QList>
 
 #include "presettablewidget.h"
 #include "qlcinputsource.h"
 
 class Doc;
+class FixtureGroup;
 class InputSelectionWidget;
+class QLineEdit;
 
-// ---- Per-output editor row (embedded in a QWidget inside the list) ----------
+// ---- Per-output editor row: Legacy mode (single fixture) -------------------
 
 class OutputEditorRow : public QWidget
 {
@@ -40,10 +44,10 @@ public:
 
 signals:
     void changed();
-    void fixtureSelected(quint32 fixtureId);   // emitted after user picks a fixture
+    void fixtureSelected(quint32 fixtureId);
 
 public:
-    void setRequiredChannels(int n);            // called by dialog when columns are auto-created
+    void setRequiredChannels(int n);
 
 private slots:
     void slotChooseFixture();
@@ -55,13 +59,46 @@ private:
     Doc*    m_doc;
     int     m_requiredChannels;
 
-    QLabel*               m_nameLabel       = nullptr;
     QLineEdit*            m_nameEdit        = nullptr;
     QLabel*               m_fixtureLabel    = nullptr;
     QPushButton*          m_chooseFixBtn    = nullptr;
     InputSelectionWidget* m_inputSel        = nullptr;
 
     quint32 m_fixtureId = UINT_MAX;
+};
+
+// ---- Per-output editor row: FixtureGroup mode (row checkboxes) -------------
+
+class FGOutputEditorRow : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit FGOutputEditorRow(Doc* doc,
+                               const PTOutput& output,
+                               QSharedPointer<QLCInputSource> src,
+                               FixtureGroup* group,
+                               int widgetPage,
+                               QWidget* parent = nullptr);
+
+    PTOutput output() const;
+    QSharedPointer<QLCInputSource> inputSource() const;
+
+    void setFixtureGroup(FixtureGroup* group);
+
+signals:
+    void changed();
+
+private:
+    void rebuildRowCheckboxes();
+
+    Doc*          m_doc   = nullptr;
+    FixtureGroup* m_group = nullptr;
+
+    QLineEdit*            m_nameEdit   = nullptr;
+    QWidget*              m_cbWidget   = nullptr;  // scrollable container for checkboxes
+    QVBoxLayout*          m_cbLayout   = nullptr;
+    QList<QCheckBox*>     m_rowCBs;                // one per y-row in the group
+    InputSelectionWidget* m_inputSel   = nullptr;
 };
 
 // ---- Main dialog ------------------------------------------------------------
@@ -78,6 +115,8 @@ public:
                                      bool crossfadeEnabled,
                                      QSharedPointer<QLCInputSource> crossfadeSrc,
                                      int widgetPage,
+                                     PTMode mode,
+                                     quint32 fixtureGroupId,
                                      QWidget* parent = nullptr);
 
     QVector<PTColumn> columns() const { return m_columns; }
@@ -86,27 +125,44 @@ public:
     bool crossfadeEnabled() const;
     QSharedPointer<QLCInputSource> crossfadeInputSource() const;
 
+    PTMode   widgetMode()            const;
+    quint32  selectedFixtureGroupId() const;
+
 private slots:
     void slotAddOutput();
     void slotRemoveOutput();
     void slotEditColumn();
     void slotValidate();
     void slotAutoCreateColumns(quint32 fixtureId);
+    void slotModeComboChanged(int index);
+    void slotGroupComboChanged(int index);
 
 private:
     void rebuildOutputList();
+    void rebuildGroupCombo();
+    void updateHintLabel();
+    FixtureGroup* currentFixtureGroup() const;
 
     Doc*   m_doc;
     int    m_widgetPage;
 
-    QVector<PTColumn>   m_columns;   // may be modified if user edits columns tab
+    QVector<PTColumn>   m_columns;
+
+    // Mode selection
+    QComboBox*  m_modeCombo      = nullptr;  // Legacy / Fixture Group
+    QWidget*    m_groupRow       = nullptr;  // row containing group combo (shown in FG mode)
+    QComboBox*  m_groupCombo     = nullptr;  // fixture group selector
 
     // Tab: Outputs
-    QListWidget*    m_outputList     = nullptr;
-    QList<OutputEditorRow*> m_outputRows;
-    QPushButton*    m_addOutBtn      = nullptr;
-    QPushButton*    m_remOutBtn      = nullptr;
-    QLabel*         m_outHintLabel   = nullptr;
+    QListWidget*   m_outputList     = nullptr;
+    QPushButton*   m_addOutBtn      = nullptr;
+    QPushButton*   m_remOutBtn      = nullptr;
+    QLabel*        m_outHintLabel   = nullptr;
+
+    // Legacy rows
+    QList<OutputEditorRow*>   m_outputRows;
+    // FixtureGroup rows
+    QList<FGOutputEditorRow*> m_fgOutputRows;
 
     // Tab: Columns
     QListWidget*    m_colList        = nullptr;
@@ -120,5 +176,5 @@ private:
     // Crossfade section (widget-level)
     QCheckBox*            m_crossfadeChk      = nullptr;
     InputSelectionWidget* m_xfadeInputSel     = nullptr;
-    QWidget*              m_xfadeInputWidget  = nullptr;  // container shown/hidden
+    QWidget*              m_xfadeInputWidget  = nullptr;
 };

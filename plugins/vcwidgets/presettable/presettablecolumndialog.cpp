@@ -7,8 +7,12 @@
 
 #include "doc.h"
 #include "fixture.h"
+#include "fixturegroup.h"
+#include "grouphead.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -18,7 +22,6 @@
 #include <QDialogButtonBox>
 #include <QTreeWidget>
 #include <QPushButton>
-#include <QLabel>
 #include <QPixmap>
 #include <QIcon>
 #include <QColor>
@@ -48,12 +51,18 @@ QIcon PresetTableColumnDialog::makeResourceIcon(const QString& resource)
 // Constructor
 // ---------------------------------------------------------------------------
 
-PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc, const PTColumn& column, QWidget* parent)
+PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc,
+                                                   const PTColumn& column,
+                                                   PTMode mode,
+                                                   FixtureGroup* group,
+                                                   QWidget* parent)
     : QDialog(parent)
     , m_doc(doc)
+    , m_mode(mode)
+    , m_group(group)
 {
     setWindowTitle(tr("Edit Column"));
-    setMinimumWidth(360);
+    setMinimumWidth(400);
 
     QVBoxLayout* root = new QVBoxLayout(this);
 
@@ -63,6 +72,23 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc, const PTColumn& colum
     m_nameEdit = new QLineEdit(column.name, nameGrp);
     form->addRow(tr("Name:"), m_nameEdit);
     root->addWidget(nameGrp);
+
+    // ---- Fixture Binding (FixtureGroup mode only) -------------------
+    m_bindGrp = new QGroupBox(tr("Fixture Binding"), this);
+    m_bindGrp->setVisible(mode == PTMode::FixtureGroup);
+    QFormLayout* bindForm = new QFormLayout(m_bindGrp);
+
+    m_fxTypeLabel  = new QLabel(tr("Fixture type:"), m_bindGrp);
+    m_fxTypeCombo  = new QComboBox(m_bindGrp);
+    m_fxTypeCombo->setMinimumWidth(240);
+    bindForm->addRow(m_fxTypeLabel, m_fxTypeCombo);
+
+    m_channelLabel = new QLabel(tr("Channel:"), m_bindGrp);
+    m_channelCombo = new QComboBox(m_bindGrp);
+    m_channelCombo->setMinimumWidth(240);
+    bindForm->addRow(m_channelLabel, m_channelCombo);
+
+    root->addWidget(m_bindGrp);
 
     // ---- Type -------------------------------------------------------
     QGroupBox* typeGrp = new QGroupBox(tr("Value type"), this);
@@ -140,6 +166,43 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc, const PTColumn& colum
     }
     m_optTable->blockSignals(false);
 
+    // Populate fixture binding combos (FG mode)
+    if (mode == PTMode::FixtureGroup && group)
+    {
+        populateFixtureTypeCombo();
+
+        // Pre-select current binding if valid
+        if (column.binding.isValid())
+        {
+            for (int i = 0; i < m_fxTypeEntries.size(); ++i)
+            {
+                const FxTypeEntry& e = m_fxTypeEntries[i];
+                if (e.manufacturer == column.binding.manufacturer &&
+                    e.model        == column.binding.model        &&
+                    e.modeName     == column.binding.modeName)
+                {
+                    m_fxTypeCombo->setCurrentIndex(i);
+                    populateChannelCombo(i);
+
+                    // Select the matching channel
+                    for (int ci = 0; ci < m_channelCombo->count(); ++ci)
+                    {
+                        if (m_channelCombo->itemData(ci).toInt() == column.binding.channelIndex)
+                        {
+                            m_channelCombo->setCurrentIndex(ci);
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        else if (m_fxTypeCombo->count() > 0)
+        {
+            populateChannelCombo(0);
+        }
+    }
+
     updateOptionsEnabled();
 
     // ---- Connections ------------------------------------------------
@@ -150,6 +213,110 @@ PresetTableColumnDialog::PresetTableColumnDialog(Doc* doc, const PTColumn& colum
     connect(m_importBtn,  &QPushButton::clicked,  this, &PresetTableColumnDialog::slotImportFromChannel);
     connect(m_buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(m_fxTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &PresetTableColumnDialog::slotFixtureTypeChanged);
+}
+
+// ---------------------------------------------------------------------------
+// Fixture binding population
+// ---------------------------------------------------------------------------
+
+void PresetTableColumnDialog::populateFixtureTypeCombo()
+{
+    m_fxTypeCombo->clear();
+    m_fxTypeEntries.clear();
+
+    if (!m_group || !m_doc) return;
+
+    // Build a deduplicated list of (manufacturer, model, modeName) in the group
+    for (quint32 fxiId : m_group->fixtureList())
+    {
+        Fixture* fxi = m_doc->fixture(fxiId);
+        if (!fxi) continue;
+
+        QLCFixtureDef*  def  = fxi->fixtureDef();
+        QLCFixtureMode* mode = fxi->fixtureMode();
+        if (!def || !mode) continue;
+
+        QString mfg    = def->manufacturer();
+        QString model  = def->model();
+        QString mName  = mode->name();
+
+        bool found = false;
+        for (FxTypeEntry& e : m_fxTypeEntries)
+        {
+            if (e.manufacturer == mfg && e.model == model && e.modeName == mName)
+            {
+                e.count++;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            FxTypeEntry e;
+            e.manufacturer = mfg;
+            e.model        = model;
+            e.modeName     = mName;
+            e.count        = 1;
+            m_fxTypeEntries.append(e);
+        }
+    }
+
+    for (const FxTypeEntry& e : m_fxTypeEntries)
+    {
+        QString label = QString("%1 %2 — %3 (%4×)")
+            .arg(e.manufacturer, e.model, e.modeName)
+            .arg(e.count);
+        m_fxTypeCombo->addItem(label);
+    }
+}
+
+void PresetTableColumnDialog::populateChannelCombo(int fixtureTypeIndex)
+{
+    m_channelCombo->clear();
+
+    if (fixtureTypeIndex < 0 || fixtureTypeIndex >= m_fxTypeEntries.size()) return;
+    if (!m_group || !m_doc) return;
+
+    const FxTypeEntry& entry = m_fxTypeEntries[fixtureTypeIndex];
+
+    // Find a representative fixture of this type in the group
+    QLCFixtureMode* fxMode = nullptr;
+    for (quint32 fxiId : m_group->fixtureList())
+    {
+        Fixture* fxi = m_doc->fixture(fxiId);
+        if (!fxi) continue;
+        QLCFixtureDef*  def  = fxi->fixtureDef();
+        QLCFixtureMode* mode = fxi->fixtureMode();
+        if (!def || !mode) continue;
+        if (def->manufacturer() == entry.manufacturer &&
+            def->model()        == entry.model        &&
+            mode->name()        == entry.modeName)
+        {
+            fxMode = mode;
+            break;
+        }
+    }
+
+    if (!fxMode) return;
+
+    // Populate combo with channel names
+    int nChannels = fxMode->channels().size();
+
+    // For multi-head fixtures, show only channels of one head
+    int nHeads = fxMode->heads().size();
+    if (nHeads > 1)
+        nChannels = nChannels / nHeads;
+
+    for (int ci = 0; ci < nChannels; ++ci)
+    {
+        QLCChannel* ch = fxMode->channel(ci);
+        QString label = ch
+            ? QString("%1: %2").arg(ci + 1).arg(ch->name())
+            : tr("Ch %1").arg(ci + 1);
+        m_channelCombo->addItem(label, ci);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +345,23 @@ PTColumn PresetTableColumnDialog::column() const
         }
     }
 
+    // Read binding (FG mode)
+    if (m_mode == PTMode::FixtureGroup && m_bindGrp && m_bindGrp->isVisible())
+    {
+        int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
+        int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
+            ? m_channelCombo->currentData().toInt() : -1;
+
+        if (typeIdx >= 0 && typeIdx < m_fxTypeEntries.size() && chanIdx >= 0)
+        {
+            const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
+            col.binding.manufacturer = e.manufacturer;
+            col.binding.model        = e.model;
+            col.binding.modeName     = e.modeName;
+            col.binding.channelIndex = chanIdx;
+        }
+    }
+
     return col;
 }
 
@@ -188,6 +372,11 @@ PTColumn PresetTableColumnDialog::column() const
 void PresetTableColumnDialog::slotTypeChanged()
 {
     updateOptionsEnabled();
+}
+
+void PresetTableColumnDialog::slotFixtureTypeChanged(int index)
+{
+    populateChannelCombo(index);
 }
 
 void PresetTableColumnDialog::slotAddOption()
