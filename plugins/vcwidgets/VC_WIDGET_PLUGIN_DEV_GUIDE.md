@@ -962,6 +962,27 @@ I zawsze wywołaj `f->stop(functionParent())` w destruktorze oraz `slotModeChang
 
 ---
 
+### ❌ Brak `VCWidget::toClipboardJson(obj, doc)` w overridzie
+
+Jeśli nadpisujesz `toClipboardJson` i zapomnisz zawołać bazy, JSON nie będzie zawierał `pluginId` — widget nie zostanie odtworzony przy wklejaniu.
+
+```cpp
+// ŹLE — brakuje wywołania bazy
+void MyWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    obj["myState"] = m_myState;  // pluginId NIE zostanie zapisany!
+}
+
+// DOBRZE
+void MyWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);   // najpierw baza — pluginId, geometry, caption, appearance, inputs
+    obj["myState"] = m_myState;
+}
+```
+
+To samo dotyczy `fromClipboardJson` — zawsze zawołaj `VCWidget::fromClipboardJson(obj, doc)` na początku.
+
 ### ❌ `slots` jako nazwa parametru lub zmiennej lokalnej
 
 **Objaw:** błąd kompilacji `expected body of lambda expression` przy dostępie do `slots[i].field`.  
@@ -1190,8 +1211,30 @@ void MojWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
 ### Zasady serializacji
 
 - **Funkcje zawsze po nazwie** — `Function::name()`, nigdy po `id()` (ID są projekt-specyficzne).
-- **Fixture po nazwie** — `Fixture::name()` + numer kanału.
-- Helperów z bazy: `VCWidget::resolveFunctionByName(name, doc)` zwraca `Function*` lub `nullptr`.
+- **Fixture po nazwie** — `Fixture::name()` + numer kanału (nie adres DMX).
+- Helper dla funkcji: `VCWidget::resolveFunctionByName(name, doc)` zwraca `Function*` lub `nullptr`.
+- Fixture nie ma gotowego helpera — użyj bezpośrednio:
+
+```cpp
+// Serializacja (toClipboardJson):
+Fixture *fxi = doc->fixture(m_fixtureId);
+obj["fixtureName"] = fxi ? fxi->name() : QString();
+obj["channel"]     = (int)m_channel;
+
+// Deserializacja (fromClipboardJson):
+const QString fxName = obj["fixtureName"].toString();
+m_fixtureId = UINT_MAX;
+for (Fixture *fxi : doc->fixtures())
+{
+    if (fxi && fxi->name() == fxName)
+    {
+        m_fixtureId = fxi->id();
+        break;
+    }
+}
+m_channel = (quint32)obj["channel"].toInt(0);
+```
+
 - Jeśli plugin nie nadpisze metod, QLC+ i tak skopiuje wygląd/rozmiar/caption/inputs — tylko stan specyficzny zostanie utracony przy wklejaniu do innego projektu.
 
 ### Rebuild
