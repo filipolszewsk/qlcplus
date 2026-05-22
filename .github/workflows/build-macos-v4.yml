@@ -3,6 +3,9 @@ name: Build macOS DMG (QLC+ 4.14)
 on:
   push:
     branches: [ main, master, fix/vcslider-properties-perf, perf/cache-paramcount-per-tick, perf/cache-paramcount-in-rgbscript, perf/direct-jsvalue-iteration, fix/efx-relative-noncontig, fix/fixturegroup-batch-update, fix/efx-fader-cleanup-on-group-rebuild, fix/vcxypad-arm-on-rebuild ]
+    paths-ignore:
+      - 'plugins/vcwidgets/**'
+      - '.github/workflows/build-vcwidget-plugins.yml'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:

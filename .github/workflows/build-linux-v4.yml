@@ -3,6 +3,9 @@ name: Build Linux AppImage (QLC+ 4.14)
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'plugins/vcwidgets/**'
+      - '.github/workflows/build-vcwidget-plugins.yml'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:

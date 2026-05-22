@@ -3,6 +3,9 @@ name: Build Windows Installer (QLC+ 4.14)
 on:
   push:
     branches: [ main, master, feature/windows-installer-workflow, feature/step-index-output-with-installer, rgbscprit_widget_exlude_and_edit, feature/efx-copy-paste-settings, fix/cuelist-crossfade-reapply, feature/efx-copy-paste-dialog, feature/vc-frame-scale-contents, fix/vcslider-properties-perf, fix/windows-tls-openssl, fix/windows-remove-openssl-dlls, perf/cache-paramcount-per-tick, perf/cache-paramcount-in-rgbscript, perf/direct-jsvalue-iteration, fix/fixturegroup-batch-update, fix/efx-fader-cleanup-on-group-rebuild, fix/vcxypad-arm-on-rebuild ]
+    paths-ignore:
+      - 'plugins/vcwidgets/**'
+      - '.github/workflows/build-vcwidget-plugins.yml'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:  # Pozwala uruchomić ręcznie z GitHub UI
