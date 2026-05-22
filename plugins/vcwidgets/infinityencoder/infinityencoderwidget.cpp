@@ -496,7 +496,7 @@ void InfinityEncoderWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) co
     obj["sensitivity"] = (int)m_sensitivity;
     obj["activeBank"]  = m_activeBank;
 
-    QJsonArray slots;
+    QJsonArray slotArray;
     for (int b = 0; b < NUM_BANKS; ++b)
     {
         const Slot &s = m_slots[b];
@@ -505,9 +505,9 @@ void InfinityEncoderWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) co
         js["fixtureName"] = fxi ? fxi->name() : QString();
         js["channel"]     = (int)s.channel;
         js["label"]       = s.label;
-        slots.append(js);
+        slotArray.append(js);
     }
-    obj["slots"] = slots;
+    obj["slots"] = slotArray;
 }
 
 void InfinityEncoderWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
@@ -517,10 +517,10 @@ void InfinityEncoderWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_sensitivity = static_cast<Sensitivity>(obj["sensitivity"].toInt(Normal));
     m_activeBank  = obj["activeBank"].toInt(0);
 
-    const QJsonArray slots = obj["slots"].toArray();
-    for (int b = 0; b < NUM_BANKS && b < slots.size(); ++b)
+    const QJsonArray slotArray = obj["slots"].toArray();
+    for (int b = 0; b < NUM_BANKS && b < slotArray.size(); ++b)
     {
-        QJsonObject js = slots[b].toObject();
+        QJsonObject js = slotArray[b].toObject();
         Slot s;
         const QString fxName = js["fixtureName"].toString();
         s.fixtureId = UINT_MAX;

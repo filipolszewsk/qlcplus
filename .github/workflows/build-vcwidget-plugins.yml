@@ -193,37 +193,51 @@ jobs:
       - name: Build plugins (macOS / Linux)
         if: runner.os != 'Windows'
         run: |
+          FAILED=0
           for PLUGIN in $PLUGINS; do
             echo "=== Building $PLUGIN ==="
             rm -rf "plugins/vcwidgets/$PLUGIN/build"
-            cmake -S "plugins/vcwidgets/$PLUGIN" \
+            if cmake -S "plugins/vcwidgets/$PLUGIN" \
                   -B "plugins/vcwidgets/$PLUGIN/build" \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DQLCPLUS_SRC_DIR="$(pwd)" \
                   -DQLCPLUS_BUILD_DIR="$(pwd)/build" \
                   -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
                   -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-            cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+               && cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}; then
+              echo "OK: $PLUGIN"
+            else
+              echo "FAILED: $PLUGIN"
+              FAILED=1
+            fi
           done
+          [ "$FAILED" -eq 0 ] || exit 1
 
       - name: Build plugins (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
+          FAILED=0
           for PLUGIN in $PLUGINS; do
             echo "=== Building $PLUGIN ==="
             rm -rf "plugins/vcwidgets/$PLUGIN/build"
-            cmake -S "plugins/vcwidgets/$PLUGIN" \
+            if cmake -S "plugins/vcwidgets/$PLUGIN" \
                   -B "plugins/vcwidgets/$PLUGIN/build" \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DQLCPLUS_SRC_DIR="$(pwd)" \
                   -DQLCPLUS_BUILD_DIR="$(pwd)/build" \
                   -DCMAKE_PREFIX_PATH="${QTDIR}/lib/cmake" \
                   -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-            cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+               && cmake --build "plugins/vcwidgets/$PLUGIN/build" -j${NPROC}; then
+              echo "OK: $PLUGIN"
+            else
+              echo "FAILED: $PLUGIN"
+              FAILED=1
+            fi
           done
+          [ "$FAILED" -eq 0 ] || exit 1
 
       # ---- Collect binaries ----
       - name: Collect plugin binaries
@@ -255,6 +269,7 @@ jobs:
   # ============================================================
   package-qlcvcw:
     needs: build-plugins
+    if: always() && needs.build-plugins.result != 'cancelled'
     runs-on: ubuntu-22.04
     name: Package .qlcvcw
 
