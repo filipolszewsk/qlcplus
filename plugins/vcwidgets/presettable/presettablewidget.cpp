@@ -25,6 +25,8 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QIcon>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMutexLocker>
 #include <QSpinBox>
 #include <QComboBox>
@@ -1625,6 +1627,197 @@ VCWidget* PresetTableWidget::createCopy(VCWidget* parent)
 
     copy->rebuildTable();
     return copy;
+}
+
+// ==========================================================================
+// Cross-project clipboard
+// ==========================================================================
+
+void PresetTableWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+
+    QMutexLocker lk(const_cast<QMutex*>(&m_stateMutex));
+
+    obj["crossfadeEnabled"] = m_crossfadeEnabled;
+    obj["mode"] = (m_mode == PTMode::FixtureGroup) ? QStringLiteral("FixtureGroup")
+                                                    : QStringLiteral("Legacy");
+
+    /* Columns */
+    QJsonArray cols;
+    for (const PTColumn &col : m_columns)
+    {
+        QJsonObject c;
+        c["name"]  = col.name;
+        c["type"]  = (col.type == PTColumn::Dropdown ? QStringLiteral("Dropdown") :
+                      col.type == PTColumn::Scaler   ? QStringLiteral("Scaler")   :
+                                                       QStringLiteral("Numeric"));
+        c["fade"]  = col.fade;
+        c["width"] = col.width;
+        if (col.type == PTColumn::Scaler)
+        {
+            c["scalerMin"] = col.scalerMin;
+            c["scalerMax"] = col.scalerMax;
+            c["scalerSuffix"] = col.scalerSuffix;
+        }
+        if (col.binding.isValid())
+        {
+            QJsonObject b;
+            b["mfg"]  = col.binding.manufacturer;
+            b["model"]= col.binding.model;
+            b["mode"] = col.binding.modeName;
+            b["chan"] = col.binding.channelIndex;
+            c["binding"] = b;
+        }
+        QJsonArray opts;
+        for (const PTOption &opt : col.options)
+        {
+            QJsonObject o;
+            o["name"]  = opt.name;
+            o["value"] = (int)opt.value;
+            o["resource"] = opt.resource;
+            opts.append(o);
+        }
+        if (!opts.isEmpty())
+            c["options"] = opts;
+        cols.append(c);
+    }
+    obj["columns"] = cols;
+
+    /* Rows */
+    QJsonArray rows;
+    for (const PTRow &row : m_rows)
+    {
+        QJsonObject r;
+        r["name"] = row.name;
+        QJsonArray vals;
+        for (uchar v : row.values)
+            vals.append((int)v);
+        r["values"] = vals;
+        rows.append(r);
+    }
+    obj["rows"] = rows;
+
+    /* Outputs — fixture by name (Legacy) or groupRows (FixtureGroup) */
+    QJsonArray outs;
+    for (const PTOutput &out : m_outputs)
+    {
+        QJsonObject o;
+        o["name"] = out.name;
+        if (m_mode == PTMode::Legacy)
+        {
+            Fixture *fxi = doc->fixture(out.fixtureId);
+            o["fixtureName"] = fxi ? fxi->name() : QString();
+        }
+        else
+        {
+            QJsonArray gRows;
+            for (int r : out.groupRows)
+                gRows.append(r);
+            o["groupRows"] = gRows;
+        }
+        outs.append(o);
+    }
+    obj["outputs"] = outs;
+}
+
+void PresetTableWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+
+    QMutexLocker lk(&m_stateMutex);
+
+    m_crossfadeEnabled = obj["crossfadeEnabled"].toBool(false);
+    m_mode = (obj["mode"].toString() == QLatin1String("FixtureGroup"))
+             ? PTMode::FixtureGroup : PTMode::Legacy;
+
+    /* Columns */
+    m_columns.clear();
+    for (const QJsonValue &v : obj["columns"].toArray())
+    {
+        QJsonObject c = v.toObject();
+        PTColumn col;
+        col.name  = c["name"].toString();
+        col.fade  = c["fade"].toBool(true);
+        col.width = c["width"].toInt(-1);
+        const QString typeStr = c["type"].toString();
+        col.type = (typeStr == QLatin1String("Dropdown") ? PTColumn::Dropdown :
+                    typeStr == QLatin1String("Scaler")   ? PTColumn::Scaler   :
+                                                           PTColumn::Numeric);
+        if (col.type == PTColumn::Scaler)
+        {
+            col.scalerMin    = c["scalerMin"].toInt(0);
+            col.scalerMax    = c["scalerMax"].toInt(360);
+            col.scalerSuffix = c["scalerSuffix"].toString();
+        }
+        if (c.contains("binding"))
+        {
+            QJsonObject b = c["binding"].toObject();
+            col.binding.manufacturer = b["mfg"].toString();
+            col.binding.model        = b["model"].toString();
+            col.binding.modeName     = b["mode"].toString();
+            col.binding.channelIndex = b["chan"].toInt(-1);
+        }
+        for (const QJsonValue &ov : c["options"].toArray())
+        {
+            QJsonObject o = ov.toObject();
+            PTOption opt;
+            opt.name     = o["name"].toString();
+            opt.value    = (uchar)o["value"].toInt(0);
+            opt.resource = o["resource"].toString();
+            col.options.append(opt);
+        }
+        m_columns.append(col);
+    }
+
+    /* Rows */
+    m_rows.clear();
+    for (const QJsonValue &v : obj["rows"].toArray())
+    {
+        QJsonObject r = v.toObject();
+        PTRow row;
+        row.name = r["name"].toString();
+        for (const QJsonValue &val : r["values"].toArray())
+            row.values.append((uchar)val.toInt(0));
+        m_rows.append(row);
+    }
+
+    /* Outputs */
+    m_outputs.clear();
+    for (const QJsonValue &v : obj["outputs"].toArray())
+    {
+        QJsonObject o = v.toObject();
+        PTOutput out;
+        out.name = o["name"].toString();
+        if (m_mode == PTMode::Legacy)
+        {
+            const QString fxName = o["fixtureName"].toString();
+            out.fixtureId = UINT_MAX;
+            if (!fxName.isEmpty())
+            {
+                for (Fixture *fxi : doc->fixtures())
+                {
+                    if (fxi && fxi->name() == fxName)
+                    {
+                        out.fixtureId = fxi->id();
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            for (const QJsonValue &rv : o["groupRows"].toArray())
+                out.groupRows.append(rv.toInt());
+        }
+        m_outputs.append(out);
+    }
+
+    m_activeRow.fill(-1, m_outputs.size());
+    m_stagedRow.fill(-1, m_outputs.size());
+
+    lk.unlock();
+    QMetaObject::invokeMethod(this, "rebuildTable", Qt::QueuedConnection);
 }
 
 // ==========================================================================

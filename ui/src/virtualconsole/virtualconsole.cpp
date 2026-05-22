@@ -1701,7 +1701,18 @@ VCWidget* VirtualConsole::createGhostFromJson(const QJsonObject &obj)
         case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(m_contents, m_doc); break;
         case VCWidget::AnimationWidget: widget = new VCMatrix(m_contents, m_doc);    break;
         case VCWidget::ClockWidget:     widget = new VCClock(m_contents, m_doc);     break;
-        default: return nullptr;
+        default:
+        {
+            const QString pid = obj["pluginId"].toString();
+            if (pid.isEmpty())
+                return nullptr;
+            VCWidgetPluginInterface *plugin =
+                VCWidgetPluginManager::instance()->pluginById(pid);
+            if (!plugin)
+                return nullptr;
+            widget = plugin->createWidget(m_contents, m_doc);
+            break;
+        }
     }
 
     widget->fromClipboardJson(obj, m_doc);
@@ -1732,7 +1743,18 @@ void VirtualConsole::importWidgetsFromJson(const QJsonArray &widgets,
             case VCWidget::SpeedDialWidget: widget = new VCSpeedDial(parentFrame, m_doc); break;
             case VCWidget::AnimationWidget: widget = new VCMatrix(parentFrame, m_doc);    break;
             case VCWidget::ClockWidget:     widget = new VCClock(parentFrame, m_doc);     break;
-            default: continue;
+            default:
+            {
+                const QString pid = obj["pluginId"].toString();
+                if (pid.isEmpty())
+                    continue;
+                VCWidgetPluginInterface *plugin =
+                    VCWidgetPluginManager::instance()->pluginById(pid);
+                if (!plugin)
+                    continue;
+                widget = plugin->createWidget(parentFrame, m_doc);
+                break;
+            }
         }
 
         if (!widget)

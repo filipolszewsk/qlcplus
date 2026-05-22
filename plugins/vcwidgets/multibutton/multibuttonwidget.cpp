@@ -27,6 +27,8 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QDir>
+#include <QJsonArray>
+#include <QJsonObject>
 
 // ---- XML tag constants ----------------------------------------------------
 
@@ -596,6 +598,52 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setInputSource(inputSource(triggerInputSourceId), triggerInputSourceId);
     copy->setInputSource(inputSource(popupInputSourceId),   popupInputSourceId);
     return copy;
+}
+
+// ---- Cross-project clipboard -----------------------------------------------
+
+void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+
+    obj["longPressMs"]          = m_longPressMs;
+    obj["addOffAtEnd"]          = m_addOffAtEnd;
+    obj["monitorChannelValues"] = m_monitorChannelValues;
+
+    QJsonArray funcs;
+    for (int i = 0; i < m_functionIds.size(); ++i)
+    {
+        Function *f = doc->function(m_functionIds.at(i));
+        QJsonObject entry;
+        entry["name"]     = f ? f->name() : QString();
+        entry["label"]    = m_functionLabels.value(i);
+        entry["iconPath"] = m_iconPaths.value(i);
+        funcs.append(entry);
+    }
+    obj["entries"] = funcs;
+}
+
+void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+
+    m_longPressMs          = obj["longPressMs"].toInt(500);
+    m_addOffAtEnd          = obj["addOffAtEnd"].toBool(false);
+    m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
+
+    QList<quint32> ids;
+    QStringList    labels;
+    QStringList    icons;
+    for (const QJsonValue &v : obj["entries"].toArray())
+    {
+        QJsonObject e = v.toObject();
+        Function *f = resolveFunctionByName(e["name"].toString(), doc);
+        ids    << (f ? f->id() : Function::invalidId());
+        labels << e["label"].toString();
+        icons  << e["iconPath"].toString();
+    }
+    setEntries(ids, labels, icons);
+    update();
 }
 
 // ---- Load & Save ---------------------------------------------------------

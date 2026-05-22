@@ -8,6 +8,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QMutexLocker>
+#include <QJsonObject>
 #include <QDebug>
 
 #include "dmxnumericconfigdialog.h"
@@ -113,6 +114,36 @@ VCWidget* DMXNumericWidget::createCopy(VCWidget* parent)
     }
     copy->m_spinBox->setValue(m_spinBox->value());
     return copy;
+}
+
+void DMXNumericWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+
+    Fixture *fxi = doc->fixture(m_fixtureId);
+    obj["fixtureName"] = fxi ? fxi->name() : QString();
+    obj["channel"]     = (int)m_channel;
+}
+
+void DMXNumericWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+
+    const QString fxName = obj["fixtureName"].toString();
+    quint32 fxId = UINT_MAX;
+    if (!fxName.isEmpty())
+    {
+        for (Fixture *fxi : doc->fixtures())
+        {
+            if (fxi && fxi->name() == fxName)
+            {
+                fxId = fxi->id();
+                break;
+            }
+        }
+    }
+    setFixtureChannel(fxId, (quint32)obj["channel"].toInt(0));
+    updateAddressLabel();
 }
 
 // ---- Mode --------------------------------------------------------------------

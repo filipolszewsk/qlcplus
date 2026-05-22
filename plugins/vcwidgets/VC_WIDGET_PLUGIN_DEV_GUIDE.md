@@ -1130,6 +1130,80 @@ qlcplus/vcwidget-registry/
 
 ---
 
+## 17. Cross-Project Copy/Paste
+
+QLC+ obsługuje kopiowanie widgetów między projektami przez schowek systemowy (`Cmd+Shift+C` / `Cmd+Shift+V`). Mechanizm oparty jest na JSON — silnik automatycznie zapisuje `pluginId`, geometrię, caption, appearance i input sources. **Twój plugin dostaje cross-project copy/paste za darmo**, ale bez stanu specyficznego (np. przypisanych funkcji).
+
+Żeby skopiować też stan specyficzny, nadpisz dwie wirtualne metody w klasie widgetu:
+
+```cpp
+// mójwidget.h
+void toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+void fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
+```
+
+```cpp
+// mójwidget.cpp
+void MojWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);   // zapisze pluginId, geometry, caption, appearance, inputs
+
+    // Zapisz stan specyficzny pluginu
+    obj["threshold"]    = m_threshold;
+    obj["functionName"] = m_function ? m_function->name() : QString();
+    // Dla list funkcji:
+    QJsonArray funcs;
+    for (quint32 id : m_functionIds)
+    {
+        Function *f = doc->function(id);
+        if (f) funcs.append(f->name());
+    }
+    if (!funcs.isEmpty())
+        obj["functions"] = funcs;
+}
+
+void MojWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc); // odtworzy wspólną część
+
+    // Odtwórz stan specyficzny
+    m_threshold = obj["threshold"].toInt();
+
+    // Funkcje — zawsze po nazwie (ID są projekt-specyficzne)
+    if (Function *f = VCWidget::resolveFunctionByName(obj["functionName"].toString(), doc))
+        setFunction(f->id());
+
+    // Lista funkcji
+    QList<quint32> ids;
+    for (const QJsonValue &v : obj["functions"].toArray())
+    {
+        if (Function *f = VCWidget::resolveFunctionByName(v.toString(), doc))
+            ids.append(f->id());
+    }
+    if (!ids.isEmpty())
+        setFunctionIds(ids);
+
+    update();
+}
+```
+
+### Zasady serializacji
+
+- **Funkcje zawsze po nazwie** — `Function::name()`, nigdy po `id()` (ID są projekt-specyficzne).
+- **Fixture po nazwie** — `Fixture::name()` + numer kanału.
+- Helperów z bazy: `VCWidget::resolveFunctionByName(name, doc)` zwraca `Function*` lub `nullptr`.
+- Jeśli plugin nie nadpisze metod, QLC+ i tak skopiuje wygląd/rozmiar/caption/inputs — tylko stan specyficzny zostanie utracony przy wklejaniu do innego projektu.
+
+### Rebuild
+
+Metody `toClipboardJson`/`fromClipboardJson` są **wirtualne w `VCWidget`** i siedzą w Twojej `.dylib`. Po dodaniu/modyfikacji tych metod wystarczy przebudować **tylko plugin** (sekcja 12). QLC+ nie wymaga rebuildu.
+
+### Co jeśli plugin nie jest zainstalowany
+
+Jeśli próbujesz wkleić widget z pluginem który nie jest zainstalowany w projekcie docelowym, QLC+ wyświetli w oknie importu ostrzeżenie `[PLUGIN NOT INSTALLED: com.twoj.plugin]` i pominie ten widget.
+
+---
+
 ## Checklist przed wydaniem pluginu
 
 - [ ] `pluginId()` jest globalnie unikalny (reverse-domain)
@@ -1154,3 +1228,4 @@ qlcplus/vcwidget-registry/
 - [ ] Input source'y kopiowane w `createCopy`
 - [ ] `<ValueInput>/<ApplyInput>` serializowane przez `saveXMLInput`/`loadXMLSources`
 - [ ] `InputSelectionWidget` w dialogu konfiguracji dla każdego mapowania
+- [ ] (opcjonalnie) `toClipboardJson` / `fromClipboardJson` nadpisane jeśli widget ma stan specyficzny (funkcje, fixture, parametry) — bez tego cross-project copy/paste kopiuje tylko wygląd

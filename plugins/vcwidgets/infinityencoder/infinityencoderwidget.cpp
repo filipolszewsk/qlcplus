@@ -17,6 +17,8 @@
 
 #include <QPainter>
 #include <QMutexLocker>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QDebug>
 #include <QtMath>
 
@@ -485,6 +487,62 @@ VCWidget* InfinityEncoderWidget::createCopy(VCWidget* parent)
     }
 
     return copy;
+}
+
+void InfinityEncoderWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
+{
+    VCWidget::toClipboardJson(obj, doc);
+
+    obj["sensitivity"] = (int)m_sensitivity;
+    obj["activeBank"]  = m_activeBank;
+
+    QJsonArray slots;
+    for (int b = 0; b < NUM_BANKS; ++b)
+    {
+        const Slot &s = m_slots[b];
+        Fixture *fxi = doc->fixture(s.fixtureId);
+        QJsonObject js;
+        js["fixtureName"] = fxi ? fxi->name() : QString();
+        js["channel"]     = (int)s.channel;
+        js["label"]       = s.label;
+        slots.append(js);
+    }
+    obj["slots"] = slots;
+}
+
+void InfinityEncoderWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
+{
+    VCWidget::fromClipboardJson(obj, doc);
+
+    m_sensitivity = static_cast<Sensitivity>(obj["sensitivity"].toInt(Normal));
+    m_activeBank  = obj["activeBank"].toInt(0);
+
+    const QJsonArray slots = obj["slots"].toArray();
+    for (int b = 0; b < NUM_BANKS && b < slots.size(); ++b)
+    {
+        QJsonObject js = slots[b].toObject();
+        Slot s;
+        const QString fxName = js["fixtureName"].toString();
+        s.fixtureId = UINT_MAX;
+        if (!fxName.isEmpty())
+        {
+            for (Fixture *fxi : doc->fixtures())
+            {
+                if (fxi && fxi->name() == fxName)
+                {
+                    s.fixtureId = fxi->id();
+                    break;
+                }
+            }
+        }
+        s.channel = (quint32)js["channel"].toInt(0);
+        s.label   = js["label"].toString();
+        setSlot(b, s);
+    }
+
+    updateInfoLabel();
+    updateBankButtonStyles();
+    updateSensButtonStyles();
 }
 
 // ---- Load & Save -----------------------------------------------------------

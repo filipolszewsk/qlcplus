@@ -15,6 +15,7 @@
 #include <QXmlStreamWriter>
 #include <QPaintEvent>
 
+#include <QJsonObject>
 #include "vcwidget.h"
 #include "dmxsource.h"
 #include "genericfader.h"
@@ -39,6 +40,8 @@ public:
 
     // ---- Clipboard ---------------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
+    void      toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+    void      fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
 
     // ---- External input / feedback -----------------------------------
     void updateFeedback() override;

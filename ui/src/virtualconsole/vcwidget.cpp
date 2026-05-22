@@ -1033,6 +1033,10 @@ void VCWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     }
     if (!inputsArr.isEmpty())
         obj["inputs"] = inputsArr;
+
+    /* Plugin identity — stored so the receiving project can recreate the widget */
+    if (!pluginId().isEmpty())
+        obj["pluginId"] = pluginId();
 }
 
 void VCWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)

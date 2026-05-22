@@ -31,6 +31,8 @@
 #include "virtualconsole.h"
 #include "vcwidget.h"
 #include "vcframe.h"
+#include "vcwidgetpluginmanager.h"
+#include "vcwidgetplugininterface.h"
 #include "function.h"
 #include "doc.h"
 
@@ -90,7 +92,22 @@ void ImportVCWidgetsDialog::populateTree(const QJsonArray &widgets, QTreeWidgetI
         QString typeName;
         int wType = w["widgetType"].toInt(-1);
         if (wType >= 0)
+        {
             typeName = VCWidget::typeToString(static_cast<VCWidget::WidgetType>(wType));
+            if (static_cast<VCWidget::WidgetType>(wType) == VCWidget::UnknownWidget)
+            {
+                const QString pid = w["pluginId"].toString();
+                if (!pid.isEmpty())
+                {
+                    VCWidgetPluginInterface *plugin =
+                        VCWidgetPluginManager::instance()->pluginById(pid);
+                    if (plugin)
+                        typeName = plugin->name();
+                    else
+                        typeName = tr("[PLUGIN NOT INSTALLED: %1]").arg(pid);
+                }
+            }
+        }
 
         QString caption = w["caption"].toString();
         if (caption.isEmpty())

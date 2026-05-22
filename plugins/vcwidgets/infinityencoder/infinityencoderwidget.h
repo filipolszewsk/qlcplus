@@ -23,6 +23,8 @@
 #include <QResizeEvent>
 #include <cmath>
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include "vcwidget.h"
 #include "dmxsource.h"
 #include "genericfader.h"
@@ -64,6 +66,8 @@ public:
 
     // ---- VCWidget overrides ------------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
+    void      toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
+    void      fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
     void      updateFeedback() override;
     bool      loadXML(QXmlStreamReader& root) override;
     bool      saveXML(QXmlStreamWriter* doc) override;
