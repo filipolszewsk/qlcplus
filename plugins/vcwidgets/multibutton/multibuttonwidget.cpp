@@ -25,10 +25,7 @@
 #include <QPen>
 #include <QMenu>
 #include <QAction>
-#include <QWidgetAction>
-#include <QFrame>
 #include <QLabel>
-#include <QHBoxLayout>
 #include <QFont>
 #include <QDebug>
 #include <QFileDialog>
@@ -39,6 +36,10 @@
 #include <QJsonObject>
 #include <QVector>
 #include <QRandomGenerator>
+#include <functional>
+#include <QEventLoop>
+#include <QApplication>
+#include <QCursor>
 
 // ---- XML tag constants ----------------------------------------------------
 
@@ -58,6 +59,7 @@ static const QString KXMLTriggerInput      = QStringLiteral("TriggerInput");
 static const QString KXMLPopupInput        = QStringLiteral("PopupInput");
 static const QString KXMLAutomationTriggerInput = QStringLiteral("AutomationTriggerInput");
 static const QString KXMLPresetChooseInput = QStringLiteral("PresetChooseInput");
+static const QString KXMLEntrySelectInput  = QStringLiteral("EntrySelectInput");
 static const QString KXMLLevelFixture      = QStringLiteral("LevelFixture");
 static const QString KXMLLevelFixtureID    = QStringLiteral("ID");
 static const QString KXMLLevelChannels     = QStringLiteral("LevelChannels");
@@ -151,10 +153,18 @@ MultiButtonWidget::MultiButtonWidget(QWidget* parent, Doc* doc)
     m_longPressTimer->setSingleShot(true);
     connect(m_longPressTimer, &QTimer::timeout,
             this, &MultiButtonWidget::slotLongPressFired);
+
+    m_entrySelectDismissTimer = new QTimer(this);
+    m_entrySelectDismissTimer->setSingleShot(true);
+    m_entrySelectDismissTimer->setInterval(500);
+    connect(m_entrySelectDismissTimer, &QTimer::timeout, this, [this]() {
+        closeEntrySelectPopup(true);
+    });
 }
 
 MultiButtonWidget::~MultiButtonWidget()
 {
+    closeEntrySelectPopup(false);
     m_doc->masterTimer()->unregisterDMXSource(this);
     releaseLevelFaders();
 
@@ -180,6 +190,9 @@ void MultiButtonWidget::setWidgetMode(MultiButtonMode mode)
 {
     if (m_mode == mode)
         return;
+
+    cancelEntrySelectPreview();
+    closeEntrySelectPopup(false);
 
     if (m_mode == MultiButtonMode::Level)
         releaseLevelFaders();
@@ -224,7 +237,7 @@ void MultiButtonWidget::setLevelConfig(const QList<LevelChannelBinding>& binding
         m_currentIndex = -1;
 
     reactivateLevelPreset();
-    recalcSpreadSize();
+    recalcLayoutSize();
     update();
 }
 
@@ -273,9 +286,11 @@ void MultiButtonWidget::setEntries(const QList<quint32>& ids,
     m_iconCache.clear();
     m_currentIndex = -1;
     m_visualOnly   = false;
+    cancelEntrySelectPreview();
+    resetLevelWriteCache();
 
     rebuildSceneCache();
-    recalcSpreadSize();
+    recalcLayoutSize();
     update();
 }
 
@@ -294,7 +309,8 @@ void MultiButtonWidget::setLongPressMs(int ms)
 void MultiButtonWidget::setAddOffAtEnd(bool v)
 {
     m_addOffAtEnd = v;
-    recalcSpreadSize();
+    cancelEntrySelectPreview();
+    recalcLayoutSize();
     update();
 }
 
@@ -303,44 +319,44 @@ void MultiButtonWidget::setWidgetLayout(MultiButtonLayout layout)
     if (m_layout == layout)
         return;
     m_layout = layout;
-    recalcSpreadSize();
+    recalcLayoutSize();
     update();
 }
 
 void MultiButtonWidget::setSpreadColumns(int columns)
 {
     m_spreadColumns = qMax(0, columns);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadRows(int rows)
 {
     m_spreadRows = qMax(0, rows);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadHMargin(int margin)
 {
     m_spreadHMargin = qBound(0, margin, 64);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadVMargin(int margin)
 {
     m_spreadVMargin = qBound(0, margin, 64);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadTileWidth(int width)
 {
     m_spreadTileWidth = qBound(20, width, 400);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadTileHeight(int height)
 {
     m_spreadTileHeight = qBound(20, height, 400);
-    recalcSpreadSize();
+    recalcLayoutSize();
 }
 
 int MultiButtonWidget::spreadTileCount() const
@@ -394,11 +410,19 @@ QSize MultiButtonWidget::spreadTotalSize() const
     return QSize(qMax(40, w), qMax(40, h + titleH));
 }
 
-void MultiButtonWidget::recalcSpreadSize()
+QSize MultiButtonWidget::singleButtonSize() const
 {
-    if (m_layout != MultiButtonLayout::Spread)
-        return;
-    resize(spreadTotalSize());
+    const int titleH = caption().isEmpty() ? 0 : 19;
+    return QSize(qMax(40, m_spreadTileWidth),
+                 qMax(40, m_spreadTileHeight + titleH));
+}
+
+void MultiButtonWidget::recalcLayoutSize()
+{
+    if (m_layout == MultiButtonLayout::Spread)
+        resize(spreadTotalSize());
+    else
+        resize(singleButtonSize());
 }
 
 QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
@@ -519,6 +543,13 @@ void MultiButtonWidget::releaseLevelFaders()
             fader->requestDelete();
     }
     m_fadersMap.clear();
+    resetLevelWriteCache();
+}
+
+void MultiButtonWidget::resetLevelWriteCache()
+{
+    m_lastWrittenPresetIndex = -1;
+    m_lastWrittenPresetValues.clear();
 }
 
 void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
@@ -533,6 +564,11 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         return;
 
     const LevelPreset& preset = m_levelPresets.at(m_currentIndex);
+    const bool presetChanged = (m_currentIndex != m_lastWrittenPresetIndex
+                                || m_lastWrittenPresetValues != preset.values);
+    if (!presetChanged)
+        return;
+
     for (int i = 0; i < m_levelChannelBindings.size() && i < preset.values.size(); ++i)
     {
         const LevelChannelBinding& b = m_levelChannelBindings.at(i);
@@ -570,6 +606,9 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         fc->setReady(false);
         fc->setElapsed(0);
     }
+
+    m_lastWrittenPresetIndex  = m_currentIndex;
+    m_lastWrittenPresetValues = preset.values;
 }
 
 // ---- Helpers --------------------------------------------------------------
@@ -680,106 +719,280 @@ static QColor contrastRingOn(const QColor& bg)
     return contrastTextOn(bg);
 }
 
-static QColor hoverAccentOn(const QColor& bg)
-{
-    return (bg.lightness() > 160) ? QColor(QStringLiteral("#f59e0b"))
-                                  : QColor(QStringLiteral("#ffeb3b"));
-}
-
-/** Colored preset row for Level popup menus (macOS ignores native menu highlight). */
-class LevelPresetMenuRow : public QFrame
+/** Non-modal entry list for Operate + Single (replaces QMenu::popup on macOS). */
+class EntrySelectOverlay : public QWidget
 {
 public:
-    explicit LevelPresetMenuRow(const QColor& bg, int index, QWidget* parent = nullptr)
-        : QFrame(parent)
-        , m_bg(bg)
-        , m_index(index)
-        , m_active(false)
-        , m_hovered(false)
+    static const int kRowHeight  = 28;
+    static const int kPad        = 4;
+    static const int kTitleHeight = 22;
+    static const int kIconSize   = 22;
+
+    explicit EntrySelectOverlay(MultiButtonWidget* owner)
+        : QWidget(nullptr)
+        , m_owner(owner)
     {
-        setFixedHeight(28);
-        setMinimumWidth(140);
-        updateBorderStyle();
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+        setAttribute(Qt::WA_ShowWithoutActivating, true);
+        setFocusPolicy(Qt::NoFocus);
+        setMouseTracking(true);
+        setPalette(owner->palette());
     }
 
-    int index() const { return m_index; }
+    std::function<void(int)> onRowPicked;
+    std::function<void()>    onPickCancelled;
 
-    void setActive(bool active)
+    void beginDragPick()
     {
-        if (m_active == active)
-            return;
-        m_active = active;
-        updateBorderStyle();
+        m_trackingPick = true;
+        grabMouse();
+        setHoverFromPos(mapFromGlobal(QCursor::pos()));
     }
 
-    void setHovered(bool hovered)
+    QSize computedSize() const
     {
-        if (m_hovered == hovered)
+        QFontMetrics fm(font());
+        int w = qMax(m_owner->width(), 180);
+
+        const int n = m_owner->entryCount();
+        for (int i = 0; i < n; ++i)
+        {
+            const QString text = rowLabel(i);
+            w = qMax(w, fm.horizontalAdvance(text) + 72);
+        }
+        if (m_owner->m_addOffAtEnd)
+            w = qMax(w, fm.horizontalAdvance(m_owner->tr("OFF (deactivate)")) + 24);
+
+        const bool hasTitle = !m_owner->caption().isEmpty();
+        int h = kPad * 2 + rowCount() * kRowHeight;
+        if (hasTitle)
+            h += kTitleHeight;
+
+        return QSize(w, h);
+    }
+
+    void positionBelowOwner()
+    {
+        setFixedSize(computedSize());
+        move(m_owner->mapToGlobal(QPoint(0, m_owner->height())));
+    }
+
+    void positionAtGlobal(const QPoint& globalPos)
+    {
+        setFixedSize(computedSize());
+        move(globalPos);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter p(this);
+        p.fillRect(rect(), palette().window());
+
+        const bool hasTitle = !m_owner->caption().isEmpty();
+        int y = kPad;
+
+        if (hasTitle)
+        {
+            QFont titleFont = font();
+            titleFont.setBold(true);
+            p.setFont(titleFont);
+            p.setPen(palette().windowText().color());
+            p.drawText(QRect(kPad, y, width() - 2 * kPad, kTitleHeight),
+                       Qt::AlignVCenter | Qt::AlignLeft,
+                       m_owner->caption());
+            y += kTitleHeight;
+        }
+
+        const int highlightIdx = highlightEntryIndex();
+        const int rows = rowCount();
+        for (int row = 0; row < rows; ++row)
+        {
+            const int entryIdx = entryIndexForRow(row);
+            const QRect rowRect(kPad, y, width() - 2 * kPad, kRowHeight);
+            paintRow(p, rowRect, entryIdx, highlightIdx);
+            y += kRowHeight;
+        }
+
+        p.setPen(QPen(palette().mid().color(), 1));
+        p.drawRect(rect().adjusted(0, 0, -1, -1));
+    }
+
+    void mousePressEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton)
             return;
-        m_hovered = hovered;
-        updateBorderStyle();
+
+        m_trackingPick = true;
+        setHoverFromPos(e->pos());
+        e->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent* e) override
+    {
+        setHoverFromPos(e->pos());
+        e->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* e) override
+    {
+        if (e->button() != Qt::LeftButton)
+            return;
+
+        const int row = rowAt(e->pos());
+        const int entryIdx = entryIndexForRow(row);
+        const bool validRow = (row >= 0 && row < rowCount() && entryIdx >= -1);
+
+        endDragPick();
+
+        if (validRow && onRowPicked)
+            onRowPicked(entryIdx);
+        else if (onPickCancelled)
+            onPickCancelled();
+
+        e->accept();
     }
 
 private:
-    void updateBorderStyle()
+    void setHoverFromPos(const QPoint& pos)
     {
-        const QColor ring = contrastRingOn(m_bg);
-        const QColor hoverRing = hoverAccentOn(m_bg);
-
-        QString border;
-        QString extra;
-
-        if (m_active)
-        {
-            const int width = m_hovered ? 4 : 3;
-            border = QStringLiteral("%1px solid %2")
-                         .arg(width)
-                         .arg(ring.name(QColor::HexRgb));
-            extra = QStringLiteral("border-left: 5px solid %1;")
-                        .arg(ring.name(QColor::HexRgb));
-        }
-        else if (m_hovered)
-        {
-            border = QStringLiteral("2px solid %1").arg(hoverRing.name(QColor::HexRgb));
-        }
-        else
-        {
-            border = QStringLiteral("1px solid rgba(0, 0, 0, 0.45)");
-        }
-
-        setStyleSheet(QStringLiteral(
-                          "QFrame { background-color: %1; border: %2; %3"
-                          " border-radius: 3px; }"
-                          "QLabel { background: transparent; border: none; }")
-                          .arg(m_bg.name(QColor::HexRgb), border, extra));
+        const int row = rowAt(pos);
+        if (row == m_hoverRow)
+            return;
+        m_hoverRow = row;
+        update();
     }
 
-    QColor m_bg;
-    int m_index = 0;
-    bool m_active = false;
-    bool m_hovered = false;
+    void endDragPick()
+    {
+        if (mouseGrabber() == this)
+            releaseMouse();
+        m_trackingPick = false;
+    }
+
+    int highlightEntryIndex() const
+    {
+        if (m_trackingPick && m_hoverRow >= 0)
+        {
+            const int idx = entryIndexForRow(m_hoverRow);
+            if (idx >= -1)
+                return idx;
+        }
+        return m_owner->displayedEntryIndex();
+    }
+
+    int m_hoverRow = -1;
+    bool m_trackingPick = false;
+
+    int rowCount() const
+    {
+        const int n = m_owner->entryCount();
+        if (n <= 0)
+            return 0;
+        return n + (m_owner->m_addOffAtEnd ? 1 : 0);
+    }
+
+    int contentTop() const
+    {
+        return kPad + (m_owner->caption().isEmpty() ? 0 : kTitleHeight);
+    }
+
+    int rowAt(const QPoint& pos) const
+    {
+        const int y = pos.y() - contentTop();
+        if (y < 0)
+            return -1;
+        return y / kRowHeight;
+    }
+
+    int entryIndexForRow(int row) const
+    {
+        const int n = m_owner->entryCount();
+        if (row < 0 || row >= rowCount())
+            return -2;
+        if (row < n)
+            return row;
+        return -1;
+    }
+
+    QString rowLabel(int entryIdx) const
+    {
+        if (entryIdx < 0)
+            return m_owner->tr("OFF (deactivate)");
+        return m_owner->popupMenuTextForEntry(entryIdx);
+    }
+
+    void paintRow(QPainter& p, const QRect& rowRect, int entryIdx, int displayIdx) const
+    {
+        const bool selected = (entryIdx < 0) ? (displayIdx < 0) : (entryIdx == displayIdx);
+
+        QColor bg = m_owner->palette().button().color();
+        QColor fg = m_owner->palette().buttonText().color();
+
+        if (entryIdx >= 0
+            && m_owner->m_mode == MultiButtonMode::Level
+            && entryIdx < m_owner->m_levelPresets.size())
+        {
+            const QColor presetColor = m_owner->m_levelPresets.at(entryIdx).color;
+            if (presetColor.isValid())
+            {
+                bg = presetColor;
+                fg = contrastTextOn(bg);
+            }
+        }
+
+        p.fillRect(rowRect, bg);
+
+        if (selected)
+        {
+            const QColor ring = contrastRingOn(bg);
+            p.setPen(QPen(ring, 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(rowRect.adjusted(1, 1, -1, -1), 3, 3);
+        }
+
+        QRect inner = rowRect.adjusted(8, 0, -6, 0);
+
+        if (selected)
+        {
+            QFont markFont = p.font();
+            markFont.setBold(true);
+            p.setFont(markFont);
+            p.setPen(fg);
+            p.drawText(QRect(inner.left(), inner.top(), 16, inner.height()),
+                       Qt::AlignVCenter | Qt::AlignLeft,
+                       QStringLiteral("\u2713"));
+            inner.adjust(14, 0, 0, 0);
+        }
+
+        if (entryIdx >= 0 && !m_owner->entryIconPath(entryIdx).isEmpty())
+        {
+            const QPixmap px = m_owner->iconForEntry(entryIdx);
+            if (!px.isNull())
+            {
+                const QPixmap scaled = px.scaled(kIconSize, kIconSize,
+                                                 Qt::KeepAspectRatio,
+                                                 Qt::SmoothTransformation);
+                const int ix = inner.right() - scaled.width();
+                const int iy = inner.top() + (inner.height() - scaled.height()) / 2;
+                p.drawPixmap(ix, iy, scaled);
+                inner.adjust(0, 0, -(scaled.width() + 4), 0);
+            }
+        }
+
+        const QString text = rowLabel(entryIdx);
+        if (!text.isEmpty())
+        {
+            QFont textFont = p.font();
+            textFont.setBold(selected);
+            p.setFont(textFont);
+            p.setPen(fg);
+            p.drawText(inner, Qt::AlignVCenter | Qt::AlignLeft, text);
+        }
+    }
+
+    MultiButtonWidget* m_owner;
 };
-
-static void updateLevelMenuRowHover(QMenu* menu, QAction* hoveredAction)
-{
-    if (!menu)
-        return;
-
-    const int hoverIdx = hoveredAction ? hoveredAction->data().toInt() : -1;
-
-    for (QAction* action : menu->actions())
-    {
-        QWidgetAction* widgetAction = qobject_cast<QWidgetAction*>(action);
-        if (!widgetAction)
-            continue;
-
-        auto* row = static_cast<LevelPresetMenuRow*>(widgetAction->defaultWidget());
-        if (!row)
-            continue;
-
-        row->setHovered(hoverIdx >= 0 && row->index() == hoverIdx);
-    }
-}
 
 QString MultiButtonWidget::popupMenuTextForEntry(int idx) const
 {
@@ -797,61 +1010,6 @@ QString MultiButtonWidget::popupMenuTextForEntry(int idx) const
         return QString();
 
     return levelPresetDisplayName(idx);
-}
-
-void MultiButtonWidget::addLevelPresetMenuRow(QMenu* menu, int index, bool selected)
-{
-    if (!menu || index < 0 || index >= m_levelPresets.size())
-        return;
-
-    const LevelPreset& preset = m_levelPresets.at(index);
-    const QColor bg = preset.color.isValid() ? preset.color : palette().button().color();
-    const QColor fg = contrastTextOn(bg);
-
-    auto* row = new LevelPresetMenuRow(bg, index, menu);
-    row->setActive(selected);
-
-    QHBoxLayout* lay = new QHBoxLayout(row);
-    lay->setContentsMargins(8, 2, 6, 2);
-    lay->setSpacing(6);
-
-    if (selected)
-    {
-        QLabel* mark = new QLabel(QStringLiteral("\u2713"), row);
-        mark->setStyleSheet(QStringLiteral("color: %1; font-weight: bold;")
-                                .arg(fg.name(QColor::HexRgb)));
-        lay->addWidget(mark);
-    }
-
-    if (!preset.hideName)
-    {
-        QLabel* lbl = new QLabel(levelPresetDisplayName(index), row);
-        lbl->setStyleSheet(QStringLiteral("color: %1; font-weight: bold;")
-                               .arg(fg.name(QColor::HexRgb)));
-        lay->addWidget(lbl, 1);
-    }
-    else
-    {
-        lay->addStretch(1);
-        row->setToolTip(tr("Preset %1").arg(index + 1));
-    }
-
-    if (!entryIconPath(index).isEmpty())
-    {
-        QPixmap px = iconForEntry(index);
-        if (!px.isNull())
-        {
-            QLabel* iconLbl = new QLabel(row);
-            iconLbl->setPixmap(px.scaled(22, 22, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            iconLbl->setStyleSheet(QStringLiteral("background: transparent;"));
-            lay->addWidget(iconLbl);
-        }
-    }
-
-    QWidgetAction* action = new QWidgetAction(menu);
-    action->setDefaultWidget(row);
-    action->setData(index);
-    menu->addAction(action);
 }
 
 void MultiButtonWidget::rebuildSceneCache()
@@ -1141,6 +1299,7 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
 {
     if (mode == Doc::Design)
     {
+        closeEntrySelectPopup(false);
         m_doc->masterTimer()->unregisterDMXSource(this);
         releaseLevelFaders();
 
@@ -1236,6 +1395,10 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
             }
             m_pressTileIndex = -2;
         }
+        else if (m_longFired && m_entrySelectOverlay)
+        {
+            clearPressTracking();
+        }
         else if (!m_longFired && rect().contains(e->pos()))
         {
             cycleNext();
@@ -1246,6 +1409,13 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
         return;
     }
     VCWidget::mouseReleaseEvent(e);
+}
+
+void MultiButtonWidget::clearPressTracking()
+{
+    m_pressActive = false;
+    m_longPressTimer->stop();
+    m_pressTileIndex = -2;
 }
 
 void MultiButtonWidget::slotLongPressFired()
@@ -1269,58 +1439,251 @@ void MultiButtonWidget::contextMenuEvent(QContextMenuEvent* e)
     VCWidget::contextMenuEvent(e);
 }
 
-void MultiButtonWidget::showPopupMenu(const QPoint& globalPos)
+int MultiButtonWidget::selectableSlotCount() const
 {
-    if (entryCount() == 0) return;
+    const int n = entryCount();
+    if (n <= 0)
+        return 0;
+    return n + (m_addOffAtEnd ? 1 : 0);
+}
 
-    QMenu menu(this);
-    menu.setTitle(caption().isEmpty() ? tr("Multi Button") : caption());
-    menu.setStyleSheet(QStringLiteral("QMenu { padding: 3px; }"));
+int MultiButtonWidget::slotFromInputValue(uchar value, const QLCInputSource* src) const
+{
+    const int slotCount = selectableSlotCount();
+    if (slotCount <= 0)
+        return 0;
 
-    if (m_mode == MultiButtonMode::Level)
+    uchar lower = 0;
+    uchar upper = 255;
+    if (src != nullptr)
     {
-        for (int i = 0; i < entryCount(); ++i)
-            addLevelPresetMenuRow(&menu, i, i == m_currentIndex);
+        lower = src->feedbackValue(QLCInputFeedback::LowerValue);
+        upper = src->feedbackValue(QLCInputFeedback::UpperValue);
+        if (upper <= lower)
+        {
+            lower = 0;
+            upper = 255;
+        }
+    }
 
-        connect(&menu, &QMenu::hovered, [&menu](QAction* action) {
-            updateLevelMenuRowHover(&menu, action);
-        });
+    const int range = int(upper) - int(lower);
+    const int v = qBound(int(lower), int(value), int(upper));
+    return qMin(slotCount - 1, int((qint64(v - lower) * slotCount) / (range + 1)));
+}
+
+int MultiButtonWidget::slotToEntryIndex(int slot) const
+{
+    const int n = entryCount();
+    if (n <= 0)
+        return -1;
+
+    if (m_addOffAtEnd && slot >= n)
+        return -1;
+
+    return qBound(0, slot, n - 1);
+}
+
+uchar MultiButtonWidget::entrySelectOutputValueForSlot(int slot) const
+{
+    const int slotCount = selectableSlotCount();
+    if (slotCount <= 0)
+        return 0;
+
+    const QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
+    uchar lower = 0;
+    uchar upper = 255;
+    if (src != nullptr)
+    {
+        lower = src->feedbackValue(QLCInputFeedback::LowerValue);
+        upper = src->feedbackValue(QLCInputFeedback::UpperValue);
+        if (upper <= lower)
+        {
+            lower = 0;
+            upper = 255;
+        }
+    }
+
+    if (slotCount <= 1)
+        return lower;
+
+    const int range = int(upper) - int(lower);
+    const int center = int(lower) + ((slot * 2 + 1) * (range + 1)) / (2 * slotCount);
+    return uchar(qBound(int(lower), center, int(upper)));
+}
+
+void MultiButtonWidget::syncEntrySelectInputOutput(uchar rawValue)
+{
+    QSharedPointer<QLCInputSource> src = inputSource(entrySelectInputSourceId);
+    if (src.isNull() || !src->isValid() || !src->needsUpdate())
+        return;
+
+    src->updateOuputValue(rawValue);
+}
+
+int MultiButtonWidget::displayedEntryIndex() const
+{
+    if (m_entrySelectPreviewActive)
+        return m_entrySelectPreviewIndex;
+    return m_currentIndex;
+}
+
+void MultiButtonWidget::cancelEntrySelectPreview()
+{
+    if (!m_entrySelectPreviewActive)
+        return;
+
+    m_entrySelectPreviewActive = false;
+    m_entrySelectPreviewIndex  = -1;
+    update();
+}
+
+void MultiButtonWidget::commitEntrySelectPreview()
+{
+    if (!m_entrySelectPreviewActive)
+        return;
+
+    m_entrySelectPreviewActive = false;
+    const int idx = m_entrySelectPreviewIndex;
+    m_entrySelectPreviewIndex = -1;
+
+    if (idx < 0)
+        stopCurrent();
+    else
+        activate(idx);
+}
+
+void MultiButtonWidget::destroyEntrySelectOverlay()
+{
+    EntrySelectOverlay* overlay = m_entrySelectOverlay.data();
+    m_entrySelectOverlay.clear();
+    if (overlay)
+    {
+        overlay->hide();
+        overlay->deleteLater();
+    }
+}
+
+void MultiButtonWidget::applyEntryPick(int idx)
+{
+    if (idx < 0)
+    {
+        stopCurrent();
+        updateFeedback();
+        update();
     }
     else
     {
-        for (int i = 0; i < entryCount(); ++i)
-        {
-            QAction* act = menu.addAction(popupMenuTextForEntry(i));
-            act->setData(i);
-            if (i == m_currentIndex)
-                act->setFont(QFont(act->font().family(), act->font().pointSize(), QFont::Bold));
-        }
+        activate(idx);
     }
+}
 
-    if (m_addOffAtEnd)
-    {
-        menu.addSeparator();
-        QAction* offAct = menu.addAction(tr("OFF (deactivate)"));
-        offAct->setData(-1);
-        if (m_currentIndex < 0)
-            offAct->setFont(QFont(offAct->font().family(), offAct->font().pointSize(), QFont::Bold));
-    }
+void MultiButtonWidget::showPopupMenu(const QPoint& globalPos)
+{
+    if (entryCount() == 0)
+        return;
 
-    QAction* chosen = menu.exec(globalPos);
-    if (chosen)
-    {
-        int idx = chosen->data().toInt();
-        if (idx < 0)
-        {
-            stopCurrent();
-            updateFeedback();
-            update();
-        }
-        else
-        {
-            activate(idx);
-        }
-    }
+    closeEntrySelectPopup(false);
+
+    auto* overlay = new EntrySelectOverlay(this);
+    m_entrySelectOverlay = overlay;
+    overlay->positionAtGlobal(globalPos);
+    overlay->onRowPicked = [this](int idx) {
+        if (m_entrySelectDismissTimer)
+            m_entrySelectDismissTimer->stop();
+        destroyEntrySelectOverlay();
+        clearPressTracking();
+        applyEntryPick(idx);
+    };
+    overlay->onPickCancelled = [this]() {
+        destroyEntrySelectOverlay();
+        clearPressTracking();
+    };
+    overlay->show();
+    if (QApplication::mouseButtons() & Qt::LeftButton)
+        overlay->beginDragPick();
+}
+
+int MultiButtonWidget::pickEntryIndexModal(const QPoint& globalPos)
+{
+    if (entryCount() == 0)
+        return -2;
+
+    int result = -2;
+    QEventLoop loop;
+
+    auto* overlay = new EntrySelectOverlay(this);
+    overlay->positionAtGlobal(globalPos);
+    overlay->onRowPicked = [overlay, &result, &loop](int idx) {
+        result = idx;
+        overlay->hide();
+        overlay->deleteLater();
+        loop.quit();
+    };
+    overlay->onPickCancelled = [overlay, &result, &loop]() {
+        result = -2;
+        overlay->hide();
+        overlay->deleteLater();
+        loop.quit();
+    };
+    overlay->show();
+    loop.exec();
+
+    return result;
+}
+
+void MultiButtonWidget::closeEntrySelectPopup(bool commitSelection)
+{
+    if (m_entrySelectDismissTimer)
+        m_entrySelectDismissTimer->stop();
+
+    destroyEntrySelectOverlay();
+
+    if (commitSelection)
+        commitEntrySelectPreview();
+    else
+        cancelEntrySelectPreview();
+}
+
+void MultiButtonWidget::armEntrySelectPopupDismissTimer()
+{
+    if (mode() != Doc::Operate)
+        return;
+
+    if (!m_entrySelectDismissTimer)
+        return;
+
+    m_entrySelectDismissTimer->stop();
+    m_entrySelectDismissTimer->start();
+}
+
+void MultiButtonWidget::openEntrySelectPopup()
+{
+    if (entryCount() == 0 || m_entrySelectOverlay)
+        return;
+
+    auto* overlay = new EntrySelectOverlay(this);
+    m_entrySelectOverlay = overlay;
+
+    overlay->onRowPicked = [this](int idx) {
+        if (m_entrySelectDismissTimer)
+            m_entrySelectDismissTimer->stop();
+
+        m_entrySelectPreviewActive = true;
+        m_entrySelectPreviewIndex  = idx;
+        closeEntrySelectPopup(true);
+    };
+    overlay->onPickCancelled = [this]() {
+        closeEntrySelectPopup(false);
+    };
+
+    overlay->positionBelowOwner();
+    overlay->show();
+}
+
+void MultiButtonWidget::updateEntrySelectPopupHighlight()
+{
+    if (m_entrySelectOverlay)
+        m_entrySelectOverlay->update();
 }
 
 // ---- Custom context menu (Design mode) ------------------------------------
@@ -1331,38 +1694,21 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
 
     QMenu* iconMenu = new QMenu(tr("Entry icon"), parentMenu);
 
-    QMenu* pickMenu = new QMenu(tr("Select entry…"), iconMenu);
-    pickMenu->setStyleSheet(QStringLiteral("QMenu { padding: 3px; }"));
-
-    if (m_mode == MultiButtonMode::Level)
-    {
-        for (int i = 0; i < entryCount(); ++i)
-            addLevelPresetMenuRow(pickMenu, i, false);
-    }
-    else
-    {
-        for (int i = 0; i < entryCount(); ++i)
-        {
-            const QString text = QString("%1: %2").arg(i + 1).arg(popupMenuTextForEntry(i));
-            QAction* entryAct = pickMenu->addAction(text);
-            entryAct->setData(i);
-        }
-    }
-
     QAction* scribbleAct = iconMenu->addAction(QIcon(":/edit.png"), tr("Scribble icon…"));
-    connect(scribbleAct, &QAction::triggered, this, [this, pickMenu]() {
-        QAction* chosen = pickMenu->exec(QCursor::pos());
-        if (!chosen) return;
+    connect(scribbleAct, &QAction::triggered, this, [this]() {
+        const int idx = pickEntryIndexModal(QCursor::pos());
+        if (idx < -1)
+            return;
         ScribbleDialog dlg(m_doc, this);
         if (dlg.exec() == QDialog::Accepted)
-            setIconForEntry(chosen->data().toInt(), dlg.savedIconPath());
+            setIconForEntry(idx, dlg.savedIconPath());
     });
 
     QAction* chooseAct = iconMenu->addAction(tr("Choose image…"));
-    connect(chooseAct, &QAction::triggered, this, [this, pickMenu]() {
-        QAction* chosen = pickMenu->exec(QCursor::pos());
-        if (!chosen) return;
-        int idx = chosen->data().toInt();
+    connect(chooseAct, &QAction::triggered, this, [this]() {
+        const int idx = pickEntryIndexModal(QCursor::pos());
+        if (idx < -1)
+            return;
 
         QString formats;
         for (const QByteArray& ba : QImageReader::supportedImageFormats())
@@ -1379,10 +1725,11 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
     iconMenu->addSeparator();
 
     QAction* resetAct = iconMenu->addAction(tr("Reset icon"));
-    connect(resetAct, &QAction::triggered, this, [this, pickMenu]() {
-        QAction* chosen = pickMenu->exec(QCursor::pos());
-        if (!chosen) return;
-        setIconForEntry(chosen->data().toInt(), QString());
+    connect(resetAct, &QAction::triggered, this, [this]() {
+        const int idx = pickEntryIndexModal(QCursor::pos());
+        if (idx < -1)
+            return;
+        setIconForEntry(idx, QString());
     });
 
     return iconMenu;
@@ -1408,6 +1755,38 @@ void MultiButtonWidget::handlePresetChooseInput(uchar value)
     m_automationPulseCounter = 0;
 }
 
+void MultiButtonWidget::handleEntrySelectInput(uchar value)
+{
+    if (entryCount() == 0)
+        return;
+
+    QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
+    const int slot = slotFromInputValue(value, src);
+    const int idx = slotToEntryIndex(slot);
+
+    syncEntrySelectInputOutput(value);
+
+    const bool selectionChanged = !m_entrySelectPreviewActive
+                                  || m_entrySelectPreviewIndex != idx;
+    m_entrySelectPreviewActive = true;
+    m_entrySelectPreviewIndex  = idx;
+
+    if (selectionChanged)
+        update();
+
+    if (mode() == Doc::Operate)
+    {
+        if (m_layout == MultiButtonLayout::Single)
+        {
+            if (!m_entrySelectOverlay)
+                openEntrySelectPopup();
+            else if (selectionChanged)
+                updateEntrySelectPopupHighlight();
+        }
+        armEntrySelectPopupDismissTimer();
+    }
+}
+
 void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
     if (!acceptsInput()) return;
@@ -1431,6 +1810,11 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
         handlePresetChooseInput(value);
         return;
     }
+    if (checkInputSource(universe, pagedCh, value, sender(), entrySelectInputSourceId))
+    {
+        handleEntrySelectInput(value);
+        return;
+    }
     if (checkInputSource(universe, pagedCh, value, sender(), popupInputSourceId))
     {
         if (value > 0) showPopupMenu(mapToGlobal(rect().center()));
@@ -1441,6 +1825,22 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
 void MultiButtonWidget::updateFeedback()
 {
     sendFeedback(m_currentIndex >= 0 ? 255 : 0, triggerInputSourceId);
+
+    QSharedPointer<QLCInputSource> src = inputSource(entrySelectInputSourceId);
+    if (src.isNull() || !src->isValid() || !src->needsUpdate())
+        return;
+
+    const int slotCount = selectableSlotCount();
+    if (slotCount <= 0)
+        return;
+
+    int slot = 0;
+    if (m_currentIndex >= 0)
+        slot = m_currentIndex;
+    else if (m_addOffAtEnd)
+        slot = slotCount - 1;
+
+    src->updateOuputValue(entrySelectOutputValueForSlot(slot));
 }
 
 // ---- Properties -----------------------------------------------------------
@@ -1474,6 +1874,7 @@ void MultiButtonWidget::editProperties()
         inputSource(popupInputSourceId),
         inputSource(automationInputSourceId),
         inputSource(presetChooseInputSourceId),
+        inputSource(entrySelectInputSourceId),
         page(),
         this);
 
@@ -1498,6 +1899,7 @@ void MultiButtonWidget::editProperties()
     setInputSource(dlg.popupInputSource(), popupInputSourceId);
     setInputSource(dlg.automationInputSource(), automationInputSourceId);
     setInputSource(dlg.presetChooseInputSource(), presetChooseInputSourceId);
+    setInputSource(dlg.entrySelectInputSource(), entrySelectInputSourceId);
     m_doc->setModified();
     update();
 }
@@ -1532,6 +1934,7 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setInputSource(inputSource(popupInputSourceId),   popupInputSourceId);
     copy->setInputSource(inputSource(automationInputSourceId), automationInputSourceId);
     copy->setInputSource(inputSource(presetChooseInputSourceId), presetChooseInputSourceId);
+    copy->setInputSource(inputSource(entrySelectInputSourceId), entrySelectInputSourceId);
     return copy;
 }
 
@@ -1907,7 +2310,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     }
 
     setLevelConfig(bindings, presets);
-    recalcSpreadSize();
+    recalcLayoutSize();
     update();
 }
 
@@ -2112,6 +2515,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         {
             loadXMLSources(root, presetChooseInputSourceId);
         }
+        else if (root.name() == KXMLEntrySelectInput)
+        {
+            loadXMLSources(root, entrySelectInputSourceId);
+        }
         else
         {
             root.skipCurrentElement();
@@ -2156,7 +2563,7 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 
     m_iconCache.clear();
     rebuildSceneCache();
-    recalcSpreadSize();
+    recalcLayoutSize();
 
     return true;
 }
@@ -2288,6 +2695,14 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeEndElement();
     }
 
+    auto entrySelSrc = inputSource(entrySelectInputSourceId);
+    if (!entrySelSrc.isNull() && entrySelSrc->isValid())
+    {
+        doc->writeStartElement(KXMLEntrySelectInput);
+        saveXMLInput(doc, entrySelSrc);
+        doc->writeEndElement();
+    }
+
     doc->writeEndElement();
     return true;
 }
@@ -2296,17 +2711,19 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
 
 QString MultiButtonWidget::activeFunctionCaption() const
 {
-    if (m_currentIndex < 0)
+    const int displayIdx = displayedEntryIndex();
+
+    if (displayIdx < 0)
         return tr("—");
 
     if (m_mode == MultiButtonMode::Level)
-        return levelPresetDisplayName(m_currentIndex);
+        return levelPresetDisplayName(displayIdx);
 
-    const QString lbl = entryLabel(m_currentIndex);
+    const QString lbl = entryLabel(displayIdx);
     if (!lbl.isEmpty())
         return lbl;
 
-    Function* f = functionAt(m_currentIndex);
+    Function* f = functionAt(displayIdx);
     return f ? f->name() : tr("?");
 }
 
@@ -2383,7 +2800,8 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
     if (showLabelText && !cap.isEmpty())
     {
         QFont mainFont = font();
-        if (isActive && tileIndex >= 0 && !m_visualOnly)
+        if (isActive && tileIndex >= 0
+            && (m_entrySelectPreviewActive || !m_visualOnly))
             mainFont.setBold(true);
         p.setFont(mainFont);
         p.setPen(fg);
@@ -2392,7 +2810,7 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
             p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, cap);
     }
 
-    const bool monitoring = isActive && m_visualOnly;
+    const bool monitoring = isActive && (m_visualOnly || m_entrySelectPreviewActive);
     drawVcButtonBorder(p, r, isActive, monitoring);
 
     p.restore();
@@ -2426,10 +2844,12 @@ void MultiButtonWidget::paintSpread(QPainter& p)
         p.drawText(QRect(4, 3, width() - 8, 14), Qt::AlignCenter, caption());
     }
 
+    const int displayIdx = displayedEntryIndex();
+
     for (const SpreadTileInfo& tile : computeSpreadTiles())
     {
-        const bool isActive = (tile.index < 0) ? (m_currentIndex < 0)
-                                               : (tile.index == m_currentIndex);
+        const bool isActive = (tile.index < 0) ? (displayIdx < 0)
+                                               : (tile.index == displayIdx);
         const bool isPressed = m_pressActive && (tile.index == m_pressTileIndex);
         drawTile(p, tile.rect, tile.index, isActive, isPressed);
     }
@@ -2437,21 +2857,23 @@ void MultiButtonWidget::paintSpread(QPainter& p)
 
 void MultiButtonWidget::paintSingle(QPainter& p)
 {
+    const int displayIdx = displayedEntryIndex();
+
     QColor bg = backgroundColor().isValid()
                 ? backgroundColor()
                 : palette().button().color();
 
     if (m_mode == MultiButtonMode::Level
-        && m_currentIndex >= 0
-        && m_currentIndex < m_levelPresets.size())
+        && displayIdx >= 0
+        && displayIdx < m_levelPresets.size())
     {
-        const QColor presetColor = m_levelPresets.at(m_currentIndex).color;
+        const QColor presetColor = m_levelPresets.at(displayIdx).color;
         if (presetColor.isValid())
             bg = presetColor;
     }
 
     if (m_pressActive)   bg = bg.darker(120);
-    if (m_currentIndex >= 0) bg = bg.lighter(115);
+    if (displayIdx >= 0) bg = bg.lighter(115);
 
     p.fillRect(rect(), bg);
 
@@ -2480,14 +2902,14 @@ void MultiButtonWidget::paintSingle(QPainter& p)
 
     const int iconTopPad = topPad + titleH;
     QPixmap icon;
-    if (m_currentIndex >= 0)
-        icon = iconForEntry(m_currentIndex);
+    if (displayIdx >= 0)
+        icon = iconForEntry(displayIdx);
 
-    const bool hasCustomLabel = (m_currentIndex >= 0)
-                                && !entryLabel(m_currentIndex).isEmpty();
+    const bool hasCustomLabel = (displayIdx >= 0)
+                                && !entryLabel(displayIdx).isEmpty();
     const bool levelNoText = (m_mode == MultiButtonMode::Level
-                              && m_currentIndex >= 0
-                              && m_levelPresets.at(m_currentIndex).hideName);
+                              && displayIdx >= 0
+                              && m_levelPresets.at(displayIdx).hideName);
     const bool showLabelText = !levelNoText && (icon.isNull() || hasCustomLabel
                                                 || m_mode == MultiButtonMode::Level);
 
@@ -2515,7 +2937,8 @@ void MultiButtonWidget::paintSingle(QPainter& p)
     if (showLabelText)
     {
         QFont mainFont = font();
-        if (m_currentIndex >= 0 && !m_visualOnly) mainFont.setBold(true);
+        if (displayIdx >= 0 && (m_entrySelectPreviewActive || !m_visualOnly))
+            mainFont.setBold(true);
         p.setFont(mainFont);
         p.setPen(fg);
         QRect mainRect = rect().adjusted(4, iconTopPad + iconAreaH, -4, -(dotsReserve + 2));
@@ -2538,8 +2961,8 @@ void MultiButtonWidget::paintSingle(QPainter& p)
             for (int i = 0; i < totalDots; ++i)
             {
                 bool isOffDot = (m_addOffAtEnd && i == n);
-                bool active   = isOffDot ? (m_currentIndex < 0)
-                                         : (i == m_currentIndex);
+                bool active   = isOffDot ? (displayIdx < 0)
+                                         : (i == displayIdx);
 
                 if (isOffDot)
                 {
@@ -2561,9 +2984,9 @@ void MultiButtonWidget::paintSingle(QPainter& p)
             small.setPointSize(qMax(6, small.pointSize() - 2));
             p.setFont(small);
             p.setPen(fg.darker(130));
-            QString idxStr = m_currentIndex < 0
+            QString idxStr = displayIdx < 0
                 ? tr("OFF/%1").arg(n)
-                : QString("%1/%2").arg(m_currentIndex + 1).arg(n);
+                : QString("%1/%2").arg(displayIdx + 1).arg(n);
             p.drawText(QRect(0, height() - 14, width(), 12),
                        Qt::AlignCenter, idxStr);
         }

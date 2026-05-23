@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QMap>
 #include <QMenu>
+#include <QPointer>
 #include <QMutex>
 
 #include "vcwidget.h"
@@ -31,6 +32,7 @@
 
 class Doc;
 class Function;
+class EntrySelectOverlay;
 
 enum class MultiButtonMode
 {
@@ -94,6 +96,7 @@ public:
     static const quint8 popupInputSourceId        = 1;   // open popup
     static const quint8 automationInputSourceId   = 2;   // advance automation
     static const quint8 presetChooseInputSourceId = 3;   // DMX value selects automation profile
+    static const quint8 entrySelectInputSourceId  = 4;   // scaled entry/preset (knob/fader)
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -189,23 +192,42 @@ protected:
     void contextMenuEvent(QContextMenuEvent* e) override;
     void paintEvent(QPaintEvent* e) override;
 
+    friend class EntrySelectOverlay;
+
 private:
     void cycleNext();
     void onAutomationTrigger();
     void advanceAutomation();
     void handlePresetChooseInput(uchar value);
+    void handleEntrySelectInput(uchar value);
     void activate(int idx);
     void stopCurrent();
     void showPopupMenu(const QPoint& globalPos);
+    int  pickEntryIndexModal(const QPoint& globalPos);
+    void applyEntryPick(int idx);
+    void destroyEntrySelectOverlay();
+    void clearPressTracking();
+    void openEntrySelectPopup();
+    void updateEntrySelectPopupHighlight();
+    void closeEntrySelectPopup(bool commitSelection = true);
+    void cancelEntrySelectPreview();
+    void commitEntrySelectPreview();
+    void armEntrySelectPopupDismissTimer();
+    int  displayedEntryIndex() const;
+    void syncEntrySelectInputOutput(uchar rawValue);
+    uchar entrySelectOutputValueForSlot(int slot) const;
+
+    int selectableSlotCount() const;
+    int slotFromInputValue(uchar value, const QLCInputSource* src) const;
+    int slotToEntryIndex(int slot) const;
 
     QString popupMenuTextForEntry(int idx) const;
 
-    void addLevelPresetMenuRow(QMenu* menu, int index, bool selected);
-
-    void recalcSpreadSize();
+    void recalcLayoutSize();
     int  spreadTileCount() const;
     void resolveSpreadGrid(int& cols, int& rows) const;
     QVector<SpreadTileInfo> computeSpreadTiles() const;
+    QSize singleButtonSize() const;
     QSize spreadTotalSize() const;
     int   spreadHitTest(const QPoint& pos) const;
     QString tileCaption(int idx) const;
@@ -217,6 +239,7 @@ private:
     void rebuildSceneCache();
     void updateDmxRegistration();
     void releaseLevelFaders();
+    void resetLevelWriteCache();
     void reactivateLevelPreset();
 
     int     entryCount() const;
@@ -249,6 +272,8 @@ private:
     QList<LevelPreset>         m_levelPresets;
     mutable QMutex     m_dmxMutex;
     QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
+    int            m_lastWrittenPresetIndex = -1;
+    QList<uchar>   m_lastWrittenPresetValues;
 
     int            m_currentIndex = -1;
     bool           m_visualOnly   = false;
@@ -286,4 +311,9 @@ private:
     bool    m_longFired      = false;
     QPoint  m_pressPos;
     int     m_pressTileIndex = -2;   // spread: entry index, -1=OFF, -2=none
+
+    QPointer<EntrySelectOverlay> m_entrySelectOverlay;
+    QTimer*         m_entrySelectDismissTimer  = nullptr;
+    bool            m_entrySelectPreviewActive = false;
+    int             m_entrySelectPreviewIndex  = -1;
 };

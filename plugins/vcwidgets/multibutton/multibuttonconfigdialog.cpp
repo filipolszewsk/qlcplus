@@ -81,6 +81,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QSharedPointer<QLCInputSource>     popupSrc,
     QSharedPointer<QLCInputSource>     automationSrc,
     QSharedPointer<QLCInputSource>     presetChooseSrc,
+    QSharedPointer<QLCInputSource>     entrySelectSrc,
     int                                widgetPage,
     QWidget*                           parent)
     : QDialog(parent)
@@ -273,6 +274,23 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
         layoutTabLay->addLayout(layoutRow);
     }
 
+    QGroupBox* tileSizeGrp = new QGroupBox(tr("Button tile size"), layoutTab);
+    QFormLayout* tileSizeForm = new QFormLayout(tileSizeGrp);
+
+    m_tileWSpin = new QSpinBox(tileSizeGrp);
+    m_tileWSpin->setRange(20, 400);
+    m_tileWSpin->setSuffix(tr(" px"));
+    m_tileWSpin->setValue(spreadTileWidth);
+    tileSizeForm->addRow(tr("Tile width:"), m_tileWSpin);
+
+    m_tileHSpin = new QSpinBox(tileSizeGrp);
+    m_tileHSpin->setRange(20, 400);
+    m_tileHSpin->setSuffix(tr(" px"));
+    m_tileHSpin->setValue(spreadTileHeight);
+    tileSizeForm->addRow(tr("Tile height:"), m_tileHSpin);
+
+    layoutTabLay->addWidget(tileSizeGrp);
+
     m_singleLayoutGrp = new QGroupBox(tr("Single button"), layoutTab);
     QFormLayout* singleForm = new QFormLayout(m_singleLayoutGrp);
 
@@ -321,18 +339,6 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_vMarginSpin->setSuffix(tr(" px"));
     m_vMarginSpin->setValue(spreadVMargin);
     spreadForm->addRow(tr("Vertical margin:"), m_vMarginSpin);
-
-    m_tileWSpin = new QSpinBox(m_spreadLayoutGrp);
-    m_tileWSpin->setRange(20, 400);
-    m_tileWSpin->setSuffix(tr(" px"));
-    m_tileWSpin->setValue(spreadTileWidth);
-    spreadForm->addRow(tr("Tile width:"), m_tileWSpin);
-
-    m_tileHSpin = new QSpinBox(m_spreadLayoutGrp);
-    m_tileHSpin->setRange(20, 400);
-    m_tileHSpin->setSuffix(tr(" px"));
-    m_tileHSpin->setValue(spreadTileHeight);
-    spreadForm->addRow(tr("Tile height:"), m_tileHSpin);
 
     layoutTabLay->addWidget(m_spreadLayoutGrp);
     layoutTabLay->addStretch();
@@ -472,6 +478,24 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_presetChooseInputSel->setInputSource(presetChooseSrc);
     presetChooseLayout->addWidget(m_presetChooseInputSel);
     inputLayout->addWidget(presetChooseGrp);
+
+    QGroupBox* entrySelectGrp = new QGroupBox(tr("Entry select (scaled knob/fader)"), inputScrollContent);
+    QVBoxLayout* entrySelectLayout = new QVBoxLayout(entrySelectGrp);
+    QLabel* entrySelectHint = new QLabel(
+        tr("Maps the input range (Lower/Upper feedback on the source) evenly across "
+           "all entries%1. In Single layout + Operate mode, moving the control opens a "
+           "popup menu and highlights the current entry; the menu closes 500 ms after "
+           "the last value change.")
+            .arg(addOffAtEnd ? tr(" plus OFF") : QString()),
+        entrySelectGrp);
+    entrySelectHint->setWordWrap(true);
+    entrySelectLayout->addWidget(entrySelectHint);
+    m_entrySelectInputSel = new InputSelectionWidget(doc, entrySelectGrp);
+    m_entrySelectInputSel->setKeyInputVisibility(false);
+    m_entrySelectInputSel->setWidgetPage(widgetPage);
+    m_entrySelectInputSel->setInputSource(entrySelectSrc);
+    entrySelectLayout->addWidget(m_entrySelectInputSel);
+    inputLayout->addWidget(entrySelectGrp);
 
     inputScroll->setWidget(inputScrollContent);
     inputTabLayout->addWidget(inputScroll);
@@ -704,6 +728,12 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::presetChooseInputSource(
 {
     return m_presetChooseInputSel ? m_presetChooseInputSel->inputSource()
                                   : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> MultiButtonConfigDialog::entrySelectInputSource() const
+{
+    return m_entrySelectInputSel ? m_entrySelectInputSel->inputSource()
+                                 : QSharedPointer<QLCInputSource>();
 }
 
 void MultiButtonConfigDialog::accept()

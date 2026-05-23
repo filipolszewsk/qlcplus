@@ -60,6 +60,7 @@ public:
         QSharedPointer<QLCInputSource>     popupSrc,
         QSharedPointer<QLCInputSource>     automationSrc,
         QSharedPointer<QLCInputSource>     presetChooseSrc,
+        QSharedPointer<QLCInputSource>     entrySelectSrc,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -86,6 +87,7 @@ public:
     QSharedPointer<QLCInputSource> popupInputSource()      const;
     QSharedPointer<QLCInputSource> automationInputSource() const;
     QSharedPointer<QLCInputSource> presetChooseInputSource() const;
+    QSharedPointer<QLCInputSource> entrySelectInputSource() const;
 
     void accept() override;
 
@@ -213,6 +215,7 @@ private:
     InputSelectionWidget* m_popupInputSel        = nullptr;
     InputSelectionWidget* m_automationInputSel   = nullptr;
     InputSelectionWidget* m_presetChooseInputSel = nullptr;
+    InputSelectionWidget* m_entrySelectInputSel  = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 
     bool m_rebuildingPresetTable = false;
