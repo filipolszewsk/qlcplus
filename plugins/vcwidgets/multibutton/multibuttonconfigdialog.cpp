@@ -23,8 +23,38 @@
 #include <QBrush>
 #include <QColorDialog>
 #include <QHeaderView>
+#include <QScrollArea>
+#include <QSizePolicy>
 #include <QVector>
 #include <algorithm>
+
+static void syncExcludeMaskFromTable(QTableWidget* table, quint32& mask);
+
+static QTableWidgetItem* widgetColumnPlaceholder()
+{
+    QTableWidgetItem* item = new QTableWidgetItem;
+    item->setFlags(Qt::ItemIsEnabled);
+    return item;
+}
+
+static void tuneAutomationProfileColumnWidths(QTableWidget* table)
+{
+    constexpr int colMode = 1;
+    constexpr int colJumpMin = 2;
+    constexpr int colJumpMax = 3;
+    constexpr int colMultiplier = 4;
+
+    if (!table || table->rowCount() == 0)
+        return;
+    if (table->cellWidget(0, colMode) == nullptr)
+        return;
+
+    table->resizeColumnsToContents();
+    table->setColumnWidth(colMode, qMax(table->columnWidth(colMode), 90));
+    table->setColumnWidth(colJumpMin, qMax(table->columnWidth(colJumpMin), 60));
+    table->setColumnWidth(colJumpMax, qMax(table->columnWidth(colJumpMax), 60));
+    table->setColumnWidth(colMultiplier, qMax(table->columnWidth(colMultiplier), 70));
+}
 
 MultiButtonConfigDialog::MultiButtonConfigDialog(
     Doc*                               doc,
@@ -44,8 +74,13 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     int                                spreadVMargin,
     int                                spreadTileWidth,
     int                                spreadTileHeight,
+    bool                               automationEnabled,
+    const QList<MultiButtonAutomationProfile>& automationProfiles,
+    int                                activeAutomationProfile,
     QSharedPointer<QLCInputSource>     triggerSrc,
     QSharedPointer<QLCInputSource>     popupSrc,
+    QSharedPointer<QLCInputSource>     automationSrc,
+    QSharedPointer<QLCInputSource>     presetChooseSrc,
     int                                widgetPage,
     QWidget*                           parent)
     : QDialog(parent)
@@ -55,7 +90,18 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     , m_icons(iconPaths)
     , m_levelChannelBindings(levelChannelBindings)
     , m_levelPresets(levelPresets)
+    , m_automationProfiles(automationProfiles)
+    , m_activeAutomationProfile(activeAutomationProfile)
 {
+    if (m_automationProfiles.isEmpty())
+    {
+        MultiButtonAutomationProfile def;
+        def.name = tr("Profile %1").arg(1);
+        m_automationProfiles.append(def);
+    }
+    m_activeAutomationProfile = qBound(0, m_activeAutomationProfile,
+                                     m_automationProfiles.size() - 1);
+
     while (m_labels.size() < m_ids.size()) m_labels.append(QString());
     while (m_icons.size() < m_ids.size())  m_icons.append(QString());
 
@@ -297,11 +343,96 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
 
     tabs->addTab(layoutTab, tr("Layout"));
 
+    // ---- Tab: Automation ------------------------------------------------
+    QWidget* autoTab = new QWidget(tabs);
+    QVBoxLayout* autoTabLay = new QVBoxLayout(autoTab);
+
+    m_autoEnableCheck = new QCheckBox(tr("Enable automation"), autoTab);
+    m_autoEnableCheck->setChecked(automationEnabled);
+    autoTabLay->addWidget(m_autoEnableCheck);
+
+    QLabel* autoHint = new QLabel(
+        tr("Automation trigger: Multiplier on the selected profile skips pulses (2 = every "
+           "2nd trigger). Exclude presets below apply to the selected profile row."), autoTab);
+    autoHint->setWordWrap(true);
+    {
+        QFont hf = autoHint->font();
+        hf.setItalic(true);
+        autoHint->setFont(hf);
+    }
+    autoTabLay->addWidget(autoHint);
+
+    QHBoxLayout* autoProfileRow = new QHBoxLayout;
+    m_autoProfileTable = new QTableWidget(autoTab);
+    m_autoProfileTable->setColumnCount(5);
+    m_autoProfileTable->setHorizontalHeaderLabels(
+        { tr("Profile"), tr("Mode"), tr("Jump min"), tr("Jump max"), tr("Multiplier") });
+    m_autoProfileTable->horizontalHeader()->setStretchLastSection(false);
+    m_autoProfileTable->horizontalHeader()->setMinimumSectionSize(48);
+    m_autoProfileTable->horizontalHeader()->setSectionResizeMode(kProfColName, QHeaderView::Stretch);
+    m_autoProfileTable->horizontalHeader()->setSectionResizeMode(kProfColMode, QHeaderView::Fixed);
+    m_autoProfileTable->horizontalHeader()->setSectionResizeMode(kProfColJumpMin, QHeaderView::Fixed);
+    m_autoProfileTable->horizontalHeader()->setSectionResizeMode(kProfColJumpMax, QHeaderView::Fixed);
+    m_autoProfileTable->horizontalHeader()->setSectionResizeMode(kProfColMultiplier, QHeaderView::Fixed);
+    m_autoProfileTable->verticalHeader()->setVisible(false);
+    m_autoProfileTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_autoProfileTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_autoProfileTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    m_autoProfileTable->setMinimumHeight(100);
+    autoProfileRow->addWidget(m_autoProfileTable, 1);
+
+    QVBoxLayout* autoProfBtnCol = new QVBoxLayout;
+    QPushButton* autoAddBtn = new QPushButton(tr("Add"), autoTab);
+    QPushButton* autoRemoveBtn = new QPushButton(tr("Remove"), autoTab);
+    autoProfBtnCol->addWidget(autoAddBtn);
+    autoProfBtnCol->addWidget(autoRemoveBtn);
+    autoProfBtnCol->addStretch();
+    autoProfileRow->addLayout(autoProfBtnCol);
+    autoTabLay->addLayout(autoProfileRow);
+
+    autoTabLay->addWidget(new QLabel(tr("Exclude presets (selected profile):"), autoTab));
+
+    m_autoExcludeTable = new QTableWidget(autoTab);
+    m_autoExcludeTable->setColumnCount(2);
+    m_autoExcludeTable->setHorizontalHeaderLabels(
+        { tr("Preset"), tr("Exclude") });
+    m_autoExcludeTable->horizontalHeader()->setStretchLastSection(false);
+    m_autoExcludeTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_autoExcludeTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_autoExcludeTable->verticalHeader()->setVisible(false);
+    m_autoExcludeTable->setSelectionMode(QAbstractItemView::NoSelection);
+    m_autoExcludeTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    autoTabLay->addWidget(m_autoExcludeTable, 1);
+
+    connect(autoAddBtn, &QPushButton::clicked, this, &MultiButtonConfigDialog::slotAutomationAddProfile);
+    connect(autoRemoveBtn, &QPushButton::clicked, this, &MultiButtonConfigDialog::slotAutomationRemoveProfile);
+    connect(m_autoProfileTable, &QTableWidget::currentCellChanged,
+            this, &MultiButtonConfigDialog::slotAutomationProfileRowChanged);
+    connect(m_autoExcludeTable, &QTableWidget::itemChanged,
+            this, &MultiButtonConfigDialog::slotAutoExcludeItemChanged);
+
+    rebuildAutomationProfileTable();
+    if (m_autoProfileTable->rowCount() > 0)
+        m_autoProfileTable->setCurrentCell(qBound(0, m_activeAutomationProfile,
+                                                  m_autoProfileTable->rowCount() - 1), 0);
+
+    tabs->addTab(autoTab, tr("Automation"));
+
     // ---- Tab: Input -----------------------------------------------------
     QWidget* inputTab = new QWidget(tabs);
-    QVBoxLayout* inputLayout = new QVBoxLayout(inputTab);
+    QVBoxLayout* inputTabLayout = new QVBoxLayout(inputTab);
+    inputTabLayout->setContentsMargins(0, 0, 0, 0);
 
-    QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputTab);
+    QScrollArea* inputScroll = new QScrollArea(inputTab);
+    inputScroll->setWidgetResizable(true);
+    inputScroll->setFrameShape(QFrame::NoFrame);
+    inputScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    QWidget* inputScrollContent = new QWidget(inputScroll);
+    inputScrollContent->setMinimumWidth(480);
+    QVBoxLayout* inputLayout = new QVBoxLayout(inputScrollContent);
+
+    QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputScrollContent);
     QVBoxLayout* trigLayout = new QVBoxLayout(trigGrp);
     m_triggerInputSel = new InputSelectionWidget(doc, trigGrp);
     m_triggerInputSel->setKeyInputVisibility(false);
@@ -310,7 +441,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     trigLayout->addWidget(m_triggerInputSel);
     inputLayout->addWidget(trigGrp);
 
-    QGroupBox* popGrp = new QGroupBox(tr("Popup trigger (long press equivalent)"), inputTab);
+    QGroupBox* popGrp = new QGroupBox(tr("Popup trigger (long press equivalent)"), inputScrollContent);
     QVBoxLayout* popLayout = new QVBoxLayout(popGrp);
     m_popupInputSel = new InputSelectionWidget(doc, popGrp);
     m_popupInputSel->setKeyInputVisibility(false);
@@ -319,7 +450,31 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     popLayout->addWidget(m_popupInputSel);
     inputLayout->addWidget(popGrp);
 
-    inputLayout->addStretch();
+    QGroupBox* autoTrigGrp = new QGroupBox(tr("Automation trigger"), inputScrollContent);
+    QVBoxLayout* autoTrigLayout = new QVBoxLayout(autoTrigGrp);
+    m_automationInputSel = new InputSelectionWidget(doc, autoTrigGrp);
+    m_automationInputSel->setKeyInputVisibility(false);
+    m_automationInputSel->setWidgetPage(widgetPage);
+    m_automationInputSel->setInputSource(automationSrc);
+    autoTrigLayout->addWidget(m_automationInputSel);
+    inputLayout->addWidget(autoTrigGrp);
+
+    QGroupBox* presetChooseGrp = new QGroupBox(tr("Automation profile choose (channel value)"), inputScrollContent);
+    QVBoxLayout* presetChooseLayout = new QVBoxLayout(presetChooseGrp);
+    QLabel* presetHint = new QLabel(
+        tr("0 suspends automation. 1 selects Profile 1, 2 selects Profile 2, and so on "
+           "(values above the last profile select the last profile)."), presetChooseGrp);
+    presetHint->setWordWrap(true);
+    presetChooseLayout->addWidget(presetHint);
+    m_presetChooseInputSel = new InputSelectionWidget(doc, presetChooseGrp);
+    m_presetChooseInputSel->setKeyInputVisibility(false);
+    m_presetChooseInputSel->setWidgetPage(widgetPage);
+    m_presetChooseInputSel->setInputSource(presetChooseSrc);
+    presetChooseLayout->addWidget(m_presetChooseInputSel);
+    inputLayout->addWidget(presetChooseGrp);
+
+    inputScroll->setWidget(inputScrollContent);
+    inputTabLayout->addWidget(inputScroll);
     tabs->addTab(inputTab, tr("Input"));
 
     root->addWidget(tabs, 1);
@@ -505,6 +660,28 @@ int MultiButtonConfigDialog::spreadTileHeight() const
     return m_tileHSpin ? m_tileHSpin->value() : 60;
 }
 
+bool MultiButtonConfigDialog::automationEnabled() const
+{
+    return m_autoEnableCheck && m_autoEnableCheck->isChecked();
+}
+
+QList<MultiButtonAutomationProfile> MultiButtonConfigDialog::automationProfiles() const
+{
+    MultiButtonConfigDialog* self = const_cast<MultiButtonConfigDialog*>(this);
+    self->syncDataFromProfileTable();
+    const int cur = m_autoProfileTable ? m_autoProfileTable->currentRow() : -1;
+    if (cur >= 0 && cur < self->m_automationProfiles.size())
+        syncExcludeMaskFromTable(m_autoExcludeTable, self->m_automationProfiles[cur].excludeMask);
+    return self->m_automationProfiles;
+}
+
+int MultiButtonConfigDialog::activeAutomationProfile() const
+{
+    if (m_autoProfileTable && m_autoProfileTable->currentRow() >= 0)
+        return m_autoProfileTable->currentRow();
+    return m_activeAutomationProfile;
+}
+
 QSharedPointer<QLCInputSource> MultiButtonConfigDialog::triggerInputSource() const
 {
     return m_triggerInputSel ? m_triggerInputSel->inputSource()
@@ -517,12 +694,36 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::popupInputSource() const
                            : QSharedPointer<QLCInputSource>();
 }
 
+QSharedPointer<QLCInputSource> MultiButtonConfigDialog::automationInputSource() const
+{
+    return m_automationInputSel ? m_automationInputSel->inputSource()
+                                : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> MultiButtonConfigDialog::presetChooseInputSource() const
+{
+    return m_presetChooseInputSel ? m_presetChooseInputSel->inputSource()
+                                  : QSharedPointer<QLCInputSource>();
+}
+
+void MultiButtonConfigDialog::accept()
+{
+    syncDataFromProfileTable();
+    const int cur = m_autoProfileTable ? m_autoProfileTable->currentRow() : -1;
+    if (cur >= 0 && cur < m_automationProfiles.size())
+        syncExcludeMaskFromTable(m_autoExcludeTable, m_automationProfiles[cur].excludeMask);
+    m_activeAutomationProfile = activeAutomationProfile();
+    QDialog::accept();
+}
+
 // ---- Mode switch -----------------------------------------------------------
 
 void MultiButtonConfigDialog::slotModeChanged(int index)
 {
     m_modeStack->setCurrentIndex(index);
     updateMonitorTooltip();
+    if (!m_syncingAutomationUi)
+        rebuildAutomationExcludeTable();
 }
 
 void MultiButtonConfigDialog::slotLayoutChanged(int index)
@@ -1196,4 +1397,313 @@ void MultiButtonConfigDialog::slotMoveDown()
     m_labels = listWidgetLabels(m_listWidget);
     m_icons  = listWidgetIcons(m_listWidget);
     slotSelectionChanged();
+}
+
+// ---- Automation tab -------------------------------------------------------
+
+static void syncExcludeMaskFromTable(QTableWidget* table, quint32& mask)
+{
+    mask = 0;
+    if (!table)
+        return;
+    for (int r = 0; r < table->rowCount(); ++r)
+    {
+        QTableWidgetItem* ex = table->item(r, 1);
+        if (ex && ex->checkState() == Qt::Checked && r < 32)
+            mask |= (1u << r);
+    }
+}
+
+int MultiButtonConfigDialog::entryCountForAutomation() const
+{
+    if (widgetMode() == MultiButtonMode::Level)
+        return m_levelPresets.size();
+    return m_listWidget ? m_listWidget->count() : 0;
+}
+
+QString MultiButtonConfigDialog::entryLabelForAutomation(int index) const
+{
+    if (index < 0)
+        return QString();
+
+    if (widgetMode() == MultiButtonMode::Level)
+    {
+        if (index >= m_levelPresets.size())
+            return QString();
+        const LevelPreset& preset = m_levelPresets.at(index);
+        if (!preset.hideName && !preset.label.isEmpty())
+            return preset.label;
+        return tr("Preset %1").arg(index + 1);
+    }
+
+    if (!m_listWidget || index >= m_listWidget->count())
+        return QString();
+    return m_listWidget->item(index)->text();
+}
+
+void MultiButtonConfigDialog::rebuildAutomationExcludeTable()
+{
+    if (!m_autoExcludeTable)
+        return;
+
+    m_rebuildingExcludeTable = true;
+    m_autoExcludeTable->setRowCount(0);
+    m_autoExcludeTable->clearSpans();
+
+    const int n = entryCountForAutomation();
+    if (n <= 0)
+    {
+        m_autoExcludeTable->setRowCount(1);
+        QTableWidgetItem* hint = new QTableWidgetItem(
+            tr("Add entries on the Entries tab first."));
+        hint->setFlags(Qt::ItemIsEnabled);
+        m_autoExcludeTable->setItem(0, 0, hint);
+        m_autoExcludeTable->setSpan(0, 0, 1, 2);
+        m_rebuildingExcludeTable = false;
+        return;
+    }
+
+    quint32 mask = 0;
+    if (m_activeAutomationProfile >= 0
+        && m_activeAutomationProfile < m_automationProfiles.size())
+    {
+        mask = m_automationProfiles.at(m_activeAutomationProfile).excludeMask;
+    }
+
+    m_autoExcludeTable->setRowCount(n);
+    for (int i = 0; i < n; ++i)
+    {
+        QTableWidgetItem* nameItem = new QTableWidgetItem(entryLabelForAutomation(i));
+        nameItem->setFlags(Qt::ItemIsEnabled);
+        m_autoExcludeTable->setItem(i, 0, nameItem);
+
+        QTableWidgetItem* exItem = new QTableWidgetItem;
+        exItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+        exItem->setCheckState((mask & (1u << i)) ? Qt::Checked : Qt::Unchecked);
+        m_autoExcludeTable->setItem(i, 1, exItem);
+    }
+    m_rebuildingExcludeTable = false;
+}
+
+void MultiButtonConfigDialog::syncDataFromProfileTable()
+{
+    if (!m_autoProfileTable || m_rebuildingProfileTable)
+        return;
+
+    const int rows = m_autoProfileTable->rowCount();
+    if (rows == 0 || m_autoProfileTable->cellWidget(0, kProfColMode) == nullptr)
+        return;
+
+    for (int row = 0; row < m_automationProfiles.size(); ++row)
+    {
+        if (row >= rows
+            || m_autoProfileTable->cellWidget(row, kProfColMode) == nullptr)
+        {
+            continue;
+        }
+
+        MultiButtonAutomationProfile& profile = m_automationProfiles[row];
+
+        if (QTableWidgetItem* nameItem = m_autoProfileTable->item(row, kProfColName))
+            profile.name = nameItem->text().trimmed();
+
+        if (auto* modeCombo = qobject_cast<QComboBox*>(
+                m_autoProfileTable->cellWidget(row, kProfColMode)))
+        {
+            profile.mode = static_cast<MultiButtonAutomationMode>(
+                modeCombo->currentData().toInt());
+        }
+
+        if (auto* minSpin = qobject_cast<QSpinBox*>(
+                m_autoProfileTable->cellWidget(row, kProfColJumpMin)))
+            profile.stepMin = minSpin->value();
+
+        if (auto* maxSpin = qobject_cast<QSpinBox*>(
+                m_autoProfileTable->cellWidget(row, kProfColJumpMax)))
+            profile.stepMax = qMax(profile.stepMin, maxSpin->value());
+
+        if (auto* multSpin = qobject_cast<QSpinBox*>(
+                m_autoProfileTable->cellWidget(row, kProfColMultiplier)))
+            profile.multiplier = qMax(1, multSpin->value());
+    }
+}
+
+void MultiButtonConfigDialog::rebuildAutomationProfileTable()
+{
+    if (!m_autoProfileTable)
+        return;
+
+    if (!m_rebuildingProfileTable)
+        syncDataFromProfileTable();
+
+    m_rebuildingProfileTable = true;
+    m_autoProfileTable->blockSignals(true);
+
+    const int sel = m_autoProfileTable->currentRow();
+    m_autoProfileTable->clearSpans();
+    m_autoProfileTable->setRowCount(0);
+
+    if (m_automationProfiles.isEmpty())
+    {
+        m_autoProfileTable->insertRow(0);
+        QTableWidgetItem* hint = new QTableWidgetItem(tr("No profiles — use Add"));
+        hint->setFlags(Qt::ItemIsEnabled);
+        m_autoProfileTable->setItem(0, kProfColName, hint);
+        m_autoProfileTable->setEnabled(false);
+    }
+    else
+    {
+        m_autoProfileTable->setEnabled(true);
+
+        for (int row = 0; row < m_automationProfiles.size(); ++row)
+        {
+            const MultiButtonAutomationProfile& profile = m_automationProfiles.at(row);
+            m_autoProfileTable->insertRow(row);
+
+            QTableWidgetItem* nameItem = new QTableWidgetItem(profile.name);
+            nameItem->setFlags(nameItem->flags() | Qt::ItemIsEditable);
+            m_autoProfileTable->setItem(row, kProfColName, nameItem);
+
+            m_autoProfileTable->setItem(row, kProfColMode, widgetColumnPlaceholder());
+            QComboBox* modeCombo = new QComboBox(m_autoProfileTable);
+            modeCombo->addItem(tr("Next"),   (int) MultiButtonAutomationMode::Next);
+            modeCombo->addItem(tr("Random"), (int) MultiButtonAutomationMode::Random);
+            modeCombo->addItem(tr("Jump"),   (int) MultiButtonAutomationMode::Jump);
+            for (int i = 0; i < modeCombo->count(); ++i)
+            {
+                if (modeCombo->itemData(i).toInt() == (int) profile.mode)
+                {
+                    modeCombo->setCurrentIndex(i);
+                    break;
+                }
+            }
+            const int capturedRow = row;
+            connect(modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                    this, [this, capturedRow](int) { slotAutomationProfileModeChanged(capturedRow); });
+            m_autoProfileTable->setCellWidget(row, kProfColMode, modeCombo);
+
+            m_autoProfileTable->setItem(row, kProfColJumpMin, widgetColumnPlaceholder());
+            QSpinBox* minSpin = new QSpinBox(m_autoProfileTable);
+            minSpin->setRange(1, 32);
+            minSpin->setValue(qMax(1, profile.stepMin));
+            minSpin->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            minSpin->setMaximumWidth(72);
+            m_autoProfileTable->setCellWidget(row, kProfColJumpMin, minSpin);
+
+            m_autoProfileTable->setItem(row, kProfColJumpMax, widgetColumnPlaceholder());
+            QSpinBox* maxSpin = new QSpinBox(m_autoProfileTable);
+            maxSpin->setRange(1, 32);
+            maxSpin->setValue(qMax(profile.stepMin, profile.stepMax));
+            maxSpin->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            maxSpin->setMaximumWidth(72);
+            m_autoProfileTable->setCellWidget(row, kProfColJumpMax, maxSpin);
+
+            m_autoProfileTable->setItem(row, kProfColMultiplier, widgetColumnPlaceholder());
+            QSpinBox* multSpin = new QSpinBox(m_autoProfileTable);
+            multSpin->setRange(1, 255);
+            multSpin->setValue(qMax(1, profile.multiplier));
+            multSpin->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            multSpin->setMaximumWidth(72);
+            m_autoProfileTable->setCellWidget(row, kProfColMultiplier, multSpin);
+
+            const bool isJump = (profile.mode == MultiButtonAutomationMode::Jump);
+            minSpin->setEnabled(isJump);
+            maxSpin->setEnabled(isJump);
+        }
+
+        tuneAutomationProfileColumnWidths(m_autoProfileTable);
+
+        const int pick = qBound(0, sel >= 0 ? sel : m_activeAutomationProfile,
+                                m_automationProfiles.size() - 1);
+        m_autoProfileTable->setCurrentCell(pick, kProfColName);
+    }
+
+    m_autoProfileTable->blockSignals(false);
+    m_rebuildingProfileTable = false;
+}
+
+void MultiButtonConfigDialog::loadExcludeTableForProfile(int profileIndex)
+{
+    if (profileIndex < 0 || profileIndex >= m_automationProfiles.size())
+        return;
+
+    m_activeAutomationProfile = profileIndex;
+    rebuildAutomationExcludeTable();
+}
+
+void MultiButtonConfigDialog::slotAutomationProfileRowChanged(int currentRow, int previousRow)
+{
+    if (m_syncingAutomationUi || m_rebuildingProfileTable || !m_autoProfileTable)
+        return;
+
+    // Exclude table still shows the previous profile — save its mask before reloading.
+    if (previousRow >= 0 && previousRow < m_automationProfiles.size()
+        && !m_rebuildingExcludeTable)
+    {
+        syncExcludeMaskFromTable(m_autoExcludeTable,
+                                 m_automationProfiles[previousRow].excludeMask);
+    }
+
+    syncDataFromProfileTable();
+
+    if (currentRow >= 0)
+        loadExcludeTableForProfile(currentRow);
+}
+
+void MultiButtonConfigDialog::slotAutomationProfileModeChanged(int row)
+{
+    if (!m_autoProfileTable || m_rebuildingProfileTable)
+        return;
+
+    auto* modeCombo = qobject_cast<QComboBox*>(
+        m_autoProfileTable->cellWidget(row, kProfColMode));
+    if (!modeCombo)
+        return;
+
+    const bool isJump = (modeCombo->currentData().toInt()
+                         == (int) MultiButtonAutomationMode::Jump);
+    if (auto* minSpin = qobject_cast<QSpinBox*>(m_autoProfileTable->cellWidget(row, kProfColJumpMin)))
+        minSpin->setEnabled(isJump);
+    if (auto* maxSpin = qobject_cast<QSpinBox*>(m_autoProfileTable->cellWidget(row, kProfColJumpMax)))
+        maxSpin->setEnabled(isJump);
+}
+
+void MultiButtonConfigDialog::slotAutoExcludeItemChanged(QTableWidgetItem* item)
+{
+    if (m_syncingAutomationUi || m_rebuildingExcludeTable || !item)
+        return;
+    if (item->column() != 1)
+        return;
+
+    const int cur = m_autoProfileTable ? m_autoProfileTable->currentRow() : -1;
+    if (cur >= 0 && cur < m_automationProfiles.size())
+        syncExcludeMaskFromTable(m_autoExcludeTable, m_automationProfiles[cur].excludeMask);
+}
+
+void MultiButtonConfigDialog::slotAutomationAddProfile()
+{
+    syncDataFromProfileTable();
+
+    MultiButtonAutomationProfile profile;
+    profile.name = tr("Profile %1").arg(m_automationProfiles.size() + 1);
+    m_automationProfiles.append(profile);
+
+    rebuildAutomationProfileTable();
+    if (m_autoProfileTable)
+        m_autoProfileTable->setCurrentCell(m_automationProfiles.size() - 1, kProfColName);
+}
+
+void MultiButtonConfigDialog::slotAutomationRemoveProfile()
+{
+    if (m_automationProfiles.size() <= 1)
+        return;
+
+    syncDataFromProfileTable();
+
+    const int row = m_autoProfileTable ? m_autoProfileTable->currentRow() : -1;
+    if (row < 0)
+        return;
+
+    m_automationProfiles.removeAt(row);
+    rebuildAutomationProfileTable();
 }

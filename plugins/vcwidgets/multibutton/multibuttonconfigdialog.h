@@ -53,8 +53,13 @@ public:
         int                                spreadVMargin,
         int                                spreadTileWidth,
         int                                spreadTileHeight,
+        bool                               automationEnabled,
+        const QList<MultiButtonAutomationProfile>& automationProfiles,
+        int                                activeAutomationProfile,
         QSharedPointer<QLCInputSource>     triggerSrc,
         QSharedPointer<QLCInputSource>     popupSrc,
+        QSharedPointer<QLCInputSource>     automationSrc,
+        QSharedPointer<QLCInputSource>     presetChooseSrc,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -74,12 +79,24 @@ public:
     int                            spreadVMargin()         const;
     int                            spreadTileWidth()       const;
     int                            spreadTileHeight()      const;
+    bool                           automationEnabled()     const;
+    QList<MultiButtonAutomationProfile> automationProfiles() const;
+    int                            activeAutomationProfile() const;
     QSharedPointer<QLCInputSource> triggerInputSource()    const;
     QSharedPointer<QLCInputSource> popupInputSource()      const;
+    QSharedPointer<QLCInputSource> automationInputSource() const;
+    QSharedPointer<QLCInputSource> presetChooseInputSource() const;
+
+    void accept() override;
 
 private slots:
     void slotModeChanged(int index);
     void slotLayoutChanged(int index);
+    void slotAutomationProfileRowChanged(int currentRow, int previousRow);
+    void slotAutomationAddProfile();
+    void slotAutomationRemoveProfile();
+    void slotAutomationProfileModeChanged(int row);
+    void slotAutoExcludeItemChanged(QTableWidgetItem* item);
     void slotAdd();
     void slotRemove();
     void slotEditLabel();
@@ -116,6 +133,12 @@ private:
     QString presetNameCellText(int row) const;
     void updateChooseChannelsButton();
     void updateMonitorTooltip();
+    void syncDataFromProfileTable();
+    void rebuildAutomationProfileTable();
+    void rebuildAutomationExcludeTable();
+    void loadExcludeTableForProfile(int profileIndex);
+    int  entryCountForAutomation() const;
+    QString entryLabelForAutomation(int index) const;
     static quint64 bindingKey(quint32 fixtureId, quint32 channel);
     static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
 
@@ -169,8 +192,27 @@ private:
     QSpinBox*     m_tileHSpin         = nullptr;
     QGroupBox*    m_singleLayoutGrp    = nullptr;
     QGroupBox*    m_spreadLayoutGrp    = nullptr;
-    InputSelectionWidget* m_triggerInputSel = nullptr;
-    InputSelectionWidget* m_popupInputSel   = nullptr;
+
+    QCheckBox*    m_autoEnableCheck    = nullptr;
+    QTableWidget* m_autoProfileTable   = nullptr;
+    QTableWidget* m_autoExcludeTable   = nullptr;
+
+    QList<MultiButtonAutomationProfile> m_automationProfiles;
+    int                               m_activeAutomationProfile = 0;
+    bool                              m_syncingAutomationUi     = false;
+    bool                              m_rebuildingProfileTable  = false;
+    bool                              m_rebuildingExcludeTable  = false;
+
+    static constexpr int kProfColName       = 0;
+    static constexpr int kProfColMode       = 1;
+    static constexpr int kProfColJumpMin    = 2;
+    static constexpr int kProfColJumpMax    = 3;
+    static constexpr int kProfColMultiplier = 4;
+
+    InputSelectionWidget* m_triggerInputSel      = nullptr;
+    InputSelectionWidget* m_popupInputSel        = nullptr;
+    InputSelectionWidget* m_automationInputSel   = nullptr;
+    InputSelectionWidget* m_presetChooseInputSel = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 
     bool m_rebuildingPresetTable = false;

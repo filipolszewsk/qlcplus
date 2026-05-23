@@ -38,6 +38,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QVector>
+#include <QRandomGenerator>
 
 // ---- XML tag constants ----------------------------------------------------
 
@@ -55,6 +56,8 @@ static const QString KXMLAddOffAtEnd       = QStringLiteral("AddOffAtEnd");
 static const QString KXMLMonitorChannels   = QStringLiteral("MonitorChannelValues");
 static const QString KXMLTriggerInput      = QStringLiteral("TriggerInput");
 static const QString KXMLPopupInput        = QStringLiteral("PopupInput");
+static const QString KXMLAutomationTriggerInput = QStringLiteral("AutomationTriggerInput");
+static const QString KXMLPresetChooseInput = QStringLiteral("PresetChooseInput");
 static const QString KXMLLevelFixture      = QStringLiteral("LevelFixture");
 static const QString KXMLLevelFixtureID    = QStringLiteral("ID");
 static const QString KXMLLevelChannels     = QStringLiteral("LevelChannels");
@@ -78,6 +81,18 @@ static const QString KXMLSpreadHMargin       = QStringLiteral("HMargin");
 static const QString KXMLSpreadVMargin       = QStringLiteral("VMargin");
 static const QString KXMLSpreadTileW         = QStringLiteral("TileW");
 static const QString KXMLSpreadTileH         = QStringLiteral("TileH");
+static const QString KXMLAutomation          = QStringLiteral("Automation");
+static const QString KXMLAutomationEnabled   = QStringLiteral("Enabled");
+// Legacy attributes kept for migration reading:
+static const QString KXMLAutomationActive    = QStringLiteral("ActiveProfile");
+static const QString KXMLAutomationProfile   = QStringLiteral("Profile");
+static const QString KXMLAutomationName      = QStringLiteral("Name");
+static const QString KXMLAutomationExcludeMask = QStringLiteral("ExcludeMask");
+// Current attributes:
+static const QString KXMLAutomationMode      = QStringLiteral("Mode");
+static const QString KXMLAutomationStepMin   = QStringLiteral("StepMin");
+static const QString KXMLAutomationStepMax   = QStringLiteral("StepMax");
+static const QString KXMLAutomationMultiplier = QStringLiteral("Multiplier");
 
 static QString modeToString(MultiButtonMode mode)
 {
@@ -101,6 +116,25 @@ static MultiButtonLayout stringToLayout(const QString& s)
 {
     return s == QStringLiteral("Spread") ? MultiButtonLayout::Spread
                                          : MultiButtonLayout::Single;
+}
+
+static QString automationModeToString(MultiButtonAutomationMode mode)
+{
+    switch (mode)
+    {
+        case MultiButtonAutomationMode::Random: return QStringLiteral("Random");
+        case MultiButtonAutomationMode::Jump:   return QStringLiteral("Jump");
+        default:                                return QStringLiteral("Next");
+    }
+}
+
+static MultiButtonAutomationMode stringToAutomationMode(const QString& s)
+{
+    if (s == QStringLiteral("Random"))
+        return MultiButtonAutomationMode::Random;
+    if (s == QStringLiteral("Jump"))
+        return MultiButtonAutomationMode::Jump;
+    return MultiButtonAutomationMode::Next;
 }
 
 // ---- Construction ---------------------------------------------------------
@@ -855,6 +889,118 @@ void MultiButtonWidget::cycleNext()
     }
 }
 
+void MultiButtonWidget::setAutomationEnabled(bool enable)
+{
+    m_automationEnabled = enable;
+}
+
+void MultiButtonWidget::setAutomationProfiles(const QList<MultiButtonAutomationProfile>& profiles,
+                                            int activeIndex)
+{
+    m_automationProfiles = profiles;
+    if (m_automationProfiles.isEmpty())
+    {
+        MultiButtonAutomationProfile def;
+        def.name = tr("Profile %1").arg(1);
+        m_automationProfiles.append(def);
+    }
+    m_activeAutomationProfile = qBound(0, activeIndex, m_automationProfiles.size() - 1);
+    m_automationPulseCounter = 0;
+}
+
+void MultiButtonWidget::onAutomationTrigger()
+{
+    const MultiButtonAutomationProfile* profile = activeAutomationProfilePtr();
+    if (!profile || entryCount() == 0)
+        return;
+
+    ++m_automationPulseCounter;
+    const int N = qMax(1, profile->multiplier);
+    if (m_automationPulseCounter % N != 0)
+        return;
+
+    advanceAutomation();
+}
+
+const MultiButtonAutomationProfile* MultiButtonWidget::activeAutomationProfilePtr() const
+{
+    if (m_automationProfiles.isEmpty())
+        return nullptr;
+    return &m_automationProfiles.at(qBound(0, m_activeAutomationProfile,
+                                             m_automationProfiles.size() - 1));
+}
+
+QVector<int> MultiButtonWidget::buildAllowedAutomationSlots(
+    const MultiButtonAutomationProfile& profile) const
+{
+    QVector<int> allowed;
+    const int n = entryCount();
+    for (int i = 0; i < n; ++i)
+    {
+        if ((profile.excludeMask & (1u << i)) == 0)
+            allowed.append(i);
+    }
+    if (m_addOffAtEnd)
+        allowed.append(-1);
+    return allowed;
+}
+
+void MultiButtonWidget::advanceAutomation()
+{
+    const MultiButtonAutomationProfile* profile = activeAutomationProfilePtr();
+    if (!profile || entryCount() == 0)
+        return;
+
+    const QVector<int> allowed = buildAllowedAutomationSlots(*profile);
+    if (allowed.isEmpty())
+        return;
+
+    int pos = 0;
+    for (int i = 0; i < allowed.size(); ++i)
+    {
+        if (allowed.at(i) == m_currentIndex)
+        {
+            pos = i;
+            break;
+        }
+    }
+
+    int newPos = pos;
+    switch (profile->mode)
+    {
+        case MultiButtonAutomationMode::Random:
+            newPos = QRandomGenerator::global()->bounded(allowed.size());
+            break;
+        case MultiButtonAutomationMode::Jump:
+        {
+            int step = profile->stepMin;
+            if (profile->stepMax > profile->stepMin)
+            {
+                step = QRandomGenerator::global()->bounded(profile->stepMin,
+                                                           profile->stepMax + 1);
+            }
+            newPos = (pos + step) % allowed.size();
+            break;
+        }
+        case MultiButtonAutomationMode::Next:
+        default:
+            newPos = (pos + 1) % allowed.size();
+            break;
+    }
+
+    const int idx = allowed.at(newPos);
+    if (idx < 0)
+    {
+        stopCurrent();
+        updateFeedback();
+        update();
+    }
+    else
+    {
+        activate(idx);
+    }
+}
+
 void MultiButtonWidget::activate(int idx)
 {
     if (!m_visualOnly && idx == m_currentIndex) return;
@@ -1244,6 +1390,24 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
 
 // ---- External input -------------------------------------------------------
 
+void MultiButtonWidget::handlePresetChooseInput(uchar value)
+{
+    if (value == 0)
+    {
+        m_automationSuspended = true;
+        return;
+    }
+
+    m_automationSuspended = false;
+
+    if (m_automationProfiles.isEmpty())
+        return;
+
+    const int idx = qBound(0, int(value) - 1, m_automationProfiles.size() - 1);
+    m_activeAutomationProfile = idx;
+    m_automationPulseCounter = 0;
+}
+
 void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
     if (!acceptsInput()) return;
@@ -1252,7 +1416,19 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
 
     if (checkInputSource(universe, pagedCh, value, sender(), triggerInputSourceId))
     {
-        if (value > 0) cycleNext();
+        if (value > 0)
+            cycleNext();
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), automationInputSourceId))
+    {
+        if (value > 0 && m_automationEnabled && !m_automationSuspended)
+            onAutomationTrigger();
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), presetChooseInputSourceId))
+    {
+        handlePresetChooseInput(value);
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), popupInputSourceId))
@@ -1291,8 +1467,13 @@ void MultiButtonWidget::editProperties()
         m_spreadVMargin,
         m_spreadTileWidth,
         m_spreadTileHeight,
+        m_automationEnabled,
+        m_automationProfiles,
+        m_activeAutomationProfile,
         inputSource(triggerInputSourceId),
         inputSource(popupInputSourceId),
+        inputSource(automationInputSourceId),
+        inputSource(presetChooseInputSourceId),
         page(),
         this);
 
@@ -1311,8 +1492,12 @@ void MultiButtonWidget::editProperties()
     setSpreadVMargin(dlg.spreadVMargin());
     setSpreadTileWidth(dlg.spreadTileWidth());
     setSpreadTileHeight(dlg.spreadTileHeight());
+    setAutomationEnabled(dlg.automationEnabled());
+    setAutomationProfiles(dlg.automationProfiles(), dlg.activeAutomationProfile());
     setInputSource(dlg.triggerInputSource(), triggerInputSourceId);
     setInputSource(dlg.popupInputSource(), popupInputSourceId);
+    setInputSource(dlg.automationInputSource(), automationInputSourceId);
+    setInputSource(dlg.presetChooseInputSource(), presetChooseInputSourceId);
     m_doc->setModified();
     update();
 }
@@ -1341,9 +1526,183 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setSpreadVMargin(m_spreadVMargin);
     copy->setSpreadTileWidth(m_spreadTileWidth);
     copy->setSpreadTileHeight(m_spreadTileHeight);
+    copy->setAutomationEnabled(m_automationEnabled);
+    copy->setAutomationProfiles(m_automationProfiles, m_activeAutomationProfile);
     copy->setInputSource(inputSource(triggerInputSourceId), triggerInputSourceId);
     copy->setInputSource(inputSource(popupInputSourceId),   popupInputSourceId);
+    copy->setInputSource(inputSource(automationInputSourceId), automationInputSourceId);
+    copy->setInputSource(inputSource(presetChooseInputSourceId), presetChooseInputSourceId);
     return copy;
+}
+
+void MultiButtonWidget::applyEntryNamesFrom(const MultiButtonWidget* src)
+{
+    if (!src)
+        return;
+
+    const int n = qMin(src->entryCount(), entryCount());
+    if (n <= 0)
+        return;
+
+    if (m_mode == MultiButtonMode::Function)
+    {
+        while (m_functionLabels.size() < m_functionIds.size())
+            m_functionLabels.append(QString());
+        while (m_iconPaths.size() < m_functionIds.size())
+            m_iconPaths.append(QString());
+
+        for (int i = 0; i < n; ++i)
+        {
+            if (src->m_mode == MultiButtonMode::Function)
+            {
+                if (i < src->m_functionLabels.size())
+                    m_functionLabels[i] = src->m_functionLabels.at(i);
+                if (i < src->m_iconPaths.size())
+                    m_iconPaths[i] = src->m_iconPaths.at(i);
+            }
+            else if (i < src->m_levelPresets.size())
+            {
+                m_functionLabels[i] = src->m_levelPresets.at(i).label;
+                m_iconPaths[i]      = src->m_levelPresets.at(i).iconPath;
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (i >= m_levelPresets.size())
+                break;
+
+            LevelPreset& tgt = m_levelPresets[i];
+            if (src->m_mode == MultiButtonMode::Level && i < src->m_levelPresets.size())
+            {
+                const LevelPreset& s = src->m_levelPresets.at(i);
+                tgt.label    = s.label;
+                tgt.iconPath = s.iconPath;
+                tgt.color    = s.color;
+                tgt.hideName = s.hideName;
+            }
+            else
+            {
+                tgt.label    = src->m_functionLabels.value(i);
+                tgt.iconPath = src->m_iconPaths.value(i);
+            }
+        }
+    }
+
+    m_iconCache.clear();
+}
+
+void MultiButtonWidget::applyChannelBindingsFrom(const MultiButtonWidget* src)
+{
+    if (!src)
+        return;
+
+    m_levelChannelBindings = src->m_levelChannelBindings;
+    const int bindCount = m_levelChannelBindings.size();
+    for (LevelPreset& preset : m_levelPresets)
+    {
+        while (preset.values.size() < bindCount)
+            preset.values.append(0);
+        while (preset.values.size() > bindCount)
+            preset.values.removeLast();
+    }
+
+    updateDmxRegistration();
+}
+
+void MultiButtonWidget::applyFunctionAssignmentsFrom(const MultiButtonWidget* src)
+{
+    if (!src)
+        return;
+
+    setEntries(src->m_functionIds, src->m_functionLabels, src->m_iconPaths);
+}
+
+void MultiButtonWidget::applyLevelValuesFrom(const MultiButtonWidget* src)
+{
+    if (!src)
+        return;
+
+    const int n = qMin(m_levelPresets.size(), src->m_levelPresets.size());
+    const int bindCount = m_levelChannelBindings.size();
+    for (int i = 0; i < n; ++i)
+    {
+        m_levelPresets[i].values = src->m_levelPresets.at(i).values;
+        while (m_levelPresets[i].values.size() < bindCount)
+            m_levelPresets[i].values.append(0);
+        while (m_levelPresets[i].values.size() > bindCount)
+            m_levelPresets[i].values.removeLast();
+    }
+}
+
+QList<QPair<VCWidget::PastePropertyGroup, QString>>
+MultiButtonWidget::pasteablePropertyGroups() const
+{
+    QList<QPair<PastePropertyGroup, QString>> groups = VCWidget::pasteablePropertyGroups();
+    groups << qMakePair(PasteSpecific0, tr("Entries — Mode (Function / Level)"));
+    groups << qMakePair(PasteSpecific1, tr("Entries — Names (label, icon, color, hide name)"));
+    groups << qMakePair(PasteSpecific2, tr("Entries — Channels (level bindings)"));
+    groups << qMakePair(PasteSpecific3, tr("Entries — Function assignments"));
+    groups << qMakePair(PasteSpecific4, tr("Entries — Level DMX values"));
+    groups << qMakePair(PasteSpecific5, tr("Layout (Single/Spread, columns, tile size)"));
+    groups << qMakePair(PasteSpecific6, tr("Automation (profiles, enabled, active profile)"));
+    groups << qMakePair(PasteSpecific7, tr("General (long-press, off at end, monitor)"));
+    return groups;
+}
+
+void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags)
+{
+    const MultiButtonWidget* src = qobject_cast<const MultiButtonWidget*>(source);
+    if (src == nullptr)
+    {
+        VCWidget::applyPropertiesFrom(source, flags);
+        return;
+    }
+
+    if (flags & PasteSpecific0)
+        setWidgetMode(src->m_mode);
+
+    if (flags & PasteSpecific1)
+        applyEntryNamesFrom(src);
+
+    if (flags & PasteSpecific2)
+        applyChannelBindingsFrom(src);
+
+    if (flags & PasteSpecific3)
+        applyFunctionAssignmentsFrom(src);
+
+    if (flags & PasteSpecific4)
+        applyLevelValuesFrom(src);
+
+    if (flags & PasteSpecific5)
+    {
+        setWidgetLayout(src->m_layout);
+        setSpreadColumns(src->m_spreadColumns);
+        setSpreadRows(src->m_spreadRows);
+        setSpreadHMargin(src->m_spreadHMargin);
+        setSpreadVMargin(src->m_spreadVMargin);
+        setSpreadTileWidth(src->m_spreadTileWidth);
+        setSpreadTileHeight(src->m_spreadTileHeight);
+    }
+
+    if (flags & PasteSpecific6)
+    {
+        setAutomationProfiles(src->m_automationProfiles, src->m_activeAutomationProfile);
+        setAutomationEnabled(src->m_automationEnabled);
+    }
+
+    if (flags & PasteSpecific7)
+    {
+        setLongPressMs(src->m_longPressMs);
+        setAddOffAtEnd(src->m_addOffAtEnd);
+        setMonitorChannelValues(src->m_monitorChannelValues);
+    }
+
+    VCWidget::applyPropertiesFrom(source, flags);
+    m_doc->setModified();
+    update();
 }
 
 // ---- Cross-project clipboard -----------------------------------------------
@@ -1366,6 +1725,22 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     spread["tileWidth"]  = m_spreadTileWidth;
     spread["tileHeight"] = m_spreadTileHeight;
     obj["spread"] = spread;
+
+    obj["automationEnabled"]      = m_automationEnabled;
+    obj["activeAutomationProfile"] = m_activeAutomationProfile;
+    QJsonArray autoProfiles;
+    for (const MultiButtonAutomationProfile& ap : m_automationProfiles)
+    {
+        QJsonObject po;
+        po["name"]         = ap.name;
+        po["mode"]         = automationModeToString(ap.mode);
+        po["stepMin"]      = ap.stepMin;
+        po["stepMax"]      = ap.stepMax;
+        po["multiplier"]   = ap.multiplier;
+        po["excludeMask"]  = QString::number(ap.excludeMask, 16);
+        autoProfiles.append(po);
+    }
+    obj["automationProfiles"] = autoProfiles;
 
     QJsonArray funcs;
     for (int i = 0; i < m_functionIds.size(); ++i)
@@ -1434,6 +1809,23 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         m_spreadTileWidth  = spread["tileWidth"].toInt(80);
         m_spreadTileHeight = spread["tileHeight"].toInt(60);
     }
+
+    m_automationEnabled = obj["automationEnabled"].toBool(false);
+    m_activeAutomationProfile = obj["activeAutomationProfile"].toInt(0);
+    QList<MultiButtonAutomationProfile> loadedAuto;
+    for (const QJsonValue& av : obj["automationProfiles"].toArray())
+    {
+        QJsonObject ao = av.toObject();
+        MultiButtonAutomationProfile ap;
+        ap.name         = ao["name"].toString();
+        ap.mode         = stringToAutomationMode(ao["mode"].toString());
+        ap.stepMin      = ao["stepMin"].toInt(1);
+        ap.stepMax      = ao["stepMax"].toInt(1);
+        ap.multiplier   = qMax(1, ao["multiplier"].toInt(1));
+        ap.excludeMask  = ao["excludeMask"].toString().toUInt(nullptr, 0);
+        loadedAuto.append(ap);
+    }
+    setAutomationProfiles(loadedAuto, m_activeAutomationProfile);
 
     QList<quint32> ids;
     QStringList    labels;
@@ -1563,6 +1955,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     QList<quint32>            legacyChannels;
     QList<LevelChannelBinding> levelBindings;
     QList<LevelPreset>        levelPresets;
+    QList<MultiButtonAutomationProfile> loadedAutomation;
+    bool hasAutomationElement = false;
 
     while (root.readNextStartElement())
     {
@@ -1605,6 +1999,40 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             setSpreadTileWidth(attrs.value(KXMLSpreadTileW).toInt());
             setSpreadTileHeight(attrs.value(KXMLSpreadTileH).toInt());
             root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLAutomation)
+        {
+            hasAutomationElement = true;
+            const auto attrs = root.attributes();
+            m_automationEnabled = attrs.value(KXMLAutomationEnabled).toInt() != 0;
+            m_activeAutomationProfile = attrs.value(KXMLAutomationActive).toInt();
+
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLAutomationProfile)
+                {
+                    MultiButtonAutomationProfile profile;
+                    const auto pa = root.attributes();
+                    profile.name = pa.value(KXMLAutomationName).toString();
+                    profile.mode = stringToAutomationMode(pa.value(KXMLAutomationMode).toString());
+                    profile.stepMin = pa.value(KXMLAutomationStepMin).toInt();
+                    if (profile.stepMin < 1)
+                        profile.stepMin = 1;
+                    profile.stepMax = pa.value(KXMLAutomationStepMax).toInt();
+                    if (profile.stepMax < profile.stepMin)
+                        profile.stepMax = profile.stepMin;
+                    profile.multiplier = qMax(1, pa.value(KXMLAutomationMultiplier).toInt());
+                    profile.excludeMask = pa.value(KXMLAutomationExcludeMask)
+                                              .toString()
+                                              .toUInt(nullptr, 0);
+                    loadedAutomation.append(profile);
+                    root.skipCurrentElement();
+                }
+                else
+                {
+                    root.skipCurrentElement();
+                }
+            }
         }
         else if (root.name() == KXMLMonitorChannels)
         {
@@ -1676,6 +2104,14 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         {
             loadXMLSources(root, popupInputSourceId);
         }
+        else if (root.name() == KXMLAutomationTriggerInput)
+        {
+            loadXMLSources(root, automationInputSourceId);
+        }
+        else if (root.name() == KXMLPresetChooseInput)
+        {
+            loadXMLSources(root, presetChooseInputSourceId);
+        }
         else
         {
             root.skipCurrentElement();
@@ -1715,6 +2151,9 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     if (m_currentIndex >= entryCount())
         m_currentIndex = -1;
 
+    if (hasAutomationElement)
+        setAutomationProfiles(loadedAutomation, m_activeAutomationProfile);
+
     m_iconCache.clear();
     rebuildSceneCache();
     recalcSpreadSize();
@@ -1752,6 +2191,24 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeAttribute(KXMLSpreadVMargin, QString::number(m_spreadVMargin));
     doc->writeAttribute(KXMLSpreadTileW, QString::number(m_spreadTileWidth));
     doc->writeAttribute(KXMLSpreadTileH, QString::number(m_spreadTileHeight));
+    doc->writeEndElement();
+
+    doc->writeStartElement(KXMLAutomation);
+    doc->writeAttribute(KXMLAutomationEnabled, m_automationEnabled ? QStringLiteral("1")
+                                                                 : QStringLiteral("0"));
+    doc->writeAttribute(KXMLAutomationActive, QString::number(m_activeAutomationProfile));
+    for (const MultiButtonAutomationProfile& profile : m_automationProfiles)
+    {
+        doc->writeStartElement(KXMLAutomationProfile);
+        doc->writeAttribute(KXMLAutomationName, profile.name);
+        doc->writeAttribute(KXMLAutomationMode, automationModeToString(profile.mode));
+        doc->writeAttribute(KXMLAutomationStepMin, QString::number(profile.stepMin));
+        doc->writeAttribute(KXMLAutomationStepMax, QString::number(profile.stepMax));
+        doc->writeAttribute(KXMLAutomationMultiplier, QString::number(profile.multiplier));
+        doc->writeAttribute(KXMLAutomationExcludeMask,
+                            QString::number(profile.excludeMask, 16));
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
 
     if (m_mode == MultiButtonMode::Level)
@@ -1812,6 +2269,22 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     {
         doc->writeStartElement(KXMLPopupInput);
         saveXMLInput(doc, popSrc);
+        doc->writeEndElement();
+    }
+
+    auto autoSrc = inputSource(automationInputSourceId);
+    if (!autoSrc.isNull() && autoSrc->isValid())
+    {
+        doc->writeStartElement(KXMLAutomationTriggerInput);
+        saveXMLInput(doc, autoSrc);
+        doc->writeEndElement();
+    }
+
+    auto presetSrc = inputSource(presetChooseInputSourceId);
+    if (!presetSrc.isNull() && presetSrc->isValid())
+    {
+        doc->writeStartElement(KXMLPresetChooseInput);
+        saveXMLInput(doc, presetSrc);
         doc->writeEndElement();
     }
 
@@ -2099,8 +2572,6 @@ void MultiButtonWidget::paintSingle(QPainter& p)
 
 void MultiButtonWidget::paintEvent(QPaintEvent* e)
 {
-    Q_UNUSED(e);
-
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, false);
 
@@ -2110,4 +2581,6 @@ void MultiButtonWidget::paintEvent(QPaintEvent* e)
         paintSingle(p);
 
     p.end();
+
+    VCWidget::paintEvent(e);
 }

@@ -68,13 +68,32 @@ struct LevelPreset
     QList<quint8> values;   // parallel to m_levelChannelBindings
 };
 
+enum class MultiButtonAutomationMode
+{
+    Next,
+    Random,
+    Jump
+};
+
+struct MultiButtonAutomationProfile
+{
+    QString                   name;
+    MultiButtonAutomationMode mode       = MultiButtonAutomationMode::Next;
+    int                       stepMin    = 1;
+    int                       stepMax    = 1;
+    int                       multiplier = 1;   // automation trigger fires advance every N-th pulse
+    quint32                   excludeMask = 0;  // bit i excludes entry index i
+};
+
 class MultiButtonWidget : public VCWidget, public DMXSource
 {
     Q_OBJECT
 
 public:
-    static const quint8 triggerInputSourceId = 0;   // cycle-next
-    static const quint8 popupInputSourceId   = 1;   // open popup
+    static const quint8 triggerInputSourceId      = 0;   // cycle-next
+    static const quint8 popupInputSourceId        = 1;   // open popup
+    static const quint8 automationInputSourceId   = 2;   // advance automation
+    static const quint8 presetChooseInputSourceId = 3;   // DMX value selects automation profile
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -127,6 +146,14 @@ public:
     int  spreadTileHeight() const { return m_spreadTileHeight; }
     void setSpreadTileHeight(int height);
 
+    bool automationEnabled() const { return m_automationEnabled; }
+    void setAutomationEnabled(bool enable);
+
+    QList<MultiButtonAutomationProfile> automationProfiles() const { return m_automationProfiles; }
+    void setAutomationProfiles(const QList<MultiButtonAutomationProfile>& profiles,
+                               int activeIndex);
+    int  activeAutomationProfile() const { return m_activeAutomationProfile; }
+
     // ---- FunctionParent (required for Function::start/stop) --------------
     FunctionParent functionParent() const;
 
@@ -134,6 +161,9 @@ public:
     void writeDMX(MasterTimer* timer, QList<Universe*> universes) override;
 
     // ---- VCWidget overrides ----------------------------------------------
+    QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
+    void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
+
     VCWidget* createCopy(VCWidget* parent) override;
     void      toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
     void      fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
@@ -161,6 +191,9 @@ protected:
 
 private:
     void cycleNext();
+    void onAutomationTrigger();
+    void advanceAutomation();
+    void handlePresetChooseInput(uchar value);
     void activate(int idx);
     void stopCurrent();
     void showPopupMenu(const QPoint& globalPos);
@@ -194,6 +227,14 @@ private:
     QString   activeFunctionCaption() const;
     Function* functionAt(int idx) const;
     QPixmap   iconForEntry(int idx) const;
+
+    const MultiButtonAutomationProfile* activeAutomationProfilePtr() const;
+    QVector<int> buildAllowedAutomationSlots(const MultiButtonAutomationProfile& profile) const;
+
+    void applyEntryNamesFrom(const MultiButtonWidget* src);
+    void applyChannelBindingsFrom(const MultiButtonWidget* src);
+    void applyFunctionAssignmentsFrom(const MultiButtonWidget* src);
+    void applyLevelValuesFrom(const MultiButtonWidget* src);
 
     // ---- Mode ------------------------------------------------------------
     MultiButtonMode m_mode = MultiButtonMode::Function;
@@ -232,6 +273,12 @@ private:
     int               m_spreadVMargin    = 4;
     int               m_spreadTileWidth  = 80;
     int               m_spreadTileHeight = 60;
+
+    bool                              m_automationEnabled      = false;
+    bool                              m_automationSuspended    = false;
+    QList<MultiButtonAutomationProfile> m_automationProfiles;
+    int                               m_activeAutomationProfile = 0;
+    int                               m_automationPulseCounter  = 0;
 
     // ---- Press-tracking state (GUI thread only) --------------------------
     QTimer* m_longPressTimer = nullptr;
