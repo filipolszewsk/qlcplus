@@ -37,6 +37,7 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QVector>
 
 // ---- XML tag constants ----------------------------------------------------
 
@@ -69,6 +70,14 @@ static const QString KXMLLevelPresetIcon   = QStringLiteral("IconPath");
 static const QString KXMLLevelPresetColor  = QStringLiteral("Color");
 static const QString KXMLLevelPresetHideName = QStringLiteral("HideName");
 static const QString KXMLLevelPresetValues = QStringLiteral("Values");
+static const QString KXMLSpread            = QStringLiteral("Spread");
+static const QString KXMLSpreadEnabled     = QStringLiteral("Enabled");
+static const QString KXMLSpreadColumns     = QStringLiteral("Columns");
+static const QString KXMLSpreadRows        = QStringLiteral("Rows");
+static const QString KXMLSpreadHMargin       = QStringLiteral("HMargin");
+static const QString KXMLSpreadVMargin       = QStringLiteral("VMargin");
+static const QString KXMLSpreadTileW         = QStringLiteral("TileW");
+static const QString KXMLSpreadTileH         = QStringLiteral("TileH");
 
 static QString modeToString(MultiButtonMode mode)
 {
@@ -80,6 +89,18 @@ static MultiButtonMode stringToMode(const QString& s)
 {
     return s == QStringLiteral("Level") ? MultiButtonMode::Level
                                         : MultiButtonMode::Function;
+}
+
+static QString layoutToString(MultiButtonLayout layout)
+{
+    return layout == MultiButtonLayout::Spread ? QStringLiteral("Spread")
+                                               : QStringLiteral("Single");
+}
+
+static MultiButtonLayout stringToLayout(const QString& s)
+{
+    return s == QStringLiteral("Spread") ? MultiButtonLayout::Spread
+                                         : MultiButtonLayout::Single;
 }
 
 // ---- Construction ---------------------------------------------------------
@@ -169,6 +190,7 @@ void MultiButtonWidget::setLevelConfig(const QList<LevelChannelBinding>& binding
         m_currentIndex = -1;
 
     reactivateLevelPreset();
+    recalcSpreadSize();
     update();
 }
 
@@ -219,6 +241,7 @@ void MultiButtonWidget::setEntries(const QList<quint32>& ids,
     m_visualOnly   = false;
 
     rebuildSceneCache();
+    recalcSpreadSize();
     update();
 }
 
@@ -237,7 +260,169 @@ void MultiButtonWidget::setLongPressMs(int ms)
 void MultiButtonWidget::setAddOffAtEnd(bool v)
 {
     m_addOffAtEnd = v;
+    recalcSpreadSize();
     update();
+}
+
+void MultiButtonWidget::setWidgetLayout(MultiButtonLayout layout)
+{
+    if (m_layout == layout)
+        return;
+    m_layout = layout;
+    recalcSpreadSize();
+    update();
+}
+
+void MultiButtonWidget::setSpreadColumns(int columns)
+{
+    m_spreadColumns = qMax(0, columns);
+    recalcSpreadSize();
+}
+
+void MultiButtonWidget::setSpreadRows(int rows)
+{
+    m_spreadRows = qMax(0, rows);
+    recalcSpreadSize();
+}
+
+void MultiButtonWidget::setSpreadHMargin(int margin)
+{
+    m_spreadHMargin = qBound(0, margin, 64);
+    recalcSpreadSize();
+}
+
+void MultiButtonWidget::setSpreadVMargin(int margin)
+{
+    m_spreadVMargin = qBound(0, margin, 64);
+    recalcSpreadSize();
+}
+
+void MultiButtonWidget::setSpreadTileWidth(int width)
+{
+    m_spreadTileWidth = qBound(20, width, 400);
+    recalcSpreadSize();
+}
+
+void MultiButtonWidget::setSpreadTileHeight(int height)
+{
+    m_spreadTileHeight = qBound(20, height, 400);
+    recalcSpreadSize();
+}
+
+int MultiButtonWidget::spreadTileCount() const
+{
+    const int n = entryCount();
+    if (n <= 0)
+        return 0;
+    return n + (m_addOffAtEnd ? 1 : 0);
+}
+
+void MultiButtonWidget::resolveSpreadGrid(int& cols, int& rows) const
+{
+    const int total = spreadTileCount();
+    if (total <= 0)
+    {
+        cols = 1;
+        rows = 1;
+        return;
+    }
+
+    int c = m_spreadColumns;
+    int r = m_spreadRows;
+
+    if (c <= 0 && r <= 0)
+    {
+        c = total;
+        r = 1;
+    }
+    else if (c > 0 && r <= 0)
+    {
+        r = (total + c - 1) / c;
+    }
+    else if (c <= 0 && r > 0)
+    {
+        c = (total + r - 1) / r;
+    }
+
+    cols = qMax(1, c);
+    rows = qMax(1, r);
+}
+
+QSize MultiButtonWidget::spreadTotalSize() const
+{
+    int cols = 0, rows = 0;
+    resolveSpreadGrid(cols, rows);
+
+    const int w = cols * m_spreadTileWidth + qMax(0, cols - 1) * m_spreadHMargin;
+    const int h = rows * m_spreadTileHeight + qMax(0, rows - 1) * m_spreadVMargin;
+
+    const int titleH = caption().isEmpty() ? 0 : 19;
+    return QSize(qMax(40, w), qMax(40, h + titleH));
+}
+
+void MultiButtonWidget::recalcSpreadSize()
+{
+    if (m_layout != MultiButtonLayout::Spread)
+        return;
+    resize(spreadTotalSize());
+}
+
+QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
+{
+    QVector<SpreadTileInfo> tiles;
+    const int total = spreadTileCount();
+    if (total <= 0)
+        return tiles;
+
+    int cols = 0, rows = 0;
+    resolveSpreadGrid(cols, rows);
+
+    const int maxSlots = cols * rows;
+    const int titleH = caption().isEmpty() ? 0 : 19;
+    const int y0 = titleH;
+
+    for (int slot = 0; slot < qMin(total, maxSlots); ++slot)
+    {
+        const int col = slot % cols;
+        const int row = slot / cols;
+
+        SpreadTileInfo info;
+        const bool isOff = m_addOffAtEnd && (slot == total - 1);
+        info.index = isOff ? -1 : slot;
+        info.rect = QRect(col * (m_spreadTileWidth + m_spreadHMargin),
+                          y0 + row * (m_spreadTileHeight + m_spreadVMargin),
+                          m_spreadTileWidth,
+                          m_spreadTileHeight);
+        tiles.append(info);
+    }
+
+    return tiles;
+}
+
+int MultiButtonWidget::spreadHitTest(const QPoint& pos) const
+{
+    for (const SpreadTileInfo& tile : computeSpreadTiles())
+    {
+        if (tile.rect.contains(pos))
+            return tile.index;
+    }
+    return -2;
+}
+
+QString MultiButtonWidget::tileCaption(int idx) const
+{
+    if (idx < 0)
+        return tr("OFF");
+
+    if (m_mode == MultiButtonMode::Level)
+        return levelPresetDisplayName(idx);
+
+    const QString lbl = entryLabel(idx);
+    if (!lbl.isEmpty())
+        return lbl;
+
+    Function* f = functionAt(idx);
+    return f ? f->name() : tr("?");
 }
 
 void MultiButtonWidget::setIconForEntry(int idx, const QString& path)
@@ -425,6 +610,35 @@ QPixmap MultiButtonWidget::iconForEntry(int idx) const
 static QColor contrastTextOn(const QColor& bg)
 {
     return (bg.lightness() > 128) ? QColor(Qt::black) : QColor(Qt::white);
+}
+
+/** VC Button style #3 borders (see vcbutton.cpp). Coordinates are local to tile (0,0). */
+static void drawVcButtonBorder(QPainter& painter, const QRect& rect,
+                               bool active, bool monitoring)
+{
+    painter.setBrush(Qt::NoBrush);
+    const int w = rect.width();
+    const int h = rect.height();
+
+    if (!active)
+    {
+        painter.setPen(QPen(QColor(160, 160, 160, 255), 3));
+        painter.drawRoundedRect(1, 1, w - 2, h - 2, 3, 3);
+        return;
+    }
+
+    const int borderWidth = (w > 80) ? 3 : 2;
+    painter.setPen(QPen(QColor(20, 20, 20, 255), borderWidth * 2));
+    painter.drawRoundedRect(borderWidth, borderWidth,
+                            w - borderWidth * 2, h - borderWidth * 2,
+                            borderWidth + 1, borderWidth + 1);
+    if (monitoring)
+        painter.setPen(QPen(QColor(255, 170, 0, 255), borderWidth));
+    else
+        painter.setPen(QPen(QColor(0, 230, 0, 255), borderWidth));
+    painter.drawRoundedRect(borderWidth, borderWidth,
+                            w - borderWidth * 2, h - borderWidth * 2,
+                            borderWidth, borderWidth);
 }
 
 static QColor contrastRingOn(const QColor& bg)
@@ -822,8 +1036,19 @@ void MultiButtonWidget::mousePressEvent(QMouseEvent* e)
         m_pressActive = true;
         m_longFired   = false;
         m_pressPos    = e->pos();
-        m_longPressTimer->start(m_longPressMs);
-        update();
+
+        if (m_layout == MultiButtonLayout::Spread)
+        {
+            m_pressTileIndex = spreadHitTest(e->pos());
+            update();
+        }
+        else
+        {
+            m_pressTileIndex = -2;
+            m_longPressTimer->start(m_longPressMs);
+            update();
+        }
+
         e->accept();
         return;
     }
@@ -853,8 +1078,22 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
         m_pressActive = false;
         m_longPressTimer->stop();
 
-        if (!m_longFired && rect().contains(e->pos()))
+        if (m_layout == MultiButtonLayout::Spread)
+        {
+            const int hit = spreadHitTest(e->pos());
+            if (!m_longFired && hit == m_pressTileIndex && hit != -2)
+            {
+                if (hit < 0)
+                    stopCurrent();
+                else
+                    activate(hit);
+            }
+            m_pressTileIndex = -2;
+        }
+        else if (!m_longFired && rect().contains(e->pos()))
+        {
             cycleNext();
+        }
 
         update();
         e->accept();
@@ -865,6 +1104,9 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
 
 void MultiButtonWidget::slotLongPressFired()
 {
+    if (m_layout != MultiButtonLayout::Single)
+        return;
+
     m_longFired = true;
     showPopupMenu(QCursor::pos());
     update();
@@ -872,7 +1114,7 @@ void MultiButtonWidget::slotLongPressFired()
 
 void MultiButtonWidget::contextMenuEvent(QContextMenuEvent* e)
 {
-    if (mode() == Doc::Operate)
+    if (mode() == Doc::Operate && m_layout == MultiButtonLayout::Single)
     {
         showPopupMenu(e->globalPos());
         e->accept();
@@ -1042,6 +1284,13 @@ void MultiButtonWidget::editProperties()
         m_longPressMs,
         m_addOffAtEnd,
         m_monitorChannelValues,
+        m_layout,
+        m_spreadColumns,
+        m_spreadRows,
+        m_spreadHMargin,
+        m_spreadVMargin,
+        m_spreadTileWidth,
+        m_spreadTileHeight,
         inputSource(triggerInputSourceId),
         inputSource(popupInputSourceId),
         page(),
@@ -1055,6 +1304,13 @@ void MultiButtonWidget::editProperties()
     setLongPressMs(dlg.longPressMs());
     setAddOffAtEnd(dlg.addOffAtEnd());
     setMonitorChannelValues(dlg.monitorChannelValues());
+    setWidgetLayout(dlg.widgetLayout());
+    setSpreadColumns(dlg.spreadColumns());
+    setSpreadRows(dlg.spreadRows());
+    setSpreadHMargin(dlg.spreadHMargin());
+    setSpreadVMargin(dlg.spreadVMargin());
+    setSpreadTileWidth(dlg.spreadTileWidth());
+    setSpreadTileHeight(dlg.spreadTileHeight());
     setInputSource(dlg.triggerInputSource(), triggerInputSourceId);
     setInputSource(dlg.popupInputSource(), popupInputSourceId);
     m_doc->setModified();
@@ -1078,6 +1334,13 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setLongPressMs(m_longPressMs);
     copy->setAddOffAtEnd(m_addOffAtEnd);
     copy->setMonitorChannelValues(m_monitorChannelValues);
+    copy->setWidgetLayout(m_layout);
+    copy->setSpreadColumns(m_spreadColumns);
+    copy->setSpreadRows(m_spreadRows);
+    copy->setSpreadHMargin(m_spreadHMargin);
+    copy->setSpreadVMargin(m_spreadVMargin);
+    copy->setSpreadTileWidth(m_spreadTileWidth);
+    copy->setSpreadTileHeight(m_spreadTileHeight);
     copy->setInputSource(inputSource(triggerInputSourceId), triggerInputSourceId);
     copy->setInputSource(inputSource(popupInputSourceId),   popupInputSourceId);
     return copy;
@@ -1093,6 +1356,16 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["longPressMs"]          = m_longPressMs;
     obj["addOffAtEnd"]          = m_addOffAtEnd;
     obj["monitorChannelValues"] = m_monitorChannelValues;
+
+    QJsonObject spread;
+    spread["enabled"]   = (m_layout == MultiButtonLayout::Spread);
+    spread["columns"]   = m_spreadColumns;
+    spread["rows"]      = m_spreadRows;
+    spread["hMargin"]   = m_spreadHMargin;
+    spread["vMargin"]   = m_spreadVMargin;
+    spread["tileWidth"]  = m_spreadTileWidth;
+    spread["tileHeight"] = m_spreadTileHeight;
+    obj["spread"] = spread;
 
     QJsonArray funcs;
     for (int i = 0; i < m_functionIds.size(); ++i)
@@ -1148,6 +1421,19 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_longPressMs          = obj["longPressMs"].toInt(500);
     m_addOffAtEnd          = obj["addOffAtEnd"].toBool(false);
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
+
+    if (obj.contains("spread"))
+    {
+        const QJsonObject spread = obj["spread"].toObject();
+        m_layout = spread["enabled"].toBool(false) ? MultiButtonLayout::Spread
+                                                     : MultiButtonLayout::Single;
+        m_spreadColumns    = spread["columns"].toInt(0);
+        m_spreadRows       = spread["rows"].toInt(1);
+        m_spreadHMargin    = spread["hMargin"].toInt(4);
+        m_spreadVMargin    = spread["vMargin"].toInt(4);
+        m_spreadTileWidth  = spread["tileWidth"].toInt(80);
+        m_spreadTileHeight = spread["tileHeight"].toInt(60);
+    }
 
     QList<quint32> ids;
     QStringList    labels;
@@ -1229,6 +1515,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     }
 
     setLevelConfig(bindings, presets);
+    recalcSpreadSize();
     update();
 }
 
@@ -1305,6 +1592,19 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLAddOffAtEnd)
         {
             setAddOffAtEnd(root.readElementText().toInt() != 0);
+        }
+        else if (root.name() == KXMLSpread)
+        {
+            const auto attrs = root.attributes();
+            if (attrs.value(KXMLSpreadEnabled).toInt() != 0)
+                m_layout = MultiButtonLayout::Spread;
+            setSpreadColumns(attrs.value(KXMLSpreadColumns).toInt());
+            setSpreadRows(attrs.value(KXMLSpreadRows).toInt());
+            setSpreadHMargin(attrs.value(KXMLSpreadHMargin).toInt());
+            setSpreadVMargin(attrs.value(KXMLSpreadVMargin).toInt());
+            setSpreadTileWidth(attrs.value(KXMLSpreadTileW).toInt());
+            setSpreadTileHeight(attrs.value(KXMLSpreadTileH).toInt());
+            root.skipCurrentElement();
         }
         else if (root.name() == KXMLMonitorChannels)
         {
@@ -1417,6 +1717,7 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 
     m_iconCache.clear();
     rebuildSceneCache();
+    recalcSpreadSize();
 
     return true;
 }
@@ -1440,6 +1741,18 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeTextElement(KXMLAddOffAtEnd,  QString::number(m_addOffAtEnd ? 1 : 0));
     if (m_monitorChannelValues)
         doc->writeTextElement(KXMLMonitorChannels, QString::number(1));
+
+    doc->writeStartElement(KXMLSpread);
+    doc->writeAttribute(KXMLSpreadEnabled,
+                        m_layout == MultiButtonLayout::Spread ? QStringLiteral("1")
+                                                              : QStringLiteral("0"));
+    doc->writeAttribute(KXMLSpreadColumns, QString::number(m_spreadColumns));
+    doc->writeAttribute(KXMLSpreadRows, QString::number(m_spreadRows));
+    doc->writeAttribute(KXMLSpreadHMargin, QString::number(m_spreadHMargin));
+    doc->writeAttribute(KXMLSpreadVMargin, QString::number(m_spreadVMargin));
+    doc->writeAttribute(KXMLSpreadTileW, QString::number(m_spreadTileWidth));
+    doc->writeAttribute(KXMLSpreadTileH, QString::number(m_spreadTileHeight));
+    doc->writeEndElement();
 
     if (m_mode == MultiButtonMode::Level)
     {
@@ -1524,13 +1837,133 @@ QString MultiButtonWidget::activeFunctionCaption() const
     return f ? f->name() : tr("?");
 }
 
-void MultiButtonWidget::paintEvent(QPaintEvent* e)
+void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
+                                 bool isActive, bool isPressed) const
 {
-    Q_UNUSED(e);
+    p.save();
+    p.translate(tileRect.topLeft());
+    const QRect r(0, 0, tileRect.width(), tileRect.height());
 
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setRenderHint(QPainter::Antialiasing, true);
 
+    QColor bg = backgroundColor().isValid()
+                ? backgroundColor()
+                : palette().button().color();
+
+    if (tileIndex >= 0
+        && m_mode == MultiButtonMode::Level
+        && tileIndex < m_levelPresets.size())
+    {
+        const QColor presetColor = m_levelPresets.at(tileIndex).color;
+        if (presetColor.isValid())
+            bg = presetColor;
+    }
+    else if (tileIndex < 0)
+    {
+        bg = palette().mid().color().lighter(130);
+    }
+
+    if (isPressed)
+        bg = bg.darker(120);
+    else if (isActive)
+        bg = bg.lighter(115);
+
+    const QRect fillRect = r.adjusted(1, 1, -2, -2);
+    p.setPen(Qt::NoPen);
+    p.setBrush(bg);
+    p.drawRoundedRect(fillRect, 3, 3);
+
+    QPixmap iconPx;
+    if (tileIndex >= 0)
+        iconPx = iconForEntry(tileIndex);
+
+    const bool hasCustomLabel = (tileIndex >= 0) && !entryLabel(tileIndex).isEmpty();
+    const bool levelNoText = (tileIndex >= 0
+                              && m_mode == MultiButtonMode::Level
+                              && tileIndex < m_levelPresets.size()
+                              && m_levelPresets.at(tileIndex).hideName);
+    const bool showLabelText = tileIndex < 0
+                               || (!levelNoText && (iconPx.isNull() || hasCustomLabel
+                                                    || m_mode == MultiButtonMode::Level));
+
+    const QColor fg = contrastTextOn(bg);
+    const int pad = 3;
+    QRect inner = fillRect.adjusted(pad, pad, -pad, -pad);
+
+    int iconAreaH = 0;
+    if (!iconPx.isNull())
+    {
+        int dim = qMin(inner.width(), qMax(inner.height(), 1)) * 7 / 10;
+        if (hasCustomLabel && tileIndex >= 0)
+            dim = dim * 4 / 10;
+        dim = qMax(12, dim);
+        QPixmap scaled = iconPx.scaled(dim, dim, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        const int ix = inner.x() + (inner.width() - scaled.width()) / 2;
+        const int iy = (tileIndex < 0 || !hasCustomLabel)
+                       ? inner.y() + qMax(0, (inner.height() - scaled.height()) / 2)
+                       : inner.y() + 1;
+        p.drawPixmap(ix, iy, scaled);
+        iconAreaH = (tileIndex >= 0 && hasCustomLabel) ? scaled.height() + 2 : inner.height();
+    }
+
+    const QString cap = tileCaption(tileIndex);
+    if (showLabelText && !cap.isEmpty())
+    {
+        QFont mainFont = font();
+        if (isActive && tileIndex >= 0 && !m_visualOnly)
+            mainFont.setBold(true);
+        p.setFont(mainFont);
+        p.setPen(fg);
+        QRect textRect = inner.adjusted(0, iconAreaH, 0, 0);
+        if (textRect.height() > 0)
+            p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, cap);
+    }
+
+    const bool monitoring = isActive && m_visualOnly;
+    drawVcButtonBorder(p, r, isActive, monitoring);
+
+    p.restore();
+}
+
+void MultiButtonWidget::paintSpread(QPainter& p)
+{
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    QColor panelBg = backgroundColor().isValid()
+                     ? backgroundColor()
+                     : palette().button().color();
+    p.fillRect(rect(), panelBg);
+
+    p.setPen(QPen(palette().mid().color(), 1));
+    p.setBrush(Qt::NoBrush);
+    p.drawRect(rect().adjusted(0, 0, -1, -1));
+
+    QColor fg = foregroundColor().isValid()
+                ? foregroundColor()
+                : palette().buttonText().color();
+
+    const bool hasTitle = !caption().isEmpty();
+    if (hasTitle)
+    {
+        QFont titleFont = font();
+        titleFont.setPointSize(qMax(6, font().pointSize() - 1));
+        titleFont.setItalic(true);
+        p.setFont(titleFont);
+        p.setPen(fg.darker(140));
+        p.drawText(QRect(4, 3, width() - 8, 14), Qt::AlignCenter, caption());
+    }
+
+    for (const SpreadTileInfo& tile : computeSpreadTiles())
+    {
+        const bool isActive = (tile.index < 0) ? (m_currentIndex < 0)
+                                               : (tile.index == m_currentIndex);
+        const bool isPressed = m_pressActive && (tile.index == m_pressTileIndex);
+        drawTile(p, tile.rect, tile.index, isActive, isPressed);
+    }
+}
+
+void MultiButtonWidget::paintSingle(QPainter& p)
+{
     QColor bg = backgroundColor().isValid()
                 ? backgroundColor()
                 : palette().button().color();
@@ -1617,21 +2050,6 @@ void MultiButtonWidget::paintEvent(QPaintEvent* e)
             p.drawText(mainRect, Qt::AlignCenter | Qt::TextWordWrap, funcText);
     }
 
-    if (m_monitorChannelValues)
-    {
-        QColor dotColor = m_visualOnly ? QColor(255, 170, 0) : QColor(100, 200, 100);
-        p.setPen(Qt::NoPen);
-        p.setBrush(dotColor);
-        p.drawEllipse(width() - 9, 3, 6, 6);
-    }
-
-    if (m_mode == MultiButtonMode::Level)
-    {
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(80, 140, 255));
-        p.drawEllipse(3, 3, 6, 6);
-    }
-
     int n         = entryCount();
     int totalDots = n + (m_addOffAtEnd ? 1 : 0);
     if (totalDots > 0)
@@ -1677,6 +2095,19 @@ void MultiButtonWidget::paintEvent(QPaintEvent* e)
                        Qt::AlignCenter, idxStr);
         }
     }
+}
+
+void MultiButtonWidget::paintEvent(QPaintEvent* e)
+{
+    Q_UNUSED(e);
+
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, false);
+
+    if (m_layout == MultiButtonLayout::Spread)
+        paintSpread(p);
+    else
+        paintSingle(p);
 
     p.end();
 }

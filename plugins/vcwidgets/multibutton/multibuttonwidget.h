@@ -38,6 +38,18 @@ enum class MultiButtonMode
     Level
 };
 
+enum class MultiButtonLayout
+{
+    Single,
+    Spread
+};
+
+struct SpreadTileInfo
+{
+    int   index = -1;   // entry index, or -1 for OFF tile
+    QRect rect;
+};
+
 struct LevelChannelBinding
 {
     quint32 fixtureId = 0;
@@ -99,6 +111,22 @@ public:
     bool monitorChannelValues() const { return m_monitorChannelValues; }
     void setMonitorChannelValues(bool enable);
 
+    MultiButtonLayout widgetLayout() const { return m_layout; }
+    void setWidgetLayout(MultiButtonLayout layout);
+
+    int  spreadColumns() const { return m_spreadColumns; }
+    void setSpreadColumns(int columns);
+    int  spreadRows() const { return m_spreadRows; }
+    void setSpreadRows(int rows);
+    int  spreadHMargin() const { return m_spreadHMargin; }
+    void setSpreadHMargin(int margin);
+    int  spreadVMargin() const { return m_spreadVMargin; }
+    void setSpreadVMargin(int margin);
+    int  spreadTileWidth() const { return m_spreadTileWidth; }
+    void setSpreadTileWidth(int width);
+    int  spreadTileHeight() const { return m_spreadTileHeight; }
+    void setSpreadTileHeight(int height);
+
     // ---- FunctionParent (required for Function::start/stop) --------------
     FunctionParent functionParent() const;
 
@@ -140,6 +168,18 @@ private:
     QString popupMenuTextForEntry(int idx) const;
 
     void addLevelPresetMenuRow(QMenu* menu, int index, bool selected);
+
+    void recalcSpreadSize();
+    int  spreadTileCount() const;
+    void resolveSpreadGrid(int& cols, int& rows) const;
+    QVector<SpreadTileInfo> computeSpreadTiles() const;
+    QSize spreadTotalSize() const;
+    int   spreadHitTest(const QPoint& pos) const;
+    QString tileCaption(int idx) const;
+    void drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
+                  bool isActive, bool isPressed) const;
+    void paintSpread(QPainter& p);
+    void paintSingle(QPainter& p);
 
     void rebuildSceneCache();
     void updateDmxRegistration();
@@ -185,9 +225,18 @@ private:
     int  m_longPressMs  = 500;
     bool m_addOffAtEnd  = false;
 
+    MultiButtonLayout m_layout           = MultiButtonLayout::Single;
+    int               m_spreadColumns    = 0;
+    int               m_spreadRows       = 1;
+    int               m_spreadHMargin    = 4;
+    int               m_spreadVMargin    = 4;
+    int               m_spreadTileWidth  = 80;
+    int               m_spreadTileHeight = 60;
+
     // ---- Press-tracking state (GUI thread only) --------------------------
     QTimer* m_longPressTimer = nullptr;
     bool    m_pressActive    = false;
     bool    m_longFired      = false;
     QPoint  m_pressPos;
+    int     m_pressTileIndex = -2;   // spread: entry index, -1=OFF, -2=none
 };

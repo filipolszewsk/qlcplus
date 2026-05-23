@@ -37,6 +37,13 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     int                                longPressMs,
     bool                               addOffAtEnd,
     bool                               monitorChannelValues,
+    MultiButtonLayout                  widgetLayout,
+    int                                spreadColumns,
+    int                                spreadRows,
+    int                                spreadHMargin,
+    int                                spreadVMargin,
+    int                                spreadTileWidth,
+    int                                spreadTileHeight,
     QSharedPointer<QLCInputSource>     triggerSrc,
     QSharedPointer<QLCInputSource>     popupSrc,
     int                                widgetPage,
@@ -54,14 +61,19 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
 
     setWindowTitle(tr("Multi Button — Properties"));
     setMinimumWidth(560);
-    setMinimumHeight(520);
+    setMinimumHeight(420);
 
     QVBoxLayout* root = new QVBoxLayout(this);
 
-    // ---- Mode selector --------------------------------------------------
+    QTabWidget* tabs = new QTabWidget(this);
+
+    // ---- Tab: Entries ---------------------------------------------------
+    QWidget* entriesTab = new QWidget(tabs);
+    QVBoxLayout* entriesLay = new QVBoxLayout(entriesTab);
+
     QHBoxLayout* modeRow = new QHBoxLayout;
-    modeRow->addWidget(new QLabel(tr("Mode:"), this));
-    m_modeCombo = new QComboBox(this);
+    modeRow->addWidget(new QLabel(tr("Mode:"), entriesTab));
+    m_modeCombo = new QComboBox(entriesTab);
     m_modeCombo->addItem(tr("Function"), (int) MultiButtonMode::Function);
     m_modeCombo->addItem(tr("Level"),    (int) MultiButtonMode::Level);
     m_modeCombo->setCurrentIndex(widgetMode == MultiButtonMode::Level ? 1 : 0);
@@ -193,37 +205,103 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
             this, &MultiButtonConfigDialog::slotPresetTableItemChanged);
 
     m_modeStack->addWidget(m_levelPage);
-    root->addWidget(m_modeStack, 1);
+    entriesLay->addWidget(m_modeStack, 1);
 
     connect(m_modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MultiButtonConfigDialog::slotModeChanged);
 
-    // ---- Behavior -------------------------------------------------------
-    QGroupBox* behaviorGrp = new QGroupBox(tr("Behavior"), this);
-    QFormLayout* behaviorForm = new QFormLayout(behaviorGrp);
+    tabs->addTab(entriesTab, tr("Entries"));
 
-    m_longPressSpin = new QSpinBox(behaviorGrp);
+    // ---- Tab: Layout ----------------------------------------------------
+    QWidget* layoutTab = new QWidget(tabs);
+    QVBoxLayout* layoutTabLay = new QVBoxLayout(layoutTab);
+
+    m_layoutCombo = new QComboBox(layoutTab);
+    m_layoutCombo->addItem(tr("Single button"), (int) MultiButtonLayout::Single);
+    m_layoutCombo->addItem(tr("Spread grid"), (int) MultiButtonLayout::Spread);
+    m_layoutCombo->setCurrentIndex(widgetLayout == MultiButtonLayout::Spread ? 1 : 0);
+    {
+        QHBoxLayout* layoutRow = new QHBoxLayout;
+        layoutRow->addWidget(new QLabel(tr("Presentation:"), layoutTab));
+        layoutRow->addWidget(m_layoutCombo, 1);
+        layoutTabLay->addLayout(layoutRow);
+    }
+
+    m_singleLayoutGrp = new QGroupBox(tr("Single button"), layoutTab);
+    QFormLayout* singleForm = new QFormLayout(m_singleLayoutGrp);
+
+    m_longPressSpin = new QSpinBox(m_singleLayoutGrp);
     m_longPressSpin->setRange(200, 2000);
     m_longPressSpin->setSingleStep(50);
     m_longPressSpin->setSuffix(tr(" ms"));
     m_longPressSpin->setValue(longPressMs);
-    behaviorForm->addRow(tr("Long press threshold:"), m_longPressSpin);
+    singleForm->addRow(tr("Long press threshold:"), m_longPressSpin);
 
-    m_offAtEndCheck = new QCheckBox(tr("Add \"OFF\" step at end of cycle"), behaviorGrp);
+    layoutTabLay->addWidget(m_singleLayoutGrp);
+
+    m_offAtEndCheck = new QCheckBox(tr("Add \"OFF\" step at end of cycle"), layoutTab);
     m_offAtEndCheck->setChecked(addOffAtEnd);
-    behaviorForm->addRow(QString(), m_offAtEndCheck);
+    layoutTabLay->addWidget(m_offAtEndCheck);
 
-    m_monitorCheck = new QCheckBox(tr("Monitor channel values"), behaviorGrp);
+    m_monitorCheck = new QCheckBox(tr("Monitor channel values"), layoutTab);
     m_monitorCheck->setChecked(monitorChannelValues);
-    behaviorForm->addRow(QString(), m_monitorCheck);
+    layoutTabLay->addWidget(m_monitorCheck);
 
-    root->addWidget(behaviorGrp);
+    m_spreadLayoutGrp = new QGroupBox(tr("Spread grid"), layoutTab);
+    QFormLayout* spreadForm = new QFormLayout(m_spreadLayoutGrp);
 
-    // ---- External Input -------------------------------------------------
-    QGroupBox* inputGrp = new QGroupBox(tr("External Input"), this);
-    QVBoxLayout* inputLayout = new QVBoxLayout(inputGrp);
+    auto makeAutoSpin = [](QWidget* parent, int value) {
+        QSpinBox* spin = new QSpinBox(parent);
+        spin->setRange(0, 32);
+        spin->setSpecialValueText(tr("Auto"));
+        spin->setValue(value);
+        return spin;
+    };
 
-    QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputGrp);
+    m_colsSpin = makeAutoSpin(m_spreadLayoutGrp, spreadColumns);
+    spreadForm->addRow(tr("Columns:"), m_colsSpin);
+
+    m_rowsSpin = makeAutoSpin(m_spreadLayoutGrp, spreadRows);
+    spreadForm->addRow(tr("Rows:"), m_rowsSpin);
+
+    m_hMarginSpin = new QSpinBox(m_spreadLayoutGrp);
+    m_hMarginSpin->setRange(0, 64);
+    m_hMarginSpin->setSuffix(tr(" px"));
+    m_hMarginSpin->setValue(spreadHMargin);
+    spreadForm->addRow(tr("Horizontal margin:"), m_hMarginSpin);
+
+    m_vMarginSpin = new QSpinBox(m_spreadLayoutGrp);
+    m_vMarginSpin->setRange(0, 64);
+    m_vMarginSpin->setSuffix(tr(" px"));
+    m_vMarginSpin->setValue(spreadVMargin);
+    spreadForm->addRow(tr("Vertical margin:"), m_vMarginSpin);
+
+    m_tileWSpin = new QSpinBox(m_spreadLayoutGrp);
+    m_tileWSpin->setRange(20, 400);
+    m_tileWSpin->setSuffix(tr(" px"));
+    m_tileWSpin->setValue(spreadTileWidth);
+    spreadForm->addRow(tr("Tile width:"), m_tileWSpin);
+
+    m_tileHSpin = new QSpinBox(m_spreadLayoutGrp);
+    m_tileHSpin->setRange(20, 400);
+    m_tileHSpin->setSuffix(tr(" px"));
+    m_tileHSpin->setValue(spreadTileHeight);
+    spreadForm->addRow(tr("Tile height:"), m_tileHSpin);
+
+    layoutTabLay->addWidget(m_spreadLayoutGrp);
+    layoutTabLay->addStretch();
+
+    connect(m_layoutCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MultiButtonConfigDialog::slotLayoutChanged);
+    slotLayoutChanged(m_layoutCombo->currentIndex());
+
+    tabs->addTab(layoutTab, tr("Layout"));
+
+    // ---- Tab: Input -----------------------------------------------------
+    QWidget* inputTab = new QWidget(tabs);
+    QVBoxLayout* inputLayout = new QVBoxLayout(inputTab);
+
+    QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputTab);
     QVBoxLayout* trigLayout = new QVBoxLayout(trigGrp);
     m_triggerInputSel = new InputSelectionWidget(doc, trigGrp);
     m_triggerInputSel->setKeyInputVisibility(false);
@@ -232,7 +310,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     trigLayout->addWidget(m_triggerInputSel);
     inputLayout->addWidget(trigGrp);
 
-    QGroupBox* popGrp = new QGroupBox(tr("Popup trigger (long press equivalent)"), inputGrp);
+    QGroupBox* popGrp = new QGroupBox(tr("Popup trigger (long press equivalent)"), inputTab);
     QVBoxLayout* popLayout = new QVBoxLayout(popGrp);
     m_popupInputSel = new InputSelectionWidget(doc, popGrp);
     m_popupInputSel->setKeyInputVisibility(false);
@@ -241,7 +319,10 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     popLayout->addWidget(m_popupInputSel);
     inputLayout->addWidget(popGrp);
 
-    root->addWidget(inputGrp);
+    inputLayout->addStretch();
+    tabs->addTab(inputTab, tr("Input"));
+
+    root->addWidget(tabs, 1);
 
     // ---- Buttons --------------------------------------------------------
     m_buttons = new QDialogButtonBox(
@@ -387,6 +468,43 @@ bool MultiButtonConfigDialog::monitorChannelValues() const
     return m_monitorCheck ? m_monitorCheck->isChecked() : false;
 }
 
+MultiButtonLayout MultiButtonConfigDialog::widgetLayout() const
+{
+    if (!m_layoutCombo)
+        return MultiButtonLayout::Single;
+    return static_cast<MultiButtonLayout>(m_layoutCombo->currentData().toInt());
+}
+
+int MultiButtonConfigDialog::spreadColumns() const
+{
+    return m_colsSpin ? m_colsSpin->value() : 0;
+}
+
+int MultiButtonConfigDialog::spreadRows() const
+{
+    return m_rowsSpin ? m_rowsSpin->value() : 1;
+}
+
+int MultiButtonConfigDialog::spreadHMargin() const
+{
+    return m_hMarginSpin ? m_hMarginSpin->value() : 4;
+}
+
+int MultiButtonConfigDialog::spreadVMargin() const
+{
+    return m_vMarginSpin ? m_vMarginSpin->value() : 4;
+}
+
+int MultiButtonConfigDialog::spreadTileWidth() const
+{
+    return m_tileWSpin ? m_tileWSpin->value() : 80;
+}
+
+int MultiButtonConfigDialog::spreadTileHeight() const
+{
+    return m_tileHSpin ? m_tileHSpin->value() : 60;
+}
+
 QSharedPointer<QLCInputSource> MultiButtonConfigDialog::triggerInputSource() const
 {
     return m_triggerInputSel ? m_triggerInputSel->inputSource()
@@ -405,6 +523,17 @@ void MultiButtonConfigDialog::slotModeChanged(int index)
 {
     m_modeStack->setCurrentIndex(index);
     updateMonitorTooltip();
+}
+
+void MultiButtonConfigDialog::slotLayoutChanged(int index)
+{
+    const bool spread = (index == 1);
+    if (m_spreadLayoutGrp)
+        m_spreadLayoutGrp->setEnabled(spread);
+    if (m_singleLayoutGrp)
+        m_singleLayoutGrp->setEnabled(!spread);
+    if (m_longPressSpin)
+        m_longPressSpin->setEnabled(!spread);
 }
 
 void MultiButtonConfigDialog::updateMonitorTooltip()

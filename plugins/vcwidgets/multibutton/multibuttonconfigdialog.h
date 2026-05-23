@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QDialogButtonBox>
 #include <QGroupBox>
+#include <QTabWidget>
 #include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -45,6 +46,13 @@ public:
         int                                longPressMs,
         bool                               addOffAtEnd,
         bool                               monitorChannelValues,
+        MultiButtonLayout                  widgetLayout,
+        int                                spreadColumns,
+        int                                spreadRows,
+        int                                spreadHMargin,
+        int                                spreadVMargin,
+        int                                spreadTileWidth,
+        int                                spreadTileHeight,
         QSharedPointer<QLCInputSource>     triggerSrc,
         QSharedPointer<QLCInputSource>     popupSrc,
         int                                widgetPage,
@@ -59,11 +67,19 @@ public:
     int                            longPressMs()           const;
     bool                           addOffAtEnd()           const;
     bool                           monitorChannelValues()  const;
+    MultiButtonLayout              widgetLayout()          const;
+    int                            spreadColumns()         const;
+    int                            spreadRows()            const;
+    int                            spreadHMargin()         const;
+    int                            spreadVMargin()         const;
+    int                            spreadTileWidth()       const;
+    int                            spreadTileHeight()      const;
     QSharedPointer<QLCInputSource> triggerInputSource()    const;
     QSharedPointer<QLCInputSource> popupInputSource()      const;
 
 private slots:
     void slotModeChanged(int index);
+    void slotLayoutChanged(int index);
     void slotAdd();
     void slotRemove();
     void slotEditLabel();
@@ -143,6 +159,16 @@ private:
     QSpinBox*     m_longPressSpin     = nullptr;
     QCheckBox*    m_offAtEndCheck     = nullptr;
     QCheckBox*    m_monitorCheck      = nullptr;
+
+    QComboBox*    m_layoutCombo       = nullptr;
+    QSpinBox*     m_colsSpin          = nullptr;
+    QSpinBox*     m_rowsSpin          = nullptr;
+    QSpinBox*     m_hMarginSpin       = nullptr;
+    QSpinBox*     m_vMarginSpin       = nullptr;
+    QSpinBox*     m_tileWSpin         = nullptr;
+    QSpinBox*     m_tileHSpin         = nullptr;
+    QGroupBox*    m_singleLayoutGrp    = nullptr;
+    QGroupBox*    m_spreadLayoutGrp    = nullptr;
     InputSelectionWidget* m_triggerInputSel = nullptr;
     InputSelectionWidget* m_popupInputSel   = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
