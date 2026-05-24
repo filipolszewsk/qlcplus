@@ -37,6 +37,15 @@ static const QString KXMLMaskCell         = QStringLiteral("Cell");
 static const QString KXMLMaskCellX        = QStringLiteral("X");
 static const QString KXMLMaskCellY        = QStringLiteral("Y");
 
+/** VC widgets are embedded; parenting modals to `this` can crash on macOS. */
+static QWidget* dialogParent(QWidget* widget)
+{
+    if (widget == nullptr)
+        return nullptr;
+    QWidget* top = widget->window();
+    return (top != widget) ? top : nullptr;
+}
+
 FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
     : VCWidget(parent, doc)
     , m_fixtureGroupId(FixtureGroup::invalidId())
@@ -454,7 +463,7 @@ void FixtureGroupLayoutWidget::slotApplyMaskClicked()
     QSet<QLCPoint> cells = validatedCells(selectedCells(), grp);
     if (cells.isEmpty())
     {
-        QMessageBox::information(this, tr("Fixture Group Layout"),
+        QMessageBox::information(dialogParent(this), tr("Fixture Group Layout"),
                                  tr("Select one or more grid cells first."));
         return;
     }
@@ -473,14 +482,14 @@ void FixtureGroupLayoutWidget::slotSavePresetClicked()
         cells = validatedCells(m_localMask.points(), grp);
     if (cells.isEmpty())
     {
-        QMessageBox::information(this, tr("Fixture Group Layout"),
+        QMessageBox::information(dialogParent(this), tr("Fixture Group Layout"),
                                  tr("Select grid cells or apply a mask before saving a preset."));
         return;
     }
 
     bool ok = false;
     const QString name = QInputDialog::getText(
-        this, tr("Save mask preset"), tr("Preset name:"),
+        dialogParent(this), tr("Save mask preset"), tr("Preset name:"),
         QLineEdit::Normal, QString(), &ok);
     if (!ok || name.trimmed().isEmpty())
         return;
@@ -846,7 +855,7 @@ void FixtureGroupLayoutWidget::editProperties()
     if (mode() != Doc::Design)
         return;
 
-    FixtureGroupLayoutConfigDialog dlg(m_doc, m_fixtureGroupId, this);
+    FixtureGroupLayoutConfigDialog dlg(m_doc, m_fixtureGroupId, dialogParent(this));
     if (dlg.exec() != QDialog::Accepted)
         return;
 
