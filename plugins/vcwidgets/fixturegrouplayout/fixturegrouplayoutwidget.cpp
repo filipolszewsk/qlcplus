@@ -20,9 +20,7 @@
 #include <QMouseEvent>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QInputDialog>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QDebug>
 #include <QSet>
 
@@ -97,7 +95,14 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
             this, &FixtureGroupLayoutWidget::slotRecallPresetClicked);
     presetToolbar->addWidget(m_recallPresetButton);
 
-    m_savePresetButton = new QPushButton(tr("Save…"), this);
+    m_presetNameEdit = new QLineEdit(this);
+    m_presetNameEdit->setPlaceholderText(tr("Preset name"));
+    m_presetNameEdit->setClearButtonEnabled(true);
+    m_presetNameEdit->setToolTip(tr("Name for a new mask preset"));
+    presetToolbar->addWidget(m_presetNameEdit, 1);
+
+    m_savePresetButton = new QPushButton(tr("Save"), this);
+    m_savePresetButton->setToolTip(tr("Save selected cells (or active mask) as a preset"));
     connect(m_savePresetButton, &QPushButton::clicked,
             this, &FixtureGroupLayoutWidget::slotSavePresetClicked);
     presetToolbar->addWidget(m_savePresetButton);
@@ -463,8 +468,7 @@ void FixtureGroupLayoutWidget::slotApplyMaskClicked()
     QSet<QLCPoint> cells = validatedCells(selectedCells(), grp);
     if (cells.isEmpty())
     {
-        QMessageBox::information(dialogParent(this), tr("Fixture Group Layout"),
-                                 tr("Select one or more grid cells first."));
+        m_titleLabel->setText(tr("Select grid cells to apply a mask"));
         return;
     }
 
@@ -482,19 +486,21 @@ void FixtureGroupLayoutWidget::slotSavePresetClicked()
         cells = validatedCells(m_localMask.points(), grp);
     if (cells.isEmpty())
     {
-        QMessageBox::information(dialogParent(this), tr("Fixture Group Layout"),
-                                 tr("Select grid cells or apply a mask before saving a preset."));
+        m_titleLabel->setText(tr("Select cells or apply a mask before saving"));
         return;
     }
 
-    bool ok = false;
-    const QString name = QInputDialog::getText(
-        dialogParent(this), tr("Save mask preset"), tr("Preset name:"),
-        QLineEdit::Normal, QString(), &ok);
-    if (!ok || name.trimmed().isEmpty())
+    const QString trimmed = m_presetNameEdit->text().trimmed();
+    if (trimmed.isEmpty())
+    {
+        m_presetNameEdit->setFocus();
+        m_presetNameEdit->setStyleSheet(QStringLiteral("QLineEdit { border: 1px solid #c0392b; }"));
+        m_presetNameEdit->setToolTip(tr("Enter a preset name"));
         return;
+    }
 
-    const QString trimmed = name.trimmed();
+    m_presetNameEdit->setStyleSheet(QString());
+    m_presetNameEdit->setToolTip(tr("Name for a new mask preset"));
     bool replaced = false;
     for (int i = 0; i < m_maskPresets.size(); i++)
     {
@@ -510,6 +516,7 @@ void FixtureGroupLayoutWidget::slotSavePresetClicked()
 
     populatePresetCombo();
     m_presetCombo->setCurrentText(trimmed);
+    updateCaptionLabel();
     if (m_doc != nullptr)
         m_doc->setModified();
 }

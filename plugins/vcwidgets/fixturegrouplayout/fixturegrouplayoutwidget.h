@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QComboBox>
+#include <QLineEdit>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QJsonObject>
@@ -99,6 +100,7 @@ private:
     QLabel* m_titleLabel;
     QPushButton* m_applyMaskButton;
     QPushButton* m_clearMaskButton;
+    QLineEdit* m_presetNameEdit;
     QPushButton* m_savePresetButton;
     QPushButton* m_recallPresetButton;
     QPushButton* m_deletePresetButton;
