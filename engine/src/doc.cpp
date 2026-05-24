@@ -170,6 +170,8 @@ void Doc::clearContents()
         delete grp;
     }
 
+    m_fixtureGroupMasks.clear();
+
     // Delete all fixture groups
     QListIterator <quint32> grpit(m_fixtureGroups.keys());
     while (grpit.hasNext() == true)
@@ -1099,6 +1101,7 @@ bool Doc::deleteFixtureGroup(quint32 id)
         FixtureGroup* grp = m_fixtureGroups.take(id);
         Q_ASSERT(grp != NULL);
 
+        m_fixtureGroupMasks.remove(id);
         emit fixtureGroupRemoved(id);
         setModified();
         delete grp;
@@ -1139,6 +1142,71 @@ quint32 Doc::createFixtureGroupId()
 void Doc::slotFixtureGroupChanged(quint32 id)
 {
     setModified();
+    slotFixtureGroupMaskChanged(id);
+    emit fixtureGroupChanged(id);
+}
+
+void Doc::setFixtureGroupMask(quint32 groupId, const FixtureGroupMask& mask)
+{
+    if (!mask.isActive())
+        m_fixtureGroupMasks.remove(groupId);
+    else
+        m_fixtureGroupMasks[groupId] = mask;
+
+    slotFixtureGroupMaskChanged(groupId);
+    emit fixtureGroupMaskChanged(groupId);
+}
+
+void Doc::clearFixtureGroupMask(quint32 groupId)
+{
+    if (!m_fixtureGroupMasks.contains(groupId))
+        return;
+
+    m_fixtureGroupMasks.remove(groupId);
+    slotFixtureGroupMaskChanged(groupId);
+    emit fixtureGroupMaskChanged(groupId);
+}
+
+FixtureGroupMask Doc::fixtureGroupMask(quint32 groupId) const
+{
+    return m_fixtureGroupMasks.value(groupId);
+}
+
+QMap<QLCPoint, GroupHead> Doc::effectiveHeadsMap(const FixtureGroup* grp) const
+{
+    if (grp == NULL)
+        return QMap<QLCPoint, GroupHead>();
+
+    const QMap<QLCPoint, GroupHead> allHeads = grp->headsMap();
+    const FixtureGroupMask mask = m_fixtureGroupMasks.value(grp->id());
+    if (!mask.isActive())
+        return allHeads;
+
+    QMap<QLCPoint, GroupHead> filtered;
+    QMapIterator<QLCPoint, GroupHead> it(allHeads);
+    while (it.hasNext())
+    {
+        it.next();
+        if (mask.acceptsPoint(it.key()))
+            filtered.insert(it.key(), it.value());
+    }
+    return filtered;
+}
+
+GroupHead Doc::effectiveHead(const FixtureGroup* grp, const QLCPoint& pt) const
+{
+    if (grp == NULL)
+        return GroupHead();
+
+    const FixtureGroupMask mask = m_fixtureGroupMasks.value(grp->id());
+    if (mask.isActive() && !mask.acceptsPoint(pt))
+        return GroupHead();
+
+    return grp->head(pt);
+}
+
+void Doc::slotFixtureGroupMaskChanged(quint32 id)
+{
     QMapIterator<quint32, Function*> it(m_functions);
     while (it.hasNext())
     {
@@ -1150,7 +1218,6 @@ void Doc::slotFixtureGroupChanged(quint32 id)
         if (efx != NULL && efx->fixtureGroupID() == id)
             efx->rebuildFixtureGroup(false);
     }
-    emit fixtureGroupChanged(id);
 }
 
 /*********************************************************************

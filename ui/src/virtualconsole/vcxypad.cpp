@@ -182,6 +182,8 @@ VCXYPad::VCXYPad(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
             this, SLOT(slotFixtureGroupRemoved(quint32)));
     connect(m_doc, SIGNAL(fixtureGroupChanged(quint32)),
             this, SLOT(slotFixtureGroupContentChanged(quint32)));
+    connect(m_doc, SIGNAL(fixtureGroupMaskChanged(quint32)),
+            this, SLOT(slotFixtureGroupContentChanged(quint32)));
 
     m_doc->masterTimer()->registerDMXSource(this);
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32,QByteArray)),
@@ -641,7 +643,7 @@ void VCXYPad::slotFixtureGroupContentChanged(quint32 id)
                 if (!isRowSelected(row))
                     continue;
                 
-                GroupHead head = group->head(QLCPoint(col, row));
+                GroupHead head = m_doc->effectiveHead(group, QLCPoint(col, row));
                 if (head.isValid())
                 {
                     VCXYPadFixture fxi(m_doc);

@@ -13,7 +13,10 @@
 #include "qlcpoint.h"
 
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QBrush>
+#include <QColor>
 #include <QMouseEvent>
 #include <QJsonObject>
 #include <QDebug>
@@ -49,6 +52,15 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
     m_titleLabel->setFont(titleFont);
     m_layout->addWidget(m_titleLabel);
 
+    QHBoxLayout* toolbar = new QHBoxLayout();
+    m_clearMaskButton = new QPushButton(tr("Mask: all columns"), this);
+    m_clearMaskButton->setToolTip(tr("Clear column mask (all columns active for RGB Matrix, EFX, etc.)"));
+    connect(m_clearMaskButton, &QPushButton::clicked,
+            this, &FixtureGroupLayoutWidget::slotClearMaskClicked);
+    toolbar->addWidget(m_clearMaskButton);
+    toolbar->addStretch();
+    m_layout->addLayout(toolbar);
+
     m_table = new QTableWidget(this);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_table->setSelectionBehavior(QAbstractItemView::SelectItems);
@@ -64,6 +76,8 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
             this, SLOT(slotCellChanged(int,int)));
     connect(m_table, SIGNAL(cellPressed(int,int)),
             this, SLOT(slotCellActivated(int,int)));
+    connect(m_table->horizontalHeader(), SIGNAL(sectionClicked(int)),
+            this, SLOT(slotColumnHeaderClicked(int)));
 
     if (m_doc != nullptr)
     {
@@ -71,6 +85,8 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
                 this, SLOT(slotFixtureGroupChanged(quint32)));
         connect(m_doc, SIGNAL(fixtureGroupRemoved(quint32)),
                 this, SLOT(slotFixtureGroupRemoved(quint32)));
+        connect(m_doc, SIGNAL(fixtureGroupMaskChanged(quint32)),
+                this, SLOT(slotFixtureGroupMaskChanged(quint32)));
     }
 
     rebuildGrid();
@@ -106,7 +122,36 @@ VCWidget* FixtureGroupLayoutWidget::createCopy(VCWidget* parent)
 void FixtureGroupLayoutWidget::setFixtureGroupId(quint32 id)
 {
     m_fixtureGroupId = id;
+    syncMaskFromDoc();
     rebuildGrid();
+}
+
+void FixtureGroupLayoutWidget::syncMaskFromDoc()
+{
+    if (m_doc == nullptr || m_fixtureGroupId == FixtureGroup::invalidId())
+    {
+        m_localMask.clear();
+        return;
+    }
+    m_localMask = m_doc->fixtureGroupMask(m_fixtureGroupId);
+}
+
+void FixtureGroupLayoutWidget::pushMaskToDoc()
+{
+    if (m_doc == nullptr || m_fixtureGroupId == FixtureGroup::invalidId())
+        return;
+
+    if (m_localMask.isActive())
+        m_doc->setFixtureGroupMask(m_fixtureGroupId, m_localMask);
+    else
+        m_doc->clearFixtureGroupMask(m_fixtureGroupId);
+}
+
+bool FixtureGroupLayoutWidget::isColumnMaskedOut(int column) const
+{
+    if (!m_localMask.isActive())
+        return false;
+    return !m_localMask.isColumnEnabled(column);
 }
 
 FixtureGroup* FixtureGroupLayoutWidget::fixtureGroup() const
@@ -125,10 +170,39 @@ void FixtureGroupLayoutWidget::updateCaptionLabel()
         return;
     }
 
-    m_titleLabel->setText(QStringLiteral("%1 (%2×%3)")
+    QString maskHint;
+    if (m_localMask.isActive())
+        maskHint = tr(" — mask: %1 col(s)").arg(m_localMask.columns().size());
+
+    m_titleLabel->setText(QStringLiteral("%1 (%2×%3)%4")
                               .arg(grp->name())
                               .arg(grp->size().width())
-                              .arg(grp->size().height()));
+                              .arg(grp->size().height())
+                              .arg(maskHint));
+}
+
+void FixtureGroupLayoutWidget::applyColumnHeaderStyles()
+{
+    FixtureGroup* grp = fixtureGroup();
+    if (grp == nullptr)
+        return;
+
+    const QBrush activeBrush(palette().button());
+    const QBrush maskedBrush(QColor(120, 120, 120));
+
+    for (int col = 0; col < grp->size().width(); col++)
+    {
+        QTableWidgetItem* headerItem = m_table->horizontalHeaderItem(col);
+        if (headerItem == nullptr)
+        {
+            headerItem = new QTableWidgetItem(QString::number(col + 1));
+            m_table->setHorizontalHeaderItem(col, headerItem);
+        }
+        headerItem->setBackground(isColumnMaskedOut(col) ? maskedBrush : activeBrush);
+        headerItem->setToolTip(isColumnMaskedOut(col)
+            ? tr("Column %1 hidden by mask (click to include)").arg(col + 1)
+            : tr("Column %1 active (click to toggle mask)").arg(col + 1));
+    }
 }
 
 void FixtureGroupLayoutWidget::rebuildGrid()
@@ -172,14 +246,67 @@ void FixtureGroupLayoutWidget::rebuildGrid()
                              .arg(str)
                              .arg(fxi->universe() + 1)
                              .arg(fxi->address() + 1));
+        if (isColumnMaskedOut(pt.x()))
+            item->setBackground(QBrush(QColor(70, 70, 70, 120)));
         m_table->setItem(pt.y(), pt.x(), item);
     }
 
     connect(m_table, SIGNAL(cellChanged(int,int)),
             this, SLOT(slotCellChanged(int,int)));
 
+    applyColumnHeaderStyles();
+    updateCaptionLabel();
+
     if (m_lastRow < m_table->rowCount() && m_lastColumn < m_table->columnCount())
         m_table->setCurrentCell(m_lastRow, m_lastColumn);
+}
+
+void FixtureGroupLayoutWidget::slotFixtureGroupMaskChanged(quint32 id)
+{
+    if (id != m_fixtureGroupId)
+        return;
+    syncMaskFromDoc();
+    rebuildGrid();
+}
+
+void FixtureGroupLayoutWidget::slotColumnHeaderClicked(int column)
+{
+    FixtureGroup* grp = fixtureGroup();
+    if (grp == nullptr || column < 0 || column >= grp->size().width())
+        return;
+
+    QSet<int> cols = m_localMask.columns();
+    if (!m_localMask.isActive())
+    {
+        cols.insert(column);
+    }
+    else if (cols.contains(column))
+    {
+        cols.remove(column);
+        if (cols.isEmpty())
+        {
+            m_localMask.clear();
+            pushMaskToDoc();
+            rebuildGrid();
+            return;
+        }
+    }
+    else
+    {
+        cols.insert(column);
+    }
+
+    m_localMask.setColumns(cols);
+    m_localMask.setRows(QSet<int>());
+    pushMaskToDoc();
+    rebuildGrid();
+}
+
+void FixtureGroupLayoutWidget::slotClearMaskClicked()
+{
+    m_localMask.clear();
+    pushMaskToDoc();
+    rebuildGrid();
 }
 
 void FixtureGroupLayoutWidget::slotModeChanged(Doc::Mode mode)

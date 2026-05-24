@@ -35,6 +35,7 @@
 #include "ioplugincache.h"
 #include "channelsgroup.h"
 #include "fixturegroup.h"
+#include "fixturegroupmask.h"
 #include "qlcclipboard.h"
 #include "mastertimer.h"
 #include "qlcpalette.h"
@@ -427,10 +428,31 @@ signals:
     void fixtureGroupAdded(quint32 id);
     void fixtureGroupRemoved(quint32 id);
     void fixtureGroupChanged(quint32 id);
+    /** Emitted when a runtime fixture group mask changes (not persisted). */
+    void fixtureGroupMaskChanged(quint32 id);
+
+public:
+    /** Set a runtime mask for $groupId (does not mark workspace modified). */
+    void setFixtureGroupMask(quint32 groupId, const FixtureGroupMask& mask);
+
+    /** Remove runtime mask for $groupId. */
+    void clearFixtureGroupMask(quint32 groupId);
+
+    /** Get runtime mask; inactive when empty. */
+    FixtureGroupMask fixtureGroupMask(quint32 groupId) const;
+
+    /** headsMap() filtered by the runtime mask for this group, if any. */
+    QMap<QLCPoint, GroupHead> effectiveHeadsMap(const FixtureGroup* grp) const;
+
+    /** head() at $pt, or invalid if masked out. */
+    GroupHead effectiveHead(const FixtureGroup* grp, const QLCPoint& pt) const;
 
 private slots:
     /** Catch fixture group property changes */
     void slotFixtureGroupChanged(quint32 id);
+
+    /** Rebuild functions affected by mask changes (no setModified). */
+    void slotFixtureGroupMaskChanged(quint32 id);
 
 private:
     /** Create a new fixture group ID */
@@ -442,6 +464,9 @@ private:
 
     /** Latest assigned fixture group ID */
     quint32 m_latestFixtureGroupId;
+
+    /** Runtime-only masks keyed by fixture group ID */
+    QMap<quint32, FixtureGroupMask> m_fixtureGroupMasks;
 
     /*********************************************************************
      * Channel groups

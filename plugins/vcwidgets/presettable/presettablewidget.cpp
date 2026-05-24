@@ -1252,7 +1252,7 @@ const QLCChannel* PresetTableWidget::resolveBoundChannel(const PTColumn& col) co
     if (!grp) return nullptr;
 
     // Find the first fixture in the group that matches the binding's manufacturer/model/mode
-    const QMap<QLCPoint, GroupHead> headsMap = grp->headsMap();
+    const QMap<QLCPoint, GroupHead> headsMap = m_doc->effectiveHeadsMap(grp);
     for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
     {
         Fixture* fxi = m_doc->fixture(it.value().fxi);
@@ -1277,7 +1277,7 @@ void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar 
     FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
     if (!grp) return;
 
-    const QMap<QLCPoint, GroupHead> headsMap = grp->headsMap();
+    const QMap<QLCPoint, GroupHead> headsMap = m_doc->effectiveHeadsMap(grp);
 
     for (int o = 0; o < m_outputs.size(); ++o)
     {

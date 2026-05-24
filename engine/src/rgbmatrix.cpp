@@ -1053,7 +1053,7 @@ void RGBMatrix::preRun(MasterTimer *timer)
     m_resolvedChannelIndices.clear();
     if (m_enablePerFixtureMapping && m_group != NULL)
     {
-        QMapIterator<QLCPoint, GroupHead> headIt(m_group->headsMap());
+        QMapIterator<QLCPoint, GroupHead> headIt(doc()->effectiveHeadsMap(m_group));
         while (headIt.hasNext())
         {
             headIt.next();
@@ -1297,7 +1297,7 @@ bool RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
 
 QLCPoint RGBMatrix::findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const
 {
-    QMapIterator<QLCPoint, GroupHead> it(grp->headsMap());
+    QMapIterator<QLCPoint, GroupHead> it(doc()->effectiveHeadsMap(grp));
     QLCPoint firstPos;
     bool found = false;
     
@@ -1331,7 +1331,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                                      : 1;
 
     // Create/modify fade channels for ALL heads in the group
-    QMapIterator<QLCPoint, GroupHead> it(grp->headsMap());
+    QMapIterator<QLCPoint, GroupHead> it(doc()->effectiveHeadsMap(grp));
     while (it.hasNext())
     {
         it.next();

@@ -7,7 +7,9 @@
 
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QJsonObject>
@@ -18,6 +20,7 @@
 #include "vcwidget.h"
 #include "qlcpoint.h"
 #include "grouphead.h"
+#include "fixturegroupmask.h"
 
 class FixtureGroup;
 
@@ -51,13 +54,20 @@ protected slots:
     void slotModeChanged(Doc::Mode mode) override;
     void slotFixtureGroupChanged(quint32 id);
     void slotFixtureGroupRemoved(quint32 id);
+    void slotFixtureGroupMaskChanged(quint32 id);
     void slotCellActivated(int row, int column);
     void slotCellChanged(int row, int column);
+    void slotColumnHeaderClicked(int column);
+    void slotClearMaskClicked();
 
 private:
     FixtureGroup* fixtureGroup() const;
     void rebuildGrid();
     void updateCaptionLabel();
+    void applyColumnHeaderStyles();
+    void syncMaskFromDoc();
+    void pushMaskToDoc();
+    bool isColumnMaskedOut(int column) const;
 
     QList<QLCPoint> selectedPoints() const;
     void reselectPoints(const QList<QLCPoint>& points);
@@ -67,7 +77,9 @@ private:
     quint32 m_fixtureGroupId;
     QVBoxLayout* m_layout;
     QLabel* m_titleLabel;
+    QPushButton* m_clearMaskButton;
     QTableWidget* m_table;
+    FixtureGroupMask m_localMask;
 
     int m_lastRow;
     int m_lastColumn;

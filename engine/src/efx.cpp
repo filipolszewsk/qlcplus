@@ -1154,7 +1154,7 @@ void EFX::applyOffsetTemplate()
             if (!isRowSelected(row))
                 continue;
 
-            GroupHead head = group->head(QLCPoint(col, row));
+            GroupHead head = d->effectiveHead(group, QLCPoint(col, row));
             if (!head.isValid())
                 continue;
 
@@ -1521,7 +1521,7 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
             if (!isRowSelected(row))
                 continue;
 
-            GroupHead head = group->head(QLCPoint(col, row));
+            GroupHead head = d->effectiveHead(group, QLCPoint(col, row));
             if (!head.isValid())
                 continue;
 
@@ -1631,7 +1631,7 @@ void EFX::applyColumnTemplates()
             if (!isRowSelected(row))
                 continue;
 
-            GroupHead head = group->head(QLCPoint(col, row));
+            GroupHead head = d->effectiveHead(group, QLCPoint(col, row));
             if (!head.isValid())
                 continue;
 
@@ -1975,7 +1975,7 @@ bool EFX::applySettingsFromJson(const QJsonObject &root, Doc *doc)
                     {
                         for (int row = 0; row < gridHeight; row++)
                         {
-                            GroupHead head = group->head(QLCPoint(col, row));
+                            GroupHead head = doc->effectiveHead(group, QLCPoint(col, row));
                             if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                             {
                                 if (offset >= 0)
@@ -2033,7 +2033,7 @@ bool EFX::applySettingsFromJson(const QJsonObject &root, Doc *doc)
                     {
                         for (int row = 0; row < gridHeight; row++)
                         {
-                            GroupHead head = group->head(QLCPoint(col, row));
+                            GroupHead head = doc->effectiveHead(group, QLCPoint(col, row));
                             if (head.isValid() && head.fxi == ef->head().fxi && head.head == ef->head().head)
                             {
                                 if (offset >= 0)
