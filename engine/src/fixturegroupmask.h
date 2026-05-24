@@ -22,20 +22,22 @@
 
 #include "qlcpoint.h"
 
-/** Runtime column/row filter for a fixture group (not saved in workspace). */
+/** Runtime filter for a fixture group (not saved in workspace by Doc). */
 class FixtureGroupMask
 {
 public:
     FixtureGroupMask() = default;
 
-    /** True when at least one column or row filter is set. */
     bool isActive() const
     {
-        return !m_columns.isEmpty() || !m_rows.isEmpty();
+        return !m_points.isEmpty() || !m_columns.isEmpty() || !m_rows.isEmpty();
     }
 
     bool acceptsPoint(const QLCPoint& pt) const
     {
+        if (!m_points.isEmpty())
+            return m_points.contains(pt);
+
         if (!m_columns.isEmpty() && !m_columns.contains(pt.x()))
             return false;
         if (!m_rows.isEmpty() && !m_rows.contains(pt.y()))
@@ -45,11 +47,29 @@ public:
 
     bool isColumnEnabled(int column) const
     {
+        if (!m_points.isEmpty())
+        {
+            for (const QLCPoint& pt : m_points)
+            {
+                if (pt.x() == column)
+                    return true;
+            }
+            return false;
+        }
         return m_columns.isEmpty() || m_columns.contains(column);
     }
 
     bool isRowEnabled(int row) const
     {
+        if (!m_points.isEmpty())
+        {
+            for (const QLCPoint& pt : m_points)
+            {
+                if (pt.y() == row)
+                    return true;
+            }
+            return false;
+        }
         return m_rows.isEmpty() || m_rows.contains(row);
     }
 
@@ -59,14 +79,18 @@ public:
 
     QSet<int> columns() const { return m_columns; }
     QSet<int> rows() const { return m_rows; }
+    QSet<QLCPoint> points() const { return m_points; }
 
     void setColumns(const QSet<int>& columns) { m_columns = columns; }
     void setRows(const QSet<int>& rows) { m_rows = rows; }
+    void setPoints(const QSet<QLCPoint>& points) { m_points = points; }
 
 private:
-    /** Non-empty: only these columns are visible. Empty: all columns. */
+    /** Non-empty: only these grid cells are visible. Takes precedence over columns/rows. */
+    QSet<QLCPoint> m_points;
+    /** Non-empty: only these columns are visible (when m_points is empty). */
     QSet<int> m_columns;
-    /** Non-empty: only these rows are visible. Empty: all rows. */
+    /** Non-empty: only these rows are visible (when m_points is empty). */
     QSet<int> m_rows;
 };
 

@@ -19,6 +19,10 @@
 #include <QColor>
 #include <QMouseEvent>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QMessageBox>
 #include <QDebug>
 #include <QSet>
 
@@ -26,6 +30,12 @@ static const QString KXMLRoot           = QStringLiteral("PluginWidget");
 static const QString KXMLPluginId       = QStringLiteral("PluginId");
 static const QString KXMLPluginIdVal    = QStringLiteral("org.qlcplus.vcwidgets.fixturegrouplayout");
 static const QString KXMLFixtureGroupID = QStringLiteral("FixtureGroupID");
+static const QString KXMLMaskPresets      = QStringLiteral("MaskPresets");
+static const QString KXMLMaskPreset       = QStringLiteral("Preset");
+static const QString KXMLMaskPresetName = QStringLiteral("Name");
+static const QString KXMLMaskCell         = QStringLiteral("Cell");
+static const QString KXMLMaskCellX        = QStringLiteral("X");
+static const QString KXMLMaskCellY        = QStringLiteral("Y");
 
 FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
     : VCWidget(parent, doc)
@@ -52,14 +62,42 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
     m_titleLabel->setFont(titleFont);
     m_layout->addWidget(m_titleLabel);
 
-    QHBoxLayout* toolbar = new QHBoxLayout();
-    m_clearMaskButton = new QPushButton(tr("Mask: all columns"), this);
-    m_clearMaskButton->setToolTip(tr("Clear column mask (all columns active for RGB Matrix, EFX, etc.)"));
+    QHBoxLayout* maskToolbar = new QHBoxLayout();
+    m_applyMaskButton = new QPushButton(tr("Apply mask"), this);
+    m_applyMaskButton->setToolTip(tr("Use selected grid cells as the active mask"));
+    connect(m_applyMaskButton, &QPushButton::clicked,
+            this, &FixtureGroupLayoutWidget::slotApplyMaskClicked);
+    maskToolbar->addWidget(m_applyMaskButton);
+
+    m_clearMaskButton = new QPushButton(tr("Clear mask"), this);
+    m_clearMaskButton->setToolTip(tr("Remove active mask (all cells visible to functions)"));
     connect(m_clearMaskButton, &QPushButton::clicked,
             this, &FixtureGroupLayoutWidget::slotClearMaskClicked);
-    toolbar->addWidget(m_clearMaskButton);
-    toolbar->addStretch();
-    m_layout->addLayout(toolbar);
+    maskToolbar->addWidget(m_clearMaskButton);
+    maskToolbar->addStretch();
+    m_layout->addLayout(maskToolbar);
+
+    QHBoxLayout* presetToolbar = new QHBoxLayout();
+    m_presetCombo = new QComboBox(this);
+    m_presetCombo->setMinimumWidth(120);
+    m_presetCombo->setToolTip(tr("Saved mask presets for this widget"));
+    presetToolbar->addWidget(m_presetCombo, 1);
+
+    m_recallPresetButton = new QPushButton(tr("Recall"), this);
+    connect(m_recallPresetButton, &QPushButton::clicked,
+            this, &FixtureGroupLayoutWidget::slotRecallPresetClicked);
+    presetToolbar->addWidget(m_recallPresetButton);
+
+    m_savePresetButton = new QPushButton(tr("Save…"), this);
+    connect(m_savePresetButton, &QPushButton::clicked,
+            this, &FixtureGroupLayoutWidget::slotSavePresetClicked);
+    presetToolbar->addWidget(m_savePresetButton);
+
+    m_deletePresetButton = new QPushButton(tr("Delete"), this);
+    connect(m_deletePresetButton, &QPushButton::clicked,
+            this, &FixtureGroupLayoutWidget::slotDeletePresetClicked);
+    presetToolbar->addWidget(m_deletePresetButton);
+    m_layout->addLayout(presetToolbar);
 
     m_table = new QTableWidget(this);
     m_table->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -89,6 +127,7 @@ FixtureGroupLayoutWidget::FixtureGroupLayoutWidget(QWidget* parent, Doc* doc)
                 this, SLOT(slotFixtureGroupMaskChanged(quint32)));
     }
 
+    populatePresetCombo();
     rebuildGrid();
 }
 
@@ -116,6 +155,8 @@ VCWidget* FixtureGroupLayoutWidget::createCopy(VCWidget* parent)
         return nullptr;
     }
     copy->setFixtureGroupId(m_fixtureGroupId);
+    copy->m_maskPresets = m_maskPresets;
+    copy->populatePresetCombo();
     return copy;
 }
 
@@ -147,11 +188,79 @@ void FixtureGroupLayoutWidget::pushMaskToDoc()
         m_doc->clearFixtureGroupMask(m_fixtureGroupId);
 }
 
+bool FixtureGroupLayoutWidget::isPointMaskedOut(const QLCPoint& pt) const
+{
+    if (!m_localMask.isActive())
+        return false;
+    return !m_localMask.acceptsPoint(pt);
+}
+
 bool FixtureGroupLayoutWidget::isColumnMaskedOut(int column) const
 {
     if (!m_localMask.isActive())
         return false;
     return !m_localMask.isColumnEnabled(column);
+}
+
+QSet<QLCPoint> FixtureGroupLayoutWidget::selectedCells() const
+{
+    QSet<QLCPoint> cells;
+    foreach (QTableWidgetItem* item, m_table->selectedItems())
+    {
+        if (item == nullptr)
+            continue;
+        cells.insert(QLCPoint(item->column(), item->row()));
+    }
+    return cells;
+}
+
+QSet<QLCPoint> FixtureGroupLayoutWidget::validatedCells(const QSet<QLCPoint>& cells,
+                                                      const FixtureGroup* grp) const
+{
+    QSet<QLCPoint> valid;
+    if (grp == nullptr)
+        return valid;
+
+    const int w = grp->size().width();
+    const int h = grp->size().height();
+    for (const QLCPoint& pt : cells)
+    {
+        if (pt.x() >= 0 && pt.x() < w && pt.y() >= 0 && pt.y() < h)
+            valid.insert(pt);
+    }
+    return valid;
+}
+
+void FixtureGroupLayoutWidget::applyMaskFromCells(const QSet<QLCPoint>& cells)
+{
+    m_localMask.clear();
+    m_localMask.setPoints(cells);
+    pushMaskToDoc();
+    rebuildGrid();
+}
+
+void FixtureGroupLayoutWidget::populatePresetCombo()
+{
+    m_presetCombo->blockSignals(true);
+    m_presetCombo->clear();
+    for (const MaskPreset& preset : m_maskPresets)
+        m_presetCombo->addItem(preset.name);
+    m_presetCombo->blockSignals(false);
+}
+
+void FixtureGroupLayoutWidget::recallPreset(int index)
+{
+    if (index < 0 || index >= m_maskPresets.size())
+        return;
+
+    FixtureGroup* grp = fixtureGroup();
+    const QSet<QLCPoint> cells = validatedCells(m_maskPresets.at(index).cells, grp);
+    if (cells.isEmpty())
+        return;
+
+    applyMaskFromCells(cells);
+    if (m_presetCombo->currentIndex() != index)
+        m_presetCombo->setCurrentIndex(index);
 }
 
 FixtureGroup* FixtureGroupLayoutWidget::fixtureGroup() const
@@ -172,7 +281,12 @@ void FixtureGroupLayoutWidget::updateCaptionLabel()
 
     QString maskHint;
     if (m_localMask.isActive())
-        maskHint = tr(" — mask: %1 col(s)").arg(m_localMask.columns().size());
+    {
+        if (!m_localMask.points().isEmpty())
+            maskHint = tr(" — mask: %1 cell(s)").arg(m_localMask.points().size());
+        else
+            maskHint = tr(" — mask: %1 col(s)").arg(m_localMask.columns().size());
+    }
 
     m_titleLabel->setText(QStringLiteral("%1 (%2×%3)%4")
                               .arg(grp->name())
@@ -246,9 +360,28 @@ void FixtureGroupLayoutWidget::rebuildGrid()
                              .arg(str)
                              .arg(fxi->universe() + 1)
                              .arg(fxi->address() + 1));
-        if (isColumnMaskedOut(pt.x()))
+        if (isPointMaskedOut(pt))
             item->setBackground(QBrush(QColor(70, 70, 70, 120)));
         m_table->setItem(pt.y(), pt.x(), item);
+    }
+
+    if (m_localMask.isActive() && !m_localMask.points().isEmpty())
+    {
+        for (int row = 0; row < grp->size().height(); row++)
+        {
+            for (int col = 0; col < grp->size().width(); col++)
+            {
+                QLCPoint pt(col, row);
+                if (m_table->item(row, col) != nullptr)
+                    continue;
+                if (!isPointMaskedOut(pt))
+                    continue;
+                QTableWidgetItem* emptyItem = new QTableWidgetItem();
+                emptyItem->setBackground(QBrush(QColor(70, 70, 70, 120)));
+                emptyItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+                m_table->setItem(row, col, emptyItem);
+            }
+        }
     }
 
     connect(m_table, SIGNAL(cellChanged(int,int)),
@@ -275,31 +408,118 @@ void FixtureGroupLayoutWidget::slotColumnHeaderClicked(int column)
     if (grp == nullptr || column < 0 || column >= grp->size().width())
         return;
 
-    QSet<int> cols = m_localMask.columns();
-    if (!m_localMask.isActive())
+    const FixtureGroupMask prev = m_localMask;
+    QSet<int> cols;
+    if (!prev.points().isEmpty())
     {
         cols.insert(column);
-    }
-    else if (cols.contains(column))
-    {
-        cols.remove(column);
-        if (cols.isEmpty())
-        {
-            m_localMask.clear();
-            pushMaskToDoc();
-            rebuildGrid();
-            return;
-        }
     }
     else
     {
-        cols.insert(column);
+        cols = prev.columns();
+        if (!prev.isActive())
+        {
+            cols.insert(column);
+        }
+        else if (cols.contains(column))
+        {
+            cols.remove(column);
+            if (cols.isEmpty())
+            {
+                m_localMask.clear();
+                pushMaskToDoc();
+                rebuildGrid();
+                return;
+            }
+        }
+        else
+        {
+            cols.insert(column);
+        }
     }
 
+    m_localMask.clear();
     m_localMask.setColumns(cols);
     m_localMask.setRows(QSet<int>());
     pushMaskToDoc();
     rebuildGrid();
+}
+
+void FixtureGroupLayoutWidget::slotApplyMaskClicked()
+{
+    FixtureGroup* grp = fixtureGroup();
+    if (grp == nullptr)
+        return;
+
+    QSet<QLCPoint> cells = validatedCells(selectedCells(), grp);
+    if (cells.isEmpty())
+    {
+        QMessageBox::information(this, tr("Fixture Group Layout"),
+                                 tr("Select one or more grid cells first."));
+        return;
+    }
+
+    applyMaskFromCells(cells);
+}
+
+void FixtureGroupLayoutWidget::slotSavePresetClicked()
+{
+    FixtureGroup* grp = fixtureGroup();
+    if (grp == nullptr)
+        return;
+
+    QSet<QLCPoint> cells = validatedCells(selectedCells(), grp);
+    if (cells.isEmpty() && !m_localMask.points().isEmpty())
+        cells = validatedCells(m_localMask.points(), grp);
+    if (cells.isEmpty())
+    {
+        QMessageBox::information(this, tr("Fixture Group Layout"),
+                                 tr("Select grid cells or apply a mask before saving a preset."));
+        return;
+    }
+
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, tr("Save mask preset"), tr("Preset name:"),
+        QLineEdit::Normal, QString(), &ok);
+    if (!ok || name.trimmed().isEmpty())
+        return;
+
+    const QString trimmed = name.trimmed();
+    bool replaced = false;
+    for (int i = 0; i < m_maskPresets.size(); i++)
+    {
+        if (m_maskPresets[i].name == trimmed)
+        {
+            m_maskPresets[i].cells = cells;
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced)
+        m_maskPresets.append({ trimmed, cells });
+
+    populatePresetCombo();
+    m_presetCombo->setCurrentText(trimmed);
+    if (m_doc != nullptr)
+        m_doc->setModified();
+}
+
+void FixtureGroupLayoutWidget::slotRecallPresetClicked()
+{
+    recallPreset(m_presetCombo->currentIndex());
+}
+
+void FixtureGroupLayoutWidget::slotDeletePresetClicked()
+{
+    const int idx = m_presetCombo->currentIndex();
+    if (idx < 0 || idx >= m_maskPresets.size())
+        return;
+
+    m_maskPresets.removeAt(idx);
+    populatePresetCombo();
+    if (m_doc != nullptr)
+        m_doc->setModified();
 }
 
 void FixtureGroupLayoutWidget::slotClearMaskClicked()
@@ -661,12 +881,45 @@ bool FixtureGroupLayoutWidget::loadXML(QXmlStreamReader& root)
         {
             m_fixtureGroupId = root.readElementText().toUInt();
         }
+        else if (root.name() == KXMLMaskPresets)
+        {
+            m_maskPresets.clear();
+            while (root.readNextStartElement())
+            {
+                if (root.name() != KXMLMaskPreset)
+                {
+                    root.skipCurrentElement();
+                    continue;
+                }
+
+                MaskPreset preset;
+                preset.name = root.attributes().value(KXMLMaskPresetName).toString();
+                while (root.readNextStartElement())
+                {
+                    if (root.name() == KXMLMaskCell)
+                    {
+                        const int x = root.attributes().value(KXMLMaskCellX).toInt();
+                        const int y = root.attributes().value(KXMLMaskCellY).toInt();
+                        preset.cells.insert(QLCPoint(x, y));
+                        root.skipCurrentElement();
+                    }
+                    else
+                    {
+                        root.skipCurrentElement();
+                    }
+                }
+                if (!preset.name.isEmpty() && !preset.cells.isEmpty())
+                    m_maskPresets.append(preset);
+            }
+        }
         else
         {
             root.skipCurrentElement();
         }
     }
 
+    populatePresetCombo();
+    syncMaskFromDoc();
     rebuildGrid();
     return true;
 }
@@ -682,6 +935,25 @@ bool FixtureGroupLayoutWidget::saveXML(QXmlStreamWriter* doc)
 
     doc->writeTextElement(KXMLFixtureGroupID, QString::number(m_fixtureGroupId));
 
+    if (!m_maskPresets.isEmpty())
+    {
+        doc->writeStartElement(KXMLMaskPresets);
+        for (const MaskPreset& preset : m_maskPresets)
+        {
+            doc->writeStartElement(KXMLMaskPreset);
+            doc->writeAttribute(KXMLMaskPresetName, preset.name);
+            for (const QLCPoint& pt : preset.cells)
+            {
+                doc->writeStartElement(KXMLMaskCell);
+                doc->writeAttribute(KXMLMaskCellX, QString::number(pt.x()));
+                doc->writeAttribute(KXMLMaskCellY, QString::number(pt.y()));
+                doc->writeEndElement();
+            }
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
+    }
+
     saveXMLAppearance(doc);
     saveXMLWindowState(doc);
 
@@ -696,6 +968,24 @@ void FixtureGroupLayoutWidget::toClipboardJson(QJsonObject& obj, const Doc* doc)
     FixtureGroup* grp = doc->fixtureGroup(m_fixtureGroupId);
     obj[QStringLiteral("fixtureGroupName")] = grp ? grp->name() : QString();
     obj[QStringLiteral("fixtureGroupId")] = static_cast<int>(m_fixtureGroupId);
+
+    QJsonArray presetsArr;
+    for (const MaskPreset& preset : m_maskPresets)
+    {
+        QJsonObject pObj;
+        pObj[QStringLiteral("name")] = preset.name;
+        QJsonArray cellsArr;
+        for (const QLCPoint& pt : preset.cells)
+        {
+            QJsonObject cObj;
+            cObj[QStringLiteral("x")] = pt.x();
+            cObj[QStringLiteral("y")] = pt.y();
+            cellsArr.append(cObj);
+        }
+        pObj[QStringLiteral("cells")] = cellsArr;
+        presetsArr.append(pObj);
+    }
+    obj[QStringLiteral("maskPresets")] = presetsArr;
 }
 
 void FixtureGroupLayoutWidget::fromClipboardJson(const QJsonObject& obj, Doc* doc)
@@ -720,6 +1010,25 @@ void FixtureGroupLayoutWidget::fromClipboardJson(const QJsonObject& obj, Doc* do
             }
         }
     }
+
+    m_maskPresets.clear();
+    const QJsonArray presetsArr = obj[QStringLiteral("maskPresets")].toArray();
+    for (const QJsonValue& pv : presetsArr)
+    {
+        const QJsonObject pObj = pv.toObject();
+        MaskPreset preset;
+        preset.name = pObj[QStringLiteral("name")].toString();
+        const QJsonArray cellsArr = pObj[QStringLiteral("cells")].toArray();
+        for (const QJsonValue& cv : cellsArr)
+        {
+            const QJsonObject cObj = cv.toObject();
+            preset.cells.insert(QLCPoint(cObj[QStringLiteral("x")].toInt(),
+                                         cObj[QStringLiteral("y")].toInt()));
+        }
+        if (!preset.name.isEmpty() && !preset.cells.isEmpty())
+            m_maskPresets.append(preset);
+    }
+    populatePresetCombo();
 
     setFixtureGroupId(id);
 }

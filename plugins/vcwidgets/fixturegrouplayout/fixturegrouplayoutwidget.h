@@ -10,12 +10,15 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QComboBox>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QJsonObject>
 #include <QMap>
 #include <QList>
+#include <QVector>
 #include <QPoint>
+#include <QSet>
 
 #include "vcwidget.h"
 #include "qlcpoint.h"
@@ -23,6 +26,12 @@
 #include "fixturegroupmask.h"
 
 class FixtureGroup;
+
+struct MaskPreset
+{
+    QString name;
+    QSet<QLCPoint> cells;
+};
 
 class FixtureGroupLayoutWidget : public VCWidget
 {
@@ -59,6 +68,10 @@ protected slots:
     void slotCellChanged(int row, int column);
     void slotColumnHeaderClicked(int column);
     void slotClearMaskClicked();
+    void slotApplyMaskClicked();
+    void slotSavePresetClicked();
+    void slotRecallPresetClicked();
+    void slotDeletePresetClicked();
 
 private:
     FixtureGroup* fixtureGroup() const;
@@ -67,7 +80,14 @@ private:
     void applyColumnHeaderStyles();
     void syncMaskFromDoc();
     void pushMaskToDoc();
+    bool isPointMaskedOut(const QLCPoint& pt) const;
     bool isColumnMaskedOut(int column) const;
+
+    QSet<QLCPoint> selectedCells() const;
+    QSet<QLCPoint> validatedCells(const QSet<QLCPoint>& cells, const FixtureGroup* grp) const;
+    void applyMaskFromCells(const QSet<QLCPoint>& cells);
+    void populatePresetCombo();
+    void recallPreset(int index);
 
     QList<QLCPoint> selectedPoints() const;
     void reselectPoints(const QList<QLCPoint>& points);
@@ -77,9 +97,15 @@ private:
     quint32 m_fixtureGroupId;
     QVBoxLayout* m_layout;
     QLabel* m_titleLabel;
+    QPushButton* m_applyMaskButton;
     QPushButton* m_clearMaskButton;
+    QPushButton* m_savePresetButton;
+    QPushButton* m_recallPresetButton;
+    QPushButton* m_deletePresetButton;
+    QComboBox* m_presetCombo;
     QTableWidget* m_table;
     FixtureGroupMask m_localMask;
+    QVector<MaskPreset> m_maskPresets;
 
     int m_lastRow;
     int m_lastColumn;

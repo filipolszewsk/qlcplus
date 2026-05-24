@@ -35,6 +35,7 @@ void FixtureGroupMask::setRowEnabled(int row, bool enabled)
 
 void FixtureGroupMask::clear()
 {
+    m_points.clear();
     m_columns.clear();
     m_rows.clear();
 }
