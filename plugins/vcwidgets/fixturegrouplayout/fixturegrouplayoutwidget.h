@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QComboBox>
-#include <QLineEdit>
+#include <QColor>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QJsonObject>
@@ -27,6 +27,7 @@
 #include "fixturegroupmask.h"
 
 class FixtureGroup;
+class MaskGridItemDelegate;
 
 struct MaskPreset
 {
@@ -34,17 +35,36 @@ struct MaskPreset
     QSet<QLCPoint> cells;
 };
 
+/** Persisted on VC widget; runtime policy is pushed to Doc. */
+enum class MaskEfxConflictPolicy
+{
+    None = 0,
+    Wait,
+    Override
+};
+
+struct MaskDisplayColors
+{
+    QColor visible         = QColor(0x22, 0x22, 0x22);
+    QColor hidden          = QColor(0x00, 0x00, 0x00);
+    QColor hiddenText      = QColor(0x70, 0x70, 0x70);
+    QColor headerVisible   = QColor(0x22, 0x22, 0x22);
+    QColor selectionBorder = QColor(0xe6, 0x7e, 0x22);
+};
+
 class FixtureGroupLayoutWidget : public VCWidget
 {
     Q_OBJECT
 
 public:
+    static const quint8 presetSelectInputSourceId = 0;
+
     FixtureGroupLayoutWidget(QWidget* parent, Doc* doc);
     ~FixtureGroupLayoutWidget() override;
 
     VCWidget* createCopy(VCWidget* parent) override;
 
-    void updateFeedback() override {}
+    void updateFeedback() override;
 
     bool loadXML(QXmlStreamReader& root) override;
     bool saveXML(QXmlStreamWriter* doc) override;
@@ -57,6 +77,15 @@ public:
     quint32 fixtureGroupId() const { return m_fixtureGroupId; }
     void setFixtureGroupId(quint32 id);
 
+    MaskDisplayColors maskDisplayColors() const { return m_maskColors; }
+    void setMaskDisplayColors(const MaskDisplayColors& colors);
+
+    MaskEfxConflictPolicy maskEfxConflictPolicy() const { return m_maskEfxConflictPolicy; }
+    void setMaskEfxConflictPolicy(MaskEfxConflictPolicy policy);
+
+    bool isPointMaskedOut(const QLCPoint& pt) const;
+    bool isGridCellSelected(int row, int column) const;
+
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
@@ -67,28 +96,39 @@ protected slots:
     void slotFixtureGroupMaskChanged(quint32 id);
     void slotCellActivated(int row, int column);
     void slotCellChanged(int row, int column);
-    void slotColumnHeaderClicked(int column);
     void slotClearMaskClicked();
     void slotApplyMaskClicked();
-    void slotSavePresetClicked();
-    void slotRecallPresetClicked();
+    void slotSubtractMaskClicked();
+    void slotNewPresetClicked();
+    void slotOverwritePresetClicked();
     void slotDeletePresetClicked();
+    void slotPresetComboChanged(int index);
+    void slotEfxConflictComboChanged(int index);
+    void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
 
 private:
     FixtureGroup* fixtureGroup() const;
     void rebuildGrid();
     void updateCaptionLabel();
     void applyColumnHeaderStyles();
+    void applyTableSelectionStyle();
     void syncMaskFromDoc();
     void pushMaskToDoc();
-    bool isPointMaskedOut(const QLCPoint& pt) const;
     bool isColumnMaskedOut(int column) const;
 
     QSet<QLCPoint> selectedCells() const;
     QSet<QLCPoint> validatedCells(const QSet<QLCPoint>& cells, const FixtureGroup* grp) const;
     void applyMaskFromCells(const QSet<QLCPoint>& cells);
+    QSet<QLCPoint> currentMaskCellsForPreset() const;
+    void clearGridSelection();
+    void deselectCellAt(int row, int column);
+    void updatePresetButtonStates();
     void populatePresetCombo();
-    void recallPreset(int index);
+    void recallPreset(int presetIndex);
+    void activatePresetComboIndex(int comboIndex);
+    void applyPresetFromChannelValue(uchar value);
+    void populateEfxConflictCombo();
+    void syncEfxConflictCombo();
 
     QList<QLCPoint> selectedPoints() const;
     void reselectPoints(const QList<QLCPoint>& points);
@@ -99,20 +139,26 @@ private:
     QVBoxLayout* m_layout;
     QLabel* m_titleLabel;
     QPushButton* m_applyMaskButton;
+    QPushButton* m_subtractMaskButton;
     QPushButton* m_clearMaskButton;
-    QLineEdit* m_presetNameEdit;
-    QPushButton* m_savePresetButton;
-    QPushButton* m_recallPresetButton;
+    QPushButton* m_newPresetButton;
+    QPushButton* m_overwritePresetButton;
     QPushButton* m_deletePresetButton;
     QComboBox* m_presetCombo;
+    QComboBox* m_efxConflictCombo;
     QTableWidget* m_table;
+    MaskGridItemDelegate* m_gridDelegate;
     FixtureGroupMask m_localMask;
     QVector<MaskPreset> m_maskPresets;
+    MaskDisplayColors m_maskColors;
+    MaskEfxConflictPolicy m_maskEfxConflictPolicy = MaskEfxConflictPolicy::Override;
 
     int m_lastRow;
     int m_lastColumn;
 
     bool m_dragging;
+    bool m_erasingSelection;
+    QPoint m_eraseLastCell;
     QPoint m_dragStartCell;
     QPoint m_dragCurrentCell;
     QList<QLCPoint> m_dragOriginalPoints;

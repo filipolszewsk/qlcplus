@@ -26,6 +26,8 @@
 #include <QList>
 #include <QFile>
 #include <QMap>
+#include <QHash>
+#include <QSet>
 #include <QMutex>
 
 #include "timecodesource.h"
@@ -54,6 +56,14 @@ class LicenseManager;
 
 #define KXMLQLCEngine QStringLiteral("Engine")
 #define KXMLQLCStartupFunction QStringLiteral("Autostart")
+
+/** How masked EFX functions share channels on the same fixture head. */
+enum class MaskChannelConflictPolicy
+{
+    None = 0,     /**< Standard QLC HTP/LTP blending */
+    Wait,         /**< Do not write conflicting channel class until owner stops */
+    Override      /**< Remove other functions' fade channels and take over */
+};
 
 class Doc : public QObject
 {
@@ -447,6 +457,18 @@ public:
     /** head() at $pt, or invalid if masked out. */
     GroupHead effectiveHead(const FixtureGroup* grp, const QLCPoint& pt) const;
 
+    MaskChannelConflictPolicy maskChannelConflictPolicy(quint32 groupId) const;
+    void setMaskChannelConflictPolicy(quint32 groupId, MaskChannelConflictPolicy policy);
+
+    /** Claim (head, EFX mode class) in a masked group; may purge others if Override. */
+    void registerMaskExclusiveChannel(quint32 groupId, quint32 functionId,
+                                      const GroupHead& head, int efxFixtureMode);
+
+    void clearMaskExclusiveChannels(quint32 functionId);
+
+    bool isChannelClassMaskExclusiveToOther(quint32 groupId, quint32 functionId,
+                                            const GroupHead& head, int efxFixtureMode) const;
+
 private slots:
     /** Catch fixture group property changes */
     void slotFixtureGroupChanged(quint32 id);
@@ -467,6 +489,11 @@ private:
 
     /** Runtime-only masks keyed by fixture group ID */
     QMap<quint32, FixtureGroupMask> m_fixtureGroupMasks;
+
+    /** groupId -> (head+mode key -> owning function id) */
+    QHash<quint32, QHash<quint64, quint32>> m_maskExclusiveChannelOwners;
+
+    QHash<quint32, MaskChannelConflictPolicy> m_maskChannelConflictPolicies;
 
     /*********************************************************************
      * Channel groups

@@ -752,8 +752,21 @@ public:
     /** Rebuild fixtures based on the current fixture group definition */
     bool rebuildFixtureGroup(bool preserveOffsets);
 
+    /** Keep the current fixture list while running when the group mask changes. */
+    void freezeFixtureListForActiveRun();
+
+    bool isGroupMaskIgnoredForRun() const { return m_ignoreGroupMaskForRun; }
+
+    void registerMaskExclusiveChannelsFromFixtures();
+
+    /** Remove fade channels for $head and EFX mode class (0=PanTilt, 1=Dimmer, 2=RGB). */
+    void purgeFadeChannelsForHeadMode(const GroupHead& head, int efxFixtureMode);
+
+    bool shouldDeferHeadModeToOtherRunningEfx(const GroupHead& head, EFXFixture::Mode mode) const;
+
 private:
     quint32 m_fixtureGroupID;
+    bool m_ignoreGroupMaskForRun;
     bool m_autoApplyOffsetTemplate;
     bool m_offsetTemplateDirty;
     OffsetDirection m_offsetDirection;

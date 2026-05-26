@@ -93,6 +93,9 @@ public:
     /** Remove a channel whose fixture & channel match with $fc's */
     void remove(FadeChannel *ch);
 
+    /** Remove a channel by fixture and channel index, if present. */
+    void removeFixtureChannel(quint32 fixtureID, quint32 channel);
+
     /** Remove all channels */
     void removeAll();
 

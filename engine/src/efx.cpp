@@ -55,6 +55,7 @@ EFX::EFX(Doc* doc)
     , m_waveFadeOut(0.2)      // Default: 20% fade out
     , m_waveLength(255)       // Default: 255 (full brightness)
     , m_fixtureGroupID(FixtureGroup::invalidId())
+    , m_ignoreGroupMaskForRun(false)
     , m_autoApplyOffsetTemplate(false)
     , m_offsetTemplateDirty(false)
     , m_offsetDirection(LeftToRight)
@@ -153,6 +154,7 @@ bool EFX::copyFrom(const Function* function)
     m_waveLength = efx->m_waveLength;
     
     m_fixtureGroupID = efx->m_fixtureGroupID;
+    m_ignoreGroupMaskForRun = false;
     m_offsetDirection = efx->m_offsetDirection;
     m_offsetStep = efx->m_offsetStep;
     m_wings = efx->m_wings;
@@ -1473,6 +1475,88 @@ QMap<int, int> EFX::columnOffsets() const
     return m_columnOffsets;
 }
 
+void EFX::freezeFixtureListForActiveRun()
+{
+    m_ignoreGroupMaskForRun = true;
+}
+
+void EFX::purgeFadeChannelsForHeadMode(const GroupHead& head, int efxFixtureMode)
+{
+    const EFXFixture::Mode mode = static_cast<EFXFixture::Mode>(efxFixtureMode);
+    QSet<quint32> channelSet;
+    foreach (EFXFixture *ef, m_fixtures)
+    {
+        if (!(ef->head() == head))
+            continue;
+        foreach (quint32 ch, ef->channelIndicesForMode(mode))
+            channelSet.insert(ch);
+    }
+
+    if (channelSet.isEmpty())
+        return;
+
+    QMutableMapIterator<quint32, QSharedPointer<GenericFader>> fit(m_fadersMap);
+    while (fit.hasNext())
+    {
+        fit.next();
+        QSharedPointer<GenericFader> fader = fit.value();
+        if (fader.isNull())
+            continue;
+
+        foreach (quint32 ch, channelSet)
+            fader->removeFixtureChannel(head.fxi, ch);
+    }
+}
+
+void EFX::registerMaskExclusiveChannelsFromFixtures()
+{
+    Doc *d = doc();
+    if (d == NULL || !isFixtureGroupMode() || m_ignoreGroupMaskForRun)
+        return;
+    if (!d->fixtureGroupMask(m_fixtureGroupID).isActive())
+        return;
+    if (d->maskChannelConflictPolicy(m_fixtureGroupID) == MaskChannelConflictPolicy::None)
+        return;
+
+    d->clearMaskExclusiveChannels(id());
+
+    foreach (EFXFixture *ef, m_fixtures)
+    {
+        const GroupHead head = ef->head();
+        if (!head.isValid())
+            continue;
+        d->registerMaskExclusiveChannel(m_fixtureGroupID, id(), head, int(ef->mode()));
+    }
+}
+
+bool EFX::shouldDeferHeadModeToOtherRunningEfx(const GroupHead& head, EFXFixture::Mode mode) const
+{
+    Doc *d = doc();
+    if (d == NULL || !isFixtureGroupMode() || !head.isValid())
+        return false;
+
+    foreach (Function *func, d->functions())
+    {
+        if (func == NULL || func->id() == id() || !func->isRunning())
+            continue;
+
+        const EFX *efx = qobject_cast<const EFX*>(func);
+        if (efx == NULL || efx->fixtureGroupID() != m_fixtureGroupID)
+            continue;
+
+        if (!efx->isGroupMaskIgnoredForRun())
+            continue;
+
+        foreach (const EFXFixture *ef, efx->fixtures())
+        {
+            if (ef->head() == head && ef->mode() == mode)
+                return true;
+        }
+    }
+
+    return false;
+}
+
 bool EFX::rebuildFixtureGroup(bool preserveOffsets)
 {
     if (!isFixtureGroupMode())
@@ -1492,6 +1576,9 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
     if (wasRunning)
         dismissAllFaders();
 
+    // Suppress per-fixture changed() from removeAllFixtures/addFixture; one emit at end.
+    const bool wasBlocked = blockSignals(true);
+
     QMap<QPair<quint32, int>, int> savedOffsets;
     if (preserveOffsets)
     {
@@ -1506,63 +1593,64 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
 
     int gridWidth = group->size().width();
     int gridHeight = group->size().height();
+    bool ok = true;
     if (gridWidth <= 0 || gridHeight <= 0)
-    {
-        emit changed(id());
-        return false;
-    }
+        ok = false;
 
     bool missingOffset = !preserveOffsets;
 
-    for (int col = 0; col < gridWidth; col++)
+    if (ok)
     {
-        for (int row = 0; row < gridHeight; row++)
+        for (int col = 0; col < gridWidth; col++)
         {
-            if (!isRowSelected(row))
-                continue;
-
-            GroupHead head = d->effectiveHead(group, QLCPoint(col, row));
-            if (!head.isValid())
-                continue;
-
-            EFXFixture *ef = new EFXFixture(this);
-            ef->setHead(head);
-
-            bool offsetAssigned = false;
-            if (preserveOffsets)
+            for (int row = 0; row < gridHeight; row++)
             {
-                QPair<quint32, int> key(head.fxi, head.head);
-                if (savedOffsets.contains(key))
+                if (!isRowSelected(row))
+                    continue;
+
+                GroupHead head = d->effectiveHead(group, QLCPoint(col, row));
+                if (!head.isValid())
+                    continue;
+
+                EFXFixture *ef = new EFXFixture(this);
+                ef->setHead(head);
+
+                bool offsetAssigned = false;
+                if (preserveOffsets)
                 {
-                    ef->setStartOffset(savedOffsets.value(key));
-                    offsetAssigned = true;
+                    QPair<quint32, int> key(head.fxi, head.head);
+                    if (savedOffsets.contains(key))
+                    {
+                        ef->setStartOffset(savedOffsets.value(key));
+                        offsetAssigned = true;
+                    }
                 }
+
+                if (!offsetAssigned)
+                {
+                    if (m_columnOffsets.contains(col))
+                        ef->setStartOffset(m_columnOffsets.value(col));
+                    else
+                        ef->setStartOffset(calculateTemplateOffsetInternal(col, row, gridWidth, gridHeight));
+                    missingOffset = true;
+                }
+
+                EFXFixture::Mode desiredMode = static_cast<EFXFixture::Mode>(columnMode(col));
+                ef->forceMode(desiredMode);
+
+                Function::Direction columnDir = columnDirection(col);
+                ef->setDirection(columnDir);
+
+                if (!addFixture(ef))
+                    delete ef;
             }
-
-            if (!offsetAssigned)
-            {
-                if (m_columnOffsets.contains(col))
-                    ef->setStartOffset(m_columnOffsets.value(col));
-                else
-                    ef->setStartOffset(calculateTemplateOffsetInternal(col, row, gridWidth, gridHeight));
-                missingOffset = true;
-            }
-
-            EFXFixture::Mode desiredMode = static_cast<EFXFixture::Mode>(columnMode(col));
-            ef->forceMode(desiredMode);
-
-            Function::Direction columnDir = columnDirection(col);
-            ef->setDirection(columnDir);
-
-            if (!addFixture(ef))
-                delete ef;
         }
-    }
 
-    if (m_autoApplyOffsetTemplate)
-        applyOffsetTemplate();
-    else if (missingOffset)
-        markOffsetTemplateDirty();
+        if (m_autoApplyOffsetTemplate)
+            applyOffsetTemplate();
+        else if (missingOffset)
+            markOffsetTemplateDirty();
+    }
 
     // If the EFX was running when the group changed, reinitialise serial
     // numbers and reset state so the new fixtures start cleanly on the next
@@ -1577,8 +1665,9 @@ bool EFX::rebuildFixtureGroup(bool preserveOffsets)
         }
     }
 
+    blockSignals(wasBlocked);
     emit changed(id());
-    return true;
+    return ok;
 }
 
 bool EFX::setColumnOffsetInternal(int column, int degrees, bool emitSignal)
@@ -2468,6 +2557,15 @@ QSharedPointer<GenericFader> EFX::getFader(QList<Universe *> universes, quint32 
 
 void EFX::preRun(MasterTimer* timer)
 {
+    if (isFixtureGroupMode() && !m_ignoreGroupMaskForRun)
+    {
+        Doc *d = doc();
+        if (d != NULL && d->fixtureGroupMask(m_fixtureGroupID).isActive())
+            rebuildFixtureGroup(true);
+    }
+
+    registerMaskExclusiveChannelsFromFixtures();
+
     int serialNumber = 0;
 
     QListIterator <EFXFixture*> it(m_fixtures);
@@ -2489,12 +2587,32 @@ void EFX::write(MasterTimer *timer, QList<Universe*> universes)
         return;
 
     int done = 0;
+    Doc *d = doc();
+    const MaskChannelConflictPolicy maskPolicy = (isFixtureGroupMode() && d != NULL)
+            ? d->maskChannelConflictPolicy(m_fixtureGroupID)
+            : MaskChannelConflictPolicy::None;
 
     // Both modes use the same logic now - each fixture has its own EFXFixture
     QListIterator <EFXFixture*> it(m_fixtures);
     while (it.hasNext() == true)
     {
         EFXFixture *ef = it.next();
+        if (maskPolicy == MaskChannelConflictPolicy::Override
+                && d->isChannelClassMaskExclusiveToOther(m_fixtureGroupID, id(), ef->head(),
+                                                         int(ef->mode())))
+        {
+            if (ef->isDone() == true)
+                done++;
+            continue;
+        }
+        if (maskPolicy == MaskChannelConflictPolicy::Wait
+                && shouldDeferHeadModeToOtherRunningEfx(ef->head(), ef->mode()))
+        {
+            if (ef->isDone() == true)
+                done++;
+            continue;
+        }
+
         if (ef->isDone() == false)
         {
             QSharedPointer<GenericFader> fader = getFader(universes, ef->universe());
@@ -2528,6 +2646,11 @@ void EFX::postRun(MasterTimer *timer, QList<Universe *> universes)
     }
 
     dismissAllFaders();
+
+    if (Doc *d = doc())
+        d->clearMaskExclusiveChannels(id());
+
+    m_ignoreGroupMaskForRun = false;
 
     Function::postRun(timer, universes);
 }

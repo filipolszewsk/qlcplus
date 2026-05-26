@@ -1163,8 +1163,90 @@ void Doc::clearFixtureGroupMask(quint32 groupId)
         return;
 
     m_fixtureGroupMasks.remove(groupId);
+    m_maskExclusiveChannelOwners.remove(groupId);
     slotFixtureGroupMaskChanged(groupId);
     emit fixtureGroupMaskChanged(groupId);
+}
+
+MaskChannelConflictPolicy Doc::maskChannelConflictPolicy(quint32 groupId) const
+{
+    return m_maskChannelConflictPolicies.value(groupId, MaskChannelConflictPolicy::None);
+}
+
+void Doc::setMaskChannelConflictPolicy(quint32 groupId, MaskChannelConflictPolicy policy)
+{
+    if (policy == MaskChannelConflictPolicy::None)
+        m_maskChannelConflictPolicies.remove(groupId);
+    else
+        m_maskChannelConflictPolicies[groupId] = policy;
+}
+
+static quint64 maskExclusiveChannelKey(const GroupHead& head, int efxFixtureMode)
+{
+    return (quint64(head.fxi) << 32) | (quint32(head.head) << 8) | quint32(efxFixtureMode & 0xFF);
+}
+
+void Doc::registerMaskExclusiveChannel(quint32 groupId, quint32 functionId,
+                                       const GroupHead& head, int efxFixtureMode)
+{
+    if (!head.isValid())
+        return;
+
+    const MaskChannelConflictPolicy policy = maskChannelConflictPolicy(groupId);
+    if (policy == MaskChannelConflictPolicy::None)
+        return;
+
+    if (policy == MaskChannelConflictPolicy::Override)
+    {
+        QMapIterator<quint32, Function*> it(m_functions);
+        while (it.hasNext())
+        {
+            it.next();
+            Function *func = it.value();
+            if (func == NULL || func->id() == functionId || !func->isRunning())
+                continue;
+
+            EFX *efx = qobject_cast<EFX*>(func);
+            if (efx == NULL || efx->fixtureGroupID() != groupId)
+                continue;
+
+            efx->purgeFadeChannelsForHeadMode(head, efxFixtureMode);
+        }
+    }
+
+    QHash<quint64, quint32>& owners = m_maskExclusiveChannelOwners[groupId];
+    owners.insert(maskExclusiveChannelKey(head, efxFixtureMode), functionId);
+}
+
+void Doc::clearMaskExclusiveChannels(quint32 functionId)
+{
+    QMutableHashIterator<quint32, QHash<quint64, quint32>> git(m_maskExclusiveChannelOwners);
+    while (git.hasNext())
+    {
+        git.next();
+        QHash<quint64, quint32>& owners = git.value();
+        QMutableHashIterator<quint64, quint32> it(owners);
+        while (it.hasNext())
+        {
+            it.next();
+            if (it.value() == functionId)
+                it.remove();
+        }
+        if (owners.isEmpty())
+            git.remove();
+    }
+}
+
+bool Doc::isChannelClassMaskExclusiveToOther(quint32 groupId, quint32 functionId,
+                                             const GroupHead& head, int efxFixtureMode) const
+{
+    if (!head.isValid())
+        return false;
+
+    const QHash<quint64, quint32> owners = m_maskExclusiveChannelOwners.value(groupId);
+    const quint32 owner = owners.value(maskExclusiveChannelKey(head, efxFixtureMode),
+                                       Function::invalidId());
+    return owner != Function::invalidId() && owner != functionId;
 }
 
 FixtureGroupMask Doc::fixtureGroupMask(quint32 groupId) const
@@ -1215,7 +1297,12 @@ void Doc::slotFixtureGroupMaskChanged(quint32 id)
             continue;
 
         EFX *efx = qobject_cast<EFX*>(func);
-        if (efx != NULL && efx->fixtureGroupID() == id)
+        if (efx == NULL || efx->fixtureGroupID() != id)
+            continue;
+
+        if (efx->isRunning())
+            efx->freezeFixtureListForActiveRun();
+        else
             efx->rebuildFixtureGroup(false);
     }
 }

@@ -125,6 +125,13 @@ void GenericFader::remove(FadeChannel *ch)
         qDebug() << "No FadeChannel found with hash" << hash;
 }
 
+void GenericFader::removeFixtureChannel(quint32 fixtureID, quint32 channel)
+{
+    const quint32 hash = channelHash(fixtureID, channel);
+    QWriteLocker l(&m_channelsLock);
+    m_channels.remove(hash);
+}
+
 void GenericFader::removeAll()
 {
     QWriteLocker l(&m_channelsLock);

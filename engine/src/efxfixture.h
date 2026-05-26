@@ -134,6 +134,9 @@ public:
     /** Convert a string to an mode type */
     static Mode stringToMode(const QString& str);
 
+    /** DMX channel indices driven when running in $mode (for mask conflict purge). */
+    QList<quint32> channelIndicesForMode(Mode mode) const;
+
 private:
     GroupHead m_head;
     quint32 m_universe;

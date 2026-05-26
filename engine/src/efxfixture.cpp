@@ -257,6 +257,58 @@ QString EFXFixture::modeToString(Mode mode)
     }
 }
 
+QList<quint32> EFXFixture::channelIndicesForMode(Mode mode) const
+{
+    QList<quint32> channels;
+    Fixture *fxi = doc()->fixture(head().fxi);
+    if (fxi == NULL)
+        return channels;
+
+    auto appendCh = [&channels](quint32 ch) {
+        if (ch != QLCChannel::invalid())
+            channels.append(ch);
+    };
+
+    switch (mode)
+    {
+        case PanTilt:
+        {
+            appendCh(fxi->channelNumber(QLCChannel::Pan, QLCChannel::MSB, head().head));
+            appendCh(fxi->channelNumber(QLCChannel::Pan, QLCChannel::LSB, head().head));
+            appendCh(fxi->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, head().head));
+            appendCh(fxi->channelNumber(QLCChannel::Tilt, QLCChannel::LSB, head().head));
+        }
+        break;
+        case Dimmer:
+        {
+            quint32 msb = fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, head().head);
+            if (msb != QLCChannel::invalid())
+            {
+                appendCh(msb);
+                appendCh(fxi->channelNumber(QLCChannel::Intensity, QLCChannel::LSB, head().head));
+            }
+            else if (fxi->masterIntensityChannel() != QLCChannel::invalid())
+            {
+                appendCh(fxi->masterIntensityChannel());
+            }
+            else if (fxi->hasVirtualDimmer())
+            {
+                channels.append(VIRTUAL_DIMMER_CHANNEL);
+            }
+        }
+        break;
+        case RGB:
+        {
+            const QVector<quint32> rgb = fxi->rgbChannels(head().head);
+            for (quint32 ch : rgb)
+                appendCh(ch);
+        }
+        break;
+    }
+
+    return channels;
+}
+
 EFXFixture::Mode EFXFixture::stringToMode(const QString& str)
 {
     if (str == QString(KXMLQLCEFXFixtureModePanTilt))

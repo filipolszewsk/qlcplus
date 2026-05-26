@@ -43,6 +43,11 @@ public:
     int head;
 };
 
+inline size_t qHash(const GroupHead &key, size_t seed = 0)
+{
+    return qHash(key.fxi, seed) ^ qHash(key.head);
+}
+
 /** @} */
 
 #endif

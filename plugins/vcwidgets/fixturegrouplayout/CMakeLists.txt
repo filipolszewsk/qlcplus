@@ -27,6 +27,7 @@ add_library(fixturegrouplayout_vcwidget MODULE
     fixturegrouplayoutplugin.cpp fixturegrouplayoutplugin.h
     fixturegrouplayoutwidget.cpp fixturegrouplayoutwidget.h
     fixturegrouplayoutconfigdialog.cpp fixturegrouplayoutconfigdialog.h
+    fixturegrouplayoutitemdelegate.cpp fixturegrouplayoutitemdelegate.h
 )
 
 target_compile_features(fixturegrouplayout_vcwidget PRIVATE cxx_std_14)
