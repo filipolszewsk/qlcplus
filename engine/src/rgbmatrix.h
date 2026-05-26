@@ -305,8 +305,12 @@ public:
     bool writesChannelClassOnHead(const GroupHead& head, int channelClass) const;
     void purgeFadeChannelsForHeadClass(const GroupHead& head, int channelClass);
 
+    /** Live mask update while running (called from Doc::slotFixtureGroupMaskChanged). */
+    void slotFixtureGroupMaskChanged(quint32 groupId);
+
 private:
     void registerMaskExclusiveChannelsFromGroup();
+    void purgeFadeChannelsOutsideMask();
     QList<int> maskChannelClasses() const;
     QList<quint32> channelIndicesForClass(const GroupHead& head, int channelClass) const;
     bool shouldDeferHeadClass(const GroupHead& head, int channelClass) const;

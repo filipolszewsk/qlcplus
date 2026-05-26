@@ -25,6 +25,7 @@
 #include <QDebug>
 #include <cmath>
 #include <QDir>
+#include <QSet>
 
 #include "rgbscriptscache.h"
 #include "qlcfixturehead.h"
@@ -1015,6 +1016,57 @@ void RGBMatrix::freezeHeadMapForActiveRun()
     if (m_group != NULL)
         m_frozenHeadsMap = m_group->headsMap();
     m_ignoreGroupMaskForRun = true;
+}
+
+void RGBMatrix::purgeFadeChannelsOutsideMask()
+{
+    Doc *d = doc();
+    if (d == NULL || m_group == NULL)
+        return;
+
+    const QMap<QLCPoint, GroupHead> effective = d->effectiveHeadsMap(m_group);
+    QSet<GroupHead> activeHeads;
+    QMapIterator<QLCPoint, GroupHead> eit(effective);
+    while (eit.hasNext())
+    {
+        eit.next();
+        activeHeads.insert(eit.value());
+    }
+
+    QSet<GroupHead> purged;
+    const QList<int> classes = maskChannelClasses();
+    QMapIterator<QLCPoint, GroupHead> it(m_group->headsMap());
+    while (it.hasNext())
+    {
+        it.next();
+        const GroupHead head = it.value();
+        if (!head.isValid() || activeHeads.contains(head) || purged.contains(head))
+            continue;
+
+        purged.insert(head);
+        foreach (int channelClass, classes)
+            purgeFadeChannelsForHeadClass(head, channelClass);
+    }
+}
+
+void RGBMatrix::slotFixtureGroupMaskChanged(quint32 groupId)
+{
+    if (fixtureGroup() != groupId)
+        return;
+
+    m_ignoreGroupMaskForRun = false;
+    m_frozenHeadsMap.clear();
+
+    if (!isRunning())
+        return;
+
+    if (m_group == NULL)
+        m_group = doc()->fixtureGroup(m_fixtureGroupID);
+    if (m_group == NULL)
+        return;
+
+    purgeFadeChannelsOutsideMask();
+    registerMaskExclusiveChannelsFromGroup();
 }
 
 QMap<QLCPoint, GroupHead> RGBMatrix::headsMapForRun() const

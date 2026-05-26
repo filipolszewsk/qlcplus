@@ -1349,11 +1349,8 @@ void Doc::slotFixtureGroupMaskChanged(quint32 id)
         }
 
         RGBMatrix *mtx = qobject_cast<RGBMatrix*>(func);
-        if (mtx != NULL && mtx->fixtureGroup() == id)
-        {
-            if (mtx->isRunning())
-                mtx->freezeHeadMapForActiveRun();
-        }
+        if (mtx != NULL && mtx->fixtureGroup() == id && mtx->isRunning())
+            mtx->slotFixtureGroupMaskChanged(id);
     }
 }
 
