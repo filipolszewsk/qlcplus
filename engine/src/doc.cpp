@@ -43,6 +43,8 @@
 #include "scriptwrapper.h"
 #include "collection.h"
 #include "efx.h"
+#include "efxfixture.h"
+#include "rgbmatrix.h"
 #include "function.h"
 #include "universe.h"
 #include "sequence.h"
@@ -1211,6 +1213,10 @@ void Doc::registerMaskExclusiveChannel(quint32 groupId, quint32 functionId,
                 continue;
 
             efx->purgeFadeChannelsForHeadMode(head, efxFixtureMode);
+
+            RGBMatrix *mtx = qobject_cast<RGBMatrix*>(func);
+            if (mtx != NULL)
+                mtx->purgeFadeChannelsForHeadClass(head, efxFixtureMode);
         }
     }
 
@@ -1247,6 +1253,42 @@ bool Doc::isChannelClassMaskExclusiveToOther(quint32 groupId, quint32 functionId
     const quint32 owner = owners.value(maskExclusiveChannelKey(head, efxFixtureMode),
                                        Function::invalidId());
     return owner != Function::invalidId() && owner != functionId;
+}
+
+bool Doc::isMaskChannelBlockedByIncumbent(quint32 groupId, quint32 functionId,
+                                          const GroupHead& head, int channelClass) const
+{
+    if (!head.isValid())
+        return false;
+
+    QMapIterator<quint32, Function*> it(m_functions);
+    while (it.hasNext())
+    {
+        it.next();
+        Function *func = it.value();
+        if (func == NULL || func->id() == functionId || !func->isRunning())
+            continue;
+
+        const EFX *efx = qobject_cast<const EFX*>(func);
+        if (efx != NULL && efx->fixtureGroupID() == groupId && efx->isGroupMaskIgnoredForRun())
+        {
+            foreach (const EFXFixture *ef, efx->fixtures())
+            {
+                if (ef->head() == head && int(ef->mode()) == channelClass)
+                    return true;
+            }
+            continue;
+        }
+
+        const RGBMatrix *mtx = qobject_cast<const RGBMatrix*>(func);
+        if (mtx != NULL && mtx->fixtureGroup() == groupId && mtx->isGroupMaskIgnoredForRun())
+        {
+            if (mtx->writesChannelClassOnHead(head, channelClass))
+                return true;
+        }
+    }
+
+    return false;
 }
 
 FixtureGroupMask Doc::fixtureGroupMask(quint32 groupId) const
@@ -1297,13 +1339,21 @@ void Doc::slotFixtureGroupMaskChanged(quint32 id)
             continue;
 
         EFX *efx = qobject_cast<EFX*>(func);
-        if (efx == NULL || efx->fixtureGroupID() != id)
+        if (efx != NULL && efx->fixtureGroupID() == id)
+        {
+            if (efx->isRunning())
+                efx->freezeFixtureListForActiveRun();
+            else
+                efx->rebuildFixtureGroup(false);
             continue;
+        }
 
-        if (efx->isRunning())
-            efx->freezeFixtureListForActiveRun();
-        else
-            efx->rebuildFixtureGroup(false);
+        RGBMatrix *mtx = qobject_cast<RGBMatrix*>(func);
+        if (mtx != NULL && mtx->fixtureGroup() == id)
+        {
+            if (mtx->isRunning())
+                mtx->freezeHeadMapForActiveRun();
+        }
     }
 }
 

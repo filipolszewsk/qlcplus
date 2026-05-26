@@ -1535,26 +1535,7 @@ bool EFX::shouldDeferHeadModeToOtherRunningEfx(const GroupHead& head, EFXFixture
     if (d == NULL || !isFixtureGroupMode() || !head.isValid())
         return false;
 
-    foreach (Function *func, d->functions())
-    {
-        if (func == NULL || func->id() == id() || !func->isRunning())
-            continue;
-
-        const EFX *efx = qobject_cast<const EFX*>(func);
-        if (efx == NULL || efx->fixtureGroupID() != m_fixtureGroupID)
-            continue;
-
-        if (!efx->isGroupMaskIgnoredForRun())
-            continue;
-
-        foreach (const EFXFixture *ef, efx->fixtures())
-        {
-            if (ef->head() == head && ef->mode() == mode)
-                return true;
-        }
-    }
-
-    return false;
+    return d->isMaskChannelBlockedByIncumbent(m_fixtureGroupID, id(), head, int(mode));
 }
 
 bool EFX::rebuildFixtureGroup(bool preserveOffsets)

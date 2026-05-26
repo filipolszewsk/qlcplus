@@ -38,6 +38,7 @@
   #include "rgbscript.h"
 #endif
 #include "function.h"
+#include "grouphead.h"
 #include "qlcpoint.h"
 
 /** Reserved channel index for Virtual Dimmer in RGB Matrix multi mapping.
@@ -299,7 +300,19 @@ public:
     /** Set a script property to a specific value */
     void setScriptProperty(QString propName, QString value);
 
+    void freezeHeadMapForActiveRun();
+    bool isGroupMaskIgnoredForRun() const { return m_ignoreGroupMaskForRun; }
+    bool writesChannelClassOnHead(const GroupHead& head, int channelClass) const;
+    void purgeFadeChannelsForHeadClass(const GroupHead& head, int channelClass);
+
 private:
+    void registerMaskExclusiveChannelsFromGroup();
+    QList<int> maskChannelClasses() const;
+    QList<quint32> channelIndicesForClass(const GroupHead& head, int channelClass) const;
+    bool shouldDeferHeadClass(const GroupHead& head, int channelClass) const;
+    bool isHeadClassBlockedForWrite(const GroupHead& head, int channelClass) const;
+    QMap<QLCPoint, GroupHead> headsMapForRun() const;
+
     /** Check what should be done when elapsed() >= duration() */
     void roundCheck();
 
@@ -461,6 +474,9 @@ private:
     /** Name of a premium script that failed to load (e.g. no active license).
      *  Preserved so the reference survives save/load cycles even without a license. */
     QString m_pendingScriptName;
+
+    bool m_ignoreGroupMaskForRun;
+    QMap<QLCPoint, GroupHead> m_frozenHeadsMap;
 };
 
 /** @} */

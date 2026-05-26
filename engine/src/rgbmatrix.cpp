@@ -31,8 +31,11 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
+#include "fixturegroupmask.h"
+#include "efxfixture.h"
 #include "genericfader.h"
 #include "fadechannel.h"
+#include "efx.h"
 #include "rgbmatrix.h"
 #include "rgbimage.h"
 #include "fixture.h"
@@ -96,6 +99,7 @@ RGBMatrix::RGBMatrix(Doc *doc)
      , m_continuousPhase(0.0)
      , m_controlMode(RGBMatrix::ControlModeRgb)
      , m_enablePerFixtureMapping(false)
+     , m_ignoreGroupMaskForRun(false)
  {
      setName(tr("New RGB Matrix"));
     setDuration(500);
@@ -1004,6 +1008,262 @@ void RGBMatrix::checkEngineCreation()
     m_requestEngineCreation = false;
 }
 
+void RGBMatrix::freezeHeadMapForActiveRun()
+{
+    if (m_group == NULL)
+        m_group = doc()->fixtureGroup(m_fixtureGroupID);
+    if (m_group != NULL)
+        m_frozenHeadsMap = m_group->headsMap();
+    m_ignoreGroupMaskForRun = true;
+}
+
+QMap<QLCPoint, GroupHead> RGBMatrix::headsMapForRun() const
+{
+    if (m_ignoreGroupMaskForRun && !m_frozenHeadsMap.isEmpty())
+        return m_frozenHeadsMap;
+
+    if (m_group == NULL || doc() == NULL)
+        return QMap<QLCPoint, GroupHead>();
+
+    return doc()->effectiveHeadsMap(m_group);
+}
+
+QList<int> RGBMatrix::maskChannelClasses() const
+{
+    QList<int> classes;
+    const int rgbClass = int(EFXFixture::RGB);
+    const int dimmerClass = int(EFXFixture::Dimmer);
+
+    if (m_enablePerFixtureMapping)
+    {
+        classes << rgbClass << dimmerClass;
+        return classes;
+    }
+
+    switch (m_controlMode)
+    {
+        case ControlModeDimmer:
+        case ControlModeDimmerFullRange:
+            classes << dimmerClass;
+            break;
+        case ControlModeRgb:
+        case ControlModeRgbw:
+        case ControlModeWhite:
+        case ControlModeAmber:
+        case ControlModeUV:
+        case ControlModeShutter:
+            classes << rgbClass;
+            break;
+        default:
+            break;
+    }
+
+    if (m_dimmerControl && !classes.contains(dimmerClass))
+        classes << dimmerClass;
+
+    return classes;
+}
+
+bool RGBMatrix::writesChannelClassOnHead(const GroupHead& head, int channelClass) const
+{
+    if (!head.isValid() || !maskChannelClasses().contains(channelClass))
+        return false;
+
+    QMapIterator<QLCPoint, GroupHead> it(headsMapForRun());
+    while (it.hasNext())
+    {
+        if (it.next().value() == head)
+            return true;
+    }
+
+    return false;
+}
+
+QList<quint32> RGBMatrix::channelIndicesForClass(const GroupHead& grpHead, int channelClass) const
+{
+    QList<quint32> channels;
+    Doc *d = doc();
+    if (d == NULL)
+        return channels;
+
+    Fixture *fxi = d->fixture(grpHead.fxi);
+    if (fxi == NULL)
+        return channels;
+
+    QLCFixtureHead head = fxi->head(grpHead.head);
+
+    auto appendCh = [&channels](quint32 ch) {
+        if (ch != QLCChannel::invalid())
+            channels.append(ch);
+    };
+
+    const int rgbClass = int(EFXFixture::RGB);
+    const int dimmerClass = int(EFXFixture::Dimmer);
+
+    if (m_enablePerFixtureMapping && fxi->fixtureDef() != NULL)
+    {
+        QString defKey = getFixtureDefKey(fxi->fixtureDef());
+        const QList<ChannelMapping> &mappings = m_fixtureDefChannelMap.value(defKey);
+        const QVector<quint32> &resolvedIdx = m_resolvedChannelIndices.value(defKey);
+
+        for (int mi = 0; mi < mappings.size(); mi++)
+        {
+            const ChannelMapping &mapping = mappings[mi];
+            if (mapping.channelName.isEmpty())
+                continue;
+
+            quint32 channelIdx = (mi < resolvedIdx.size())
+                    ? resolvedIdx[mi]
+                    : findChannelByName(fxi->fixtureMode(), mapping.channelName);
+
+            if (channelClass == dimmerClass)
+            {
+                if (channelIdx == RGBMATRIX_VIRTUAL_DIMMER_CHANNEL)
+                    appendCh(VIRTUAL_DIMMER_CHANNEL);
+                else if (channelIdx == RGBMATRIX_VIRTUAL_STROBE_CHANNEL)
+                    appendCh(VIRTUAL_STROBE_CHANNEL);
+            }
+            else if (channelClass == rgbClass
+                     && channelIdx != RGBMATRIX_VIRTUAL_DIMMER_CHANNEL
+                     && channelIdx != RGBMATRIX_VIRTUAL_STROBE_CHANNEL)
+            {
+                appendCh(channelIdx);
+            }
+        }
+
+        if (!channels.isEmpty())
+            return channels;
+    }
+
+    if (channelClass == rgbClass)
+    {
+        switch (m_controlMode)
+        {
+            case ControlModeRgb:
+                foreach (quint32 ch, head.rgbChannels())
+                    appendCh(ch);
+                foreach (quint32 ch, head.cmyChannels())
+                    appendCh(ch);
+                break;
+            case ControlModeRgbw:
+                foreach (quint32 ch, head.rgbwChannels())
+                    appendCh(ch);
+                break;
+            case ControlModeWhite:
+                appendCh(head.channelNumber(QLCChannel::White, QLCChannel::MSB));
+                break;
+            case ControlModeAmber:
+                appendCh(head.channelNumber(QLCChannel::Amber, QLCChannel::MSB));
+                break;
+            case ControlModeUV:
+                appendCh(head.channelNumber(QLCChannel::UV, QLCChannel::MSB));
+                break;
+            case ControlModeShutter:
+                foreach (quint32 ch, head.shutterChannels())
+                    appendCh(ch);
+                break;
+            default:
+                break;
+        }
+    }
+    else if (channelClass == dimmerClass)
+    {
+        quint32 msb = fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, grpHead.head);
+        if (msb != QLCChannel::invalid())
+        {
+            appendCh(msb);
+            appendCh(fxi->channelNumber(QLCChannel::Intensity, QLCChannel::LSB, grpHead.head));
+        }
+        else if (fxi->masterIntensityChannel() != QLCChannel::invalid())
+        {
+            appendCh(fxi->masterIntensityChannel());
+        }
+        else if (fxi->hasVirtualDimmer())
+        {
+            foreach (quint32 ch, fxi->virtualDimmerChannels())
+                appendCh(ch);
+        }
+    }
+
+    return channels;
+}
+
+void RGBMatrix::purgeFadeChannelsForHeadClass(const GroupHead& head, int channelClass)
+{
+    QSet<quint32> channelSet;
+    foreach (quint32 ch, channelIndicesForClass(head, channelClass))
+        channelSet.insert(ch);
+
+    if (channelSet.isEmpty())
+        return;
+
+    QMutableMapIterator<quint32, QSharedPointer<GenericFader>> fit(m_fadersMap);
+    while (fit.hasNext())
+    {
+        fit.next();
+        QSharedPointer<GenericFader> fader = fit.value();
+        if (fader.isNull())
+            continue;
+
+        foreach (quint32 ch, channelSet)
+            fader->removeFixtureChannel(head.fxi, ch);
+    }
+}
+
+void RGBMatrix::registerMaskExclusiveChannelsFromGroup()
+{
+    Doc *d = doc();
+    if (d == NULL || m_fixtureGroupID == FixtureGroup::invalidId() || m_ignoreGroupMaskForRun)
+        return;
+    if (!d->fixtureGroupMask(m_fixtureGroupID).isActive())
+        return;
+    if (d->maskChannelConflictPolicy(m_fixtureGroupID) == MaskChannelConflictPolicy::None)
+        return;
+
+    d->clearMaskExclusiveChannels(id());
+
+    const QList<int> classes = maskChannelClasses();
+    QMapIterator<QLCPoint, GroupHead> it(headsMapForRun());
+    while (it.hasNext())
+    {
+        it.next();
+        const GroupHead grpHead = it.value();
+        if (!grpHead.isValid())
+            continue;
+
+        foreach (int channelClass, classes)
+            d->registerMaskExclusiveChannel(m_fixtureGroupID, id(), grpHead, channelClass);
+    }
+}
+
+bool RGBMatrix::shouldDeferHeadClass(const GroupHead& head, int channelClass) const
+{
+    Doc *d = doc();
+    if (d == NULL || m_fixtureGroupID == FixtureGroup::invalidId() || !head.isValid())
+        return false;
+
+    return d->isMaskChannelBlockedByIncumbent(m_fixtureGroupID, id(), head, channelClass);
+}
+
+bool RGBMatrix::isHeadClassBlockedForWrite(const GroupHead& head, int channelClass) const
+{
+    Doc *d = doc();
+    if (d == NULL || m_fixtureGroupID == FixtureGroup::invalidId() || !head.isValid())
+        return false;
+
+    const MaskChannelConflictPolicy policy = d->maskChannelConflictPolicy(m_fixtureGroupID);
+    if (policy == MaskChannelConflictPolicy::None)
+        return false;
+
+    if (policy == MaskChannelConflictPolicy::Override)
+        return d->isChannelClassMaskExclusiveToOther(m_fixtureGroupID, id(), head, channelClass);
+
+    if (policy == MaskChannelConflictPolicy::Wait)
+        return shouldDeferHeadClass(head, channelClass);
+
+    return false;
+}
+
 void RGBMatrix::preRun(MasterTimer *timer)
 {
     {
@@ -1053,7 +1313,7 @@ void RGBMatrix::preRun(MasterTimer *timer)
     m_resolvedChannelIndices.clear();
     if (m_enablePerFixtureMapping && m_group != NULL)
     {
-        QMapIterator<QLCPoint, GroupHead> headIt(doc()->effectiveHeadsMap(m_group));
+        QMapIterator<QLCPoint, GroupHead> headIt(headsMapForRun());
         while (headIt.hasNext())
         {
             headIt.next();
@@ -1076,6 +1336,8 @@ void RGBMatrix::preRun(MasterTimer *timer)
     }
 
     m_roundTime.restart();
+
+    registerMaskExclusiveChannelsFromGroup();
 
     Function::preRun(timer);
 }
@@ -1214,6 +1476,12 @@ void RGBMatrix::postRun(MasterTimer *timer, QList<Universe *> universes)
             m_runAlgorithm->postRun();
     }
 
+    if (Doc *d = doc())
+        d->clearMaskExclusiveChannels(id());
+
+    m_ignoreGroupMaskForRun = false;
+    m_frozenHeadsMap.clear();
+
     Function::postRun(timer, universes);
 }
 
@@ -1297,10 +1565,11 @@ bool RGBMatrix::updateFaderValues(FadeChannel *fc, uchar value, uint fadeTime)
 
 QLCPoint RGBMatrix::findFirstHeadPosition(const FixtureGroup *grp, quint32 fixtureId) const
 {
-    QMapIterator<QLCPoint, GroupHead> it(doc()->effectiveHeadsMap(grp));
+    Q_UNUSED(grp);
+    QMapIterator<QLCPoint, GroupHead> it(headsMapForRun());
     QLCPoint firstPos;
     bool found = false;
-    
+
     while (it.hasNext())
     {
         it.next();
@@ -1330,8 +1599,11 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                                      ? m_runAlgorithm->paramCount()
                                      : 1;
 
+    const int rgbClass = int(EFXFixture::RGB);
+    const int dimmerClass = int(EFXFixture::Dimmer);
+
     // Create/modify fade channels for ALL heads in the group
-    QMapIterator<QLCPoint, GroupHead> it(doc()->effectiveHeadsMap(grp));
+    QMapIterator<QLCPoint, GroupHead> it(headsMapForRun());
     while (it.hasNext())
     {
         it.next();
@@ -1417,6 +1689,9 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                                          : findChannelByName(fxi->fixtureMode(), mapping.channelName);
                 if (channelIdx == RGBMATRIX_VIRTUAL_DIMMER_CHANNEL)
                 {
+                    if (isHeadClassBlockedForWrite(grpHead, dimmerClass))
+                        continue;
+
                     // Use Virtual Dimmer as normal FadeChannel with special channel 0xFFFE
                     int offset = mapping.valueIndex;
                     int sourceRow = scriptRow * cachedParamCount + offset;
@@ -1448,6 +1723,9 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
                 else if (channelIdx == RGBMATRIX_VIRTUAL_STROBE_CHANNEL)
                 {
+                    if (isHeadClassBlockedForWrite(grpHead, rgbClass))
+                        continue;
+
                     // Use Virtual Strobe as normal FadeChannel with special channel 0xFFFC
                     int offset = mapping.valueIndex;
                     int sourceRow = scriptRow * cachedParamCount + offset;
@@ -1475,6 +1753,9 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
                 else if (channelIdx != QLCChannel::invalid())
                 {
+                    if (isHeadClassBlockedForWrite(grpHead, rgbClass))
+                        continue;
+
                     int offset = mapping.valueIndex;
                     int sourceRow = scriptRow * cachedParamCount + offset;
 
@@ -1498,7 +1779,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
         if (!usePerDefinitionMapping && m_controlMode == ControlModeNone)
             continue;
 
-        if (!usePerDefinitionMapping && m_controlMode == ControlModeRgb)
+        if (!usePerDefinitionMapping && m_controlMode == ControlModeRgb
+                && !isHeadClassBlockedForWrite(grpHead, rgbClass))
         {
             QVector<quint32> rgbCh = head.rgbChannels();
 
@@ -1524,7 +1806,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
             }
         }
-        else if (!usePerDefinitionMapping && m_controlMode == ControlModeRgbw)
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeRgbw
+                 && !isHeadClassBlockedForWrite(grpHead, rgbClass))
         {
             // RGBW mode: RGB from bits 0-23, White (W) from alpha bits 24-31
             QVector<quint32> rgbwCh = head.rgbwChannels();
@@ -1539,7 +1822,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                     valueList.append(qAlpha(col));  // W channel packed in alpha bits by script
             }
         }
-        else if (!usePerDefinitionMapping && m_controlMode == ControlModeShutter)
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeShutter
+                 && !isHeadClassBlockedForWrite(grpHead, rgbClass))
         {
             QVector<quint32> shutterCh = head.shutterChannels();
 
@@ -1551,7 +1835,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 valueList.append(rgbToGrey(col));
             }
         }
-        else if (!usePerDefinitionMapping && (m_controlMode == ControlModeDimmer || m_dimmerControl))
+        else if (!usePerDefinitionMapping && (m_controlMode == ControlModeDimmer || m_dimmerControl)
+                 && !isHeadClassBlockedForWrite(grpHead, dimmerClass))
         {
             // Collect all dimmers that affect current head:
             // They are the master dimmer (affects whole fixture)
@@ -1595,7 +1880,8 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
             }
         }
-        else if (!usePerDefinitionMapping && m_controlMode == ControlModeDimmerFullRange)
+        else if (!usePerDefinitionMapping && m_controlMode == ControlModeDimmerFullRange
+                 && !isHeadClassBlockedForWrite(grpHead, dimmerClass))
         {
             // Full range dimmer control mode - all dimmers use full 0-255 range
             // This is similar to ControlModeDimmer but without binary per-head dimmer
@@ -1624,7 +1910,7 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 }
             }
         }
-        else if (!usePerDefinitionMapping)
+        else if (!usePerDefinitionMapping && !isHeadClassBlockedForWrite(grpHead, rgbClass))
         {
             if (m_controlMode == ControlModeWhite)
                 channelList.append(head.channelNumber(QLCChannel::White, QLCChannel::MSB));

@@ -467,7 +467,11 @@ public:
     void clearMaskExclusiveChannels(quint32 functionId);
 
     bool isChannelClassMaskExclusiveToOther(quint32 groupId, quint32 functionId,
-                                            const GroupHead& head, int efxFixtureMode) const;
+                                            const GroupHead& head, int channelClass) const;
+
+    /** True if a running function started before the mask owns (head, channelClass). */
+    bool isMaskChannelBlockedByIncumbent(quint32 groupId, quint32 functionId,
+                                         const GroupHead& head, int channelClass) const;
 
 private slots:
     /** Catch fixture group property changes */
