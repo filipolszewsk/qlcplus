@@ -9,6 +9,7 @@
 #include "inputselectionwidget.h"
 #include "fixtureselection.h"
 #include "fixturegroup.h"
+#include "fixturegroupmask.h"
 #include "qlcpoint.h"
 #include "grouphead.h"
 #include "doc.h"
@@ -183,6 +184,18 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     m_nameEdit->setMaximumWidth(120);
     lay->addWidget(m_nameEdit);
 
+    m_scopeCombo = new QComboBox(this);
+    m_scopeCombo->addItem(tr("Rows"), int(PTOutputScope::Rows));
+    m_scopeCombo->addItem(tr("Group mask"), int(PTOutputScope::Mask));
+    m_scopeCombo->addItem(tr("Rows + mask"), int(PTOutputScope::RowsAndMask));
+    const int scopeIdx = m_scopeCombo->findData(int(output.scope));
+    if (scopeIdx >= 0)
+        m_scopeCombo->setCurrentIndex(scopeIdx);
+    m_scopeCombo->setToolTip(tr("Rows: grid rows only (ignores VC mask). "
+                                 "Group mask: cells from Fixture Group Layout mask on this group. "
+                                 "Rows + mask: both."));
+    lay->addWidget(m_scopeCombo);
+
     // Checkbox container (rows)
     m_cbWidget = new QWidget(this);
     m_cbLayout = new QVBoxLayout(m_cbWidget);
@@ -208,12 +221,25 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     }
 
     connect(m_nameEdit, &QLineEdit::textEdited, this, &FGOutputEditorRow::changed);
+    connect(m_scopeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &FGOutputEditorRow::updateScopeUi);
+    updateScopeUi();
+}
+
+void FGOutputEditorRow::updateScopeUi()
+{
+    const bool showRows = m_scopeCombo == nullptr
+            || m_scopeCombo->currentData().toInt() != int(PTOutputScope::Mask);
+    if (m_cbWidget != nullptr)
+        m_cbWidget->setVisible(showRows);
 }
 
 PTOutput FGOutputEditorRow::output() const
 {
     PTOutput out;
     out.name = m_nameEdit ? m_nameEdit->text().trimmed() : QString();
+    if (m_scopeCombo != nullptr)
+        out.scope = static_cast<PTOutputScope>(m_scopeCombo->currentData().toInt());
     for (const QCheckBox* cb : m_rowCBs)
     {
         if (cb->isChecked())
@@ -1142,8 +1168,16 @@ void PresetTableConfigDialog::slotValidate()
             for (int i = 0; i < m_fgOutputRows.size(); ++i)
             {
                 PTOutput out = m_fgOutputRows[i]->output();
-                if (out.groupRows.isEmpty())
+                if (out.scope == PTOutputScope::Mask)
+                {
+                    if (!m_doc->fixtureGroupMask(currentFixtureGroup()->id()).isActive())
+                        errors.append(tr("Output \"%1\": group mask is not active — apply a mask in Fixture Group Layout.")
+                                         .arg(out.name));
+                }
+                else if (out.groupRows.isEmpty())
+                {
                     errors.append(tr("Output \"%1\": no grid rows selected.").arg(out.name));
+                }
             }
 
             // Warn if any column has no binding

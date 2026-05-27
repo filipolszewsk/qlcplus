@@ -13,6 +13,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "fixturegroup.h"
+#include "fixturegroupmask.h"
 #include "grouphead.h"
 #include "qlcpoint.h"
 #include "qlcchannel.h"
@@ -87,6 +88,42 @@ static const QString KXMLNameColWidth    = QStringLiteral("NameColWidth");
 static const QString KXMLMode           = QStringLiteral("Mode");
 static const QString KXMLFxGroupId      = QStringLiteral("FixtureGroupID");
 static const QString KXMLOutRows        = QStringLiteral("Rows");
+static const QString KXMLOutScope       = QStringLiteral("Scope");
+
+static PTOutputScope scopeFromString(const QString& value)
+{
+    if (value == QLatin1String("Mask"))
+        return PTOutputScope::Mask;
+    if (value == QLatin1String("Rows"))
+        return PTOutputScope::Rows;
+    return PTOutputScope::RowsAndMask;
+}
+
+static QString scopeToString(PTOutputScope scope)
+{
+    switch (scope)
+    {
+        case PTOutputScope::Mask:
+            return QStringLiteral("Mask");
+        case PTOutputScope::Rows:
+            return QStringLiteral("Rows");
+        default:
+            return QStringLiteral("RowsAndMask");
+    }
+}
+
+static bool outputScopeAllowsPoint(PTOutputScope scope, const QLCPoint& pt, const PTOutput& out)
+{
+    switch (scope)
+    {
+        case PTOutputScope::Rows:
+            return out.groupRows.contains(pt.y());
+        case PTOutputScope::Mask:
+            return true;
+        default:
+            return out.groupRows.contains(pt.y());
+    }
+}
 static const QString KXMLBindMfg        = QStringLiteral("BindMfg");
 static const QString KXMLBindModel      = QStringLiteral("BindModel");
 static const QString KXMLBindMode       = QStringLiteral("BindMode");
@@ -491,6 +528,12 @@ PresetTableWidget::PresetTableWidget(QWidget* parent, Doc* doc)
     m_layout->addWidget(m_statusBar);
 
     setLayout(m_layout);
+
+    if (m_doc != nullptr)
+    {
+        connect(m_doc, SIGNAL(fixtureGroupMaskChanged(quint32)),
+                this, SLOT(slotFixtureGroupMaskChanged(quint32)));
+    }
 }
 
 PresetTableWidget::~PresetTableWidget()
@@ -1277,7 +1320,9 @@ void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar 
     FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
     if (!grp) return;
 
-    const QMap<QLCPoint, GroupHead> headsMap = m_doc->effectiveHeadsMap(grp);
+    const FixtureGroupMask docMask = m_doc->fixtureGroupMask(m_fixtureGroupId);
+    const QMap<QLCPoint, GroupHead> maskedHeads = m_doc->effectiveHeadsMap(grp);
+    const QMap<QLCPoint, GroupHead> fullHeads = grp->headsMap();
 
     for (int o = 0; o < m_outputs.size(); ++o)
     {
@@ -1287,19 +1332,27 @@ void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar 
         if (activeRow < 0 || activeRow >= m_rows.size()) continue;
 
         const PTOutput& out = m_outputs[o];
-        if (out.groupRows.isEmpty()) continue;
+        if (out.scope == PTOutputScope::Rows && out.groupRows.isEmpty())
+            continue;
+        if (out.scope == PTOutputScope::Mask && !docMask.isActive())
+            continue;
+        if (out.scope == PTOutputScope::RowsAndMask && out.groupRows.isEmpty())
+            continue;
 
         const QVector<uchar>& aVals = m_rows[activeRow].values;
         const QVector<uchar>* bVals = (stagedRow >= 0 && stagedRow < m_rows.size())
             ? &m_rows[stagedRow].values : nullptr;
 
-        // Iterate all group head positions, keep only those in out.groupRows
+        const QMap<QLCPoint, GroupHead>& headsMap =
+                (out.scope == PTOutputScope::Rows) ? fullHeads : maskedHeads;
+
         for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
         {
             const QLCPoint&  pt   = it.key();
             const GroupHead& head = it.value();
 
-            if (!out.groupRows.contains(pt.y())) continue;
+            if (!outputScopeAllowsPoint(out.scope, pt, out))
+                continue;
 
             Fixture* fxi = m_doc->fixture(head.fxi);
             if (!fxi) continue;
@@ -1355,6 +1408,14 @@ void PresetTableWidget::writeDMXFixtureGroup(QList<Universe*>& universes, uchar 
 // ==========================================================================
 // writeDMX (MasterTimer thread)
 // ==========================================================================
+
+void PresetTableWidget::slotFixtureGroupMaskChanged(quint32 groupId)
+{
+    if (m_mode != PTMode::FixtureGroup || m_fixtureGroupId != groupId)
+        return;
+
+    refreshRowHighlights();
+}
 
 void PresetTableWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
 {
@@ -1724,6 +1785,7 @@ void PresetTableWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
             for (int r : out.groupRows)
                 gRows.append(r);
             o["groupRows"] = gRows;
+            o["outputScope"] = scopeToString(out.scope);
         }
         outs.append(o);
     }
@@ -1835,6 +1897,7 @@ void PresetTableWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         {
             for (const QJsonValue &rv : o["groupRows"].toArray())
                 out.groupRows.append(rv.toInt());
+            out.scope = scopeFromString(o["outputScope"].toString());
         }
         m_outputs.append(out);
     }
@@ -1988,6 +2051,7 @@ bool PresetTableWidget::loadXML(QXmlStreamReader& root)
                 for (const QString& rStr : rowsStr.split(QLatin1Char(','), Qt::SkipEmptyParts))
                     out.groupRows.append(rStr.trimmed().toInt());
             }
+            out.scope = scopeFromString(attrs.value(KXMLOutScope).toString());
 
             while (root.readNextStartElement())
             {
@@ -2117,14 +2181,15 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
 
     // Collect output data under lock, then write outside
     struct OutData {
-        QString    name;
-        quint32    fixtureId;
-        QList<int> groupRows;
+        QString       name;
+        quint32       fixtureId;
+        QList<int>    groupRows;
+        PTOutputScope scope;
     };
     QVector<OutData> outData;
     outData.reserve(m_outputs.size());
     for (const PTOutput& out : m_outputs)
-        outData.append({out.name, out.fixtureId, out.groupRows});
+        outData.append({out.name, out.fixtureId, out.groupRows, out.scope});
 
     bool isFGMode = (m_mode == PTMode::FixtureGroup);
     lk.unlock();
@@ -2139,12 +2204,16 @@ bool PresetTableWidget::saveXML(QXmlStreamWriter* doc)
         {
             doc->writeAttribute(KXMLOutFxId, QString::number(outData[o].fixtureId));
         }
-        else if (!outData[o].groupRows.isEmpty())
+        else
         {
-            QStringList rowParts;
-            for (int row : outData[o].groupRows)
-                rowParts << QString::number(row);
-            doc->writeAttribute(KXMLOutRows, rowParts.join(QLatin1Char(',')));
+            doc->writeAttribute(KXMLOutScope, scopeToString(outData[o].scope));
+            if (!outData[o].groupRows.isEmpty())
+            {
+                QStringList rowParts;
+                for (int row : outData[o].groupRows)
+                    rowParts << QString::number(row);
+                doc->writeAttribute(KXMLOutRows, rowParts.join(QLatin1Char(',')));
+            }
         }
 
         auto src = inputSource(quint8(o));

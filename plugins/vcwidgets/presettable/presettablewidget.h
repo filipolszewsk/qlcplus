@@ -42,6 +42,14 @@ class FixtureGroup;
 
 enum class PTMode { Legacy = 0, FixtureGroup = 1 };
 
+/** Which fixture-group grid cells an output drives (see Doc mask for Mask / RowsAndMask). */
+enum class PTOutputScope
+{
+    Rows = 0,
+    Mask,
+    RowsAndMask
+};
+
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
@@ -84,6 +92,7 @@ struct PTOutput {
     QString    name;
     quint32    fixtureId = UINT_MAX;    // used in PTMode::Legacy
     QList<int> groupRows;               // used in PTMode::FixtureGroup: y-coords in group grid
+    PTOutputScope scope = PTOutputScope::RowsAndMask;
 };
 
 // ---------------------------------------------------------------------------
@@ -183,6 +192,7 @@ private slots:
     void slotCopySelection();
     void slotPasteSelection();
     void slotTableContextMenu(const QPoint& pos);
+    void slotFixtureGroupMaskChanged(quint32 groupId);
 
 private:
     void rebuildTable();

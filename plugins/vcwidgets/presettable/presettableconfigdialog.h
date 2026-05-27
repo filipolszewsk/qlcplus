@@ -91,11 +91,13 @@ signals:
 
 private:
     void rebuildRowCheckboxes();
+    void updateScopeUi();
 
     Doc*          m_doc   = nullptr;
     FixtureGroup* m_group = nullptr;
 
     QLineEdit*            m_nameEdit   = nullptr;
+    QComboBox*            m_scopeCombo = nullptr;
     QWidget*              m_cbWidget   = nullptr;  // scrollable container for checkboxes
     QVBoxLayout*          m_cbLayout   = nullptr;
     QList<QCheckBox*>     m_rowCBs;                // one per y-row in the group
