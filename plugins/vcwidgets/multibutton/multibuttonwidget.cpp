@@ -11,6 +11,8 @@
 #include "function.h"
 #include "doc.h"
 #include "qlcinputsource.h"
+#include "inputoutputmap.h"
+#include "vcframe.h"
 #include "scene.h"
 #include "universe.h"
 #include "qlcfile.h"
@@ -20,6 +22,7 @@
 #include "fadechannel.h"
 #include "qlcchannel.h"
 #include "scribbledialog.h"
+#include "apputil.h"
 
 #include <QPainter>
 #include <QPen>
@@ -35,11 +38,15 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QVector>
+#include <QMap>
 #include <QRandomGenerator>
 #include <functional>
 #include <QEventLoop>
 #include <QApplication>
 #include <QCursor>
+#include <QShowEvent>
+#include <QStyle>
+#include <QStyleOptionButton>
 
 // ---- XML tag constants ----------------------------------------------------
 
@@ -55,11 +62,19 @@ static const QString KXMLFunctionLabel     = QStringLiteral("Label");
 static const QString KXMLFunctionIconPath  = QStringLiteral("IconPath");
 static const QString KXMLAddOffAtEnd       = QStringLiteral("AddOffAtEnd");
 static const QString KXMLMonitorChannels   = QStringLiteral("MonitorChannelValues");
+static const QString KXMLReceiveInputInactiveFramePage =
+    QStringLiteral("ReceiveInputOnInactiveFramePage");
 static const QString KXMLTriggerInput      = QStringLiteral("TriggerInput");
 static const QString KXMLPopupInput        = QStringLiteral("PopupInput");
 static const QString KXMLAutomationTriggerInput = QStringLiteral("AutomationTriggerInput");
 static const QString KXMLPresetChooseInput = QStringLiteral("PresetChooseInput");
 static const QString KXMLEntrySelectInput  = QStringLiteral("EntrySelectInput");
+static const QString KXMLSpreadPageInput   = QStringLiteral("SpreadPageInput");
+static const QString KXMLEntryTriggerInput = QStringLiteral("EntryTriggerInput");
+static const QString KXMLFunctionEntryInput = QStringLiteral("FunctionEntryInput");
+static const QString KXMLFunctionEntryIndex = QStringLiteral("Index");
+static const QString KXMLSpreadSlotInput   = QStringLiteral("SpreadSlotInput");
+static const QString KXMLSpreadSlotIndex   = QStringLiteral("Index");
 static const QString KXMLLevelFixture      = QStringLiteral("LevelFixture");
 static const QString KXMLLevelFixtureID    = QStringLiteral("ID");
 static const QString KXMLLevelChannels     = QStringLiteral("LevelChannels");
@@ -73,7 +88,11 @@ static const QString KXMLLevelPreset       = QStringLiteral("LevelPreset");
 static const QString KXMLLevelPresetLabel  = QStringLiteral("Label");
 static const QString KXMLLevelPresetIcon   = QStringLiteral("IconPath");
 static const QString KXMLLevelPresetColor  = QStringLiteral("Color");
+static const QString KXMLLevelPresetLabelColor = QStringLiteral("LabelColor");
+static const QString KXMLLevelPresetFlash  = QStringLiteral("Flash");
 static const QString KXMLLevelPresetHideName = QStringLiteral("HideName");
+static const QString KXMLFunctionFlash     = QStringLiteral("Flash");
+static const QString KXMLFunctionLabelColor = QStringLiteral("LabelColor");
 static const QString KXMLLevelPresetValues = QStringLiteral("Values");
 static const QString KXMLSpread            = QStringLiteral("Spread");
 static const QString KXMLSpreadEnabled     = QStringLiteral("Enabled");
@@ -83,6 +102,7 @@ static const QString KXMLSpreadHMargin       = QStringLiteral("HMargin");
 static const QString KXMLSpreadVMargin       = QStringLiteral("VMargin");
 static const QString KXMLSpreadTileW         = QStringLiteral("TileW");
 static const QString KXMLSpreadTileH         = QStringLiteral("TileH");
+static const QString KXMLSpreadPages         = QStringLiteral("Pages");
 static const QString KXMLAutomation          = QStringLiteral("Automation");
 static const QString KXMLAutomationEnabled   = QStringLiteral("Enabled");
 // Legacy attributes kept for migration reading:
@@ -95,6 +115,7 @@ static const QString KXMLAutomationMode      = QStringLiteral("Mode");
 static const QString KXMLAutomationStepMin   = QStringLiteral("StepMin");
 static const QString KXMLAutomationStepMax   = QStringLiteral("StepMax");
 static const QString KXMLAutomationMultiplier = QStringLiteral("Multiplier");
+static const QString KXMLAutomationBeatOffset = QStringLiteral("BeatOffset");
 
 static QString modeToString(MultiButtonMode mode)
 {
@@ -139,6 +160,57 @@ static MultiButtonAutomationMode stringToAutomationMode(const QString& s)
     return MultiButtonAutomationMode::Next;
 }
 
+static QSharedPointer<QLCInputSource> cloneInputSource(const QSharedPointer<QLCInputSource>& src)
+{
+    if (src.isNull() || !src->isValid())
+        return QSharedPointer<QLCInputSource>();
+
+    QSharedPointer<QLCInputSource> copy(new QLCInputSource(src->universe(), src->channel()));
+    copy->setFeedbackValue(QLCInputFeedback::LowerValue,
+                          src->feedbackValue(QLCInputFeedback::LowerValue));
+    copy->setFeedbackValue(QLCInputFeedback::UpperValue,
+                          src->feedbackValue(QLCInputFeedback::UpperValue));
+    copy->setFeedbackValue(QLCInputFeedback::MonitorValue,
+                          src->feedbackValue(QLCInputFeedback::MonitorValue));
+    copy->setFeedbackExtraParams(QLCInputFeedback::LowerValue,
+                                 src->feedbackExtraParams(QLCInputFeedback::LowerValue));
+    copy->setFeedbackExtraParams(QLCInputFeedback::UpperValue,
+                                 src->feedbackExtraParams(QLCInputFeedback::UpperValue));
+    copy->setFeedbackExtraParams(QLCInputFeedback::MonitorValue,
+                                 src->feedbackExtraParams(QLCInputFeedback::MonitorValue));
+    return copy;
+}
+
+struct EntryInputBinding
+{
+    QSharedPointer<QLCInputSource> source;
+    QKeySequence                 key;
+};
+
+static EntryInputBinding readInputBlock(QXmlStreamReader& root, VCWidget* widget)
+{
+    EntryInputBinding binding;
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLQLCVCWidgetInput)
+            binding.source = widget->getXMLInput(root);
+        else if (root.name() == KXMLQLCVCWidgetKey)
+            binding.key = VCWidget::stripKeySequence(QKeySequence(root.readElementText()));
+        else
+            root.skipCurrentElement();
+    }
+    return binding;
+}
+
+static void saveInputBlock(QXmlStreamWriter* doc, const QSharedPointer<QLCInputSource>& src,
+                           const QKeySequence& key)
+{
+    if (!src.isNull() && src->isValid())
+        VCWidget::saveXMLInput(doc, src);
+    if (!key.isEmpty())
+        doc->writeTextElement(KXMLQLCVCWidgetKey, key.toString());
+}
+
 // ---- Construction ---------------------------------------------------------
 
 MultiButtonWidget::MultiButtonWidget(QWidget* parent, Doc* doc)
@@ -148,6 +220,8 @@ MultiButtonWidget::MultiButtonWidget(QWidget* parent, Doc* doc)
     setType(VCWidget::UnknownWidget);
     setCaption(QString());
     resize(QSize(120, 80));
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_TranslucentBackground, true);
 
     m_longPressTimer = new QTimer(this);
     m_longPressTimer->setSingleShot(true);
@@ -237,6 +311,9 @@ void MultiButtonWidget::setLevelConfig(const QList<LevelChannelBinding>& binding
         m_currentIndex = -1;
 
     reactivateLevelPreset();
+    clampSpreadPageIndex();
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
     recalcLayoutSize();
     update();
 }
@@ -289,7 +366,26 @@ void MultiButtonWidget::setEntries(const QList<quint32>& ids,
     cancelEntrySelectPreview();
     resetLevelWriteCache();
 
+    while (m_functionEntryInputs.size() < m_functionIds.size())
+        m_functionEntryInputs.append(QSharedPointer<QLCInputSource>());
+    while (m_functionEntryInputs.size() > m_functionIds.size())
+        m_functionEntryInputs.removeLast();
+    while (m_functionEntryKeys.size() < m_functionIds.size())
+        m_functionEntryKeys.append(QKeySequence());
+    while (m_functionEntryKeys.size() > m_functionIds.size())
+        m_functionEntryKeys.removeLast();
+    while (m_functionEntryFlash.size() < m_functionIds.size())
+        m_functionEntryFlash.append(false);
+    while (m_functionEntryFlash.size() > m_functionIds.size())
+        m_functionEntryFlash.removeLast();
+    while (m_functionEntryLabelColors.size() < m_functionIds.size())
+        m_functionEntryLabelColors.append(QColor());
+    while (m_functionEntryLabelColors.size() > m_functionIds.size())
+        m_functionEntryLabelColors.removeLast();
+
     rebuildSceneCache();
+    clampSpreadPageIndex();
+    syncEntryInputSources();
     recalcLayoutSize();
     update();
 }
@@ -326,12 +422,18 @@ void MultiButtonWidget::setWidgetLayout(MultiButtonLayout layout)
 void MultiButtonWidget::setSpreadColumns(int columns)
 {
     m_spreadColumns = qMax(0, columns);
+    clampSpreadPageIndex();
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
     recalcLayoutSize();
 }
 
 void MultiButtonWidget::setSpreadRows(int rows)
 {
     m_spreadRows = qMax(0, rows);
+    clampSpreadPageIndex();
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
     recalcLayoutSize();
 }
 
@@ -359,7 +461,16 @@ void MultiButtonWidget::setSpreadTileHeight(int height)
     recalcLayoutSize();
 }
 
-int MultiButtonWidget::spreadTileCount() const
+void MultiButtonWidget::setSpreadPages(int pages)
+{
+    m_spreadPages = qBound(0, pages, 32);
+    clampSpreadPageIndex();
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
+    recalcLayoutSize();
+}
+
+int MultiButtonWidget::totalSpreadSlots() const
 {
     const int n = entryCount();
     if (n <= 0)
@@ -367,9 +478,287 @@ int MultiButtonWidget::spreadTileCount() const
     return n + (m_addOffAtEnd ? 1 : 0);
 }
 
+int MultiButtonWidget::spreadSlotsPerPage(bool forPaging) const
+{
+    if (forPaging)
+    {
+        if (m_spreadColumns > 0)
+        {
+            const int r = m_spreadRows > 0 ? m_spreadRows : 1;
+            return m_spreadColumns * r;
+        }
+
+        const int total = totalSpreadSlots();
+        if (m_spreadPages > 0)
+            return qMax(1, (total + m_spreadPages - 1) / m_spreadPages);
+        return qMax(1, total);
+    }
+
+    int cols = 0, rows = 0;
+    resolveSpreadGrid(cols, rows);
+    return cols * rows;
+}
+
+int MultiButtonWidget::spreadPageCount() const
+{
+    if (m_layout != MultiButtonLayout::Spread)
+        return 1;
+
+    if (m_spreadPages > 0)
+        return qMax(1, m_spreadPages);
+
+    const int total = totalSpreadSlots();
+    const int spp = spreadSlotsPerPage(true);
+    if (total <= 0 || spp <= 0)
+        return 1;
+    return qMax(1, (total + spp - 1) / spp);
+}
+
+bool MultiButtonWidget::spreadPagingActive() const
+{
+    return m_layout == MultiButtonLayout::Spread && spreadPageCount() > 1;
+}
+
+void MultiButtonWidget::clampSpreadPageIndex()
+{
+    const int pc = spreadPageCount();
+    m_spreadPageIndex = qBound(0, m_spreadPageIndex, qMax(0, pc - 1));
+}
+
+void MultiButtonWidget::resizeSpreadSlotInputs()
+{
+    const int n = qMin(MBInputId::kMaxSpreadSlots, spreadSlotsPerPage(true));
+    while (m_spreadSlotInputs.size() < n)
+        m_spreadSlotInputs.append(QSharedPointer<QLCInputSource>());
+    while (m_spreadSlotInputs.size() > n)
+        m_spreadSlotInputs.removeLast();
+    while (m_spreadSlotKeys.size() < n)
+        m_spreadSlotKeys.append(QKeySequence());
+    while (m_spreadSlotKeys.size() > n)
+        m_spreadSlotKeys.removeLast();
+}
+
+int MultiButtonWidget::entryInputLocalSlot(int globalRow) const
+{
+    if (!spreadPagingActive() || globalRow < 0)
+        return globalRow;
+    const int spp = spreadSlotsPerPage(true);
+    if (spp <= 0)
+        return globalRow;
+    return globalRow % spp;
+}
+
+QSharedPointer<QLCInputSource> MultiButtonWidget::entryInputSource(int idx) const
+{
+    if (idx < 0)
+        return QSharedPointer<QLCInputSource>();
+
+    if (m_mode == MultiButtonMode::Level)
+    {
+        if (idx >= m_levelPresets.size())
+            return QSharedPointer<QLCInputSource>();
+        return m_levelPresets.at(idx).entryInput;
+    }
+
+    if (idx >= m_functionEntryInputs.size())
+        return QSharedPointer<QLCInputSource>();
+    return m_functionEntryInputs.at(idx);
+}
+
+void MultiButtonWidget::setEntryInputSource(int idx, QSharedPointer<QLCInputSource> src)
+{
+    if (idx < 0)
+        return;
+
+    if (m_mode == MultiButtonMode::Level)
+    {
+        if (idx >= m_levelPresets.size())
+            return;
+        m_levelPresets[idx].entryInput = src;
+    }
+    else
+    {
+        while (m_functionEntryInputs.size() <= idx)
+            m_functionEntryInputs.append(QSharedPointer<QLCInputSource>());
+        m_functionEntryInputs[idx] = src;
+    }
+
+    if (idx < MBInputId::kMaxEntryInputs)
+        assignInputSource(src, MBInputId::entryTrigger(idx));
+}
+
+void MultiButtonWidget::setSpreadSlotInputs(const QList<QSharedPointer<QLCInputSource>>& inputs)
+{
+    m_spreadSlotInputs = inputs;
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
+}
+
+QSharedPointer<QLCInputSource> MultiButtonWidget::spreadSlotInput(int localSlot) const
+{
+    if (localSlot < 0 || localSlot >= m_spreadSlotInputs.size())
+        return QSharedPointer<QLCInputSource>();
+    return m_spreadSlotInputs.at(localSlot);
+}
+
+void MultiButtonWidget::setSpreadSlotInput(int localSlot, QSharedPointer<QLCInputSource> src)
+{
+    if (localSlot < 0 || localSlot >= MBInputId::kMaxSpreadSlots)
+        return;
+    while (m_spreadSlotInputs.size() <= localSlot)
+        m_spreadSlotInputs.append(QSharedPointer<QLCInputSource>());
+    m_spreadSlotInputs[localSlot] = src;
+    if (localSlot < m_spreadSlotInputs.size())
+        assignInputSource(src, MBInputId::spreadSlot(localSlot));
+}
+
+QKeySequence MultiButtonWidget::entryKeySource(int idx) const
+{
+    if (idx < 0)
+        return QKeySequence();
+
+    if (m_mode == MultiButtonMode::Level)
+    {
+        if (idx >= m_levelPresets.size())
+            return QKeySequence();
+        return m_levelPresets.at(idx).entryKey;
+    }
+
+    if (idx >= m_functionEntryKeys.size())
+        return QKeySequence();
+    return m_functionEntryKeys.at(idx);
+}
+
+void MultiButtonWidget::setEntryKeySource(int idx, const QKeySequence& key)
+{
+    if (idx < 0)
+        return;
+
+    const QKeySequence stripped = stripKeySequence(key);
+
+    if (m_mode == MultiButtonMode::Level)
+    {
+        if (idx >= m_levelPresets.size())
+            return;
+        m_levelPresets[idx].entryKey = stripped;
+    }
+    else
+    {
+        while (m_functionEntryKeys.size() <= idx)
+            m_functionEntryKeys.append(QKeySequence());
+        m_functionEntryKeys[idx] = stripped;
+    }
+}
+
+void MultiButtonWidget::setSpreadSlotKeys(const QList<QKeySequence>& keys)
+{
+    m_spreadSlotKeys = keys;
+    resizeSpreadSlotInputs();
+}
+
+void MultiButtonWidget::setFunctionEntryKeys(const QList<QKeySequence>& keys)
+{
+    m_functionEntryKeys = keys;
+}
+
+QKeySequence MultiButtonWidget::spreadSlotKey(int localSlot) const
+{
+    if (localSlot < 0 || localSlot >= m_spreadSlotKeys.size())
+        return QKeySequence();
+    return m_spreadSlotKeys.at(localSlot);
+}
+
+void MultiButtonWidget::setSpreadSlotKey(int localSlot, const QKeySequence& key)
+{
+    if (localSlot < 0 || localSlot >= MBInputId::kMaxSpreadSlots)
+        return;
+    while (m_spreadSlotKeys.size() <= localSlot)
+        m_spreadSlotKeys.append(QKeySequence());
+    m_spreadSlotKeys[localSlot] = stripKeySequence(key);
+}
+
+void MultiButtonWidget::syncEntryInputSources()
+{
+    for (int s = 0; s < MBInputId::kMaxSpreadSlots; ++s)
+        setInputSource(QSharedPointer<QLCInputSource>(), MBInputId::spreadSlot(s));
+    for (int i = 0; i < MBInputId::kMaxEntryInputs; ++i)
+        setInputSource(QSharedPointer<QLCInputSource>(), MBInputId::entryTrigger(i));
+
+    resizeSpreadSlotInputs();
+    if (spreadPagingActive())
+    {
+        for (int s = 0; s < m_spreadSlotInputs.size(); ++s)
+        {
+            const QSharedPointer<QLCInputSource>& src = m_spreadSlotInputs.at(s);
+            if (!src.isNull() && src->isValid())
+                assignInputSource(src, MBInputId::spreadSlot(s));
+        }
+    }
+
+    const int n = entryCount();
+    for (int i = 0; i < n && i < MBInputId::kMaxEntryInputs; ++i)
+    {
+        const QSharedPointer<QLCInputSource> src = entryInputSource(i);
+        if (!src.isNull() && src->isValid())
+            assignInputSource(src, MBInputId::entryTrigger(i));
+    }
+
+    syncAllInputSourcePages();
+}
+
+void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
+{
+    const int total = totalSpreadSlots();
+    if (globalSlot < 0 || globalSlot >= total)
+        return;
+
+    if (m_addOffAtEnd && globalSlot == total - 1)
+    {
+        stopCurrent();
+        updateFeedback();
+        update();
+        return;
+    }
+
+    if (globalSlot < entryCount())
+        activate(globalSlot);
+}
+
+int MultiButtonWidget::spreadTileCount() const
+{
+    const int total = totalSpreadSlots();
+    if (total <= 0)
+        return 0;
+
+    if (!spreadPagingActive())
+        return total;
+
+    const int spp = spreadSlotsPerPage(true);
+    const int pageStart = m_spreadPageIndex * spp;
+    if (pageStart >= total)
+        return 0;
+    return qMin(spp, total - pageStart);
+}
+
 void MultiButtonWidget::resolveSpreadGrid(int& cols, int& rows) const
 {
-    const int total = spreadTileCount();
+    if (spreadPagingActive())
+    {
+        const int tilesOnPage = spreadTileCount();
+        if (m_spreadColumns <= 0)
+        {
+            cols = qMax(1, tilesOnPage);
+            rows = 1;
+        }
+        else
+        {
+            cols = m_spreadColumns;
+            rows = m_spreadRows > 0 ? m_spreadRows : 1;
+        }
+        return;
+    }
+
+    const int total = totalSpreadSlots();
     if (total <= 0)
     {
         cols = 1;
@@ -428,8 +817,8 @@ void MultiButtonWidget::recalcLayoutSize()
 QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
 {
     QVector<SpreadTileInfo> tiles;
-    const int total = spreadTileCount();
-    if (total <= 0)
+    const int totalAll = totalSpreadSlots();
+    if (totalAll <= 0)
         return tiles;
 
     int cols = 0, rows = 0;
@@ -439,13 +828,36 @@ QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
     const int titleH = caption().isEmpty() ? 0 : 19;
     const int y0 = titleH;
 
-    for (int slot = 0; slot < qMin(total, maxSlots); ++slot)
+    if (spreadPagingActive())
+    {
+        const int spp = spreadSlotsPerPage(true);
+        const int pageStart = m_spreadPageIndex * spp;
+
+        for (int local = 0; local < spp && (pageStart + local) < totalAll; ++local)
+        {
+            const int globalSlot = pageStart + local;
+            const int col = local % cols;
+            const int row = local / cols;
+
+            SpreadTileInfo info;
+            const bool isOff = m_addOffAtEnd && (globalSlot == totalAll - 1);
+            info.index = isOff ? -1 : globalSlot;
+            info.rect = QRect(col * (m_spreadTileWidth + m_spreadHMargin),
+                              y0 + row * (m_spreadTileHeight + m_spreadVMargin),
+                              m_spreadTileWidth,
+                              m_spreadTileHeight);
+            tiles.append(info);
+        }
+        return tiles;
+    }
+
+    for (int slot = 0; slot < qMin(totalAll, maxSlots); ++slot)
     {
         const int col = slot % cols;
         const int row = slot / cols;
 
         SpreadTileInfo info;
-        const bool isOff = m_addOffAtEnd && (slot == total - 1);
+        const bool isOff = m_addOffAtEnd && (slot == totalAll - 1);
         info.index = isOff ? -1 : slot;
         info.rect = QRect(col * (m_spreadTileWidth + m_spreadHMargin),
                           y0 + row * (m_spreadTileHeight + m_spreadVMargin),
@@ -504,6 +916,11 @@ void MultiButtonWidget::setIconForEntry(int idx, const QString& path)
     update();
 }
 
+void MultiButtonWidget::setReceiveInputOnInactiveFramePage(bool enable)
+{
+    m_receiveInputOnInactiveFramePage = enable;
+}
+
 void MultiButtonWidget::setMonitorChannelValues(bool enable)
 {
     if (m_monitorChannelValues == enable) return;
@@ -558,13 +975,14 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
 
     if (m_mode != MultiButtonMode::Level)
         return;
-    if (m_currentIndex < 0 || m_currentIndex >= m_levelPresets.size())
+    const int dmxIdx = levelDmxPresetIndex();
+    if (dmxIdx < 0 || dmxIdx >= m_levelPresets.size())
         return;
     if (m_levelChannelBindings.isEmpty())
         return;
 
-    const LevelPreset& preset = m_levelPresets.at(m_currentIndex);
-    const bool presetChanged = (m_currentIndex != m_lastWrittenPresetIndex
+    const LevelPreset& preset = m_levelPresets.at(dmxIdx);
+    const bool presetChanged = (dmxIdx != m_lastWrittenPresetIndex
                                 || m_lastWrittenPresetValues != preset.values);
     if (!presetChanged)
         return;
@@ -607,8 +1025,186 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         fc->setElapsed(0);
     }
 
-    m_lastWrittenPresetIndex  = m_currentIndex;
+    m_lastWrittenPresetIndex  = dmxIdx;
     m_lastWrittenPresetValues = preset.values;
+}
+
+bool MultiButtonWidget::entryIsFlash(int idx) const
+{
+    if (idx < 0 || idx >= entryCount())
+        return false;
+
+    if (m_mode == MultiButtonMode::Level)
+    {
+        if (idx >= m_levelPresets.size())
+            return false;
+        return m_levelPresets.at(idx).flashOnActivate;
+    }
+
+    return idx < m_functionEntryFlash.size() && m_functionEntryFlash.at(idx);
+}
+
+void MultiButtonWidget::beginFlashHold(int idx)
+{
+    if (idx < 0 || idx >= entryCount() || !entryIsFlash(idx))
+        return;
+    if (m_flashHoldIndex >= 0)
+        return;
+
+    m_restoreIndex   = m_currentIndex;
+    m_flashHoldIndex = idx;
+
+    if (m_mode == MultiButtonMode::Function)
+    {
+        Function* f = functionAt(idx);
+        if (f != nullptr && m_doc->mode() == Doc::Operate)
+            f->flash(m_doc->masterTimer(), false, false);
+    }
+    else
+    {
+        resetLevelWriteCache();
+        updateDmxRegistration();
+    }
+
+    update();
+}
+
+void MultiButtonWidget::endFlashHold()
+{
+    if (m_flashHoldIndex < 0)
+        return;
+
+    const int held = m_flashHoldIndex;
+    m_flashHoldIndex = -1;
+    const int restore = m_restoreIndex;
+    m_restoreIndex = -1;
+
+    if (m_mode == MultiButtonMode::Function)
+    {
+        Function* f = functionAt(held);
+        if (f != nullptr && m_doc->mode() == Doc::Operate)
+            f->unFlash(m_doc->masterTimer());
+    }
+    else
+    {
+        resetLevelWriteCache();
+        if (restore >= 0 && restore < entryCount())
+            activate(restore);
+        else
+            stopCurrent();
+    }
+
+    update();
+}
+
+int MultiButtonWidget::levelDmxPresetIndex() const
+{
+    if (m_flashHoldIndex >= 0 && m_flashHoldIndex < m_levelPresets.size())
+        return m_flashHoldIndex;
+    return m_currentIndex;
+}
+
+/** Flash emblem (same asset as VCButton). Coordinates are local to the tile rect. */
+static void drawFlashEmblem(QPainter& p, const QRect& rect)
+{
+    const QPixmap flashPx(QStringLiteral(":/flash.png"));
+    if (flashPx.isNull())
+        return;
+
+    const int size = qBound(10, qMin(rect.width(), rect.height()) / 4, 16);
+    const QPixmap scaled = flashPx.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    p.drawPixmap(rect.right() - scaled.width() - 2, rect.top() + 2, scaled);
+}
+
+/** VC Button style #3 borders (vcbutton.cpp paintEvent). Local coords (0,0) = top-left of tile. */
+static void drawVcButtonStyle3Border(QPainter& painter, const QRect& rect,
+                                     bool active, bool monitoring)
+{
+    painter.setBrush(Qt::NoBrush);
+    const int w = rect.width();
+    const int h = rect.height();
+
+    if (!active)
+    {
+        painter.setPen(QPen(QColor(160, 160, 160, 255), 3));
+        painter.drawRoundedRect(1, 1, w - 2, h - 2, 3, 3);
+        return;
+    }
+
+    const int borderWidth = (w > 80) ? 3 : 2;
+    painter.setPen(QPen(QColor(20, 20, 20, 255), borderWidth * 2));
+    painter.drawRoundedRect(borderWidth, borderWidth,
+                            w - borderWidth * 2, h - borderWidth * 2,
+                            borderWidth + 1, borderWidth + 1);
+    if (monitoring)
+        painter.setPen(QPen(QColor(255, 170, 0, 255), borderWidth));
+    else
+        painter.setPen(QPen(QColor(0, 230, 0, 255), borderWidth));
+    painter.drawRoundedRect(borderWidth, borderWidth,
+                            w - borderWidth * 2, h - borderWidth * 2,
+                            borderWidth, borderWidth);
+}
+
+/** Same paint sequence as VCButton::paintEvent — Fusion style + CE_PushButton + style #3. */
+static void paintVcButtonSurface(QPainter& p, const QWidget* paletteHost,
+                                 const QRect& rect, const QColor& buttonColorOverride,
+                                 bool sunken, bool monitoring, bool drawStyle3Border)
+{
+    QStyleOptionButton opt;
+    opt.initFrom(paletteHost);
+    opt.rect = rect;
+    opt.features = QStyleOptionButton::None;
+    opt.state = QStyle::State_Enabled;
+    opt.state |= sunken ? QStyle::State_Sunken : QStyle::State_Raised;
+
+    if (buttonColorOverride.isValid())
+    {
+        QPalette pal = opt.palette;
+        pal.setColor(QPalette::Button, buttonColorOverride);
+        opt.palette = pal;
+    }
+
+    QStyle* const btnStyle = AppUtil::saneStyle();
+    btnStyle->drawControl(QStyle::CE_PushButton, &opt, &p,
+                          const_cast<QWidget*>(paletteHost));
+
+    if (drawStyle3Border)
+        drawVcButtonStyle3Border(p, rect, sunken, monitoring);
+}
+
+void MultiButtonWidget::paintTileBackground(QPainter& p, const QRect& rect, int tileIndex,
+                                            bool isActive, bool isPressed, bool monitoring,
+                                            QColor& outBg) const
+{
+    QColor buttonColor;
+    bool hasColorOverride = false;
+
+    if (tileIndex >= 0
+        && m_mode == MultiButtonMode::Level
+        && tileIndex < m_levelPresets.size())
+    {
+        const QColor presetColor = m_levelPresets.at(tileIndex).color;
+        if (presetColor.isValid())
+        {
+            buttonColor = presetColor;
+            hasColorOverride = true;
+        }
+    }
+    else if (tileIndex < 0)
+    {
+        buttonColor = palette().mid().color().lighter(130);
+        hasColorOverride = true;
+    }
+
+    if (!hasColorOverride)
+        outBg = defaultTileBackground();
+    else
+        outBg = buttonColor;
+
+    const bool sunken = isPressed || isActive;
+    paintVcButtonSurface(p, this, rect,
+                         hasColorOverride ? buttonColor : QColor(),
+                         sunken, monitoring, true);
 }
 
 // ---- Helpers --------------------------------------------------------------
@@ -683,35 +1279,6 @@ QPixmap MultiButtonWidget::iconForEntry(int idx) const
 static QColor contrastTextOn(const QColor& bg)
 {
     return (bg.lightness() > 128) ? QColor(Qt::black) : QColor(Qt::white);
-}
-
-/** VC Button style #3 borders (see vcbutton.cpp). Coordinates are local to tile (0,0). */
-static void drawVcButtonBorder(QPainter& painter, const QRect& rect,
-                               bool active, bool monitoring)
-{
-    painter.setBrush(Qt::NoBrush);
-    const int w = rect.width();
-    const int h = rect.height();
-
-    if (!active)
-    {
-        painter.setPen(QPen(QColor(160, 160, 160, 255), 3));
-        painter.drawRoundedRect(1, 1, w - 2, h - 2, 3, 3);
-        return;
-    }
-
-    const int borderWidth = (w > 80) ? 3 : 2;
-    painter.setPen(QPen(QColor(20, 20, 20, 255), borderWidth * 2));
-    painter.drawRoundedRect(borderWidth, borderWidth,
-                            w - borderWidth * 2, h - borderWidth * 2,
-                            borderWidth + 1, borderWidth + 1);
-    if (monitoring)
-        painter.setPen(QPen(QColor(255, 170, 0, 255), borderWidth));
-    else
-        painter.setPen(QPen(QColor(0, 230, 0, 255), borderWidth));
-    painter.drawRoundedRect(borderWidth, borderWidth,
-                            w - borderWidth * 2, h - borderWidth * 2,
-                            borderWidth, borderWidth);
 }
 
 static QColor contrastRingOn(const QColor& bg)
@@ -1074,7 +1641,8 @@ void MultiButtonWidget::onAutomationTrigger()
 
     ++m_automationPulseCounter;
     const int N = qMax(1, profile->multiplier);
-    if (m_automationPulseCounter % N != 0)
+    const int phase = ((profile->beatOffset % N) + N) % N;
+    if ((m_automationPulseCounter % N) != phase)
         return;
 
     advanceAutomation();
@@ -1095,6 +1663,8 @@ QVector<int> MultiButtonWidget::buildAllowedAutomationSlots(
     const int n = entryCount();
     for (int i = 0; i < n; ++i)
     {
+        if (entryIsFlash(i))
+            continue;
         if ((profile.excludeMask & (1u << i)) == 0)
             allowed.append(i);
     }
@@ -1114,14 +1684,18 @@ void MultiButtonWidget::advanceAutomation()
         return;
 
     int pos = 0;
+    bool currentInAllowed = false;
     for (int i = 0; i < allowed.size(); ++i)
     {
         if (allowed.at(i) == m_currentIndex)
         {
             pos = i;
+            currentInAllowed = true;
             break;
         }
     }
+    if (!currentInAllowed)
+        pos = allowed.size() - 1;
 
     int newPos = pos;
     switch (profile->mode)
@@ -1161,6 +1735,9 @@ void MultiButtonWidget::advanceAutomation()
 
 void MultiButtonWidget::activate(int idx)
 {
+    if (entryIsFlash(idx))
+        return;
+
     if (!m_visualOnly && idx == m_currentIndex) return;
 
     stopCurrent();
@@ -1318,6 +1895,11 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
     }
     else if (mode == Doc::Operate)
     {
+        syncAllInputSourcePages();
+        syncAutomationSuspendDefault();
+        m_triggerLastValue    = 0;
+        m_automationLastValue = 0;
+
         reactivateLevelPreset();
 
         if (m_monitorChannelValues)
@@ -1345,6 +1927,10 @@ void MultiButtonWidget::mousePressEvent(QMouseEvent* e)
         if (m_layout == MultiButtonLayout::Spread)
         {
             m_pressTileIndex = spreadHitTest(e->pos());
+            if (m_pressTileIndex >= 0 && entryIsFlash(m_pressTileIndex))
+                beginFlashHold(m_pressTileIndex);
+            else if (m_pressTileIndex >= -1)
+                m_longPressTimer->start(m_longPressMs);
             update();
         }
         else
@@ -1385,13 +1971,20 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
 
         if (m_layout == MultiButtonLayout::Spread)
         {
-            const int hit = spreadHitTest(e->pos());
-            if (!m_longFired && hit == m_pressTileIndex && hit != -2)
+            if (m_flashHoldIndex >= 0)
             {
-                if (hit < 0)
-                    stopCurrent();
-                else
-                    activate(hit);
+                endFlashHold();
+            }
+            else
+            {
+                const int hit = spreadHitTest(e->pos());
+                if (!m_longFired && hit == m_pressTileIndex && hit != -2)
+                {
+                    if (hit < 0)
+                        stopCurrent();
+                    else if (!entryIsFlash(hit))
+                        activate(hit);
+                }
             }
             m_pressTileIndex = -2;
         }
@@ -1420,7 +2013,7 @@ void MultiButtonWidget::clearPressTracking()
 
 void MultiButtonWidget::slotLongPressFired()
 {
-    if (m_layout != MultiButtonLayout::Single)
+    if (m_layout != MultiButtonLayout::Single && m_layout != MultiButtonLayout::Spread)
         return;
 
     m_longFired = true;
@@ -1430,7 +2023,8 @@ void MultiButtonWidget::slotLongPressFired()
 
 void MultiButtonWidget::contextMenuEvent(QContextMenuEvent* e)
 {
-    if (mode() == Doc::Operate && m_layout == MultiButtonLayout::Single)
+    if (mode() == Doc::Operate
+        && (m_layout == MultiButtonLayout::Single || m_layout == MultiButtonLayout::Spread))
     {
         showPopupMenu(e->globalPos());
         e->accept();
@@ -1522,6 +2116,8 @@ void MultiButtonWidget::syncEntrySelectInputOutput(uchar rawValue)
 
 int MultiButtonWidget::displayedEntryIndex() const
 {
+    if (m_flashHoldIndex >= 0)
+        return m_flashHoldIndex;
     if (m_entrySelectPreviewActive)
         return m_entrySelectPreviewIndex;
     return m_currentIndex;
@@ -1737,11 +2333,122 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
 
 // ---- External input -------------------------------------------------------
 
+void MultiButtonWidget::setPage(int pNum)
+{
+    VCWidget::setPage(pNum);
+    syncAllInputSourcePages();
+}
+
+void MultiButtonWidget::showEvent(QShowEvent* event)
+{
+    VCWidget::showEvent(event);
+    if (m_doc != nullptr && m_doc->mode() == Doc::Operate)
+        syncAllInputSourcePages();
+}
+
+void MultiButtonWidget::assignInputSource(const QSharedPointer<QLCInputSource>& src, quint8 id)
+{
+    if (!src.isNull() && src->isValid())
+        src->setPage(quint16(page()));
+    setInputSource(src, id);
+}
+
+void MultiButtonWidget::syncAllInputSourcePages()
+{
+    const QList<quint8> globalIds = {
+        triggerInputSourceId,
+        popupInputSourceId,
+        automationInputSourceId,
+        presetChooseInputSourceId,
+        entrySelectInputSourceId,
+        spreadPageInputSourceId
+    };
+
+    for (quint8 id : globalIds)
+    {
+        QSharedPointer<QLCInputSource> src = inputSource(id);
+        if (!src.isNull() && src->isValid())
+            src->setPage(quint16(page()));
+    }
+
+    for (int s = 0; s < MBInputId::kMaxSpreadSlots; ++s)
+    {
+        QSharedPointer<QLCInputSource> src = inputSource(MBInputId::spreadSlot(s));
+        if (!src.isNull() && src->isValid())
+            src->setPage(quint16(page()));
+    }
+
+    for (int i = 0; i < MBInputId::kMaxEntryInputs; ++i)
+    {
+        QSharedPointer<QLCInputSource> src = inputSource(MBInputId::entryTrigger(i));
+        if (!src.isNull() && src->isValid())
+            src->setPage(quint16(page()));
+    }
+}
+
+void MultiButtonWidget::syncAutomationSuspendDefault()
+{
+    const QSharedPointer<QLCInputSource> src = inputSource(presetChooseInputSourceId);
+    if (!src.isNull() && src->isValid())
+        m_automationSuspended = true;
+}
+
+bool MultiButtonWidget::isOnInactiveFrameSubPage() const
+{
+    if (m_doc == nullptr || m_doc->mode() != Doc::Operate)
+        return false;
+    if (isEnabled() || m_disableState)
+        return false;
+
+    for (QWidget* w = parentWidget(); w != nullptr; w = w->parentWidget())
+    {
+        const VCFrame* frame = qobject_cast<const VCFrame*>(w);
+        if (frame != nullptr && frame->multipageMode())
+            return true;
+    }
+    return false;
+}
+
+bool MultiButtonWidget::acceptsBackgroundInput() const
+{
+    return m_receiveInputOnInactiveFramePage && isOnInactiveFrameSubPage();
+}
+
+void MultiButtonWidget::sendInputFeedback(uchar value,
+                                          const QSharedPointer<QLCInputSource>& src)
+{
+    if (src.isNull() || !src->isValid())
+        return;
+
+    if (src->needsUpdate())
+        src->updateOuputValue(value);
+
+    if (acceptsInput())
+    {
+        sendFeedback(value, src);
+        return;
+    }
+
+    if (!acceptsBackgroundInput())
+        return;
+
+    const QVariant extra = src->feedbackExtraParams(QLCInputFeedback::UpperValue);
+    m_doc->inputOutputMap()->sendFeedBack(
+        src->universe(), src->channel(), value,
+        extra.isValid() ? extra : src->feedbackExtraParams(QLCInputFeedback::UpperValue));
+}
+
+void MultiButtonWidget::sendPresetChooseFeedback(uchar value)
+{
+    sendInputFeedback(value, inputSource(presetChooseInputSourceId));
+}
+
 void MultiButtonWidget::handlePresetChooseInput(uchar value)
 {
     if (value == 0)
     {
         m_automationSuspended = true;
+        sendPresetChooseFeedback(0);
         return;
     }
 
@@ -1751,13 +2458,57 @@ void MultiButtonWidget::handlePresetChooseInput(uchar value)
         return;
 
     const int idx = qBound(0, int(value) - 1, m_automationProfiles.size() - 1);
+    const bool profileChanged = (idx != m_activeAutomationProfile);
+
     m_activeAutomationProfile = idx;
     m_automationPulseCounter = 0;
+
+    const QVector<int> allowed = buildAllowedAutomationSlots(m_automationProfiles.at(idx));
+    if (!allowed.isEmpty() && profileChanged)
+    {
+        bool currentAllowed = false;
+        for (int slot : allowed)
+        {
+            if (slot == m_currentIndex)
+            {
+                currentAllowed = true;
+                break;
+            }
+        }
+
+        if (!currentAllowed)
+        {
+            const int snap = allowed.first();
+            if (snap < 0)
+                stopCurrent();
+            else
+                activate(snap);
+        }
+    }
+
+    sendPresetChooseFeedback(value);
+    updateFeedback();
+    update();
+}
+
+void MultiButtonWidget::handleSpreadPageInput(uchar value)
+{
+    if (!spreadPagingActive())
+        return;
+
+    const int pc = spreadPageCount();
+    const int next = qBound(0, int(value), pc - 1);
+    if (next == m_spreadPageIndex)
+        return;
+
+    m_spreadPageIndex = next;
+    recalcLayoutSize();
+    update();
 }
 
 void MultiButtonWidget::handleEntrySelectInput(uchar value)
 {
-    if (entryCount() == 0)
+    if (entryCount() == 0 || value == 0)
         return;
 
     QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
@@ -1789,20 +2540,34 @@ void MultiButtonWidget::handleEntrySelectInput(uchar value)
 
 void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
-    if (!acceptsInput()) return;
+    const bool visibleInput = acceptsInput();
+    const bool backgroundInput = acceptsBackgroundInput();
+    if (!visibleInput && !backgroundInput)
+        return;
 
-    quint32 pagedCh = (page() << 16) | channel;
+    const quint32 pagedCh = (quint32(page()) << 16) | (channel & 0xFFFF);
 
     if (checkInputSource(universe, pagedCh, value, sender(), triggerInputSourceId))
     {
-        if (value > 0)
+        if (m_triggerLastValue == 0 && value > 0)
             cycleNext();
+        if (value == 0)
+            m_triggerLastValue = 0;
+        else if (value > 0)
+            m_triggerLastValue = value;
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), automationInputSourceId))
     {
-        if (value > 0 && m_automationEnabled && !m_automationSuspended)
+        if (m_automationLastValue == 0 && value > 0
+            && m_automationEnabled && !m_automationSuspended)
+        {
             onAutomationTrigger();
+        }
+        if (value == 0)
+            m_automationLastValue = 0;
+        else if (value > 0)
+            m_automationLastValue = value;
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), presetChooseInputSourceId))
@@ -1815,16 +2580,116 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
         handleEntrySelectInput(value);
         return;
     }
+    if (checkInputSource(universe, pagedCh, value, sender(), spreadPageInputSourceId))
+    {
+        handleSpreadPageInput(value);
+        return;
+    }
+
     if (checkInputSource(universe, pagedCh, value, sender(), popupInputSourceId))
     {
-        if (value > 0) showPopupMenu(mapToGlobal(rect().center()));
+        if (value > 0)
+            showPopupMenu(mapToGlobal(rect().center()));
         return;
+    }
+
+    if (!visibleInput)
+        return;
+
+    if (spreadPagingActive())
+    {
+        const int spp = spreadSlotsPerPage(true);
+        for (int slot = 0; slot < spp && slot < m_spreadSlotInputs.size(); ++slot)
+        {
+            if (checkInputSource(universe, pagedCh, value, sender(), MBInputId::spreadSlot(slot)))
+            {
+                if (value > 0)
+                    activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
+                return;
+            }
+        }
+    }
+
+    for (int i = 0; i < entryCount() && i < MBInputId::kMaxEntryInputs; ++i)
+    {
+        if (checkInputSource(universe, pagedCh, value, sender(), MBInputId::entryTrigger(i)))
+        {
+            if (entryIsFlash(i))
+            {
+                if (value > 0)
+                    beginFlashHold(i);
+                else
+                    endFlashHold();
+            }
+            else if (value > 0)
+            {
+                activate(i);
+            }
+            return;
+        }
+    }
+
+}
+
+void MultiButtonWidget::slotKeyPressed(const QKeySequence& keySequence)
+{
+    if (!acceptsInput())
+        return;
+
+    const QKeySequence key = stripKeySequence(keySequence);
+    if (key.isEmpty())
+        return;
+
+    if (spreadPagingActive())
+    {
+        const int spp = spreadSlotsPerPage(true);
+        for (int slot = 0; slot < spp && slot < m_spreadSlotKeys.size(); ++slot)
+        {
+            if (stripKeySequence(m_spreadSlotKeys.at(slot)) == key)
+            {
+                activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
+                return;
+            }
+        }
+    }
+
+    for (int i = 0; i < entryCount() && i < MBInputId::kMaxEntryInputs; ++i)
+    {
+        if (stripKeySequence(entryKeySource(i)) == key)
+        {
+            activate(i);
+            return;
+        }
     }
 }
 
 void MultiButtonWidget::updateFeedback()
 {
     sendFeedback(m_currentIndex >= 0 ? 255 : 0, triggerInputSourceId);
+
+    if (spreadPagingActive())
+        sendFeedback(uchar(m_spreadPageIndex), spreadPageInputSourceId);
+
+    if (spreadPagingActive() && m_currentIndex >= 0)
+    {
+        const int spp = spreadSlotsPerPage(true);
+        if (spp > 0)
+        {
+            const int local = m_currentIndex % spp;
+            if (local >= 0 && local < m_spreadSlotInputs.size())
+            {
+                const auto slotSrc = m_spreadSlotInputs.at(local);
+                if (!slotSrc.isNull() && slotSrc->isValid())
+                    sendFeedback(255, MBInputId::spreadSlot(local));
+            }
+        }
+    }
+
+    for (int i = 0; i < entryCount() && i < MBInputId::kMaxEntryInputs; ++i)
+    {
+        if (i == m_currentIndex)
+            sendFeedback(255, MBInputId::entryTrigger(i));
+    }
 
     QSharedPointer<QLCInputSource> src = inputSource(entrySelectInputSourceId);
     if (src.isNull() || !src->isValid() || !src->needsUpdate())
@@ -1860,6 +2725,7 @@ void MultiButtonWidget::editProperties()
         m_longPressMs,
         m_addOffAtEnd,
         m_monitorChannelValues,
+        m_receiveInputOnInactiveFramePage,
         m_layout,
         m_spreadColumns,
         m_spreadRows,
@@ -1867,6 +2733,7 @@ void MultiButtonWidget::editProperties()
         m_spreadVMargin,
         m_spreadTileWidth,
         m_spreadTileHeight,
+        m_spreadPages,
         m_automationEnabled,
         m_automationProfiles,
         m_activeAutomationProfile,
@@ -1875,6 +2742,13 @@ void MultiButtonWidget::editProperties()
         inputSource(automationInputSourceId),
         inputSource(presetChooseInputSourceId),
         inputSource(entrySelectInputSourceId),
+        inputSource(spreadPageInputSourceId),
+        m_functionEntryInputs,
+        m_functionEntryKeys,
+        m_spreadSlotInputs,
+        m_spreadSlotKeys,
+        m_functionEntryFlash,
+        m_functionEntryLabelColors,
         page(),
         this);
 
@@ -1882,10 +2756,29 @@ void MultiButtonWidget::editProperties()
 
     setWidgetMode(dlg.widgetMode());
     setEntries(dlg.functionIds(), dlg.functionLabels(), dlg.iconPaths());
+    m_functionEntryFlash = dlg.functionEntryFlash();
+    m_functionEntryLabelColors = dlg.functionEntryLabelColors();
+    while (m_functionEntryFlash.size() < m_functionIds.size())
+        m_functionEntryFlash.append(false);
+    while (m_functionEntryFlash.size() > m_functionIds.size())
+        m_functionEntryFlash.removeLast();
+    while (m_functionEntryLabelColors.size() < m_functionIds.size())
+        m_functionEntryLabelColors.append(QColor());
+    while (m_functionEntryLabelColors.size() > m_functionIds.size())
+        m_functionEntryLabelColors.removeLast();
+    m_functionEntryInputs = dlg.functionEntryInputs();
+    m_functionEntryKeys     = dlg.functionEntryKeys();
+    for (int i = 0; i < m_functionEntryInputs.size(); ++i)
+        setEntryInputSource(i, m_functionEntryInputs.at(i));
+    for (int i = 0; i < m_functionEntryKeys.size(); ++i)
+        setEntryKeySource(i, m_functionEntryKeys.at(i));
     setLevelConfig(dlg.levelChannelBindings(), dlg.levelPresets());
+    setSpreadSlotInputs(dlg.spreadSlotInputs());
+    setSpreadSlotKeys(dlg.spreadSlotKeys());
     setLongPressMs(dlg.longPressMs());
     setAddOffAtEnd(dlg.addOffAtEnd());
     setMonitorChannelValues(dlg.monitorChannelValues());
+    setReceiveInputOnInactiveFramePage(dlg.receiveInputOnInactiveFramePage());
     setWidgetLayout(dlg.widgetLayout());
     setSpreadColumns(dlg.spreadColumns());
     setSpreadRows(dlg.spreadRows());
@@ -1893,13 +2786,18 @@ void MultiButtonWidget::editProperties()
     setSpreadVMargin(dlg.spreadVMargin());
     setSpreadTileWidth(dlg.spreadTileWidth());
     setSpreadTileHeight(dlg.spreadTileHeight());
+    setSpreadPages(dlg.spreadPages());
     setAutomationEnabled(dlg.automationEnabled());
     setAutomationProfiles(dlg.automationProfiles(), dlg.activeAutomationProfile());
-    setInputSource(dlg.triggerInputSource(), triggerInputSourceId);
-    setInputSource(dlg.popupInputSource(), popupInputSourceId);
-    setInputSource(dlg.automationInputSource(), automationInputSourceId);
-    setInputSource(dlg.presetChooseInputSource(), presetChooseInputSourceId);
-    setInputSource(dlg.entrySelectInputSource(), entrySelectInputSourceId);
+    assignInputSource(dlg.triggerInputSource(), triggerInputSourceId);
+    assignInputSource(dlg.popupInputSource(), popupInputSourceId);
+    assignInputSource(dlg.automationInputSource(), automationInputSourceId);
+    assignInputSource(dlg.presetChooseInputSource(), presetChooseInputSourceId);
+    assignInputSource(dlg.entrySelectInputSource(), entrySelectInputSourceId);
+    assignInputSource(dlg.spreadPageInputSource(), spreadPageInputSourceId);
+    syncAutomationSuspendDefault();
+    m_triggerLastValue    = 0;
+    m_automationLastValue = 0;
     m_doc->setModified();
     update();
 }
@@ -1917,10 +2815,26 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     }
     copy->setWidgetMode(m_mode);
     copy->setEntries(m_functionIds, m_functionLabels, m_iconPaths);
-    copy->setLevelConfig(m_levelChannelBindings, m_levelPresets);
+    copy->m_functionEntryKeys = m_functionEntryKeys;
+    for (int i = 0; i < m_functionEntryInputs.size(); ++i)
+        copy->setEntryInputSource(i, cloneInputSource(m_functionEntryInputs.at(i)));
+    for (int i = 0; i < m_functionEntryKeys.size(); ++i)
+        copy->setEntryKeySource(i, m_functionEntryKeys.at(i));
+
+    QList<LevelPreset> clonedLevelPresets = m_levelPresets;
+    for (LevelPreset& preset : clonedLevelPresets)
+        preset.entryInput = cloneInputSource(preset.entryInput);
+    copy->setLevelConfig(m_levelChannelBindings, clonedLevelPresets);
+
+    QList<QSharedPointer<QLCInputSource>> clonedSpreadInputs;
+    for (const QSharedPointer<QLCInputSource>& src : m_spreadSlotInputs)
+        clonedSpreadInputs.append(cloneInputSource(src));
+    copy->setSpreadSlotInputs(clonedSpreadInputs);
+    copy->setSpreadSlotKeys(m_spreadSlotKeys);
     copy->setLongPressMs(m_longPressMs);
     copy->setAddOffAtEnd(m_addOffAtEnd);
     copy->setMonitorChannelValues(m_monitorChannelValues);
+    copy->setReceiveInputOnInactiveFramePage(m_receiveInputOnInactiveFramePage);
     copy->setWidgetLayout(m_layout);
     copy->setSpreadColumns(m_spreadColumns);
     copy->setSpreadRows(m_spreadRows);
@@ -1928,13 +2842,13 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setSpreadVMargin(m_spreadVMargin);
     copy->setSpreadTileWidth(m_spreadTileWidth);
     copy->setSpreadTileHeight(m_spreadTileHeight);
+    copy->setSpreadPages(m_spreadPages);
+    copy->m_spreadPageIndex = m_spreadPageIndex;
     copy->setAutomationEnabled(m_automationEnabled);
     copy->setAutomationProfiles(m_automationProfiles, m_activeAutomationProfile);
-    copy->setInputSource(inputSource(triggerInputSourceId), triggerInputSourceId);
-    copy->setInputSource(inputSource(popupInputSourceId),   popupInputSourceId);
-    copy->setInputSource(inputSource(automationInputSourceId), automationInputSourceId);
-    copy->setInputSource(inputSource(presetChooseInputSourceId), presetChooseInputSourceId);
-    copy->setInputSource(inputSource(entrySelectInputSourceId), entrySelectInputSourceId);
+    copy->m_functionEntryFlash = m_functionEntryFlash;
+    copy->m_functionEntryLabelColors = m_functionEntryLabelColors;
+    copy->syncEntryInputSources();
     return copy;
 }
 
@@ -2049,7 +2963,7 @@ MultiButtonWidget::pasteablePropertyGroups() const
     groups << qMakePair(PasteSpecific2, tr("Entries — Channels (level bindings)"));
     groups << qMakePair(PasteSpecific3, tr("Entries — Function assignments"));
     groups << qMakePair(PasteSpecific4, tr("Entries — Level DMX values"));
-    groups << qMakePair(PasteSpecific5, tr("Layout (Single/Spread, columns, tile size)"));
+    groups << qMakePair(PasteSpecific5, tr("Layout (Single/Spread, columns, pages, tile size)"));
     groups << qMakePair(PasteSpecific6, tr("Automation (profiles, enabled, active profile)"));
     groups << qMakePair(PasteSpecific7, tr("General (long-press, off at end, monitor)"));
     return groups;
@@ -2088,6 +3002,7 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         setSpreadVMargin(src->m_spreadVMargin);
         setSpreadTileWidth(src->m_spreadTileWidth);
         setSpreadTileHeight(src->m_spreadTileHeight);
+        setSpreadPages(src->m_spreadPages);
     }
 
     if (flags & PasteSpecific6)
@@ -2101,6 +3016,7 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         setLongPressMs(src->m_longPressMs);
         setAddOffAtEnd(src->m_addOffAtEnd);
         setMonitorChannelValues(src->m_monitorChannelValues);
+        setReceiveInputOnInactiveFramePage(src->m_receiveInputOnInactiveFramePage);
     }
 
     VCWidget::applyPropertiesFrom(source, flags);
@@ -2118,6 +3034,7 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["longPressMs"]          = m_longPressMs;
     obj["addOffAtEnd"]          = m_addOffAtEnd;
     obj["monitorChannelValues"] = m_monitorChannelValues;
+    obj["receiveInputOnInactiveFramePage"] = m_receiveInputOnInactiveFramePage;
 
     QJsonObject spread;
     spread["enabled"]   = (m_layout == MultiButtonLayout::Spread);
@@ -2127,6 +3044,33 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     spread["vMargin"]   = m_spreadVMargin;
     spread["tileWidth"]  = m_spreadTileWidth;
     spread["tileHeight"] = m_spreadTileHeight;
+    spread["pages"]      = m_spreadPages;
+    if (!m_spreadSlotInputs.isEmpty() || !m_spreadSlotKeys.isEmpty())
+    {
+        QJsonArray slotArr;
+        const int n = qMax(m_spreadSlotInputs.size(), m_spreadSlotKeys.size());
+        for (int s = 0; s < n; ++s)
+        {
+            const QSharedPointer<QLCInputSource> src =
+                (s < m_spreadSlotInputs.size()) ? m_spreadSlotInputs.at(s)
+                                                : QSharedPointer<QLCInputSource>();
+            const QKeySequence key = (s < m_spreadSlotKeys.size()) ? m_spreadSlotKeys.at(s)
+                                                                   : QKeySequence();
+            if ((src.isNull() || !src->isValid()) && key.isEmpty())
+                continue;
+            QJsonObject io;
+            if (!src.isNull() && src->isValid())
+            {
+                io["universe"] = (int) src->universe();
+                io["channel"]  = (int) src->channel();
+            }
+            if (!key.isEmpty())
+                io["key"] = key.toString();
+            slotArr.append(io);
+        }
+        if (!slotArr.isEmpty())
+            spread["slotInputs"] = slotArr;
+    }
     obj["spread"] = spread;
 
     obj["automationEnabled"]      = m_automationEnabled;
@@ -2141,6 +3085,7 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
         po["stepMax"]      = ap.stepMax;
         po["multiplier"]   = ap.multiplier;
         po["excludeMask"]  = QString::number(ap.excludeMask, 16);
+        po["beatOffset"]   = ap.beatOffset;
         autoProfiles.append(po);
     }
     obj["automationProfiles"] = autoProfiles;
@@ -2153,6 +3098,13 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
         entry["name"]     = f ? f->name() : QString();
         entry["label"]    = m_functionLabels.value(i);
         entry["iconPath"] = m_iconPaths.value(i);
+        if (i < m_functionEntryFlash.size() && m_functionEntryFlash.at(i))
+            entry["flash"] = true;
+        if (i < m_functionEntryLabelColors.size()
+            && m_functionEntryLabelColors.at(i).isValid())
+        {
+            entry["labelColor"] = m_functionEntryLabelColors.at(i).name(QColor::HexRgb);
+        }
         funcs.append(entry);
     }
     obj["entries"] = funcs;
@@ -2182,13 +3134,46 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
             po["color"] = preset.color.name(QColor::HexRgb);
         if (preset.hideName)
             po["hideName"] = true;
+        if (preset.flashOnActivate)
+            po["flash"] = true;
+        if (preset.labelColor.isValid())
+            po["labelColor"] = preset.labelColor.name(QColor::HexRgb);
         QJsonArray vals;
         for (quint8 v : preset.values)
             vals.append(v);
         po["values"] = vals;
+        if (!preset.entryInput.isNull() && preset.entryInput->isValid())
+        {
+            po["inputUniverse"] = (int) preset.entryInput->universe();
+            po["inputChannel"]  = (int) preset.entryInput->channel();
+        }
+        if (!preset.entryKey.isEmpty())
+            po["inputKey"] = preset.entryKey.toString();
         presetArr.append(po);
     }
     obj["levelPresets"] = presetArr;
+
+    QJsonArray funcInArr;
+    for (int i = 0; i < m_functionEntryInputs.size(); ++i)
+    {
+        const QSharedPointer<QLCInputSource>& src = m_functionEntryInputs.at(i);
+        const QKeySequence key = (i < m_functionEntryKeys.size())
+                                     ? m_functionEntryKeys.at(i)
+                                     : QKeySequence();
+        if ((src.isNull() || !src->isValid()) && key.isEmpty())
+            continue;
+        QJsonObject io;
+        if (!src.isNull() && src->isValid())
+        {
+            io["universe"] = (int) src->universe();
+            io["channel"]  = (int) src->channel();
+        }
+        if (!key.isEmpty())
+            io["key"] = key.toString();
+        funcInArr.append(io);
+    }
+    if (!funcInArr.isEmpty())
+        obj["functionEntryInputs"] = funcInArr;
 }
 
 void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
@@ -2199,6 +3184,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_longPressMs          = obj["longPressMs"].toInt(500);
     m_addOffAtEnd          = obj["addOffAtEnd"].toBool(false);
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
+    m_receiveInputOnInactiveFramePage = obj["receiveInputOnInactiveFramePage"].toBool(false);
 
     if (obj.contains("spread"))
     {
@@ -2211,6 +3197,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         m_spreadVMargin    = spread["vMargin"].toInt(4);
         m_spreadTileWidth  = spread["tileWidth"].toInt(80);
         m_spreadTileHeight = spread["tileHeight"].toInt(60);
+        m_spreadPages      = spread["pages"].toInt(0);
     }
 
     m_automationEnabled = obj["automationEnabled"].toBool(false);
@@ -2225,7 +3212,10 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         ap.stepMin      = ao["stepMin"].toInt(1);
         ap.stepMax      = ao["stepMax"].toInt(1);
         ap.multiplier   = qMax(1, ao["multiplier"].toInt(1));
-        ap.excludeMask  = ao["excludeMask"].toString().toUInt(nullptr, 0);
+        ap.beatOffset   = ao["beatOffset"].toInt(0);
+        ap.excludeMask  = ao["excludeMask"].toString().toUInt(nullptr, 16);
+        const int maxOff = qMax(0, ap.multiplier - 1);
+        ap.beatOffset = qBound(0, ap.beatOffset, maxOff);
         loadedAuto.append(ap);
     }
     setAutomationProfiles(loadedAuto, m_activeAutomationProfile);
@@ -2242,6 +3232,32 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         icons  << e["iconPath"].toString();
     }
     setEntries(ids, labels, icons);
+
+    QList<bool> loadedFlash;
+    QList<QColor> loadedLabelColors;
+    for (const QJsonValue& v : obj["entries"].toArray())
+    {
+        QJsonObject e = v.toObject();
+        loadedFlash.append(e["flash"].toBool(false));
+        const QString lc = e["labelColor"].toString();
+        if (!lc.isEmpty())
+        {
+            const QColor c(lc);
+            loadedLabelColors.append(c.isValid() ? c : QColor());
+        }
+        else
+            loadedLabelColors.append(QColor());
+    }
+    m_functionEntryFlash = loadedFlash;
+    m_functionEntryLabelColors = loadedLabelColors;
+    while (m_functionEntryFlash.size() < m_functionIds.size())
+        m_functionEntryFlash.append(false);
+    while (m_functionEntryFlash.size() > m_functionIds.size())
+        m_functionEntryFlash.removeLast();
+    while (m_functionEntryLabelColors.size() < m_functionIds.size())
+        m_functionEntryLabelColors.append(QColor());
+    while (m_functionEntryLabelColors.size() > m_functionIds.size())
+        m_functionEntryLabelColors.removeLast();
 
     QList<LevelChannelBinding> bindings;
 
@@ -2302,14 +3318,77 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
                 preset.color = c;
         }
         preset.hideName = po["hideName"].toBool(false);
+        preset.flashOnActivate = po["flash"].toBool(false);
+        const QString labelColorStr = po["labelColor"].toString();
+        if (!labelColorStr.isEmpty())
+        {
+            const QColor lc(labelColorStr);
+            if (lc.isValid())
+                preset.labelColor = lc;
+        }
         for (const QJsonValue& vv : po["values"].toArray())
             preset.values.append((quint8) vv.toInt());
         while (preset.values.size() < bindings.size()) preset.values.append(0);
         while (preset.values.size() > bindings.size()) preset.values.removeLast();
+        if (po.contains("inputUniverse"))
+        {
+            preset.entryInput = QSharedPointer<QLCInputSource>(
+                new QLCInputSource((quint32) po["inputUniverse"].toInt(),
+                                   (quint32) po["inputChannel"].toInt()));
+        }
+        if (po.contains("inputKey"))
+            preset.entryKey = stripKeySequence(QKeySequence(po["inputKey"].toString()));
         presets.append(preset);
     }
 
     setLevelConfig(bindings, presets);
+
+    if (obj.contains("functionEntryInputs"))
+    {
+        const QJsonArray arr = obj["functionEntryInputs"].toArray();
+        for (int i = 0; i < arr.size(); ++i)
+        {
+            QJsonObject io = arr.at(i).toObject();
+            while (m_functionEntryInputs.size() <= i)
+                m_functionEntryInputs.append(QSharedPointer<QLCInputSource>());
+            while (m_functionEntryKeys.size() <= i)
+                m_functionEntryKeys.append(QKeySequence());
+            if (io.contains("universe"))
+            {
+                m_functionEntryInputs[i] = QSharedPointer<QLCInputSource>(
+                    new QLCInputSource((quint32) io["universe"].toInt(),
+                                       (quint32) io["channel"].toInt()));
+            }
+            if (io.contains("key"))
+                m_functionEntryKeys[i] = stripKeySequence(QKeySequence(io["key"].toString()));
+        }
+    }
+
+    if (obj.contains("spread"))
+    {
+        const QJsonArray slotArr = obj["spread"].toObject()["slotInputs"].toArray();
+        m_spreadSlotInputs.clear();
+        m_spreadSlotKeys.clear();
+        for (const QJsonValue& sv : slotArr)
+        {
+            QJsonObject io = sv.toObject();
+            if (io.contains("universe"))
+            {
+                m_spreadSlotInputs.append(QSharedPointer<QLCInputSource>(
+                    new QLCInputSource((quint32) io["universe"].toInt(),
+                                       (quint32) io["channel"].toInt())));
+            }
+            else
+                m_spreadSlotInputs.append(QSharedPointer<QLCInputSource>());
+            if (io.contains("key"))
+                m_spreadSlotKeys.append(stripKeySequence(QKeySequence(io["key"].toString())));
+            else
+                m_spreadSlotKeys.append(QKeySequence());
+        }
+    }
+
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
     recalcLayoutSize();
     update();
 }
@@ -2360,6 +3439,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     QList<LevelPreset>        levelPresets;
     QList<MultiButtonAutomationProfile> loadedAutomation;
     bool hasAutomationElement = false;
+    QMap<int, EntryInputBinding> functionInputsLoaded;
+    QMap<int, EntryInputBinding> spreadSlotsLoaded;
+    QList<bool>  functionFlashLoaded;
+    QList<QColor> functionLabelColorsLoaded;
 
     while (root.readNextStartElement())
     {
@@ -2401,6 +3484,7 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             setSpreadVMargin(attrs.value(KXMLSpreadVMargin).toInt());
             setSpreadTileWidth(attrs.value(KXMLSpreadTileW).toInt());
             setSpreadTileHeight(attrs.value(KXMLSpreadTileH).toInt());
+            setSpreadPages(attrs.value(KXMLSpreadPages).toInt());
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLAutomation)
@@ -2425,9 +3509,12 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
                     if (profile.stepMax < profile.stepMin)
                         profile.stepMax = profile.stepMin;
                     profile.multiplier = qMax(1, pa.value(KXMLAutomationMultiplier).toInt());
+                    profile.beatOffset = pa.value(KXMLAutomationBeatOffset).toInt();
                     profile.excludeMask = pa.value(KXMLAutomationExcludeMask)
                                               .toString()
-                                              .toUInt(nullptr, 0);
+                                              .toUInt(nullptr, 16);
+                    const int maxOff = qMax(0, profile.multiplier - 1);
+                    profile.beatOffset = qBound(0, profile.beatOffset, maxOff);
                     loadedAutomation.append(profile);
                     root.skipCurrentElement();
                 }
@@ -2440,6 +3527,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLMonitorChannels)
         {
             setMonitorChannelValues(root.readElementText().toInt() != 0);
+        }
+        else if (root.name() == KXMLReceiveInputInactiveFramePage)
+        {
+            setReceiveInputOnInactiveFramePage(root.readElementText().toInt() != 0);
         }
         else if (root.name() == KXMLLevelFixture)
         {
@@ -2483,13 +3574,42 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
                     preset.color = c;
             }
             preset.hideName = attrs.value(KXMLLevelPresetHideName).toInt() != 0;
+            preset.flashOnActivate = attrs.value(KXMLLevelPresetFlash).toInt() != 0;
+            const QString labelColorStr = attrs.value(KXMLLevelPresetLabelColor).toString();
+            if (!labelColorStr.isEmpty())
+            {
+                const QColor lc(labelColorStr);
+                if (lc.isValid())
+                    preset.labelColor = lc;
+            }
 
             QString valuesStr = attrs.value(KXMLLevelPresetValues).toString();
             for (const QString& part : valuesStr.split(' ', Qt::SkipEmptyParts))
                 preset.values.append((quint8) part.toUInt());
 
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLEntryTriggerInput)
+                {
+                    const EntryInputBinding binding = readInputBlock(root, this);
+                    preset.entryInput = binding.source;
+                    preset.entryKey   = binding.key;
+                }
+                else
+                    root.skipCurrentElement();
+            }
+
             levelPresets.append(preset);
-            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLFunctionEntryInput)
+        {
+            const int idx = root.attributes().value(KXMLFunctionEntryIndex).toInt();
+            functionInputsLoaded[idx] = readInputBlock(root, this);
+        }
+        else if (root.name() == KXMLSpreadSlotInput)
+        {
+            const int idx = root.attributes().value(KXMLSpreadSlotIndex).toInt();
+            spreadSlotsLoaded[idx] = readInputBlock(root, this);
         }
         else if (root.name() == KXMLFunction)
         {
@@ -2497,6 +3617,15 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             ids.append(attrs.value(KXMLFunctionID).toUInt());
             labels.append(attrs.value(KXMLFunctionLabel).toString());
             icons.append(resolveIconPath(attrs.value(KXMLFunctionIconPath).toString(), m_doc));
+            functionFlashLoaded.append(attrs.value(KXMLFunctionFlash).toInt() != 0);
+            const QString fnLabelColor = attrs.value(KXMLFunctionLabelColor).toString();
+            if (!fnLabelColor.isEmpty())
+            {
+                const QColor lc(fnLabelColor);
+                functionLabelColorsLoaded.append(lc.isValid() ? lc : QColor());
+            }
+            else
+                functionLabelColorsLoaded.append(QColor());
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLTriggerInput)
@@ -2518,6 +3647,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLEntrySelectInput)
         {
             loadXMLSources(root, entrySelectInputSourceId);
+        }
+        else if (root.name() == KXMLSpreadPageInput)
+        {
+            loadXMLSources(root, spreadPageInputSourceId);
         }
         else
         {
@@ -2541,11 +3674,42 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         }
     }
     m_levelPresets = levelPresets;
+    m_functionEntryFlash = functionFlashLoaded;
+    m_functionEntryLabelColors = functionLabelColorsLoaded;
+    while (m_functionEntryFlash.size() < m_functionIds.size())
+        m_functionEntryFlash.append(false);
+    while (m_functionEntryFlash.size() > m_functionIds.size())
+        m_functionEntryFlash.removeLast();
+    while (m_functionEntryLabelColors.size() < m_functionIds.size())
+        m_functionEntryLabelColors.append(QColor());
+    while (m_functionEntryLabelColors.size() > m_functionIds.size())
+        m_functionEntryLabelColors.removeLast();
 
     while (m_functionLabels.size() < m_functionIds.size())
         m_functionLabels.append(QString());
     while (m_iconPaths.size() < m_functionIds.size())
         m_iconPaths.append(QString());
+
+    m_functionEntryInputs.clear();
+    m_functionEntryKeys.clear();
+    for (int i = 0; i < m_functionIds.size(); ++i)
+    {
+        const EntryInputBinding binding = functionInputsLoaded.value(i);
+        m_functionEntryInputs.append(cloneInputSource(binding.source));
+        m_functionEntryKeys.append(binding.key);
+    }
+
+    m_spreadSlotInputs.clear();
+    m_spreadSlotKeys.clear();
+    int maxSpreadSlot = -1;
+    for (auto it = spreadSlotsLoaded.constBegin(); it != spreadSlotsLoaded.constEnd(); ++it)
+        maxSpreadSlot = qMax(maxSpreadSlot, it.key());
+    for (int s = 0; s <= maxSpreadSlot && s < MBInputId::kMaxSpreadSlots; ++s)
+    {
+        const EntryInputBinding binding = spreadSlotsLoaded.value(s);
+        m_spreadSlotInputs.append(cloneInputSource(binding.source));
+        m_spreadSlotKeys.append(binding.key);
+    }
 
     for (LevelPreset& preset : m_levelPresets)
     {
@@ -2563,6 +3727,13 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 
     m_iconCache.clear();
     rebuildSceneCache();
+    clampSpreadPageIndex();
+    resizeSpreadSlotInputs();
+    syncEntryInputSources();
+    syncAllInputSourcePages();
+    syncAutomationSuspendDefault();
+    m_triggerLastValue    = 0;
+    m_automationLastValue = 0;
     recalcLayoutSize();
 
     return true;
@@ -2587,6 +3758,8 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeTextElement(KXMLAddOffAtEnd,  QString::number(m_addOffAtEnd ? 1 : 0));
     if (m_monitorChannelValues)
         doc->writeTextElement(KXMLMonitorChannels, QString::number(1));
+    if (m_receiveInputOnInactiveFramePage)
+        doc->writeTextElement(KXMLReceiveInputInactiveFramePage, QString::number(1));
 
     doc->writeStartElement(KXMLSpread);
     doc->writeAttribute(KXMLSpreadEnabled,
@@ -2598,6 +3771,7 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeAttribute(KXMLSpreadVMargin, QString::number(m_spreadVMargin));
     doc->writeAttribute(KXMLSpreadTileW, QString::number(m_spreadTileWidth));
     doc->writeAttribute(KXMLSpreadTileH, QString::number(m_spreadTileHeight));
+    doc->writeAttribute(KXMLSpreadPages, QString::number(m_spreadPages));
     doc->writeEndElement();
 
     doc->writeStartElement(KXMLAutomation);
@@ -2612,6 +3786,7 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLAutomationStepMin, QString::number(profile.stepMin));
         doc->writeAttribute(KXMLAutomationStepMax, QString::number(profile.stepMax));
         doc->writeAttribute(KXMLAutomationMultiplier, QString::number(profile.multiplier));
+        doc->writeAttribute(KXMLAutomationBeatOffset, QString::number(profile.beatOffset));
         doc->writeAttribute(KXMLAutomationExcludeMask,
                             QString::number(profile.excludeMask, 16));
         doc->writeEndElement();
@@ -2643,11 +3818,23 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
                 doc->writeAttribute(KXMLLevelPresetColor, preset.color.name(QColor::HexRgb));
             if (preset.hideName)
                 doc->writeAttribute(KXMLLevelPresetHideName, QStringLiteral("1"));
+            if (preset.flashOnActivate)
+                doc->writeAttribute(KXMLLevelPresetFlash, QStringLiteral("1"));
+            if (preset.labelColor.isValid())
+                doc->writeAttribute(KXMLLevelPresetLabelColor,
+                                    preset.labelColor.name(QColor::HexRgb));
 
             QStringList parts;
             for (quint8 v : preset.values)
                 parts.append(QString::number(v));
             doc->writeAttribute(KXMLLevelPresetValues, parts.join(' '));
+            if ((!preset.entryInput.isNull() && preset.entryInput->isValid())
+                || !preset.entryKey.isEmpty())
+            {
+                doc->writeStartElement(KXMLEntryTriggerInput);
+                saveInputBlock(doc, preset.entryInput, preset.entryKey);
+                doc->writeEndElement();
+            }
             doc->writeEndElement();
         }
     }
@@ -2659,8 +3846,42 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
             doc->writeAttribute(KXMLFunctionID,       QString::number(m_functionIds.at(i)));
             doc->writeAttribute(KXMLFunctionLabel,    m_functionLabels.value(i));
             doc->writeAttribute(KXMLFunctionIconPath, normalizeIconPath(m_iconPaths.value(i), m_doc));
+            if (i < m_functionEntryFlash.size() && m_functionEntryFlash.at(i))
+                doc->writeAttribute(KXMLFunctionFlash, QStringLiteral("1"));
+            if (i < m_functionEntryLabelColors.size()
+                && m_functionEntryLabelColors.at(i).isValid())
+            {
+                doc->writeAttribute(KXMLFunctionLabelColor,
+                                    m_functionEntryLabelColors.at(i).name(QColor::HexRgb));
+            }
             doc->writeEndElement();
         }
+    }
+
+    for (int i = 0; i < m_functionEntryInputs.size(); ++i)
+    {
+        const QSharedPointer<QLCInputSource>& src = m_functionEntryInputs.at(i);
+        const QKeySequence key = (i < m_functionEntryKeys.size())
+                                     ? m_functionEntryKeys.at(i)
+                                     : QKeySequence();
+        if ((src.isNull() || !src->isValid()) && key.isEmpty())
+            continue;
+        doc->writeStartElement(KXMLFunctionEntryInput);
+        doc->writeAttribute(KXMLFunctionEntryIndex, QString::number(i));
+        saveInputBlock(doc, src, key);
+        doc->writeEndElement();
+    }
+
+    for (int s = 0; s < m_spreadSlotInputs.size(); ++s)
+    {
+        const QSharedPointer<QLCInputSource>& src = m_spreadSlotInputs.at(s);
+        const QKeySequence key = (s < m_spreadSlotKeys.size()) ? m_spreadSlotKeys.at(s) : QKeySequence();
+        if ((src.isNull() || !src->isValid()) && key.isEmpty())
+            continue;
+        doc->writeStartElement(KXMLSpreadSlotInput);
+        doc->writeAttribute(KXMLSpreadSlotIndex, QString::number(s));
+        saveInputBlock(doc, src, key);
+        doc->writeEndElement();
     }
 
     auto trigSrc = inputSource(triggerInputSourceId);
@@ -2703,6 +3924,14 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeEndElement();
     }
 
+    auto spreadPageSrc = inputSource(spreadPageInputSourceId);
+    if (!spreadPageSrc.isNull() && spreadPageSrc->isValid())
+    {
+        doc->writeStartElement(KXMLSpreadPageInput);
+        saveXMLInput(doc, spreadPageSrc);
+        doc->writeEndElement();
+    }
+
     doc->writeEndElement();
     return true;
 }
@@ -2727,6 +3956,20 @@ QString MultiButtonWidget::activeFunctionCaption() const
     return f ? f->name() : tr("?");
 }
 
+QColor MultiButtonWidget::defaultTileBackground() const
+{
+    if (hasCustomBackgroundColor())
+        return backgroundColor();
+    return palette().button().color();
+}
+
+QColor MultiButtonWidget::buttonTextColor(const QColor& tileBg) const
+{
+    if (hasCustomForegroundColor())
+        return foregroundColor();
+    return contrastTextOn(tileBg);
+}
+
 void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
                                  bool isActive, bool isPressed) const
 {
@@ -2736,32 +3979,9 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
 
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    QColor bg = backgroundColor().isValid()
-                ? backgroundColor()
-                : palette().button().color();
-
-    if (tileIndex >= 0
-        && m_mode == MultiButtonMode::Level
-        && tileIndex < m_levelPresets.size())
-    {
-        const QColor presetColor = m_levelPresets.at(tileIndex).color;
-        if (presetColor.isValid())
-            bg = presetColor;
-    }
-    else if (tileIndex < 0)
-    {
-        bg = palette().mid().color().lighter(130);
-    }
-
-    if (isPressed)
-        bg = bg.darker(120);
-    else if (isActive)
-        bg = bg.lighter(115);
-
-    const QRect fillRect = r.adjusted(1, 1, -2, -2);
-    p.setPen(Qt::NoPen);
-    p.setBrush(bg);
-    p.drawRoundedRect(fillRect, 3, 3);
+    const bool monitoring = isActive && (m_visualOnly || m_entrySelectPreviewActive);
+    QColor bg;
+    paintTileBackground(p, r, tileIndex, isActive, isPressed, monitoring, bg);
 
     QPixmap iconPx;
     if (tileIndex >= 0)
@@ -2776,8 +3996,25 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
                                || (!levelNoText && (iconPx.isNull() || hasCustomLabel
                                                     || m_mode == MultiButtonMode::Level));
 
-    const QColor fg = contrastTextOn(bg);
+    QColor fg = buttonTextColor(bg);
+    if (tileIndex >= 0)
+    {
+        if (m_mode == MultiButtonMode::Level
+            && tileIndex < m_levelPresets.size()
+            && m_levelPresets.at(tileIndex).labelColor.isValid())
+        {
+            fg = m_levelPresets.at(tileIndex).labelColor;
+        }
+        else if (m_mode == MultiButtonMode::Function
+                 && tileIndex < m_functionEntryLabelColors.size()
+                 && m_functionEntryLabelColors.at(tileIndex).isValid())
+        {
+            fg = m_functionEntryLabelColors.at(tileIndex);
+        }
+    }
+
     const int pad = 3;
+    const QRect fillRect = r.adjusted(1, 1, -2, -2);
     QRect inner = fillRect.adjusted(pad, pad, -pad, -pad);
 
     int iconAreaH = 0;
@@ -2810,8 +4047,8 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
             p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, cap);
     }
 
-    const bool monitoring = isActive && (m_visualOnly || m_entrySelectPreviewActive);
-    drawVcButtonBorder(p, r, isActive, monitoring);
+    if (tileIndex >= 0 && entryIsFlash(tileIndex))
+        drawFlashEmblem(p, r);
 
     p.restore();
 }
@@ -2820,16 +4057,11 @@ void MultiButtonWidget::paintSpread(QPainter& p)
 {
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    QColor panelBg = backgroundColor().isValid()
-                     ? backgroundColor()
-                     : palette().button().color();
-    p.fillRect(rect(), panelBg);
-
     p.setPen(QPen(palette().mid().color(), 1));
     p.setBrush(Qt::NoBrush);
     p.drawRect(rect().adjusted(0, 0, -1, -1));
 
-    QColor fg = foregroundColor().isValid()
+    QColor fg = hasCustomForegroundColor()
                 ? foregroundColor()
                 : palette().buttonText().color();
 
@@ -2858,11 +4090,9 @@ void MultiButtonWidget::paintSpread(QPainter& p)
 void MultiButtonWidget::paintSingle(QPainter& p)
 {
     const int displayIdx = displayedEntryIndex();
+    const bool isPressed = m_pressActive;
 
-    QColor bg = backgroundColor().isValid()
-                ? backgroundColor()
-                : palette().button().color();
-
+    QColor bg = defaultTileBackground();
     if (m_mode == MultiButtonMode::Level
         && displayIdx >= 0
         && displayIdx < m_levelPresets.size())
@@ -2872,19 +4102,30 @@ void MultiButtonWidget::paintSingle(QPainter& p)
             bg = presetColor;
     }
 
-    if (m_pressActive)   bg = bg.darker(120);
-    if (displayIdx >= 0) bg = bg.lighter(115);
+    if (m_pressActive)
+        bg = bg.darker(120);
+    if (displayIdx >= 0)
+        bg = bg.lighter(115);
 
     p.fillRect(rect(), bg);
 
-    p.setPen(QPen(palette().mid().color(), 1));
-    p.setBrush(Qt::NoBrush);
-    p.drawRect(rect().adjusted(0, 0, -1, -1));
-
     const int dotsReserve = (entryCount() > 0) ? 14 : 0;
-    QColor fg = foregroundColor().isValid()
-                ? foregroundColor()
-                : palette().buttonText().color();
+    QColor fg = buttonTextColor(bg);
+    if (displayIdx >= 0)
+    {
+        if (m_mode == MultiButtonMode::Level
+            && displayIdx < m_levelPresets.size()
+            && m_levelPresets.at(displayIdx).labelColor.isValid())
+        {
+            fg = m_levelPresets.at(displayIdx).labelColor;
+        }
+        else if (m_mode == MultiButtonMode::Function
+                 && displayIdx < m_functionEntryLabelColors.size()
+                 && m_functionEntryLabelColors.at(displayIdx).isValid())
+        {
+            fg = m_functionEntryLabelColors.at(displayIdx);
+        }
+    }
 
     const bool hasTitle = !caption().isEmpty();
     const int  titleH   = hasTitle ? 16 : 0;
@@ -2991,6 +4232,9 @@ void MultiButtonWidget::paintSingle(QPainter& p)
                        Qt::AlignCenter, idxStr);
         }
     }
+
+    if (displayIdx >= 0 && entryIsFlash(displayIdx))
+        drawFlashEmblem(p, rect());
 }
 
 void MultiButtonWidget::paintEvent(QPaintEvent* e)

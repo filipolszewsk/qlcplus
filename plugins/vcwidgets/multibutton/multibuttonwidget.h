@@ -23,6 +23,7 @@
 #include <QMenu>
 #include <QPointer>
 #include <QMutex>
+#include <QKeySequence>
 
 #include "vcwidget.h"
 #include "genericfader.h"
@@ -61,13 +62,28 @@ struct LevelChannelBinding
     { return fixtureId == o.fixtureId && channel == o.channel; }
 };
 
+namespace MBInputId
+{
+    static constexpr quint8 kSpreadSlotBase = 16;
+    static constexpr quint8 kEntryBase      = 64;
+    static constexpr int    kMaxSpreadSlots = 32;
+    static constexpr int    kMaxEntryInputs = 160;
+
+    inline quint8 spreadSlot(int localSlot) { return quint8(kSpreadSlotBase + localSlot); }
+    inline quint8 entryTrigger(int idx)     { return quint8(kEntryBase + idx); }
+}
+
 struct LevelPreset
 {
     QString       label;
     QString       iconPath;
-    QColor        color;      // invalid = use default widget background
+    QColor        color;           // invalid = use default widget background
+    QColor        labelColor;      // invalid = auto contrast on background
     bool          hideName = false;  // true = no text on button (user cleared name)
+    bool          flashOnActivate = false;
     QList<quint8> values;   // parallel to m_levelChannelBindings
+    QSharedPointer<QLCInputSource> entryInput;
+    QKeySequence                 entryKey;
 };
 
 enum class MultiButtonAutomationMode
@@ -84,6 +100,7 @@ struct MultiButtonAutomationProfile
     int                       stepMin    = 1;
     int                       stepMax    = 1;
     int                       multiplier = 1;   // automation trigger fires advance every N-th pulse
+    int                       beatOffset = 0;   // phase within multiplier window (0..multiplier-1)
     quint32                   excludeMask = 0;  // bit i excludes entry index i
 };
 
@@ -97,6 +114,7 @@ public:
     static const quint8 automationInputSourceId   = 2;   // advance automation
     static const quint8 presetChooseInputSourceId = 3;   // DMX value selects automation profile
     static const quint8 entrySelectInputSourceId  = 4;   // scaled entry/preset (knob/fader)
+    static const quint8 spreadPageInputSourceId   = 5;   // spread page index (0-based channel value)
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -133,6 +151,9 @@ public:
     bool monitorChannelValues() const { return m_monitorChannelValues; }
     void setMonitorChannelValues(bool enable);
 
+    bool receiveInputOnInactiveFramePage() const { return m_receiveInputOnInactiveFramePage; }
+    void setReceiveInputOnInactiveFramePage(bool enable);
+
     MultiButtonLayout widgetLayout() const { return m_layout; }
     void setWidgetLayout(MultiButtonLayout layout);
 
@@ -148,6 +169,9 @@ public:
     void setSpreadTileWidth(int width);
     int  spreadTileHeight() const { return m_spreadTileHeight; }
     void setSpreadTileHeight(int height);
+    int  spreadPages() const { return m_spreadPages; }
+    void setSpreadPages(int pages);
+    int  spreadPageIndex() const { return m_spreadPageIndex; }
 
     bool automationEnabled() const { return m_automationEnabled; }
     void setAutomationEnabled(bool enable);
@@ -156,6 +180,23 @@ public:
     void setAutomationProfiles(const QList<MultiButtonAutomationProfile>& profiles,
                                int activeIndex);
     int  activeAutomationProfile() const { return m_activeAutomationProfile; }
+
+    QSharedPointer<QLCInputSource> entryInputSource(int idx) const;
+    void setEntryInputSource(int idx, QSharedPointer<QLCInputSource> src);
+    QKeySequence entryKeySource(int idx) const;
+    void setEntryKeySource(int idx, const QKeySequence& key);
+
+    QList<QSharedPointer<QLCInputSource>> spreadSlotInputs() const { return m_spreadSlotInputs; }
+    QList<QKeySequence>                   spreadSlotKeys()  const { return m_spreadSlotKeys; }
+    void setSpreadSlotInputs(const QList<QSharedPointer<QLCInputSource>>& inputs);
+    void setSpreadSlotKeys(const QList<QKeySequence>& keys);
+    QSharedPointer<QLCInputSource> spreadSlotInput(int localSlot) const;
+    void setSpreadSlotInput(int localSlot, QSharedPointer<QLCInputSource> src);
+    QKeySequence spreadSlotKey(int localSlot) const;
+    void setSpreadSlotKey(int localSlot, const QKeySequence& key);
+
+    QList<QKeySequence> functionEntryKeys() const { return m_functionEntryKeys; }
+    void setFunctionEntryKeys(const QList<QKeySequence>& keys);
 
     // ---- FunctionParent (required for Function::start/stop) --------------
     FunctionParent functionParent() const;
@@ -167,6 +208,7 @@ public:
     QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
     void applyPropertiesFrom(const VCWidget* source, PastePropertyGroups flags) override;
 
+    void      setPage(int pNum);
     VCWidget* createCopy(VCWidget* parent) override;
     void      toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
     void      fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
@@ -180,6 +222,7 @@ public:
 protected slots:
     void slotModeChanged(Doc::Mode mode) override;
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
+    void slotKeyPressed(const QKeySequence& keySequence) override;
 
 private slots:
     void slotLongPressFired();
@@ -191,6 +234,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* e) override;
     void contextMenuEvent(QContextMenuEvent* e) override;
     void paintEvent(QPaintEvent* e) override;
+    void showEvent(QShowEvent* e) override;
 
     friend class EntrySelectOverlay;
 
@@ -200,8 +244,27 @@ private:
     void advanceAutomation();
     void handlePresetChooseInput(uchar value);
     void handleEntrySelectInput(uchar value);
+    void handleSpreadPageInput(uchar value);
+    void assignInputSource(const QSharedPointer<QLCInputSource>& src, quint8 id);
+    void syncAllInputSourcePages();
+    void syncAutomationSuspendDefault();
+    void sendPresetChooseFeedback(uchar value);
+    void sendInputFeedback(uchar value, const QSharedPointer<QLCInputSource>& src);
+    bool isOnInactiveFrameSubPage() const;
+    bool acceptsBackgroundInput() const;
+    void activateFromGlobalSlot(int globalSlot);
+    void syncEntryInputSources();
+    void resizeSpreadSlotInputs();
+    int  entryInputLocalSlot(int globalRow) const;
     void activate(int idx);
     void stopCurrent();
+    bool entryIsFlash(int idx) const;
+    void beginFlashHold(int idx);
+    void endFlashHold();
+    int  levelDmxPresetIndex() const;
+    void paintTileBackground(QPainter& p, const QRect& rect, int tileIndex,
+                             bool isActive, bool isPressed, bool monitoring,
+                             QColor& outBg) const;
     void showPopupMenu(const QPoint& globalPos);
     int  pickEntryIndexModal(const QPoint& globalPos);
     void applyEntryPick(int idx);
@@ -224,6 +287,11 @@ private:
     QString popupMenuTextForEntry(int idx) const;
 
     void recalcLayoutSize();
+    void clampSpreadPageIndex();
+    int  totalSpreadSlots() const;
+    int  spreadSlotsPerPage(bool forPaging) const;
+    int  spreadPageCount() const;
+    bool spreadPagingActive() const;
     int  spreadTileCount() const;
     void resolveSpreadGrid(int& cols, int& rows) const;
     QVector<SpreadTileInfo> computeSpreadTiles() const;
@@ -235,6 +303,8 @@ private:
                   bool isActive, bool isPressed) const;
     void paintSpread(QPainter& p);
     void paintSingle(QPainter& p);
+    QColor buttonTextColor(const QColor& tileBg) const;
+    QColor defaultTileBackground() const;
 
     void rebuildSceneCache();
     void updateDmxRegistration();
@@ -266,6 +336,10 @@ private:
     QList<quint32> m_functionIds;
     QStringList    m_functionLabels;
     QStringList    m_iconPaths;
+    QList<QSharedPointer<QLCInputSource>> m_functionEntryInputs;
+    QList<QKeySequence>                   m_functionEntryKeys;
+    QList<bool>                           m_functionEntryFlash;
+    QList<QColor>                         m_functionEntryLabelColors;
 
     // ---- Level mode state -----------------------------------------------
     QList<LevelChannelBinding> m_levelChannelBindings;
@@ -283,6 +357,7 @@ private:
 
     // ---- Monitor --------------------------------------------------------
     bool                         m_monitorChannelValues = false;
+    bool                         m_receiveInputOnInactiveFramePage = false;
     QTimer*                      m_channelMonitorTimer  = nullptr;
     QList<QList<SceneValue>>     m_cachedSceneValues;
     QElapsedTimer                m_lastActivationTime;
@@ -298,12 +373,18 @@ private:
     int               m_spreadVMargin    = 4;
     int               m_spreadTileWidth  = 80;
     int               m_spreadTileHeight = 60;
+    int               m_spreadPages      = 0;   // 0 = Auto
+    int               m_spreadPageIndex  = 0;
+    QList<QSharedPointer<QLCInputSource>> m_spreadSlotInputs;
+    QList<QKeySequence>                   m_spreadSlotKeys;
 
     bool                              m_automationEnabled      = false;
     bool                              m_automationSuspended    = false;
     QList<MultiButtonAutomationProfile> m_automationProfiles;
     int                               m_activeAutomationProfile = 0;
     int                               m_automationPulseCounter  = 0;
+    uchar                             m_triggerLastValue        = 0;
+    uchar                             m_automationLastValue     = 0;
 
     // ---- Press-tracking state (GUI thread only) --------------------------
     QTimer* m_longPressTimer = nullptr;
@@ -311,6 +392,9 @@ private:
     bool    m_longFired      = false;
     QPoint  m_pressPos;
     int     m_pressTileIndex = -2;   // spread: entry index, -1=OFF, -2=none
+
+    int     m_flashHoldIndex = -1;   // entry held for flash (-1 = none)
+    int     m_restoreIndex   = -1;   // latched index before flash hold
 
     QPointer<EntrySelectOverlay> m_entrySelectOverlay;
     QTimer*         m_entrySelectDismissTimer  = nullptr;

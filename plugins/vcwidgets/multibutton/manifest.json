@@ -1,7 +1,7 @@
 {
   "plugin_id": "org.qlcplus.vcwidgets.multibutton",
   "name": "Multi Button",
-  "version": "1.2.3",
+  "version": "1.6.1",
   "author": "QLC+ VC Widget SDK",
   "description": "Cycles through scenes/functions. Scribble fills full area when no label. Monitor channel values, per-entry icons, optional OFF step.",
   "qt_version": "6.8.1",

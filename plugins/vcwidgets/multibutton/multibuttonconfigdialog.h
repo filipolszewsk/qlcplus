@@ -23,6 +23,7 @@
 #include <QList>
 #include <QStringList>
 #include <QHash>
+#include <functional>
 
 #include "qlcinputsource.h"
 #include "multibuttonwidget.h"
@@ -46,6 +47,7 @@ public:
         int                                longPressMs,
         bool                               addOffAtEnd,
         bool                               monitorChannelValues,
+        bool                               receiveInputOnInactiveFramePage,
         MultiButtonLayout                  widgetLayout,
         int                                spreadColumns,
         int                                spreadRows,
@@ -53,6 +55,7 @@ public:
         int                                spreadVMargin,
         int                                spreadTileWidth,
         int                                spreadTileHeight,
+        int                                spreadPages,
         bool                               automationEnabled,
         const QList<MultiButtonAutomationProfile>& automationProfiles,
         int                                activeAutomationProfile,
@@ -61,6 +64,13 @@ public:
         QSharedPointer<QLCInputSource>     automationSrc,
         QSharedPointer<QLCInputSource>     presetChooseSrc,
         QSharedPointer<QLCInputSource>     entrySelectSrc,
+        QSharedPointer<QLCInputSource>     spreadPageSrc,
+        const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
+        const QList<QKeySequence>&                   functionEntryKeys,
+        const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
+        const QList<QKeySequence>&                   spreadSlotKeys,
+        const QList<bool>&                           functionEntryFlash,
+        const QList<QColor>&                         functionEntryLabelColors,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -73,6 +83,7 @@ public:
     int                            longPressMs()           const;
     bool                           addOffAtEnd()           const;
     bool                           monitorChannelValues()  const;
+    bool                           receiveInputOnInactiveFramePage() const;
     MultiButtonLayout              widgetLayout()          const;
     int                            spreadColumns()         const;
     int                            spreadRows()            const;
@@ -80,6 +91,7 @@ public:
     int                            spreadVMargin()         const;
     int                            spreadTileWidth()       const;
     int                            spreadTileHeight()      const;
+    int                            spreadPages()           const;
     bool                           automationEnabled()     const;
     QList<MultiButtonAutomationProfile> automationProfiles() const;
     int                            activeAutomationProfile() const;
@@ -88,12 +100,41 @@ public:
     QSharedPointer<QLCInputSource> automationInputSource() const;
     QSharedPointer<QLCInputSource> presetChooseInputSource() const;
     QSharedPointer<QLCInputSource> entrySelectInputSource() const;
+    QSharedPointer<QLCInputSource> spreadPageInputSource()  const;
+    QList<QSharedPointer<QLCInputSource>> functionEntryInputs() const;
+    QList<QKeySequence>                   functionEntryKeys()  const;
+    QList<QSharedPointer<QLCInputSource>> spreadSlotInputs()  const;
+    QList<QKeySequence>                   spreadSlotKeys()   const;
+    QList<bool>                           functionEntryFlash() const;
+    QList<QColor>                         functionEntryLabelColors() const;
 
     void accept() override;
 
 private slots:
     void slotModeChanged(int index);
     void slotLayoutChanged(int index);
+    void updateSpreadPagesPreview();
+    void commitEntryInputEditor();
+    void loadEntryInputEditor(int row);
+    void updatePresetInputCell(int row);
+    void updateAllPresetInputCells();
+    void rebuildSpreadSlotTable();
+    void updateSpreadColumnInputVisibility();
+    bool dialogSpreadPagingActive() const;
+    int  dialogSlotsPerPage() const;
+    int  spreadLocalSlotForRow(int row) const;
+    QSharedPointer<QLCInputSource> spreadSlotInputAt(int localSlot) const;
+    void setSpreadSlotInputAt(int localSlot, QSharedPointer<QLCInputSource> src);
+    QKeySequence spreadSlotKeyAt(int localSlot) const;
+    void setSpreadSlotKeyAt(int localSlot, const QKeySequence& key);
+    QSharedPointer<QLCInputSource> entryInputForRow(int row) const;
+    void setEntryInputForRow(int row, QSharedPointer<QLCInputSource> src);
+    QKeySequence entryKeyForRow(int row) const;
+    void setEntryKeyForRow(int row, const QKeySequence& key);
+    static QString formatInputPatch(const QSharedPointer<QLCInputSource>& src,
+                                    const QKeySequence& key = QKeySequence());
+    static QSharedPointer<QLCInputSource> inputFromPatchString(const QString& patch);
+    void slotSpreadSlotSelectionChanged();
     void slotAutomationProfileRowChanged(int currentRow, int previousRow);
     void slotAutomationAddProfile();
     void slotAutomationRemoveProfile();
@@ -118,6 +159,12 @@ private slots:
     void slotLevelClearIcon();
     void slotLevelChooseColor();
     void slotLevelClearColor();
+    void slotLevelChooseLabelColor();
+    void slotLevelClearLabelColor();
+    void slotLevelFlashToggled(int state);
+    void slotFunctionFlashToggled(int state);
+    void slotFunctionChooseLabelColor();
+    void slotFunctionClearLabelColor();
     void slotLevelMoveUp();
     void slotLevelMoveDown();
     void slotLevelSelectionChanged();
@@ -133,12 +180,22 @@ private:
     void updatePresetNameCell(int row);
     void syncPresetNameFromCell(int row, const QString& cellText);
     QString presetNameCellText(int row) const;
+    QList<int> selectedPresetRows() const;
+    bool selectedPresetRowsContiguous() const;
+    void commitLevelPresetsFromTable();
+    void selectPresetRows(const QList<int>& rows);
+    void refreshPresetRows(const QList<int>& rows);
+    void applyAppearanceToSelectedRows(const std::function<void(LevelPreset&)>& fn);
+    void moveSelectedPresetBlock(int delta);
     void updateChooseChannelsButton();
     void updateMonitorTooltip();
     void syncDataFromProfileTable();
     void rebuildAutomationProfileTable();
     void rebuildAutomationExcludeTable();
-    void loadExcludeTableForProfile(int profileIndex);
+    void slotExcludeColumnHeaderClicked(int col);
+    void slotExcludeRowHeaderClicked(int row);
+    void toggleExcludeColumn(int col);
+    void toggleExcludeRow(int row);
     int  entryCountForAutomation() const;
     QString entryLabelForAutomation(int index) const;
     static quint64 bindingKey(quint32 fixtureId, quint32 channel);
@@ -152,6 +209,12 @@ private:
 
     QList<LevelChannelBinding> m_levelChannelBindings;
     QList<LevelPreset>         m_levelPresets;
+    QList<QSharedPointer<QLCInputSource>> m_functionEntryInputs;
+    QList<QKeySequence>                   m_functionEntryKeys;
+    QList<QSharedPointer<QLCInputSource>> m_spreadSlotInputs;
+    QList<QKeySequence>                   m_spreadSlotKeys;
+    QList<bool>                           m_functionEntryFlash;
+    QList<QColor>                         m_functionEntryLabelColors;
 
     QComboBox*       m_modeCombo    = nullptr;
     QStackedWidget*  m_modeStack    = nullptr;
@@ -178,6 +241,10 @@ private:
     QPushButton*  m_lvlClearIconBtn  = nullptr;
     QPushButton*  m_lvlChooseColorBtn = nullptr;
     QPushButton*  m_lvlClearColorBtn  = nullptr;
+    QPushButton*  m_lvlChooseLabelColorBtn = nullptr;
+    QPushButton*  m_lvlClearLabelColorBtn  = nullptr;
+    QCheckBox*    m_lvlFlashCheck         = nullptr;
+    QCheckBox*    m_functionFlashCheck     = nullptr;
     QPushButton*  m_lvlUpBtn         = nullptr;
     QPushButton*  m_lvlDownBtn       = nullptr;
 
@@ -192,8 +259,15 @@ private:
     QSpinBox*     m_vMarginSpin       = nullptr;
     QSpinBox*     m_tileWSpin         = nullptr;
     QSpinBox*     m_tileHSpin         = nullptr;
+    QSpinBox*     m_pagesSpin         = nullptr;
+    QLabel*       m_spreadPagesPreview = nullptr;
     QGroupBox*    m_singleLayoutGrp    = nullptr;
     QGroupBox*    m_spreadLayoutGrp    = nullptr;
+    QGroupBox*    m_spreadPageInputGrp = nullptr;
+    QGroupBox*    m_spreadColumnInputGrp = nullptr;
+    QTableWidget* m_spreadSlotTable     = nullptr;
+    QGroupBox*    m_entryInputGrp       = nullptr;
+    InputSelectionWidget* m_presetEntryInputSel = nullptr;
 
     QCheckBox*    m_autoEnableCheck    = nullptr;
     QTableWidget* m_autoProfileTable   = nullptr;
@@ -210,17 +284,24 @@ private:
     static constexpr int kProfColJumpMin    = 2;
     static constexpr int kProfColJumpMax    = 3;
     static constexpr int kProfColMultiplier = 4;
+    static constexpr int kProfColBeatOffset = 5;
 
     InputSelectionWidget* m_triggerInputSel      = nullptr;
     InputSelectionWidget* m_popupInputSel        = nullptr;
     InputSelectionWidget* m_automationInputSel   = nullptr;
     InputSelectionWidget* m_presetChooseInputSel = nullptr;
     InputSelectionWidget* m_entrySelectInputSel  = nullptr;
+    InputSelectionWidget* m_spreadPageInputSel   = nullptr;
+    QCheckBox*            m_receiveInputInactiveFrameCheck = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 
     bool m_rebuildingPresetTable = false;
+    bool m_syncingEntryInputEditor = false;
+    int  m_entryInputEditRow = -1;
+    int  m_spreadSlotEditRow = -1;
 
-    static constexpr int kPresetNameColumn    = 0;
-    static constexpr int kPresetFirstDmxColumn = 1;
+    static constexpr int kPresetNameColumn     = 0;
+    static constexpr int kPresetInputColumn    = 1;
+    static constexpr int kPresetFirstDmxColumn = 2;
     static constexpr int kDataRowOffset = 0;
 };
