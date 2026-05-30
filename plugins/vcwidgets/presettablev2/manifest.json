@@ -1,0 +1,14 @@
+{
+  "plugin_id": "org.qlcplus.vcwidgets.presettablev2",
+  "name": "Preset Table v2",
+  "version": "1.0.0",
+  "author": "QLC+ Community",
+  "description": "Preset table with fixture-group mask scopes and spatial stagger when recalling rows (mask-aware wave).",
+  "qt_version": "6.8.1",
+  "platforms": {
+    "macos_arm64": "libpresettablev2_vcwidget.dylib",
+    "macos_x64":   "libpresettablev2_vcwidget.dylib",
+    "linux_x64":   "libpresettablev2_vcwidget.so",
+    "windows_x64": "presettablev2_vcwidget.dll"
+  }
+}
