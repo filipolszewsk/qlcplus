@@ -132,7 +132,18 @@ Kolumny banku: dwuklik nagłówka kolumny (Design), jak wcześniej.
 | `192+o` | `transContinuousBank(o)` — bank Continuous (0=off) |
 
 ID 64/128/192 to **osobne kanały VC** (wewnętrzne ID), nie podział jednego zakresu 0–255.
-| `255` | Crossfade global |
+| `255` | Crossfade global (direction-locked 0↔255) |
+
+### Crossfade + EFX (oba włączone w Properties)
+
+| Tryb | Suwak | Primary / selectory | DMX |
+|------|-------|---------------------|-----|
+| **Sweep** | `xfEffective` 0→255 lub 255→0 (od `m_crossfadeStartPos`) | Primary → `m_stagedRow` do ruchu suwaka | Matrix sweep **active→staged**; promote primary na skrajności (0/255) |
+| **Continuous** | Pozycja **≤127** = edycja staged; **>127** = live | Przy ≤127: primary/secondary/bank → bufory `m_staged*`; przy >127 primary od razu live | **Zawsze live** na wyjściu do commitu; **commit** przy narastającym przejściu **127→128** (`promoteStagedToLive`) |
+
+**Global speed / intensity** (engine): zawsze **live**, nigdy staged.
+
+Bufory staged (Continuous): `m_stagedRow`, `m_stagedSecondaryRow`, `m_stagedSweepPreset`, `m_stagedContinuousPreset`, engine `m_stagedColumnOverrides`.
 
 ### Input ID — engine (`ptefxinputids.h`)
 

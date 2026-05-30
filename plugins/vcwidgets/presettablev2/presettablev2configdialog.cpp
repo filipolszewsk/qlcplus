@@ -670,14 +670,19 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     }
     spatialLay->addWidget(spatialHint);
 
-    connect(m_crossfadeChk, &QCheckBox::toggled, this, [this](bool on) {
-        if (on && m_spatialChk->isChecked())
-            m_spatialChk->setChecked(false);
-    });
-    connect(m_spatialChk, &QCheckBox::toggled, this, [this](bool on) {
-        if ( on && m_crossfadeChk->isChecked())
-            m_crossfadeChk->setChecked(false);
-    });
+    QLabel* xfEfxHint = new QLabel(
+            tr("Crossfade and EFX can be enabled together: with Sweep, the crossfade fader is manual "
+               "sweep progress (0↔255); with Continuous, edits are staged while the fader is ≤127 "
+               "and commit to live when it crosses above 128 (DMX stays on live until then)."),
+            spatialGrp);
+    xfEfxHint->setWordWrap(true);
+  {
+        QFont hf = xfEfxHint->font();
+        hf.setItalic(true);
+        xfEfxHint->setFont(hf);
+    }
+    spatialLay->addWidget(xfEfxHint);
+
     connect(m_transitionLinkCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) {
         PresetTableV2TransitionProviderIface* provider =

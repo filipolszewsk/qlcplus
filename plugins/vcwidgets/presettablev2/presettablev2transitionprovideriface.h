@@ -22,7 +22,10 @@ public:
     virtual PTGlobalEffectSettings globalEffectSettings() const = 0;
     virtual bool hasLiveColumnOverride(quint8 inputId) const = 0;
     virtual void requestFlash(int tableRowIndex, int transitionPresetIndex) = 0;
+
+    /** Copy staged per-preset DMX overrides into live (Continuous crossfade commit). */
+    virtual void promoteStagedColumnOverrides() = 0;
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,
-                    "org.qlcplus.PresetTableV2TransitionProvider/2.3")
+                    "org.qlcplus.PresetTableV2TransitionProvider/2.4")

@@ -44,6 +44,8 @@ enum class PTPreFlashState
 struct PTOutputMatrixState
 {
     bool     sweepRunning  = false;
+    /** Crossfade fader drives sweep progress (no auto timer). */
+    bool     sweepManualCrossfade = false;
     double   sweepProgress = 0.0;
     int      sweepFromRow  = -1;
     int      sweepToRow    = -1;

@@ -181,6 +181,7 @@ public:
     void setLinkedTransitionWidgetId(quint32 id) override;
     void refreshTransitionPresetCache() override;
     void requestTableFlash(int tableRowIndex, int transitionPresetIndex) override;
+    bool continuousCrossfadeStagedEditing() const override;
 
     // ---- VCWidget overrides -----------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
@@ -275,6 +276,12 @@ private:
     /** Secondary table row for Continuous only (DMX 128+ / Properties / activeRow). */
     int effectiveSecondaryRowLocked(int outputIdx, int activeRow) const;
 
+    bool continuousCrossfadeModeLocked(int outputIdx) const;
+    bool crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const;
+    bool continuousCrossfadeActiveAnyLocked() const;
+    void ensureStagedSnapshotLocked(int outputIdx);
+    void promoteStagedToLiveLocked();
+
     void syncLiveTransitionFromOutputs();
     void writeContinuousSpatial(int outputIdx, MasterTimer* timer,
                                 QList<Universe*>& universes, const PTOutput& out,
@@ -318,6 +325,12 @@ public:
     bool              m_crossfadeEnabled   = false;  // widget-level toggle
     uchar             m_crossfadeGlobalPos = 0;      // physical fader position 0-255
     uchar             m_crossfadeStartPos  = 0;      // fader position when first staging was set
+    uchar             m_crossfadePrevPos   = 0;      // previous fader pos (127/128 edge detect)
+
+    QVector<int>      m_stagedSecondaryRow;
+    QVector<int>      m_stagedSweepPreset;
+    QVector<int>      m_stagedContinuousPreset;
+    QVector<bool>     m_stagedSnapshotValid;
 
     PTMode            m_mode            = PTMode::Legacy;
     quint32           m_fixtureGroupId  = UINT_MAX;  // valid only when m_mode == FixtureGroup

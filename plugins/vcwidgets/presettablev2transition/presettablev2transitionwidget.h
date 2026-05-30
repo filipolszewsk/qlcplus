@@ -51,6 +51,7 @@ public:
     PTGlobalEffectSettings globalEffectSettings() const override { return m_globalSettings; }
     bool hasLiveColumnOverride(quint8 inputId) const override;
     void requestFlash(int tableRowIndex, int transitionPresetIndex) override;
+    void promoteStagedColumnOverrides() override;
 
     VCWidget* createCopy(VCWidget* parent) override;
     bool loadXML(QXmlStreamReader& root) override;
@@ -136,6 +137,7 @@ private:
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
+    QHash<quint8, uchar> m_stagedColumnOverrides;
 
     QVBoxLayout*  m_layout = nullptr;
     QLabel*       m_linkLabel = nullptr;

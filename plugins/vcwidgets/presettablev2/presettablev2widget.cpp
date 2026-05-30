@@ -612,6 +612,14 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
+        m_stagedSecondaryRow.resize(m_outputs.size());
+        m_stagedSecondaryRow.fill(-1);
+        m_stagedSweepPreset.resize(m_outputs.size());
+        m_stagedSweepPreset.fill(-1);
+        m_stagedContinuousPreset.resize(m_outputs.size());
+        m_stagedContinuousPreset.fill(-1);
+        m_stagedSnapshotValid.resize(m_outputs.size());
+        m_stagedSnapshotValid.fill(false);
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
         m_spatialChase.resize(m_outputs.size());
@@ -659,8 +667,10 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_faders.clear();
             m_activeRow.fill(-1, m_activeRow.size());
             m_stagedRow.fill(-1, m_stagedRow.size());
+            m_stagedSnapshotValid.fill(false, m_stagedSnapshotValid.size());
             m_crossfadeGlobalPos = 0;
             m_crossfadeStartPos  = 0;
+            m_crossfadePrevPos   = 0;
         }
     }
 
@@ -1252,6 +1262,10 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_liveSweepPreset.resize(m_outputs.size());
     m_liveContinuousPreset.resize(m_outputs.size());
     m_liveSecondaryRow.resize(m_outputs.size());
+    m_stagedSecondaryRow.resize(m_outputs.size());
+    m_stagedSweepPreset.resize(m_outputs.size());
+    m_stagedContinuousPreset.resize(m_outputs.size());
+    m_stagedSnapshotValid.resize(m_outputs.size());
     m_continuousElapsedMs.resize(m_outputs.size());
     m_matrixState.resize(m_outputs.size());
     m_flashInputHeldRow.resize(m_outputs.size());
@@ -1358,6 +1372,88 @@ int PresetTableV2Widget::effectiveSecondaryRowLocked(int outputIdx, int activeRo
         return prop;
 
     return -1;
+}
+
+bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
+{
+    if (!m_crossfadeEnabled || !continuousEfxActiveForOutputLocked(outputIdx))
+        return false;
+    return effectiveSecondaryRowLocked(outputIdx, m_activeRow[outputIdx]) >= 0;
+}
+
+bool PresetTableV2Widget::crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const
+{
+    return m_crossfadeEnabled && hasStaged && sweepEfxActiveForOutputLocked(outputIdx)
+            && !sweepOnPrimaryChangeLocked(outputIdx, activeRow);
+}
+
+bool PresetTableV2Widget::continuousCrossfadeActiveAnyLocked() const
+{
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        if (continuousCrossfadeModeLocked(o))
+            return true;
+    }
+    return false;
+}
+
+bool PresetTableV2Widget::continuousCrossfadeStagedEditing() const
+{
+    QMutexLocker lk(&m_stateMutex);
+    return m_crossfadeEnabled && m_crossfadeGlobalPos <= 127
+            && continuousCrossfadeActiveAnyLocked();
+}
+
+void PresetTableV2Widget::ensureStagedSnapshotLocked(int outputIdx)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return;
+
+    while (m_stagedSnapshotValid.size() <= outputIdx)
+        m_stagedSnapshotValid.append(false);
+    while (m_stagedSecondaryRow.size() <= outputIdx)
+        m_stagedSecondaryRow.append(-1);
+    while (m_stagedSweepPreset.size() <= outputIdx)
+        m_stagedSweepPreset.append(-1);
+    while (m_stagedContinuousPreset.size() <= outputIdx)
+        m_stagedContinuousPreset.append(-1);
+
+    if (m_stagedSnapshotValid[outputIdx])
+        return;
+
+    m_stagedSecondaryRow[outputIdx] = effectiveSecondaryRowLocked(outputIdx, m_activeRow[outputIdx]);
+    m_stagedSweepPreset[outputIdx] = liveSweepPresetIndexLocked(outputIdx);
+    m_stagedContinuousPreset[outputIdx] = liveContinuousPresetIndexLocked(outputIdx);
+    m_stagedSnapshotValid[outputIdx] = true;
+}
+
+void PresetTableV2Widget::promoteStagedToLiveLocked()
+{
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        if (o < m_stagedRow.size() && m_stagedRow[o] >= 0)
+        {
+            m_activeRow[o] = m_stagedRow[o];
+            m_stagedRow[o] = -1;
+        }
+
+        if (o < m_stagedSnapshotValid.size() && m_stagedSnapshotValid[o])
+        {
+            if (o < m_liveSecondaryRow.size() && o < m_stagedSecondaryRow.size())
+                m_liveSecondaryRow[o] = m_stagedSecondaryRow[o];
+            if (o < m_liveSweepPreset.size() && o < m_stagedSweepPreset.size())
+                m_liveSweepPreset[o] = m_stagedSweepPreset[o];
+            if (o < m_liveContinuousPreset.size() && o < m_stagedContinuousPreset.size())
+                m_liveContinuousPreset[o] = m_stagedContinuousPreset[o];
+            m_stagedSnapshotValid[o] = false;
+            if (o < m_continuousElapsedMs.size())
+                m_continuousElapsedMs[o] = 0;
+            resetMatrixStateLocked(o);
+        }
+    }
+
+    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
+        provider->promoteStagedColumnOverrides();
 }
 
 PTTransitionPreset PresetTableV2Widget::transitionPresetForOutputLocked(int outputIdx) const
@@ -1946,6 +2042,7 @@ void PresetTableV2Widget::resetMatrixStateLocked(int outputIdx)
     ensureMatrixState(outputIdx);
     PTOutputMatrixState& st = m_matrixState[outputIdx];
     st.sweepRunning = false;
+    st.sweepManualCrossfade = false;
     st.sweepProgress = 0.0;
     st.sweepFromRow = -1;
     st.sweepToRow = -1;
@@ -2169,7 +2266,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                                    serialIndex.value(pt, 0), serialCount);
     };
 
-    if (st.sweepRunning)
+    if (st.sweepRunning && !st.sweepManualCrossfade)
         st.sweepElapsedMs += MasterTimer::tick();
 
     if (st.flashActive)
@@ -2314,7 +2411,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         }
     }
 
-    if (st.sweepRunning)
+    if (st.sweepRunning && !st.sweepManualCrossfade)
     {
         st.sweepProgress += increment;
         const bool allLocked = (sweepScopeCount > 0 && sweepLockedCount >= sweepScopeCount);
@@ -2328,7 +2425,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             st.sweepHeldValues.clear();
         }
     }
-    else if (!st.flashActive && activeRow >= 0)
+    else if (!st.flashActive && activeRow >= 0 && !st.sweepManualCrossfade)
     {
         st.appliedRow = activeRow;
     }
@@ -2344,7 +2441,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
     const QMap<QLCPoint, GroupHead> maskedHeads = m_doc->effectiveHeadsMap(grp);
     const QMap<QLCPoint, GroupHead> fullHeads = grp->headsMap();
 
-    const bool spatialOn = m_spatialEffects.enabled && !m_crossfadeEnabled;
+    const bool spatialOn = m_spatialEffects.enabled;
     const QSize gridSize = grp->size();
 
     if (m_spatialAppliedRow.size() != m_outputs.size())
@@ -2387,11 +2484,33 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
         const bool sweepOn = sweepEfxActiveForOutputLocked(o);
         const bool contOn = continuousEfxActiveForOutputLocked(o);
         const int secRow = effectiveSecondaryRowLocked(o, activeRow);
+        const bool crossfadeSweep = crossfadeSweepModeLocked(o, activeRow, hasStaged);
+        const bool crossfadeCont = continuousCrossfadeModeLocked(o);
+        const bool blockMatrixForStaged = hasStaged && !crossfadeSweep && !crossfadeCont;
 
-        if (matrixEngine && !hasStaged)
+        if (matrixEngine && crossfadeSweep)
         {
             ensureMatrixState(o);
             PTOutputMatrixState& st = m_matrixState[o];
+            PTTransitionPreset sweepPreset = sweepPresetForOutputLocked(o);
+            if (sweepPreset.enabled && stagedRow >= 0)
+            {
+                if (!st.sweepRunning)
+                    beginMatrixSweepLocked(o, activeRow, stagedRow);
+                st.sweepManualCrossfade = true;
+                const quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(globalFx, sweepPreset));
+                st.sweepElapsedMs = quint32(qint64(xfEffective) * qint64(cycleMs) / 255);
+                writeMatrixSpatial(o, timer, universes, out, activeRow, activeRow,
+                                   sweepPreset, globalFx, gridSize, headsMap);
+                continue;
+            }
+        }
+
+        if (matrixEngine && !blockMatrixForStaged)
+        {
+            ensureMatrixState(o);
+            PTOutputMatrixState& st = m_matrixState[o];
+            st.sweepManualCrossfade = false;
 
             if (sweepOnPrimaryChangeLocked(o, activeRow) && !st.flashActive && !st.sweepRunning
                     && activeRow >= 0 && activeRow != st.appliedRow)
@@ -2434,7 +2553,8 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
         const bool sweepActive = sweepOn;
         const bool contActive = contOn;
 
-        const bool useContinuous = spatialOn && contActive && !hasStaged
+        const bool useContinuous = spatialOn && contActive
+                && !blockMatrixForStaged
                 && secRow >= 0 && secRow < m_rows.size()
                 && !matrixEngine;
 
@@ -2447,7 +2567,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
 
         PTTransitionPreset transPreset = transitionPresetForOutputLocked(o);
         const bool efxActive = sweepActive || contActive;
-        const bool useSpatial = spatialOn && efxActive && !hasStaged
+        const bool useSpatial = spatialOn && efxActive && !blockMatrixForStaged
                 && transPreset.enabled && !matrixEngine;
         const int appliedRow = (o < m_spatialAppliedRow.size()) ? m_spatialAppliedRow[o] : -1;
 
@@ -2598,9 +2718,14 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
     if (checkInputSource(universe, pagedCh, value, sender(), quint8(255)))
     {
         QMutexLocker lk2(&m_stateMutex);
+        const uchar prevPos = m_crossfadePrevPos;
         m_crossfadeGlobalPos = value;
 
-        // Direction-locked: auto-promote when fader reaches the target extreme
+        if (m_crossfadeEnabled && prevPos <= 127 && value > 127
+                && continuousCrossfadeActiveAnyLocked())
+            promoteStagedToLiveLocked();
+
+        // Direction-locked: auto-promote primary at fader extreme (Sweep crossfade leg)
         const uchar target = (m_crossfadeStartPos < 128) ? 255 : 0;
         if (value == target)
         {
@@ -2610,9 +2735,18 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                 {
                     m_activeRow[o] = m_stagedRow[o];
                     m_stagedRow[o] = -1;
+                    if (o < m_matrixState.size())
+                    {
+                        PTOutputMatrixState& st = m_matrixState[o];
+                        st.sweepRunning = false;
+                        st.sweepManualCrossfade = false;
+                        st.appliedRow = m_activeRow[o];
+                    }
                 }
             }
         }
+
+        m_crossfadePrevPos = value;
         lk2.unlock();
         refreshRowHighlights();
         return;
@@ -2658,26 +2792,39 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             int rowIdx = (value == 0) ? -1 : qMin<int>(int(value) - 1, numRows - 1);
             if (xfEnabled)
             {
-                // Crossfade mode: selector sets staged row
-                // If selecting the currently active row, clear staging instead
+                bool applyLivePrimary = false;
+                {
+                    QMutexLocker lk2(&m_stateMutex);
+                    applyLivePrimary = continuousCrossfadeModeLocked(o)
+                            && m_crossfadeGlobalPos > 127;
+                    if (applyLivePrimary && o < m_stagedRow.size())
+                        m_stagedRow[o] = -1;
+                }
+                if (applyLivePrimary)
+                {
+                    setActiveRow(o, rowIdx);
+                    refreshRowHighlights();
+                    return;
+                }
+
+                // Crossfade: staged primary (Sweep manual progress, or Continuous fader ≤127)
                 QMutexLocker lk2(&m_stateMutex);
                 if (o < m_stagedRow.size())
                 {
                     if (rowIdx == m_activeRow[o])
-                    {
-                        m_stagedRow[o] = -1;  // selector = current: clear staging
-                    }
+                        m_stagedRow[o] = -1;
                     else
                     {
-                        // Snapshot fader position only when this is the FIRST staging
                         bool wasAnyStaged = false;
                         for (int i = 0; i < m_stagedRow.size(); ++i)
                             if (m_stagedRow[i] >= 0) { wasAnyStaged = true; break; }
 
                         m_stagedRow[o] = rowIdx;
-
                         if (!wasAnyStaged)
                             m_crossfadeStartPos = m_crossfadeGlobalPos;
+
+                        if (continuousCrossfadeModeLocked(o))
+                            ensureStagedSnapshotLocked(o);
                     }
                 }
                 lk2.unlock();
@@ -2716,8 +2863,17 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSweep(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
+            const bool toStaged = xfEnabled && m_crossfadeGlobalPos <= 127
+                    && continuousCrossfadeModeLocked(o);
             const int prevSweep = (o < m_liveSweepPreset.size()) ? m_liveSweepPreset[o] : -1;
-            if (o < m_liveSweepPreset.size())
+            if (toStaged)
+            {
+                ensureStagedSnapshotLocked(o);
+                if (o < m_stagedSweepPreset.size())
+                    m_stagedSweepPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
+                            value, sweepPresetCount);
+            }
+            else if (o < m_liveSweepPreset.size())
             {
                 m_liveSweepPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
                         value, sweepPresetCount);
@@ -2747,7 +2903,16 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (o < 64 && checkInputSource(universe, pagedCh, value, sender(), PTInputId::transContinuousBank(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            if (o < m_liveContinuousPreset.size())
+            const bool toStaged = xfEnabled && m_crossfadeGlobalPos <= 127
+                    && continuousCrossfadeModeLocked(o);
+            if (toStaged)
+            {
+                ensureStagedSnapshotLocked(o);
+                if (o < m_stagedContinuousPreset.size())
+                    m_stagedContinuousPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
+                            value, continuousPresetCount);
+            }
+            else if (o < m_liveContinuousPreset.size())
             {
                 m_liveContinuousPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
                         value, continuousPresetCount);
@@ -2763,7 +2928,16 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSecondaryRow(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            if (o < m_liveSecondaryRow.size())
+            const bool toStaged = xfEnabled && m_crossfadeGlobalPos <= 127
+                    && continuousCrossfadeModeLocked(o);
+            if (toStaged)
+            {
+                ensureStagedSnapshotLocked(o);
+                if (o < m_stagedSecondaryRow.size())
+                    m_stagedSecondaryRow[o] = PresetTableV2SpatialEngine::tableRowIndexFromInput(
+                            value, numRows);
+            }
+            else if (o < m_liveSecondaryRow.size())
             {
                 m_liveSecondaryRow[o] = PresetTableV2SpatialEngine::tableRowIndexFromInput(
                         value, numRows);
@@ -2909,8 +3083,10 @@ void PresetTableV2Widget::editProperties()
         if (!m_crossfadeEnabled)
         {
             m_stagedRow.fill(-1, m_stagedRow.size());
+            m_stagedSnapshotValid.fill(false, m_stagedSnapshotValid.size());
             m_crossfadeGlobalPos = 0;
             m_crossfadeStartPos  = 0;
+            m_crossfadePrevPos   = 0;
         }
     }
 
@@ -3434,6 +3610,7 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_crossfadeEnabled   = xfEnabled;
         m_crossfadeGlobalPos = 0;
         m_crossfadeStartPos  = 0;
+        m_crossfadePrevPos   = 0;
         m_nameColWidth = (nameColW > 0) ? nameColW : -1;
         m_mode           = loadedMode;
         m_fixtureGroupId = loadedGroupId;

@@ -683,6 +683,17 @@ bool PresetTableV2TransitionWidget::hasLiveColumnOverride(quint8 inputId) const
     return m_liveColumnOverrides.contains(inputId);
 }
 
+void PresetTableV2TransitionWidget::promoteStagedColumnOverrides()
+{
+    QMutexLocker lk(&m_liveMutex);
+    for (auto it = m_stagedColumnOverrides.constBegin();
+         it != m_stagedColumnOverrides.constEnd(); ++it)
+        m_liveColumnOverrides.insert(it.key(), it.value());
+    m_stagedColumnOverrides.clear();
+    lk.unlock();
+    notifyTablePresetCacheRefresh();
+}
+
 void PresetTableV2TransitionWidget::migrateLegacyInputSources()
 {
     const bool preBlocksLayout = m_inputs.contains(4)
@@ -948,8 +959,17 @@ void PresetTableV2TransitionWidget::slotInputValueChanged(quint32 universe, quin
             return;
         }
 
+        const bool stagedEditing = [this]() {
+            if (PresetTableV2ControlIface* table = linkedTable())
+                return table->continuousCrossfadeStagedEditing();
+            return false;
+        }();
+
         QMutexLocker lk(&m_liveMutex);
-        m_liveColumnOverrides.insert(inputId, value);
+        if (stagedEditing)
+            m_stagedColumnOverrides.insert(inputId, value);
+        else
+            m_liveColumnOverrides.insert(inputId, value);
         lk.unlock();
         notifyTablePresetCacheRefresh();
         sendFeedback(value, inputId);
