@@ -264,6 +264,7 @@ const quint8 VCCueList::deleteInputSourceId = 7;
 const quint8 VCCueList::secondarySelectInputSourceId = 8;
 const quint8 VCCueList::renameInputSourceId = 9;
 const quint8 VCCueList::behaviourModeInputSourceId = 10;
+const quint8 VCCueList::stepsFaderInputSourceId = 11;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -2442,11 +2443,14 @@ void VCCueList::slotKeyPressed(const QKeySequence& keySequence)
 
 void VCCueList::updateFeedback()
 {
-    int fbv = int(SCALE(float(m_sideFader->value()), 
+    int fbv = int(SCALE(float(m_sideFader->value()),
                         float(m_sideFader->minimum()),
-                        float(m_sideFader->maximum()), 
+                        float(m_sideFader->maximum()),
                         float(0), float(UCHAR_MAX)));
-    sendFeedback(fbv, sideFaderInputSourceId);
+    if (sideFaderMode() == Crossfade)
+        sendFeedback(fbv, sideFaderInputSourceId);
+    else if (sideFaderMode() == Steps)
+        sendFeedback(fbv, stepsFaderInputSourceId);
 
     if (sideFaderMode() == Crossfade)
         sendFeedback(0, behaviourModeInputSourceId);
@@ -2630,7 +2634,17 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
-        if (sideFaderMode() == None)
+        if (sideFaderMode() != Crossfade)
+            return;
+
+        float val = SCALE((float) value, (float) 0, (float) UCHAR_MAX,
+                          (float) m_sideFader->minimum(),
+                          (float) m_sideFader->maximum());
+        m_sideFader->setValue(val);
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), stepsFaderInputSourceId))
+    {
+        if (sideFaderMode() != Steps)
             return;
 
         float val = SCALE((float) value, (float) 0, (float) UCHAR_MAX,
@@ -4231,6 +4245,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             loadXMLSources(root, sideFaderInputSourceId);
         }
+        else if (root.name() == KXMLQLCVCCueListStepsLeft)
+        {
+            loadXMLSources(root, stepsFaderInputSourceId);
+        }
         else if (root.name() == KXMLQLCVCCueListCrossfadeRight) /* Legacy */
         {
             root.skipCurrentElement();
@@ -4556,6 +4574,14 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     {
         doc->writeStartElement(KXMLQLCVCCueListCrossfadeLeft);
         saveXMLInput(doc, cf1Src);
+        doc->writeEndElement();
+    }
+
+    QSharedPointer<QLCInputSource> stepsSrc = inputSource(stepsFaderInputSourceId);
+    if (!stepsSrc.isNull() && stepsSrc->isValid())
+    {
+        doc->writeStartElement(KXMLQLCVCCueListStepsLeft);
+        saveXMLInput(doc, stepsSrc);
         doc->writeEndElement();
     }
 

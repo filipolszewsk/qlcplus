@@ -184,12 +184,20 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_crossFadeLayout->insertWidget(0, m_behaviourModeInputWidget);
 
     m_crossfadeInputWidget = new InputSelectionWidget(m_doc, this);
-    m_crossfadeInputWidget->setTitle(tr("Crossfade Slider External Input"));
+    m_crossfadeInputWidget->setTitle(tr("Crossfade Slider External Input (Crossfade mode only)"));
     m_crossfadeInputWidget->setKeyInputVisibility(false);
     m_crossfadeInputWidget->setInputSource(m_cueList->inputSource(VCCueList::sideFaderInputSourceId));
     m_crossfadeInputWidget->setWidgetPage(m_cueList->page());
     m_crossfadeInputWidget->show();
     m_crossFadeLayout->addWidget(m_crossfadeInputWidget);
+
+    m_stepsFaderInputWidget = new InputSelectionWidget(m_doc, this);
+    m_stepsFaderInputWidget->setTitle(tr("Steps Slider External Input (Steps mode only)"));
+    m_stepsFaderInputWidget->setKeyInputVisibility(false);
+    m_stepsFaderInputWidget->setInputSource(m_cueList->inputSource(VCCueList::stepsFaderInputSourceId));
+    m_stepsFaderInputWidget->setWidgetPage(m_cueList->page());
+    m_stepsFaderInputWidget->show();
+    m_crossFadeLayout->addWidget(m_stepsFaderInputWidget);
 
     m_secondarySelectInputWidget = new InputSelectionWidget(m_doc, this);
     m_secondarySelectInputWidget->setTitle(tr("Index Select Slider (1=first cue, 2=second, ...) — Crossfade: sets target; Steps: jumps to cue"));
@@ -316,6 +324,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_deleteInputWidget->inputSource(), VCCueList::deleteInputSourceId);
     m_cueList->setInputSource(m_renameInputWidget->inputSource(), VCCueList::renameInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
+    m_cueList->setInputSource(m_stepsFaderInputWidget->inputSource(), VCCueList::stepsFaderInputSourceId);
     m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
     m_cueList->setInputSource(m_behaviourModeInputWidget->inputSource(), VCCueList::behaviourModeInputSourceId);
 
@@ -356,6 +365,7 @@ void VCCueListProperties::slotTabChanged()
     m_prevInputWidget->stopAutoDetection();
 
     m_crossfadeInputWidget->stopAutoDetection();
+    m_stepsFaderInputWidget->stopAutoDetection();
     m_secondarySelectInputWidget->stopAutoDetection();
     m_behaviourModeInputWidget->stopAutoDetection();
 }

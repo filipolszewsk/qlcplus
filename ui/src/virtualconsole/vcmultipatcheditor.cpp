@@ -337,13 +337,21 @@ void VCMultiPatchEditor::fillTree()
                     stopItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
                 stopItem->setFlags(stopItem->flags() | Qt::ItemIsEditable);
 
-                QTreeWidgetItem *faderItem = new QTreeWidgetItem(topItem);
-                faderItem->setText(0, tr("Side Fader"));
-                faderItem->setData(0, Qt::UserRole, VCCueList::sideFaderInputSourceId);
+                QTreeWidgetItem *crossfadeFaderItem = new QTreeWidgetItem(topItem);
+                crossfadeFaderItem->setText(0, tr("Crossfade Fader"));
+                crossfadeFaderItem->setData(0, Qt::UserRole, VCCueList::sideFaderInputSourceId);
                 src = cueList->inputSource(VCCueList::sideFaderInputSourceId);
                 if (src)
-                    faderItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
-                faderItem->setFlags(faderItem->flags() | Qt::ItemIsEditable);
+                    crossfadeFaderItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
+                crossfadeFaderItem->setFlags(crossfadeFaderItem->flags() | Qt::ItemIsEditable);
+
+                QTreeWidgetItem *stepsFaderItem = new QTreeWidgetItem(topItem);
+                stepsFaderItem->setText(0, tr("Steps Fader"));
+                stepsFaderItem->setData(0, Qt::UserRole, VCCueList::stepsFaderInputSourceId);
+                src = cueList->inputSource(VCCueList::stepsFaderInputSourceId);
+                if (src)
+                    stepsFaderItem->setData(1, Qt::EditRole, (src->universe() << 16) | src->channel());
+                stepsFaderItem->setFlags(stepsFaderItem->flags() | Qt::ItemIsEditable);
             }
         }
         else if (widget->type() == VCWidget::FrameWidget || widget->type() == VCWidget::SoloFrameWidget)

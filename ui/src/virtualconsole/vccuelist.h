@@ -68,6 +68,7 @@ class Doc;
 #define KXMLQLCVCCueListRename          QStringLiteral("Rename")
 #define KXMLQLCVCCueListCrossfadeLeft   QStringLiteral("CrossLeft")
 #define KXMLQLCVCCueListCrossfadeRight  QStringLiteral("CrossRight")
+#define KXMLQLCVCCueListStepsLeft       QStringLiteral("StepsLeft")
 #define KXMLQLCVCCueListSlidersMode     QStringLiteral("SlidersMode")
 #define KXMLQLCVCCueListRecordAllChannels QStringLiteral("RecordAllChannels")
 #define KXMLQLCVCCueListRecordNonZeroOnly QStringLiteral("RecordNonZeroOnly")
@@ -175,6 +176,7 @@ public:
     static const quint8 renameInputSourceId;
     static const quint8 secondarySelectInputSourceId;
     static const quint8 behaviourModeInputSourceId;
+    static const quint8 stepsFaderInputSourceId;
 
     /*************************************************************************
      * Initialization
