@@ -64,6 +64,7 @@ protected:
 
     InputSelectionWidget *m_crossfadeInputWidget;
     InputSelectionWidget *m_secondarySelectInputWidget;
+    InputSelectionWidget *m_behaviourModeInputWidget;
 
     /************************************************************************
      * Cues

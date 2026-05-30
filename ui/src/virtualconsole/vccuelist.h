@@ -75,6 +75,7 @@ class Doc;
 #define KXMLQLCVCCueListRecordPrefix    QStringLiteral("RecordPrefix")
 #define KXMLQLCVCCueListNextPrevSecondary QStringLiteral("NextPrevSecondary")
 #define KXMLQLCVCCueListSecondarySelect QStringLiteral("SecondarySelect")
+#define KXMLQLCVCCueListBehaviourMode   QStringLiteral("BehaviourMode")
 #define KXMLQLCVCCueListStepIndexOutput QStringLiteral("StepIndexOutput")
 #define KXMLQLCVCCueListStepIndexOutputEnabled QStringLiteral("Enabled")
 #define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
@@ -173,6 +174,7 @@ public:
     static const quint8 deleteInputSourceId;
     static const quint8 renameInputSourceId;
     static const quint8 secondarySelectInputSourceId;
+    static const quint8 behaviourModeInputSourceId;
 
     /*************************************************************************
      * Initialization

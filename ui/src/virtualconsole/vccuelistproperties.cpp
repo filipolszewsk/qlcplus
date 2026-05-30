@@ -175,6 +175,14 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     /* Next/Prev controls secondary selection */
     m_nextPrevSecondaryCheck->setChecked(cueList->nextPrevControlsSecondary());
 
+    m_behaviourModeInputWidget = new InputSelectionWidget(m_doc, this);
+    m_behaviourModeInputWidget->setTitle(tr("Behaviour Mode External Input (0 = Crossfade, >0 = Steps)"));
+    m_behaviourModeInputWidget->setKeyInputVisibility(false);
+    m_behaviourModeInputWidget->setInputSource(m_cueList->inputSource(VCCueList::behaviourModeInputSourceId));
+    m_behaviourModeInputWidget->setWidgetPage(m_cueList->page());
+    m_behaviourModeInputWidget->show();
+    m_crossFadeLayout->insertWidget(0, m_behaviourModeInputWidget);
+
     m_crossfadeInputWidget = new InputSelectionWidget(m_doc, this);
     m_crossfadeInputWidget->setTitle(tr("Crossfade Slider External Input"));
     m_crossfadeInputWidget->setKeyInputVisibility(false);
@@ -309,6 +317,7 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_renameInputWidget->inputSource(), VCCueList::renameInputSourceId);
     m_cueList->setInputSource(m_crossfadeInputWidget->inputSource(), VCCueList::sideFaderInputSourceId);
     m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
+    m_cueList->setInputSource(m_behaviourModeInputWidget->inputSource(), VCCueList::behaviourModeInputSourceId);
 
     if (m_noneRadio->isChecked())
         m_cueList->setSideFaderMode(VCCueList::None);
@@ -348,6 +357,7 @@ void VCCueListProperties::slotTabChanged()
 
     m_crossfadeInputWidget->stopAutoDetection();
     m_secondarySelectInputWidget->stopAutoDetection();
+    m_behaviourModeInputWidget->stopAutoDetection();
 }
 
 /****************************************************************************

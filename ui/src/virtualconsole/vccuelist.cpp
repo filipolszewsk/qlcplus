@@ -263,6 +263,7 @@ const quint8 VCCueList::overwriteInputSourceId = 6;
 const quint8 VCCueList::deleteInputSourceId = 7;
 const quint8 VCCueList::secondarySelectInputSourceId = 8;
 const quint8 VCCueList::renameInputSourceId = 9;
+const quint8 VCCueList::behaviourModeInputSourceId = 10;
 
 const QString progressDisabledStyle =
         "QProgressBar { border: 2px solid #C3C3C3; border-radius: 4px; background-color: #DCDCDC; }";
@@ -2447,6 +2448,11 @@ void VCCueList::updateFeedback()
                         float(0), float(UCHAR_MAX)));
     sendFeedback(fbv, sideFaderInputSourceId);
 
+    if (sideFaderMode() == Crossfade)
+        sendFeedback(0, behaviourModeInputSourceId);
+    else if (sideFaderMode() == Steps)
+        sendFeedback(UCHAR_MAX, behaviourModeInputSourceId);
+
     Chaser *ch = chaser();
     if (ch == NULL)
         return;
@@ -2615,6 +2621,12 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
         {
             m_renameLatestValue = value;
         }
+    }
+    else if (checkInputSource(universe, pagedCh, value, sender(), behaviourModeInputSourceId))
+    {
+        FaderMode newMode = (value == 0) ? Crossfade : Steps;
+        if (sideFaderMode() != newMode)
+            setSideFaderMode(newMode);
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), sideFaderInputSourceId))
     {
@@ -4211,6 +4223,10 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         {
             loadXMLSources(root, secondarySelectInputSourceId);
         }
+        else if (root.name() == KXMLQLCVCCueListBehaviourMode)
+        {
+            loadXMLSources(root, behaviourModeInputSourceId);
+        }
         else if (root.name() == KXMLQLCVCCueListCrossfadeLeft)
         {
             loadXMLSources(root, sideFaderInputSourceId);
@@ -4549,6 +4565,15 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
     {
         doc->writeStartElement(KXMLQLCVCCueListSecondarySelect);
         saveXMLInput(doc, secSelSrc);
+        doc->writeEndElement();
+    }
+
+    /* Behaviour mode (Crossfade / Steps) */
+    QSharedPointer<QLCInputSource> behaviourSrc = inputSource(behaviourModeInputSourceId);
+    if (!behaviourSrc.isNull() && behaviourSrc->isValid())
+    {
+        doc->writeStartElement(KXMLQLCVCCueListBehaviourMode);
+        saveXMLInput(doc, behaviourSrc);
         doc->writeEndElement();
     }
 
