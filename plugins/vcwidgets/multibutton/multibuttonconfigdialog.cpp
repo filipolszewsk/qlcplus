@@ -4,6 +4,7 @@
 */
 
 #include "multibuttonconfigdialog.h"
+#include "mbvalueexpr.h"
 
 #include "inputselectionwidget.h"
 #include "functionselection.h"
@@ -91,6 +92,8 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QSharedPointer<QLCInputSource>     presetChooseSrc,
     QSharedPointer<QLCInputSource>     entrySelectSrc,
     QSharedPointer<QLCInputSource>     spreadPageSrc,
+    QSharedPointer<QLCInputSource>     commitSrc,
+    bool                               stageBeforeCommit,
     const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
     const QList<QKeySequence>&                   functionEntryKeys,
     const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
@@ -246,6 +249,14 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_presetTable->setAlternatingRowColors(true);
     m_presetTable->verticalHeader()->setDefaultSectionSize(22);
     presetLayout->addWidget(m_presetTable, 1);
+
+    auto* formulaHint = new QLabel(
+        tr("DMX cells: enter 0–255 or a formula, e.g. IF(u1.ch42 >= 128, 255, 0) "
+           "(uN = universe, chM = channel in universe)."),
+        presetGrp);
+    formulaHint->setWordWrap(true);
+    formulaHint->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
+    presetLayout->addWidget(formulaHint);
 
     QVBoxLayout* lvlBtnCol = new QVBoxLayout;
     m_chooseChannelsBtn = new QPushButton(tr("Choose channels…"), presetGrp);
@@ -581,6 +592,31 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
            "entry select, etc.) still work. Tile and per-entry triggers are not affected."));
     inputLayout->addWidget(m_receiveInputInactiveFrameCheck);
 
+    m_stageBeforeCommitCheck = new QCheckBox(
+        tr("Stage selection — commit required (Operate)"), inputScrollContent);
+    m_stageBeforeCommitCheck->setChecked(stageBeforeCommit);
+    m_stageBeforeCommitCheck->setToolTip(
+        tr("Clicks and entry-select only highlight the chosen preset (white border). "
+           "Level DMX and functions apply only after the commit input reaches 255. "
+           "Cycle trigger and automation still activate immediately."));
+    inputLayout->addWidget(m_stageBeforeCommitCheck);
+
+    QGroupBox* commitInputGrp = new QGroupBox(tr("Commit staged selection (channel value)"),
+                                             inputScrollContent);
+    QVBoxLayout* commitInputLayout = new QVBoxLayout(commitInputGrp);
+    QLabel* commitHint = new QLabel(
+        tr("0 = idle (no commit). Value must equal the source Upper feedback (typically 255) "
+           "to apply the staged preset. Only used when stage-before-commit is enabled."),
+        commitInputGrp);
+    commitHint->setWordWrap(true);
+    commitInputLayout->addWidget(commitHint);
+    m_commitInputSel = new InputSelectionWidget(doc, commitInputGrp);
+    m_commitInputSel->setKeyInputVisibility(false);
+    m_commitInputSel->setWidgetPage(widgetPage);
+    m_commitInputSel->setInputSource(commitSrc);
+    commitInputLayout->addWidget(m_commitInputSel);
+    inputLayout->addWidget(commitInputGrp);
+
     QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputScrollContent);
     QVBoxLayout* trigLayout = new QVBoxLayout(trigGrp);
     m_triggerInputSel = new InputSelectionWidget(doc, trigGrp);
@@ -777,7 +813,11 @@ QList<LevelPreset> MultiButtonConfigDialog::levelPresets() const
             preset.hideName = m_levelPresets.value(row).hideName;
         }
         for (int col = 0; col < chanCount; ++col)
+        {
+            const QString formula = presetCellFormula(row, kPresetFirstDmxColumn + col);
+            preset.valueFormulas.append(formula);
             preset.values.append(presetTableValue(row, kPresetFirstDmxColumn + col));
+        }
         if (row < m_levelPresets.size())
             preset.entryInput = m_levelPresets.at(row).entryInput;
         presets.append(preset);
@@ -785,16 +825,44 @@ QList<LevelPreset> MultiButtonConfigDialog::levelPresets() const
     return presets;
 }
 
+QString MultiButtonConfigDialog::presetCellFormula(int row, int col) const
+{
+    if (col < kPresetFirstDmxColumn || !m_presetTable)
+        return QString();
+
+    if (row < 0 || row >= m_presetTable->rowCount() || col >= m_presetTable->columnCount())
+        return QString();
+
+    QTableWidgetItem* item = m_presetTable->item(row, col);
+    if (!item)
+        return QString();
+
+    if (item->data(kDmxFormulaUserRole).isValid())
+        return item->data(kDmxFormulaUserRole).toString().trimmed();
+
+    const QString text = item->text().trimmed();
+    return mbValueExprLooksLikeFormula(text) ? text : QString();
+}
+
 quint8 MultiButtonConfigDialog::presetTableValue(int row, int col) const
 {
     if (col < kPresetFirstDmxColumn)
         return 0;
 
-    int tableRow = row + kDataRowOffset;
     if (!m_presetTable) return 0;
-    if (tableRow >= m_presetTable->rowCount() || col >= m_presetTable->columnCount()) return 0;
-    QTableWidgetItem* item = m_presetTable->item(tableRow, col);
+    if (row < 0 || row >= m_presetTable->rowCount() || col >= m_presetTable->columnCount())
+        return 0;
+
+    QTableWidgetItem* item = m_presetTable->item(row, col);
     if (!item) return 0;
+
+    if (!presetCellFormula(row, col).isEmpty())
+    {
+        if (item->data(Qt::UserRole).isValid())
+            return quint8(item->data(Qt::UserRole).toInt());
+        return 0;
+    }
+
     if (item->data(Qt::UserRole).isValid())
         return quint8(item->data(Qt::UserRole).toInt());
     return parseDmxCell(item->text());
@@ -918,6 +986,17 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::spreadPageInputSource() 
 {
     return m_spreadPageInputSel ? m_spreadPageInputSel->inputSource()
                                 : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> MultiButtonConfigDialog::commitInputSource() const
+{
+    return m_commitInputSel ? m_commitInputSel->inputSource()
+                            : QSharedPointer<QLCInputSource>();
+}
+
+bool MultiButtonConfigDialog::stageBeforeCommit() const
+{
+    return m_stageBeforeCommitCheck ? m_stageBeforeCommitCheck->isChecked() : false;
 }
 
 void MultiButtonConfigDialog::accept()
@@ -1412,6 +1491,30 @@ QTableWidgetItem* MultiButtonConfigDialog::makeValueTableItem(quint8 value)
     return item;
 }
 
+QTableWidgetItem* MultiButtonConfigDialog::makePresetValueTableItem(const LevelPreset& preset,
+                                                                    int valCol)
+{
+    if (valCol >= 0 && valCol < preset.valueFormulas.size()
+        && !preset.valueFormulas.at(valCol).trimmed().isEmpty())
+    {
+        const QString formula = preset.valueFormulas.at(valCol).trimmed();
+        QTableWidgetItem* item = new QTableWidgetItem(formula);
+        item->setTextAlignment(Qt::AlignCenter);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+        item->setData(kDmxFormulaUserRole, formula);
+        QFont f = item->font();
+        f.setItalic(true);
+        item->setFont(f);
+        const quint8 fallback = valCol < preset.values.size() ? preset.values.at(valCol) : 0;
+        item->setData(Qt::UserRole, int(fallback));
+        item->setToolTip(tr("Formula. Syntax: IF(u1.ch42 >= 128, 255, 0)"));
+        return item;
+    }
+
+    const quint8 value = valCol < preset.values.size() ? preset.values.at(valCol) : 0;
+    return makeValueTableItem(value);
+}
+
 void MultiButtonConfigDialog::updateChooseChannelsButton()
 {
     if (!m_chooseChannelsBtn) return;
@@ -1452,14 +1555,19 @@ void MultiButtonConfigDialog::slotChooseChannels()
         return;
 
     QList<QHash<quint64, quint8>> perRowOld;
+    QList<QHash<quint64, QString>> perRowFormulas;
     perRowOld.resize(m_levelPresets.size());
+    perRowFormulas.resize(m_levelPresets.size());
     for (int row = 0; row < m_levelPresets.size(); ++row)
     {
         const LevelPreset& preset = m_levelPresets.at(row);
         for (int col = 0; col < m_levelChannelBindings.size() && col < preset.values.size(); ++col)
         {
             const LevelChannelBinding& b = m_levelChannelBindings.at(col);
-            perRowOld[row].insert(bindingKey(b.fixtureId, b.channel), preset.values.at(col));
+            const quint64 key = bindingKey(b.fixtureId, b.channel);
+            perRowOld[row].insert(key, preset.values.at(col));
+            if (col < preset.valueFormulas.size())
+                perRowFormulas[row].insert(key, preset.valueFormulas.at(col));
         }
     }
 
@@ -1475,9 +1583,15 @@ void MultiButtonConfigDialog::slotChooseChannels()
     for (int row = 0; row < m_levelPresets.size(); ++row)
     {
         QList<quint8> newValues;
+        QStringList newFormulas;
         for (const LevelChannelBinding& b : m_levelChannelBindings)
-            newValues.append(perRowOld[row].value(bindingKey(b.fixtureId, b.channel), 0));
+        {
+            const quint64 key = bindingKey(b.fixtureId, b.channel);
+            newValues.append(perRowOld[row].value(key, 0));
+            newFormulas.append(perRowFormulas[row].value(key, QString()));
+        }
         m_levelPresets[row].values = newValues;
+        m_levelPresets[row].valueFormulas = newFormulas;
     }
 
     syncPresetTableColumns();
@@ -1713,6 +1827,7 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
     const int tableCols    = kPresetFirstDmxColumn + chanCount;
 
     QVector<QHash<quint64, quint8>> rowByKey(presetCount);
+    QVector<QHash<quint64, QString>> rowFormulaByKey(presetCount);
 
     for (int r = 0; r < presetCount; ++r)
     {
@@ -1721,6 +1836,11 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
         {
             const LevelChannelBinding& b = m_levelChannelBindings.at(c);
             rowByKey[r].insert(bindingKey(b.fixtureId, b.channel), preset.values.at(c));
+            if (c < preset.valueFormulas.size())
+            {
+                rowFormulaByKey[r].insert(bindingKey(b.fixtureId, b.channel),
+                                          preset.valueFormulas.at(c));
+            }
         }
     }
 
@@ -1738,14 +1858,23 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
     for (int r = 0; r < presetCount; ++r)
     {
         QList<quint8> newValues;
+        QStringList newFormulas;
+        LevelPreset rowPreset = m_levelPresets.at(r);
         for (int col = 0; col < chanCount; ++col)
         {
             const LevelChannelBinding& b = m_levelChannelBindings.at(col);
-            const quint8 val = rowByKey[r].value(bindingKey(b.fixtureId, b.channel), 0);
+            const quint64 key = bindingKey(b.fixtureId, b.channel);
+            const quint8 val = rowByKey[r].value(key, 0);
+            const QString formula = rowFormulaByKey[r].value(key, QString());
             newValues.append(val);
-            m_presetTable->setItem(r, kPresetFirstDmxColumn + col, makeValueTableItem(val));
+            newFormulas.append(formula);
+            rowPreset.values = newValues;
+            rowPreset.valueFormulas = newFormulas;
+            m_presetTable->setItem(r, kPresetFirstDmxColumn + col,
+                                   makePresetValueTableItem(rowPreset, col));
         }
         m_levelPresets[r].values = newValues;
+        m_levelPresets[r].valueFormulas = newFormulas;
         updatePresetNameCell(r);
         updatePresetInputCell(r);
     }
@@ -1793,18 +1922,44 @@ void MultiButtonConfigDialog::slotPresetTableItemChanged(QTableWidgetItem* item)
     if (valCol < 0 || valCol >= m_levelChannelBindings.size())
         return;
 
-    const quint8 val = parseDmxCell(item->text());
+    LevelPreset& preset = m_levelPresets[row];
+    MultiButtonWidget::alignLevelPresetArrays(preset, m_levelChannelBindings.size());
+
+    const QString text = item->text().trimmed();
+    if (mbValueExprLooksLikeFormula(text))
+    {
+        MbValueExpr expr;
+        QString err;
+        if (mbParseValueExpr(text, expr, &err))
+            item->setToolTip(tr("Formula OK"));
+        else
+            item->setToolTip(err);
+
+        m_rebuildingPresetTable = true;
+        preset.valueFormulas[valCol] = text;
+        item->setData(kDmxFormulaUserRole, text);
+        QFont f = item->font();
+        f.setItalic(true);
+        item->setFont(f);
+        item->setData(Qt::UserRole, int(preset.values.at(valCol)));
+        m_rebuildingPresetTable = false;
+        return;
+    }
+
+    const quint8 val = parseDmxCell(text);
     const QString normalized = QString::number(val);
 
     m_rebuildingPresetTable = true;
+    preset.valueFormulas[valCol].clear();
+    item->setData(kDmxFormulaUserRole, QVariant());
+    QFont f = item->font();
+    f.setItalic(false);
+    item->setFont(f);
     if (item->text() != normalized)
         item->setText(normalized);
     item->setData(Qt::UserRole, int(val));
     m_rebuildingPresetTable = false;
 
-    LevelPreset& preset = m_levelPresets[row];
-    while (preset.values.size() < m_levelChannelBindings.size())
-        preset.values.append(0);
     preset.values[valCol] = val;
 }
 
@@ -1905,6 +2060,7 @@ void MultiButtonConfigDialog::slotLevelAddPreset()
     LevelPreset preset;
     preset.hideName = false;
     preset.values = QList<quint8>(m_levelChannelBindings.size(), 0);
+    preset.valueFormulas = QStringList(m_levelChannelBindings.size(), QString());
     m_levelPresets.append(preset);
     syncPresetTableColumns();
     if (!m_levelPresets.isEmpty())

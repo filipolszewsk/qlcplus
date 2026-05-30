@@ -82,6 +82,7 @@ struct LevelPreset
     bool          hideName = false;  // true = no text on button (user cleared name)
     bool          flashOnActivate = false;
     QList<quint8> values;   // parallel to m_levelChannelBindings
+    QStringList   valueFormulas;
     QSharedPointer<QLCInputSource> entryInput;
     QKeySequence                 entryKey;
 };
@@ -115,6 +116,7 @@ public:
     static const quint8 presetChooseInputSourceId = 3;   // DMX value selects automation profile
     static const quint8 entrySelectInputSourceId  = 4;   // scaled entry/preset (knob/fader)
     static const quint8 spreadPageInputSourceId   = 5;   // spread page index (0-based channel value)
+    static const quint8 commitInputSourceId       = 6;   // 0 = idle, upper (255) = apply staged
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -153,6 +155,11 @@ public:
 
     bool receiveInputOnInactiveFramePage() const { return m_receiveInputOnInactiveFramePage; }
     void setReceiveInputOnInactiveFramePage(bool enable);
+
+    bool stageBeforeCommit() const { return m_stageBeforeCommit; }
+    void setStageBeforeCommit(bool enable);
+
+    static void alignLevelPresetArrays(LevelPreset& preset, int bindingCount);
 
     MultiButtonLayout widgetLayout() const { return m_layout; }
     void setWidgetLayout(MultiButtonLayout layout);
@@ -245,6 +252,7 @@ private:
     void handlePresetChooseInput(uchar value);
     void handleEntrySelectInput(uchar value);
     void handleSpreadPageInput(uchar value);
+    void handleCommitInput(uchar value);
     void assignInputSource(const QSharedPointer<QLCInputSource>& src, quint8 id);
     void syncAllInputSourcePages();
     void syncAutomationSuspendDefault();
@@ -258,6 +266,9 @@ private:
     int  entryInputLocalSlot(int globalRow) const;
     void activate(int idx);
     void stopCurrent();
+    bool stagingActive() const;
+    void stageEntry(int idx);
+    void commitStaged();
     bool entryIsFlash(int idx) const;
     void beginFlashHold(int idx);
     void endFlashHold();
@@ -300,7 +311,9 @@ private:
     int   spreadHitTest(const QPoint& pos) const;
     QString tileCaption(int idx) const;
     void drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
-                  bool isActive, bool isPressed) const;
+                  bool isSelected, bool isPressed, bool showMonitorBorder) const;
+    int monitorHighlightIndex() const;
+    int stagedHighlightIndex() const;
     void paintSpread(QPainter& p);
     void paintSingle(QPainter& p);
     QColor buttonTextColor(const QColor& tileBg) const;
@@ -329,6 +342,11 @@ private:
     void applyFunctionAssignmentsFrom(const MultiButtonWidget* src);
     void applyLevelValuesFrom(const MultiButtonWidget* src);
 
+    QList<uchar> resolvedPresetValues(const LevelPreset& preset,
+                                      const QList<Universe*>& universes) const;
+    quint8 resolvedPresetChannelValue(const LevelPreset& preset, int channelIndex,
+                                      const QList<Universe*>& universes) const;
+
     // ---- Mode ------------------------------------------------------------
     MultiButtonMode m_mode = MultiButtonMode::Function;
 
@@ -351,6 +369,9 @@ private:
 
     int            m_currentIndex = -1;
     bool           m_visualOnly   = false;
+    bool           m_stageBeforeCommit    = false;
+    int            m_stagedIndex          = -1;
+    uchar          m_commitInputLastValue = 0;
 
     // ---- Icon cache (keyed by entry index) ------------------------------
     mutable QHash<int, QPixmap> m_iconCache;

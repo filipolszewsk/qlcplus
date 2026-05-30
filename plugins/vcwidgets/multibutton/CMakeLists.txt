@@ -30,6 +30,7 @@ add_library(multibutton_vcwidget MODULE
     multibuttonplugin.cpp multibuttonplugin.h
     multibuttonwidget.cpp multibuttonwidget.h
     multibuttonconfigdialog.cpp multibuttonconfigdialog.h
+    mbvalueexpr.cpp mbvalueexpr.h
 )
 
 target_compile_features(multibutton_vcwidget PRIVATE cxx_std_17)

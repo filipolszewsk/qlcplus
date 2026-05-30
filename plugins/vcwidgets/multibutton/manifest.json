@@ -1,9 +1,9 @@
 {
   "plugin_id": "org.qlcplus.vcwidgets.multibutton",
   "name": "Multi Button",
-  "version": "1.6.1",
+  "version": "1.7.5",
   "author": "QLC+ VC Widget SDK",
-  "description": "Cycles through scenes/functions. Scribble fills full area when no label. Monitor channel values, per-entry icons, optional OFF step.",
+  "description": "Level/Function presets with monitor (1.6.1 paint), IF() DMX formulas, stage-before-commit (no white border). Cycle/automation still commit immediately.",
   "qt_version": "6.8.1",
   "platforms": {
     "macos_arm64": "libmultibutton_vcwidget.dylib",

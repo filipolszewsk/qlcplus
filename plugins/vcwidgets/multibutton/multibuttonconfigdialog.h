@@ -65,6 +65,8 @@ public:
         QSharedPointer<QLCInputSource>     presetChooseSrc,
         QSharedPointer<QLCInputSource>     entrySelectSrc,
         QSharedPointer<QLCInputSource>     spreadPageSrc,
+        QSharedPointer<QLCInputSource>     commitSrc,
+        bool                               stageBeforeCommit,
         const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
         const QList<QKeySequence>&                   functionEntryKeys,
         const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
@@ -101,6 +103,8 @@ public:
     QSharedPointer<QLCInputSource> presetChooseInputSource() const;
     QSharedPointer<QLCInputSource> entrySelectInputSource() const;
     QSharedPointer<QLCInputSource> spreadPageInputSource()  const;
+    QSharedPointer<QLCInputSource> commitInputSource()      const;
+    bool                           stageBeforeCommit()     const;
     QList<QSharedPointer<QLCInputSource>> functionEntryInputs() const;
     QList<QKeySequence>                   functionEntryKeys()  const;
     QList<QSharedPointer<QLCInputSource>> spreadSlotInputs()  const;
@@ -175,8 +179,11 @@ private:
     void syncPresetTableColumns();
     void syncPresetTableRows();
     quint8 presetTableValue(int row, int col) const;
+    QString presetCellFormula(int row, int col) const;
     static quint8 parseDmxCell(const QString& text);
     static QTableWidgetItem* makeValueTableItem(quint8 value);
+    static QTableWidgetItem* makePresetValueTableItem(const LevelPreset& preset, int valCol);
+    static constexpr int kDmxFormulaUserRole = Qt::UserRole + 2;
     void updatePresetNameCell(int row);
     void syncPresetNameFromCell(int row, const QString& cellText);
     QString presetNameCellText(int row) const;
@@ -292,6 +299,8 @@ private:
     InputSelectionWidget* m_presetChooseInputSel = nullptr;
     InputSelectionWidget* m_entrySelectInputSel  = nullptr;
     InputSelectionWidget* m_spreadPageInputSel   = nullptr;
+    InputSelectionWidget* m_commitInputSel       = nullptr;
+    QCheckBox*            m_stageBeforeCommitCheck = nullptr;
     QCheckBox*            m_receiveInputInactiveFrameCheck = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 

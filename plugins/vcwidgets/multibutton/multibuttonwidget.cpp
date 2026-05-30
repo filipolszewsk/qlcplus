@@ -5,6 +5,7 @@
 
 #include "multibuttonwidget.h"
 #include "multibuttonconfigdialog.h"
+#include "mbvalueexpr.h"
 
 #include "functionparent.h"
 #include "mastertimer.h"
@@ -64,6 +65,8 @@ static const QString KXMLAddOffAtEnd       = QStringLiteral("AddOffAtEnd");
 static const QString KXMLMonitorChannels   = QStringLiteral("MonitorChannelValues");
 static const QString KXMLReceiveInputInactiveFramePage =
     QStringLiteral("ReceiveInputOnInactiveFramePage");
+static const QString KXMLStageBeforeCommit = QStringLiteral("StageBeforeCommit");
+static const QString KXMLCommitInput       = QStringLiteral("CommitInput");
 static const QString KXMLTriggerInput      = QStringLiteral("TriggerInput");
 static const QString KXMLPopupInput        = QStringLiteral("PopupInput");
 static const QString KXMLAutomationTriggerInput = QStringLiteral("AutomationTriggerInput");
@@ -94,6 +97,9 @@ static const QString KXMLLevelPresetHideName = QStringLiteral("HideName");
 static const QString KXMLFunctionFlash     = QStringLiteral("Flash");
 static const QString KXMLFunctionLabelColor = QStringLiteral("LabelColor");
 static const QString KXMLLevelPresetValues = QStringLiteral("Values");
+static const QString KXMLLevelValueFormula = QStringLiteral("ValueFormula");
+static const QString KXMLLevelValueFormulaIndex = QStringLiteral("Index");
+static const QString KXMLLevelValueFormulaText = QStringLiteral("Text");
 static const QString KXMLSpread            = QStringLiteral("Spread");
 static const QString KXMLSpreadEnabled     = QStringLiteral("Enabled");
 static const QString KXMLSpreadColumns     = QStringLiteral("Columns");
@@ -296,12 +302,7 @@ void MultiButtonWidget::setLevelConfig(const QList<LevelChannelBinding>& binding
     m_levelPresets         = presets;
 
     for (LevelPreset& preset : m_levelPresets)
-    {
-        while (preset.values.size() < bindings.size())
-            preset.values.append(0);
-        while (preset.values.size() > bindings.size())
-            preset.values.removeLast();
-    }
+        alignLevelPresetArrays(preset, bindings.size());
 
     m_iconCache.clear();
     m_visualOnly = false;
@@ -714,14 +715,24 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
 
     if (m_addOffAtEnd && globalSlot == total - 1)
     {
-        stopCurrent();
-        updateFeedback();
-        update();
+        if (stagingActive())
+            stageEntry(-1);
+        else
+        {
+            stopCurrent();
+            updateFeedback();
+            update();
+        }
         return;
     }
 
     if (globalSlot < entryCount())
-        activate(globalSlot);
+    {
+        if (stagingActive())
+            stageEntry(globalSlot);
+        else
+            activate(globalSlot);
+    }
 }
 
 int MultiButtonWidget::spreadTileCount() const
@@ -921,6 +932,16 @@ void MultiButtonWidget::setReceiveInputOnInactiveFramePage(bool enable)
     m_receiveInputOnInactiveFramePage = enable;
 }
 
+void MultiButtonWidget::setStageBeforeCommit(bool enable)
+{
+    if (m_stageBeforeCommit == enable)
+        return;
+    m_stageBeforeCommit = enable;
+    if (!enable)
+        m_stagedIndex = -1;
+    update();
+}
+
 void MultiButtonWidget::setMonitorChannelValues(bool enable)
 {
     if (m_monitorChannelValues == enable) return;
@@ -969,6 +990,49 @@ void MultiButtonWidget::resetLevelWriteCache()
     m_lastWrittenPresetValues.clear();
 }
 
+void MultiButtonWidget::alignLevelPresetArrays(LevelPreset& preset, int bindingCount)
+{
+    const int n = qMax(0, bindingCount);
+    while (preset.values.size() < n)
+        preset.values.append(0);
+    while (preset.values.size() > n)
+        preset.values.removeLast();
+    while (preset.valueFormulas.size() < n)
+        preset.valueFormulas.append(QString());
+    while (preset.valueFormulas.size() > n)
+        preset.valueFormulas.removeLast();
+}
+
+quint8 MultiButtonWidget::resolvedPresetChannelValue(const LevelPreset& preset, int channelIndex,
+                                                     const QList<Universe*>& universes) const
+{
+    if (channelIndex >= 0 && channelIndex < preset.valueFormulas.size())
+    {
+        const QString formula = preset.valueFormulas.at(channelIndex).trimmed();
+        if (!formula.isEmpty() && mbValueExprLooksLikeFormula(formula))
+        {
+            MbValueExpr expr;
+            QString err;
+            if (mbParseValueExpr(formula, expr, &err))
+                return mbEvaluateValueExpr(expr, universes, &err);
+        }
+    }
+    if (channelIndex >= 0 && channelIndex < preset.values.size())
+        return preset.values.at(channelIndex);
+    return 0;
+}
+
+QList<uchar> MultiButtonWidget::resolvedPresetValues(const LevelPreset& preset,
+                                                     const QList<Universe*>& universes) const
+{
+    QList<uchar> out;
+    const int n = m_levelChannelBindings.size();
+    out.reserve(n);
+    for (int i = 0; i < n; ++i)
+        out.append(resolvedPresetChannelValue(preset, i, universes));
+    return out;
+}
+
 void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
 {
     QMutexLocker lock(&m_dmxMutex);
@@ -982,12 +1046,13 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         return;
 
     const LevelPreset& preset = m_levelPresets.at(dmxIdx);
+    const QList<uchar> resolved = resolvedPresetValues(preset, universes);
     const bool presetChanged = (dmxIdx != m_lastWrittenPresetIndex
-                                || m_lastWrittenPresetValues != preset.values);
+                                || m_lastWrittenPresetValues != resolved);
     if (!presetChanged)
         return;
 
-    for (int i = 0; i < m_levelChannelBindings.size() && i < preset.values.size(); ++i)
+    for (int i = 0; i < m_levelChannelBindings.size() && i < resolved.size(); ++i)
     {
         const LevelChannelBinding& b = m_levelChannelBindings.at(i);
         Fixture* fxi = m_doc->fixture(b.fixtureId);
@@ -1018,7 +1083,7 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         if (qlcch && qlcch->group() != QLCChannel::Intensity)
             fc->addFlag(FadeChannel::AutoRemove);
 
-        const uchar target = preset.values.at(i);
+        const uchar target = resolved.at(i);
         fc->setStart(fc->current());
         fc->setTarget(target);
         fc->setReady(false);
@@ -1026,7 +1091,7 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
     }
 
     m_lastWrittenPresetIndex  = dmxIdx;
-    m_lastWrittenPresetValues = preset.values;
+    m_lastWrittenPresetValues = resolved;
 }
 
 bool MultiButtonWidget::entryIsFlash(int idx) const
@@ -1760,6 +1825,7 @@ void MultiButtonWidget::activate(int idx)
 
     m_currentIndex = idx;
     m_visualOnly   = false;
+    m_stagedIndex  = m_currentIndex;
     m_lastActivationTime.restart();
     updateFeedback();
     update();
@@ -1781,7 +1847,41 @@ void MultiButtonWidget::stopCurrent()
 
     m_currentIndex = -1;
     m_visualOnly   = false;
+    m_stagedIndex  = -1;
     m_lastActivationTime.restart();
+}
+
+bool MultiButtonWidget::stagingActive() const
+{
+    return m_stageBeforeCommit && mode() == Doc::Operate;
+}
+
+void MultiButtonWidget::stageEntry(int idx)
+{
+    if (!stagingActive())
+        return;
+    if (idx < -1 || idx >= entryCount())
+        return;
+    if (idx >= 0 && entryIsFlash(idx))
+        return;
+
+    m_stagedIndex = idx;
+    update();
+}
+
+void MultiButtonWidget::commitStaged()
+{
+    if (!stagingActive())
+        return;
+
+    const int idx = m_stagedIndex;
+    if (idx < 0)
+        activate(-1);
+    else
+        activate(idx);
+
+    m_stagedIndex = m_currentIndex;
+    update();
 }
 
 // ---- Monitor channel values -----------------------------------------------
@@ -1849,7 +1949,7 @@ void MultiButtonWidget::slotCheckChannelValues()
 
                 quint32 addr = fxi->address() + b.channel;
                 quint32 uni  = fxi->universe();
-                quint8 expected = i < preset.values.size() ? preset.values.at(i) : 0;
+                const quint8 expected = resolvedPresetChannelValue(preset, i, universes);
 
                 if ((int) uni >= universes.count()) { allMatch = false; break; }
                 if (universes.at(uni)->preGMValue(addr) != expected) { allMatch = false; break; }
@@ -1890,6 +1990,8 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
             stopCurrent();
         }
 
+        m_stagedIndex = -1;
+
         if (m_channelMonitorTimer)
             m_channelMonitorTimer->stop();
     }
@@ -1897,8 +1999,9 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
     {
         syncAllInputSourcePages();
         syncAutomationSuspendDefault();
-        m_triggerLastValue    = 0;
-        m_automationLastValue = 0;
+        m_triggerLastValue     = 0;
+        m_automationLastValue  = 0;
+        m_commitInputLastValue = 0;
 
         reactivateLevelPreset();
 
@@ -1980,10 +2083,21 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
                 const int hit = spreadHitTest(e->pos());
                 if (!m_longFired && hit == m_pressTileIndex && hit != -2)
                 {
-                    if (hit < 0)
+                    if (stagingActive())
+                    {
+                        if (hit < 0)
+                            stageEntry(-1);
+                        else if (!entryIsFlash(hit))
+                            stageEntry(hit);
+                    }
+                    else if (hit < 0)
+                    {
                         stopCurrent();
+                    }
                     else if (!entryIsFlash(hit))
+                    {
                         activate(hit);
+                    }
                 }
             }
             m_pressTileIndex = -2;
@@ -2120,7 +2234,37 @@ int MultiButtonWidget::displayedEntryIndex() const
         return m_flashHoldIndex;
     if (m_entrySelectPreviewActive)
         return m_entrySelectPreviewIndex;
+    if (stagingActive() && m_stagedIndex >= 0)
+        return m_stagedIndex;
     return m_currentIndex;
+}
+
+int MultiButtonWidget::monitorHighlightIndex() const
+{
+    if (!m_monitorChannelValues)
+        return -1;
+
+    // Staging: orange = committed/output (m_currentIndex), green = m_stagedIndex
+    if (stagingActive())
+    {
+        if (m_currentIndex < 0)
+            return -1;
+        if (m_stagedIndex == m_currentIndex)
+            return -1;
+        return m_currentIndex;
+    }
+
+    if (m_visualOnly)
+        return m_currentIndex;
+
+    return -1;
+}
+
+int MultiButtonWidget::stagedHighlightIndex() const
+{
+    if (!stagingActive())
+        return -1;
+    return m_stagedIndex;
 }
 
 void MultiButtonWidget::cancelEntrySelectPreview()
@@ -2142,6 +2286,12 @@ void MultiButtonWidget::commitEntrySelectPreview()
     const int idx = m_entrySelectPreviewIndex;
     m_entrySelectPreviewIndex = -1;
 
+    if (stagingActive())
+    {
+        stageEntry(idx);
+        return;
+    }
+
     if (idx < 0)
         stopCurrent();
     else
@@ -2161,6 +2311,12 @@ void MultiButtonWidget::destroyEntrySelectOverlay()
 
 void MultiButtonWidget::applyEntryPick(int idx)
 {
+    if (stagingActive())
+    {
+        stageEntry(idx);
+        return;
+    }
+
     if (idx < 0)
     {
         stopCurrent();
@@ -2506,9 +2662,51 @@ void MultiButtonWidget::handleSpreadPageInput(uchar value)
     update();
 }
 
+void MultiButtonWidget::handleCommitInput(uchar value)
+{
+    if (!stagingActive())
+        return;
+
+    const QLCInputSource* src = inputSource(commitInputSourceId).data();
+    uchar upper = 255;
+    if (src != nullptr)
+    {
+        upper = src->feedbackValue(QLCInputFeedback::UpperValue);
+        if (upper == 0)
+            upper = 255;
+    }
+
+    if (value == 0)
+    {
+        m_commitInputLastValue = 0;
+        return;
+    }
+
+    if (m_commitInputLastValue != upper && value == upper)
+        commitStaged();
+
+    m_commitInputLastValue = value;
+}
+
 void MultiButtonWidget::handleEntrySelectInput(uchar value)
 {
-    if (entryCount() == 0 || value == 0)
+    if (entryCount() == 0)
+        return;
+
+    if (stagingActive())
+    {
+        if (value == 0)
+            return;
+
+        QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
+        const int slot = slotFromInputValue(value, src);
+        const int idx = slotToEntryIndex(slot);
+        syncEntrySelectInputOutput(value);
+        stageEntry(idx);
+        return;
+    }
+
+    if (value == 0)
         return;
 
     QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
@@ -2585,6 +2783,11 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
         handleSpreadPageInput(value);
         return;
     }
+    if (checkInputSource(universe, pagedCh, value, sender(), commitInputSourceId))
+    {
+        handleCommitInput(value);
+        return;
+    }
 
     if (checkInputSource(universe, pagedCh, value, sender(), popupInputSourceId))
     {
@@ -2604,7 +2807,12 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             if (checkInputSource(universe, pagedCh, value, sender(), MBInputId::spreadSlot(slot)))
             {
                 if (value > 0)
-                    activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
+                {
+                    if (stagingActive())
+                        stageEntry(m_spreadPageIndex * spp + slot);
+                    else
+                        activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
+                }
                 return;
             }
         }
@@ -2623,7 +2831,10 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             }
             else if (value > 0)
             {
-                activate(i);
+                if (stagingActive())
+                    stageEntry(i);
+                else
+                    activate(i);
             }
             return;
         }
@@ -2743,6 +2954,8 @@ void MultiButtonWidget::editProperties()
         inputSource(presetChooseInputSourceId),
         inputSource(entrySelectInputSourceId),
         inputSource(spreadPageInputSourceId),
+        inputSource(commitInputSourceId),
+        m_stageBeforeCommit,
         m_functionEntryInputs,
         m_functionEntryKeys,
         m_spreadSlotInputs,
@@ -2779,6 +2992,7 @@ void MultiButtonWidget::editProperties()
     setAddOffAtEnd(dlg.addOffAtEnd());
     setMonitorChannelValues(dlg.monitorChannelValues());
     setReceiveInputOnInactiveFramePage(dlg.receiveInputOnInactiveFramePage());
+    setStageBeforeCommit(dlg.stageBeforeCommit());
     setWidgetLayout(dlg.widgetLayout());
     setSpreadColumns(dlg.spreadColumns());
     setSpreadRows(dlg.spreadRows());
@@ -2795,9 +3009,11 @@ void MultiButtonWidget::editProperties()
     assignInputSource(dlg.presetChooseInputSource(), presetChooseInputSourceId);
     assignInputSource(dlg.entrySelectInputSource(), entrySelectInputSourceId);
     assignInputSource(dlg.spreadPageInputSource(), spreadPageInputSourceId);
+    assignInputSource(dlg.commitInputSource(), commitInputSourceId);
     syncAutomationSuspendDefault();
-    m_triggerLastValue    = 0;
-    m_automationLastValue = 0;
+    m_triggerLastValue     = 0;
+    m_automationLastValue  = 0;
+    m_commitInputLastValue = 0;
     m_doc->setModified();
     update();
 }
@@ -2835,6 +3051,9 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setAddOffAtEnd(m_addOffAtEnd);
     copy->setMonitorChannelValues(m_monitorChannelValues);
     copy->setReceiveInputOnInactiveFramePage(m_receiveInputOnInactiveFramePage);
+    copy->setStageBeforeCommit(m_stageBeforeCommit);
+    copy->assignInputSource(cloneInputSource(inputSource(commitInputSourceId)),
+                            commitInputSourceId);
     copy->setWidgetLayout(m_layout);
     copy->setSpreadColumns(m_spreadColumns);
     copy->setSpreadRows(m_spreadRows);
@@ -2946,12 +3165,11 @@ void MultiButtonWidget::applyLevelValuesFrom(const MultiButtonWidget* src)
     const int bindCount = m_levelChannelBindings.size();
     for (int i = 0; i < n; ++i)
     {
-        m_levelPresets[i].values = src->m_levelPresets.at(i).values;
-        while (m_levelPresets[i].values.size() < bindCount)
-            m_levelPresets[i].values.append(0);
-        while (m_levelPresets[i].values.size() > bindCount)
-            m_levelPresets[i].values.removeLast();
+        m_levelPresets[i].values        = src->m_levelPresets.at(i).values;
+        m_levelPresets[i].valueFormulas = src->m_levelPresets.at(i).valueFormulas;
+        alignLevelPresetArrays(m_levelPresets[i], bindCount);
     }
+    resetLevelWriteCache();
 }
 
 QList<QPair<VCWidget::PastePropertyGroup, QString>>
@@ -3017,6 +3235,9 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         setAddOffAtEnd(src->m_addOffAtEnd);
         setMonitorChannelValues(src->m_monitorChannelValues);
         setReceiveInputOnInactiveFramePage(src->m_receiveInputOnInactiveFramePage);
+        setStageBeforeCommit(src->m_stageBeforeCommit);
+        assignInputSource(cloneInputSource(src->inputSource(commitInputSourceId)),
+                          commitInputSourceId);
     }
 
     VCWidget::applyPropertiesFrom(source, flags);
@@ -3035,6 +3256,7 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["addOffAtEnd"]          = m_addOffAtEnd;
     obj["monitorChannelValues"] = m_monitorChannelValues;
     obj["receiveInputOnInactiveFramePage"] = m_receiveInputOnInactiveFramePage;
+    obj["stageBeforeCommit"] = m_stageBeforeCommit;
 
     QJsonObject spread;
     spread["enabled"]   = (m_layout == MultiButtonLayout::Spread);
@@ -3142,6 +3364,11 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
         for (quint8 v : preset.values)
             vals.append(v);
         po["values"] = vals;
+        QJsonArray formulas;
+        for (const QString& f : preset.valueFormulas)
+            formulas.append(f);
+        if (!formulas.isEmpty())
+            po["valueFormulas"] = formulas;
         if (!preset.entryInput.isNull() && preset.entryInput->isValid())
         {
             po["inputUniverse"] = (int) preset.entryInput->universe();
@@ -3185,6 +3412,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_addOffAtEnd          = obj["addOffAtEnd"].toBool(false);
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
     m_receiveInputOnInactiveFramePage = obj["receiveInputOnInactiveFramePage"].toBool(false);
+    setStageBeforeCommit(obj["stageBeforeCommit"].toBool(false));
 
     if (obj.contains("spread"))
     {
@@ -3328,8 +3556,9 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
         }
         for (const QJsonValue& vv : po["values"].toArray())
             preset.values.append((quint8) vv.toInt());
-        while (preset.values.size() < bindings.size()) preset.values.append(0);
-        while (preset.values.size() > bindings.size()) preset.values.removeLast();
+        for (const QJsonValue& fv : po["valueFormulas"].toArray())
+            preset.valueFormulas.append(fv.toString());
+        alignLevelPresetArrays(preset, bindings.size());
         if (po.contains("inputUniverse"))
         {
             preset.entryInput = QSharedPointer<QLCInputSource>(
@@ -3532,6 +3761,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         {
             setReceiveInputOnInactiveFramePage(root.readElementText().toInt() != 0);
         }
+        else if (root.name() == KXMLStageBeforeCommit)
+        {
+            setStageBeforeCommit(root.readElementText().toInt() != 0);
+        }
         else if (root.name() == KXMLLevelFixture)
         {
             legacyFxId = root.attributes().value(KXMLLevelFixtureID).toUInt();
@@ -3595,6 +3828,15 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
                     preset.entryInput = binding.source;
                     preset.entryKey   = binding.key;
                 }
+                else if (root.name() == KXMLLevelValueFormula)
+                {
+                    const int fi = root.attributes().value(KXMLLevelValueFormulaIndex).toInt();
+                    const QString text = root.attributes().value(KXMLLevelValueFormulaText).toString();
+                    while (preset.valueFormulas.size() <= fi)
+                        preset.valueFormulas.append(QString());
+                    preset.valueFormulas[fi] = text;
+                    root.skipCurrentElement();
+                }
                 else
                     root.skipCurrentElement();
             }
@@ -3651,6 +3893,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLSpreadPageInput)
         {
             loadXMLSources(root, spreadPageInputSourceId);
+        }
+        else if (root.name() == KXMLCommitInput)
+        {
+            loadXMLSources(root, commitInputSourceId);
         }
         else
         {
@@ -3760,6 +4006,8 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeTextElement(KXMLMonitorChannels, QString::number(1));
     if (m_receiveInputOnInactiveFramePage)
         doc->writeTextElement(KXMLReceiveInputInactiveFramePage, QString::number(1));
+    if (m_stageBeforeCommit)
+        doc->writeTextElement(KXMLStageBeforeCommit, QString::number(1));
 
     doc->writeStartElement(KXMLSpread);
     doc->writeAttribute(KXMLSpreadEnabled,
@@ -3833,6 +4081,16 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
             {
                 doc->writeStartElement(KXMLEntryTriggerInput);
                 saveInputBlock(doc, preset.entryInput, preset.entryKey);
+                doc->writeEndElement();
+            }
+            for (int fi = 0; fi < preset.valueFormulas.size(); ++fi)
+            {
+                const QString formula = preset.valueFormulas.at(fi).trimmed();
+                if (formula.isEmpty())
+                    continue;
+                doc->writeStartElement(KXMLLevelValueFormula);
+                doc->writeAttribute(KXMLLevelValueFormulaIndex, QString::number(fi));
+                doc->writeAttribute(KXMLLevelValueFormulaText, formula);
                 doc->writeEndElement();
             }
             doc->writeEndElement();
@@ -3932,6 +4190,14 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeEndElement();
     }
 
+    auto commitSrc = inputSource(commitInputSourceId);
+    if (!commitSrc.isNull() && commitSrc->isValid())
+    {
+        doc->writeStartElement(KXMLCommitInput);
+        saveXMLInput(doc, commitSrc);
+        doc->writeEndElement();
+    }
+
     doc->writeEndElement();
     return true;
 }
@@ -3971,7 +4237,8 @@ QColor MultiButtonWidget::buttonTextColor(const QColor& tileBg) const
 }
 
 void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
-                                 bool isActive, bool isPressed) const
+                                 bool isSelected, bool isPressed,
+                                 bool showMonitorBorder) const
 {
     p.save();
     p.translate(tileRect.topLeft());
@@ -3979,9 +4246,11 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
 
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const bool monitoring = isActive && (m_visualOnly || m_entrySelectPreviewActive);
+    const bool highlighted = isSelected || showMonitorBorder;
+    const bool monitoring = showMonitorBorder
+                            || (isSelected && m_entrySelectPreviewActive);
     QColor bg;
-    paintTileBackground(p, r, tileIndex, isActive, isPressed, monitoring, bg);
+    paintTileBackground(p, r, tileIndex, highlighted, isPressed, monitoring, bg);
 
     QPixmap iconPx;
     if (tileIndex >= 0)
@@ -4037,8 +4306,8 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
     if (showLabelText && !cap.isEmpty())
     {
         QFont mainFont = font();
-        if (isActive && tileIndex >= 0
-            && (m_entrySelectPreviewActive || !m_visualOnly))
+        if (isSelected && tileIndex >= 0
+            && (m_entrySelectPreviewActive || !m_visualOnly || stagingActive()))
             mainFont.setBold(true);
         p.setFont(mainFont);
         p.setPen(fg);
@@ -4077,13 +4346,19 @@ void MultiButtonWidget::paintSpread(QPainter& p)
     }
 
     const int displayIdx = displayedEntryIndex();
+    const int monitorIdx = monitorHighlightIndex();
+    const int stagedIdx  = stagedHighlightIndex();
 
     for (const SpreadTileInfo& tile : computeSpreadTiles())
     {
-        const bool isActive = (tile.index < 0) ? (displayIdx < 0)
-                                               : (tile.index == displayIdx);
+        const bool showMonitor = (tile.index == monitorIdx);
+        const bool isSelected = stagingActive()
+                                    ? ((tile.index < 0) ? (stagedIdx < 0)
+                                                        : (tile.index == stagedIdx))
+                                    : ((tile.index < 0) ? (displayIdx < 0)
+                                                        : (tile.index == displayIdx));
         const bool isPressed = m_pressActive && (tile.index == m_pressTileIndex);
-        drawTile(p, tile.rect, tile.index, isActive, isPressed);
+        drawTile(p, tile.rect, tile.index, isSelected, isPressed, showMonitor);
     }
 }
 
