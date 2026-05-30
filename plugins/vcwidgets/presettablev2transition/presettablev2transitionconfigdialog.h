@@ -26,6 +26,7 @@ public:
     PTGlobalEffectSettings globalSettings() const;
     QSharedPointer<QLCInputSource> globalSpeedInputSource() const;
     QSharedPointer<QLCInputSource> globalIntensityInputSource() const;
+    QSharedPointer<QLCInputSource> globalCrossfadeManualInputSource() const;
 
 private slots:
     void slotValidate();
@@ -46,5 +47,6 @@ private:
     QSpinBox*                      m_maxDurationSpin = nullptr;
     InputSelectionWidget*          m_speedInputSel = nullptr;
     InputSelectionWidget*          m_intensityInputSel = nullptr;
+    InputSelectionWidget*          m_crossfadeManualInputSel = nullptr;
     QDialogButtonBox*              m_buttons = nullptr;
 };

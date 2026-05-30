@@ -44,6 +44,44 @@ int PTDimmerWaveEngine::evenOffsetStepForSpan(int span)
     return 360 / (span - 1);
 }
 
+int PTDimmerWaveEngine::gridSpanAlongAxis(int gridWidth, int gridHeight, PTTransitionAxis axis,
+                                          int fxOrientation)
+{
+    PTTransitionAxis useAxis = axis;
+    if (fxOrientation == 1)
+        useAxis = PTTransitionAxis::Y;
+
+    const PTDimmerWaveSpatialSpan s = spatialSpanForPoint(
+            qMax(0, gridWidth - 1), qMax(0, gridHeight - 1),
+            qMax(1, gridWidth), qMax(1, gridHeight), useAxis);
+    return qMax(1, s.span);
+}
+
+int PTDimmerWaveEngine::effectiveOffsetSlotCount(int gridSpanAlongAxis,
+                                                 const PTTransitionPreset& preset)
+{
+    const int span = qMax(1, gridSpanAlongAxis);
+    const int wings = qBound(1, preset.wings, span);
+    const int blocks = qMax(1, preset.blocks);
+    const int ppw = qMax(1, span / wings);
+    const int blocksPerWing = int(std::ceil(double(ppw) / double(blocks)));
+    return qMax(1, wings * blocksPerWing);
+}
+
+int PTDimmerWaveEngine::maxOffsetStepForGrid(int gridSpanAlongAxis,
+                                             const PTTransitionPreset& preset)
+{
+    const int slotCount = effectiveOffsetSlotCount(gridSpanAlongAxis, preset);
+    return qMax(1, 360 / slotCount);
+}
+
+void PTDimmerWaveEngine::clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis)
+{
+    if (gridSpanAlongAxis <= 0)
+        return;
+    preset.offsetStep = qBound(1, preset.offsetStep, maxOffsetStepForGrid(gridSpanAlongAxis, preset));
+}
+
 PTDimmerWaveSpatialSpan PTDimmerWaveEngine::spatialSpanForPoint(int col, int row, int gridWidth,
                                                                 int gridHeight, PTTransitionAxis axis)
 {
@@ -155,6 +193,13 @@ float PTDimmerWaveEngine::dimmerAtPhaseInWidth(float phaseInWidth, const PTDimme
     }
     // No fade-out zone — sustain to end of packet (QLC else branch).
     return maxValue;
+}
+
+float PTDimmerWaveEngine::dimmerSweepAttack01(float phaseInWindow01, const PTDimmerWaveParams& params)
+{
+    PTDimmerWaveParams attack = params;
+    attack.waveFadeOut = 0;
+    return dimmerAtPhaseInWidth(phaseInWindow01, attack);
 }
 
 float PTDimmerWaveEngine::calculateDimmerWave(float iteratorRad, const PTDimmerWaveParams& params)

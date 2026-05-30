@@ -5,6 +5,8 @@
 
 #include "ptparammatrixengine.h"
 
+#include "ptdimmerwaveengine.h"
+#include "ptspatialfixtureplan.h"
 #include "mastertimer.h"
 
 #include <QtMath>
@@ -295,4 +297,12 @@ int PTParamMatrixEngine::waveFrontFromOffset(PTOffsetDirection dir)
         case PTOffsetDirection::Symmetric:      return 0;
         default:                                return 1;
     }
+}
+
+float PTParamMatrixEngine::crossfadeSweepBlend01(double globalProgress, double phaseStart01,
+                                               const PTTransitionPreset& preset,
+                                               const PTGlobalEffectSettings& global)
+{
+    return PTSpatialFixturePlan::sweepBlend01AtPhaseStart(
+            globalProgress, phaseStart01, preset, global);
 }

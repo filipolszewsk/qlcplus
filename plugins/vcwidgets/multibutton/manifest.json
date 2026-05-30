@@ -1,9 +1,9 @@
 {
   "plugin_id": "org.qlcplus.vcwidgets.multibutton",
   "name": "Multi Button",
-  "version": "1.7.5",
+  "version": "1.7.12",
   "author": "QLC+ VC Widget SDK",
-  "description": "Level/Function presets with monitor (1.6.1 paint), IF() DMX formulas, stage-before-commit (no white border). Cycle/automation still commit immediately.",
+  "description": "IF() formulas: DMX channels ch1–512 (1-based, same as patch N.M).",
   "qt_version": "6.8.1",
   "platforms": {
     "macos_arm64": "libmultibutton_vcwidget.dylib",

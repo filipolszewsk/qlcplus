@@ -9,6 +9,7 @@
 #include "presettablev2effectengine.h"
 #include "ptdimmerwaveengine.h"
 #include "ptdimmerwavecurvewidget.h"
+#include "ptspatialfixturegridwidget.h"
 #include "ptparammatrixengine.h"
 #include "presettablev2vclookup.h"
 #include "ptefxinputids.h"
@@ -19,6 +20,7 @@
 #include <QDialog>
 #include <QHeaderView>
 #include <QSignalBlocker>
+#include <QHBoxLayout>
 #include <QSpinBox>
 
 static const QString KXMLRoot = QStringLiteral("PluginWidget");
@@ -53,6 +55,7 @@ static const QString KXMLPresetPlaybackMode = QStringLiteral("PlaybackMode");
 static const QString KXMLPresetSpeedMult = QStringLiteral("SpeedMult");
 static const QString KXMLGlobalSpeedInput = QStringLiteral("GlobalSpeedInput");
 static const QString KXMLGlobalIntensityInput = QStringLiteral("GlobalIntensityInput");
+static const QString KXMLGlobalCrossfadeManualInput = QStringLiteral("GlobalCrossfadeManualInput");
 static const QString KXMLEfxColumnInput = QStringLiteral("EfxColumnInput");
 static const QString KXMLInputIdAttr = QStringLiteral("InputId");
 static const QString KXMLGlobalMinMsRoot = QStringLiteral("GlobalMinMs");
@@ -227,13 +230,17 @@ void PresetTableV2TransitionWidget::updateGlobalSummaryLabel()
         return (src && src->isValid()) ? QStringLiteral(" *") : QString();
     };
 
-    const QString text = tr("Speed: %1%2 | Intensity: %3%4 | Cycle: %5–%6 ms")
+    const QString xfMode = crossfadeManualControlEnabled()
+            ? tr("XF manual ON") : tr("XF clock");
+    const QString text = tr("Speed: %1%2 | Intensity: %3%4 | Cycle: %5–%6 ms | %7%8")
             .arg(m_globalSettings.speed)
             .arg(inputMark(PTEfxCol::InputGlobalSpeed))
             .arg(m_globalSettings.intensity)
             .arg(inputMark(PTEfxCol::InputGlobalIntensity))
             .arg(m_globalSettings.minDurationMs)
-            .arg(m_globalSettings.maxDurationMs);
+            .arg(m_globalSettings.maxDurationMs)
+            .arg(xfMode)
+            .arg(inputMark(PTEfxCol::InputCrossfadeManual));
     m_globalSummaryLabel->setText(text);
     m_globalSummaryLabel->setToolTip(
             tr("Global speed, intensity and min/max cycle times — open widget properties to edit."));
@@ -262,8 +269,18 @@ void PresetTableV2TransitionWidget::buildUi()
     m_toolbar->addAction(tr("Duplicate"), this, &PresetTableV2TransitionWidget::slotDuplicatePreset);
     m_layout->addWidget(m_toolbar);
 
-    m_curveWidget = new PTDimmerWaveCurveWidget(this);
-    m_layout->addWidget(m_curveWidget);
+    m_previewRow = new QWidget(this);
+    QHBoxLayout* previewLayout = new QHBoxLayout(m_previewRow);
+    previewLayout->setContentsMargins(0, 0, 0, 0);
+    previewLayout->setSpacing(6);
+    m_curveWidget = new PTDimmerWaveCurveWidget(m_previewRow);
+    m_spatialGridWidget = new PTSpatialFixtureGridWidget(m_previewRow);
+    m_spatialGridWidget->setToolTip(
+            tr("Fixture group: sweep order, head offset (°), phase start. "
+               "Orange border = offset step too large; red = duplicate offsets."));
+    previewLayout->addWidget(m_curveWidget, 3);
+    previewLayout->addWidget(m_spatialGridWidget, 2);
+    m_layout->addWidget(m_previewRow);
 
     m_bankTabs = new QTabWidget(this);
     m_sweepTable = new QTableWidget(m_bankTabs);
@@ -277,7 +294,7 @@ void PresetTableV2TransitionWidget::buildUi()
         connect(table, &QTableWidget::cellChanged,
                 this, &PresetTableV2TransitionWidget::slotPresetCellChanged);
         connect(table, &QTableWidget::itemSelectionChanged,
-                this, &PresetTableV2TransitionWidget::updateCurvePreview);
+                this, &PresetTableV2TransitionWidget::updateEffectPreview);
         connect(table->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
                 this, &PresetTableV2TransitionWidget::slotColumnHeaderDoubleClicked);
     }
@@ -455,7 +472,19 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
         };
         wingsSymmetryCell(ColWingsSymmetry, p.wingsSymmetry);
 
-        spinCell(ColOffsetStep, p.offsetStep, 1, 360);
+        {
+            int maxStep = 360;
+            if (PresetTableV2ControlIface* table = linkedTable())
+            {
+                const int span = table->fixtureGroupSpanAlongAxis(p, m_globalSettings);
+                if (span > 0)
+                    maxStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, p);
+            }
+            PTTransitionPreset clamped = p;
+            PTDimmerWaveEngine::clampOffsetStep(clamped,
+                    gridSpanForPreset(clamped));
+            spinCell(ColOffsetStep, clamped.offsetStep, 1, maxStep);
+        }
         spinCell(ColDuration, int(p.durationMs), 20, 60000);
         spinCell(ColWaveWidth, p.waveWidth, 1, 360);
         waveShapeCell(ColWaveShape, p.waveShape);
@@ -481,12 +510,13 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
         };
         speedMultCell(ColSpeedMult, p.speedMultiplier);
         updatePresetRowUiForMode(r, mode);
+        updateOffsetStepLimitForRow(r, mode);
     }
 
     updateColumnHeaders(table);
     table->setColumnHidden(ColDuration, true);
     m_rebuildingTable = false;
-    updateCurvePreview();
+    updateEffectPreview();
 }
 
 PTTransitionPreset PresetTableV2TransitionWidget::presetFromRow(PTTransitionMode mode, int row) const
@@ -538,6 +568,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromRow(PTTransitionMode
     p.enabled = true;
     if (mode == PTTransitionMode::SweepOnly)
         PresetTableV2SpatialEngine::applySweepPresetConstraints(p);
+    PTDimmerWaveEngine::clampOffsetStep(p, gridSpanForPreset(p));
     return p;
 }
 
@@ -620,8 +651,9 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
     updatePresetRowUiForMode(row, mode);
     syncPresetFromTable(mode, row);
     updatePresetRowUiForMode(row, mode);
+    updateOffsetStepLimitForRow(row, mode);
     notifyTablePresetCacheRefresh();
-    updateCurvePreview();
+    updateEffectPreview();
 }
 
 void PresetTableV2TransitionWidget::slotPresetCellChanged(int row, int col)
@@ -652,7 +684,7 @@ void PresetTableV2TransitionWidget::slotBankTabChanged(int)
             syncPresetFromTable(PTTransitionMode::Continuous, r);
     }
     notifyTablePresetCacheRefresh();
-    updateCurvePreview();
+    updateEffectPreview();
 }
 
 void PresetTableV2TransitionWidget::mapColumnInput(quint8 inputId, const QString& title)
@@ -755,12 +787,69 @@ bool PresetTableV2TransitionWidget::applyGlobalInput(quint8 inputId, uchar value
             m_globalSettings.intensity = value;
             updateGlobalSummaryLabel();
             return true;
+        case PTEfxCol::InputCrossfadeManual:
+            m_crossfadeManualInputMapped = true;
+            m_crossfadeManualControl = (value > 127);
+            updateGlobalSummaryLabel();
+            notifyTablePresetCacheRefresh();
+            return true;
         default:
             return false;
     }
 }
 
-void PresetTableV2TransitionWidget::updateCurvePreview()
+bool PresetTableV2TransitionWidget::crossfadeManualControlEnabled() const
+{
+    const auto src = inputSource(PTEfxCol::InputCrossfadeManual);
+    if (src && src->isValid())
+        return m_crossfadeManualControl;
+    return true;
+}
+
+int PresetTableV2TransitionWidget::gridSpanForPreset(const PTTransitionPreset& preset) const
+{
+    if (PresetTableV2ControlIface* table = linkedTable())
+        return table->fixtureGroupSpanAlongAxis(preset, m_globalSettings);
+    return 0;
+}
+
+void PresetTableV2TransitionWidget::updateOffsetStepLimitForRow(int row, PTTransitionMode mode)
+{
+    QTableWidget* table = tableForMode(mode);
+    if (!table || row < 0 || row >= table->rowCount())
+        return;
+
+    QSpinBox* step = qobject_cast<QSpinBox*>(table->cellWidget(row, ColOffsetStep));
+    if (!step)
+        return;
+
+    const PTTransitionPreset preset = presetFromRow(mode, row);
+    int maxStep = 360;
+    int slotCount = 0;
+    const int span = gridSpanForPreset(preset);
+    if (span > 0)
+    {
+        slotCount = PTDimmerWaveEngine::effectiveOffsetSlotCount(span, preset);
+        maxStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
+    }
+
+    const QSignalBlocker block(step);
+    step->setMaximum(maxStep);
+    if (step->value() > maxStep)
+        step->setValue(maxStep);
+    if (slotCount > 0)
+    {
+        step->setToolTip(tr("Offset step (max %1° for %2 slots: wings×blocks per wing)")
+                                 .arg(maxStep)
+                                 .arg(slotCount));
+    }
+    else
+    {
+        step->setToolTip(tr("Offset step (link Fixture Group table for max limit)"));
+    }
+}
+
+void PresetTableV2TransitionWidget::updateEffectPreview()
 {
     if (!m_curveWidget)
         return;
@@ -768,7 +857,11 @@ void PresetTableV2TransitionWidget::updateCurvePreview()
     const PTTransitionMode mode = activeBankMode();
     const QVector<PTTransitionPreset>& presets = presetsForMode(mode);
     if (presets.isEmpty())
+    {
+        if (m_spatialGridWidget)
+            m_spatialGridWidget->setPlaceholderText(tr("Add a preset"));
         return;
+    }
 
     QTableWidget* table = activeTable();
     int row = table ? table->currentRow() : 0;
@@ -782,6 +875,21 @@ void PresetTableV2TransitionWidget::updateCurvePreview()
     const quint32 cycleMs = PTParamMatrixEngine::effectiveDurationMs(m_globalSettings, preset, false);
     m_curveWidget->setParams(params);
     m_curveWidget->setCycleDurationMs(cycleMs);
+
+    if (!m_spatialGridWidget)
+        return;
+
+    PTSpatialGridPreview preview;
+    if (PresetTableV2ControlIface* tableIface = linkedTable())
+    {
+        if (tableIface->spatialGridPreview(preset, m_globalSettings, preview))
+        {
+            m_spatialGridWidget->setPreview(preview);
+            return;
+        }
+    }
+    m_spatialGridWidget->setPlaceholderText(
+            tr("Link Preset Table v2 in Fixture Group mode to preview spatial order"));
 }
 
 void PresetTableV2TransitionWidget::slotAddPreset()
@@ -872,6 +980,12 @@ void PresetTableV2TransitionWidget::slotRefreshTableLink()
         m_linkLabel->setText(tr("Table #%1 not found").arg(m_targetTableId));
     else
         m_linkLabel->setText(tr("No table — double-click column headers to map inputs"));
+
+    for (int r = 0; m_sweepTable && r < m_sweepTable->rowCount(); ++r)
+        updateOffsetStepLimitForRow(r, PTTransitionMode::SweepOnly);
+    for (int r = 0; m_continuousTable && r < m_continuousTable->rowCount(); ++r)
+        updateOffsetStepLimitForRow(r, PTTransitionMode::Continuous);
+    updateEffectPreview();
 }
 
 int PresetTableV2TransitionWidget::transitionPresetCount(PTTransitionMode mode) const
@@ -902,6 +1016,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::effectiveTransitionPreset(PTTr
     PTTransitionPreset p = PresetTableV2SpatialEngine::mergePreset(transitionPreset(mode, index), live);
     p.playbackMode = (mode == PTTransitionMode::Continuous)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
+    PTDimmerWaveEngine::clampOffsetStep(p, gridSpanForPreset(p));
     return p;
 }
 
@@ -944,7 +1059,8 @@ void PresetTableV2TransitionWidget::slotInputValueChanged(quint32 universe, quin
         PTEfxCol::InputPropagation,
         PTEfxCol::InputSpeedMult,
         PTEfxCol::InputGlobalSpeed,
-        PTEfxCol::InputGlobalIntensity
+        PTEfxCol::InputGlobalIntensity,
+        PTEfxCol::InputCrossfadeManual
     };
 
     for (quint8 inputId : kAllInputs)
@@ -1010,8 +1126,11 @@ void PresetTableV2TransitionWidget::editProperties()
 
     setInputSource(dlg.globalSpeedInputSource(), PTEfxCol::InputGlobalSpeed);
     setInputSource(dlg.globalIntensityInputSource(), PTEfxCol::InputGlobalIntensity);
+    setInputSource(dlg.globalCrossfadeManualInputSource(), PTEfxCol::InputCrossfadeManual);
+    m_crossfadeManualInputMapped = dlg.globalCrossfadeManualInputSource()
+            && dlg.globalCrossfadeManualInputSource()->isValid();
     updateGlobalSummaryLabel();
-    updateCurvePreview();
+    updateEffectPreview();
 
     if (PresetTableV2ControlIface* table = linkedTable())
     {
@@ -1045,6 +1164,7 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     }
     copy->setInputSource(inputSource(PTEfxCol::InputGlobalSpeed), PTEfxCol::InputGlobalSpeed);
     copy->setInputSource(inputSource(PTEfxCol::InputGlobalIntensity), PTEfxCol::InputGlobalIntensity);
+    copy->setInputSource(inputSource(PTEfxCol::InputCrossfadeManual), PTEfxCol::InputCrossfadeManual);
     copy->slotRefreshTableLink();
     return copy;
 }
@@ -1211,6 +1331,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
             loadXMLSources(root, PTEfxCol::InputGlobalSpeed);
         else if (root.name() == KXMLGlobalIntensityInput)
             loadXMLSources(root, PTEfxCol::InputGlobalIntensity);
+        else if (root.name() == KXMLGlobalCrossfadeManualInput)
+            loadXMLSources(root, PTEfxCol::InputCrossfadeManual);
         else if (root.name() == KXMLEfxColumnInput)
         {
             const quint8 inputId = PTEfxCol::migrateLegacyInputKey(
@@ -1357,6 +1479,7 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
 
     saveInputBinding(PTEfxCol::InputGlobalSpeed, KXMLGlobalSpeedInput);
     saveInputBinding(PTEfxCol::InputGlobalIntensity, KXMLGlobalIntensityInput);
+    saveInputBinding(PTEfxCol::InputCrossfadeManual, KXMLGlobalCrossfadeManualInput);
 
     for (int col = 1; col < ColCount; ++col)
         saveInputBinding(PTEfxCol::inputIdForColumn(col), KXMLEfxColumnInput);

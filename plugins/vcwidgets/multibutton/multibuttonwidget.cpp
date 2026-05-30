@@ -66,6 +66,8 @@ static const QString KXMLMonitorChannels   = QStringLiteral("MonitorChannelValue
 static const QString KXMLReceiveInputInactiveFramePage =
     QStringLiteral("ReceiveInputOnInactiveFramePage");
 static const QString KXMLStageBeforeCommit = QStringLiteral("StageBeforeCommit");
+static const QString KXMLEntrySelectAutoCommit = QStringLiteral("EntrySelectAutoCommit");
+static const QString KXMLLogPresetChanges = QStringLiteral("LogPresetChanges");
 static const QString KXMLCommitInput       = QStringLiteral("CommitInput");
 static const QString KXMLTriggerInput      = QStringLiteral("TriggerInput");
 static const QString KXMLPopupInput        = QStringLiteral("PopupInput");
@@ -932,6 +934,16 @@ void MultiButtonWidget::setReceiveInputOnInactiveFramePage(bool enable)
     m_receiveInputOnInactiveFramePage = enable;
 }
 
+void MultiButtonWidget::setEntrySelectAutoCommit(bool enable)
+{
+    m_entrySelectAutoCommit = enable;
+}
+
+void MultiButtonWidget::setLogPresetChanges(bool enable)
+{
+    m_logPresetChanges = enable;
+}
+
 void MultiButtonWidget::setStageBeforeCommit(bool enable)
 {
     if (m_stageBeforeCommit == enable)
@@ -939,7 +951,16 @@ void MultiButtonWidget::setStageBeforeCommit(bool enable)
     m_stageBeforeCommit = enable;
     if (!enable)
         m_stagedIndex = -1;
+    updateChannelMonitorTimerInterval();
     update();
+}
+
+void MultiButtonWidget::updateChannelMonitorTimerInterval()
+{
+    if (!m_channelMonitorTimer)
+        return;
+    const int intervalMs = stagingActive() ? 100 : 200;
+    m_channelMonitorTimer->setInterval(intervalMs);
 }
 
 void MultiButtonWidget::setMonitorChannelValues(bool enable)
@@ -953,10 +974,10 @@ void MultiButtonWidget::setMonitorChannelValues(bool enable)
         if (!m_channelMonitorTimer)
         {
             m_channelMonitorTimer = new QTimer(this);
-            m_channelMonitorTimer->setInterval(200);
             connect(m_channelMonitorTimer, &QTimer::timeout,
                     this, &MultiButtonWidget::slotCheckChannelValues);
         }
+        updateChannelMonitorTimerInterval();
         if (mode() == Doc::Operate)
             m_channelMonitorTimer->start();
     }
@@ -1047,8 +1068,9 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
 
     const LevelPreset& preset = m_levelPresets.at(dmxIdx);
     const QList<uchar> resolved = resolvedPresetValues(preset, universes);
+    const bool liveFormulas = presetUsesLiveFormulas(preset);
     const bool presetChanged = (dmxIdx != m_lastWrittenPresetIndex
-                                || m_lastWrittenPresetValues != resolved);
+                                || (liveFormulas && m_lastWrittenPresetValues != resolved));
     if (!presetChanged)
         return;
 
@@ -1664,6 +1686,9 @@ void MultiButtonWidget::cycleNext()
 {
     if (entryCount() == 0) return;
 
+    if (m_logPresetChanges)
+        qDebug().nospace() << "MultiButton id=" << id() << " cycleNext";
+
     int total = entryCount() + (m_addOffAtEnd ? 1 : 0);
     int next  = (m_currentIndex + 1) % total;
 
@@ -1744,6 +1769,9 @@ void MultiButtonWidget::advanceAutomation()
     if (!profile || entryCount() == 0)
         return;
 
+    if (m_logPresetChanges)
+        qDebug().nospace() << "MultiButton id=" << id() << " advanceAutomation";
+
     const QVector<int> allowed = buildAllowedAutomationSlots(*profile);
     if (allowed.isEmpty())
         return;
@@ -1798,12 +1826,47 @@ void MultiButtonWidget::advanceAutomation()
     }
 }
 
+quint8 MultiButtonWidget::staticPresetChannelValue(const LevelPreset& preset, int channelIndex)
+{
+    if (channelIndex >= 0 && channelIndex < preset.values.size())
+        return preset.values.at(channelIndex);
+    return 0;
+}
+
+bool MultiButtonWidget::presetUsesLiveFormulas(const LevelPreset& preset) const
+{
+    for (const QString& formula : preset.valueFormulas)
+    {
+        if (mbValueExprLooksLikeFormula(formula.trimmed()))
+            return true;
+    }
+    return false;
+}
+
+quint8 MultiButtonWidget::monitorExpectedChannelValue(const LevelPreset& preset, int channelIndex,
+                                                      const QList<Universe*>& universes) const
+{
+    if (channelIndex >= 0 && channelIndex < preset.valueFormulas.size())
+    {
+        const QString formula = preset.valueFormulas.at(channelIndex).trimmed();
+        if (!formula.isEmpty() && mbValueExprLooksLikeFormula(formula))
+            return resolvedPresetChannelValue(preset, channelIndex, universes);
+    }
+    return staticPresetChannelValue(preset, channelIndex);
+}
+
 void MultiButtonWidget::activate(int idx)
 {
     if (entryIsFlash(idx))
         return;
 
     if (!m_visualOnly && idx == m_currentIndex) return;
+
+    if (m_logPresetChanges)
+    {
+        qDebug().nospace() << "MultiButton id=" << id() << " activate idx=" << idx
+                           << " (was " << m_currentIndex << ")";
+    }
 
     stopCurrent();
 
@@ -1825,7 +1888,9 @@ void MultiButtonWidget::activate(int idx)
 
     m_currentIndex = idx;
     m_visualOnly   = false;
-    m_stagedIndex  = m_currentIndex;
+    m_stagedIndex         = m_currentIndex;
+    m_monitorMatchIndex   = idx;
+    m_lastMonitorMatchIdx = idx;
     m_lastActivationTime.restart();
     updateFeedback();
     update();
@@ -1874,6 +1939,11 @@ void MultiButtonWidget::commitStaged()
     if (!stagingActive())
         return;
 
+    if (m_logPresetChanges)
+    {
+        qDebug().nospace() << "MultiButton id=" << id() << " commitStaged idx=" << m_stagedIndex;
+    }
+
     const int idx = m_stagedIndex;
     if (idx < 0)
         activate(-1);
@@ -1884,13 +1954,22 @@ void MultiButtonWidget::commitStaged()
     update();
 }
 
+void MultiButtonWidget::clearStagedOnExternalMonitorChange(int matchIdx)
+{
+    Q_UNUSED(matchIdx);
+    if (!stagingActive() || m_stagedIndex < 0)
+        return;
+    m_stagedIndex = -1;
+}
+
 // ---- Monitor channel values -----------------------------------------------
 
 void MultiButtonWidget::slotCheckChannelValues()
 {
     if (!m_monitorChannelValues) return;
 
-    if (m_lastActivationTime.isValid() && m_lastActivationTime.elapsed() < 500)
+    const int debounceMs = stagingActive() ? 100 : 500;
+    if (m_lastActivationTime.isValid() && m_lastActivationTime.elapsed() < debounceMs)
         return;
 
     QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
@@ -1906,6 +1985,9 @@ void MultiButtonWidget::slotCheckChannelValues()
 
         if (m_cachedSceneValues.size() != m_functionIds.size())
             rebuildSceneCache();
+
+        QVector<int> matches;
+        matches.reserve(m_cachedSceneValues.size());
 
         for (int entry = 0; entry < m_cachedSceneValues.size(); ++entry)
         {
@@ -1925,7 +2007,16 @@ void MultiButtonWidget::slotCheckChannelValues()
                 if (universes.at(uni)->preGMValue(addr) != scv.value) { allMatch = false; break; }
             }
 
-            if (allMatch) { matchIdx = entry; break; }
+            if (allMatch)
+                matches.append(entry);
+        }
+
+        if (!matches.isEmpty())
+        {
+            if (m_currentIndex >= 0 && matches.contains(m_currentIndex))
+                matchIdx = m_currentIndex;
+            else
+                matchIdx = matches.first();
         }
     }
     else
@@ -1935,6 +2026,9 @@ void MultiButtonWidget::slotCheckChannelValues()
             m_doc->inputOutputMap()->releaseUniverses(false);
             return;
         }
+
+        QVector<int> matches;
+        matches.reserve(m_levelPresets.size());
 
         for (int entry = 0; entry < m_levelPresets.size(); ++entry)
         {
@@ -1949,25 +2043,54 @@ void MultiButtonWidget::slotCheckChannelValues()
 
                 quint32 addr = fxi->address() + b.channel;
                 quint32 uni  = fxi->universe();
-                const quint8 expected = resolvedPresetChannelValue(preset, i, universes);
+                const quint8 expected = monitorExpectedChannelValue(preset, i, universes);
 
                 if ((int) uni >= universes.count()) { allMatch = false; break; }
                 if (universes.at(uni)->preGMValue(addr) != expected) { allMatch = false; break; }
             }
 
-            if (allMatch) { matchIdx = entry; break; }
+            if (allMatch)
+                matches.append(entry);
+        }
+
+        if (!matches.isEmpty())
+        {
+            if (m_currentIndex >= 0 && matches.contains(m_currentIndex))
+                matchIdx = m_currentIndex;
+            else
+                matchIdx = matches.first();
         }
     }
 
     m_doc->inputOutputMap()->releaseUniverses(false);
 
-    if (matchIdx >= 0 && matchIdx != m_currentIndex)
+    bool needUpdate = false;
+    bool stagedCleared = false;
+    const int prevMonitorMatch = m_monitorMatchIndex;
+
+    if (matchIdx >= 0)
     {
-        m_currentIndex = matchIdx;
-        m_visualOnly   = true;
-        updateFeedback();
-        update();
+        if (stagingActive() && m_stagedIndex >= 0 && matchIdx != m_lastMonitorMatchIdx)
+        {
+            clearStagedOnExternalMonitorChange(matchIdx);
+            stagedCleared = true;
+        }
+
+        m_monitorMatchIndex   = matchIdx;
+        m_lastMonitorMatchIdx = matchIdx;
     }
+    else
+    {
+        m_monitorMatchIndex = -1;
+        if (m_lastMonitorMatchIdx >= 0)
+            m_lastMonitorMatchIdx = -1;
+    }
+
+    if (m_monitorMatchIndex != prevMonitorMatch || stagedCleared)
+        needUpdate = true;
+
+    if (needUpdate)
+        update();
 }
 
 // ---- Mode ----------------------------------------------------------------
@@ -1990,7 +2113,9 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
             stopCurrent();
         }
 
-        m_stagedIndex = -1;
+        m_stagedIndex         = -1;
+        m_monitorMatchIndex   = -1;
+        m_lastMonitorMatchIdx = -2;
 
         if (m_channelMonitorTimer)
             m_channelMonitorTimer->stop();
@@ -2004,6 +2129,7 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
         m_commitInputLastValue = 0;
 
         reactivateLevelPreset();
+        updateChannelMonitorTimerInterval();
 
         if (m_monitorChannelValues)
         {
@@ -2244,20 +2370,18 @@ int MultiButtonWidget::monitorHighlightIndex() const
     if (!m_monitorChannelValues)
         return -1;
 
-    // Staging: orange = committed/output (m_currentIndex), green = m_stagedIndex
+    // Staging: orange = bus match (external/internal), green = m_stagedIndex; DMX = m_currentIndex
     if (stagingActive())
     {
-        if (m_currentIndex < 0)
-            return -1;
-        if (m_stagedIndex == m_currentIndex)
-            return -1;
-        return m_currentIndex;
+        if (m_monitorMatchIndex >= 0)
+            return m_monitorMatchIndex;
+        if (m_currentIndex >= 0)
+            return m_currentIndex;
+        return -1;
     }
 
-    if (m_visualOnly)
-        return m_currentIndex;
-
-    return -1;
+    // Monitor is display-only; does not change m_currentIndex / writeDMX
+    return m_monitorMatchIndex;
 }
 
 int MultiButtonWidget::stagedHighlightIndex() const
@@ -2390,7 +2514,7 @@ void MultiButtonWidget::closeEntrySelectPopup(bool commitSelection)
 
     destroyEntrySelectOverlay();
 
-    if (commitSelection)
+    if (commitSelection && m_entrySelectAutoCommit && acceptsOperationalInput())
         commitEntrySelectPreview();
     else
         cancelEntrySelectPreview();
@@ -2399,6 +2523,12 @@ void MultiButtonWidget::closeEntrySelectPopup(bool commitSelection)
 void MultiButtonWidget::armEntrySelectPopupDismissTimer()
 {
     if (mode() != Doc::Operate)
+        return;
+
+    if (!m_entrySelectAutoCommit)
+        return;
+
+    if (!isVisible() || !isEnabled())
         return;
 
     if (!m_entrySelectDismissTimer)
@@ -2570,6 +2700,15 @@ bool MultiButtonWidget::acceptsBackgroundInput() const
     return m_receiveInputOnInactiveFramePage && isOnInactiveFrameSubPage();
 }
 
+bool MultiButtonWidget::acceptsOperationalInput() const
+{
+    if (m_doc == nullptr || m_doc->mode() != Doc::Operate)
+        return false;
+    if (isEnabled() && isVisible())
+        return true;
+    return acceptsBackgroundInput();
+}
+
 void MultiButtonWidget::sendInputFeedback(uchar value,
                                           const QSharedPointer<QLCInputSource>& src)
 {
@@ -2693,13 +2832,24 @@ void MultiButtonWidget::handleEntrySelectInput(uchar value)
     if (entryCount() == 0)
         return;
 
+    QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
+    const int slot = slotFromInputValue(value, src);
+
+    if (m_entrySelectDebounceTime.isValid()
+        && m_entrySelectDebounceTime.elapsed() < 100
+        && slot == m_entrySelectDebounceSlot)
+    {
+        syncEntrySelectInputOutput(value);
+        return;
+    }
+    m_entrySelectDebounceSlot = slot;
+    m_entrySelectDebounceTime.restart();
+
     if (stagingActive())
     {
         if (value == 0)
             return;
 
-        QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
-        const int slot = slotFromInputValue(value, src);
         const int idx = slotToEntryIndex(slot);
         syncEntrySelectInputOutput(value);
         stageEntry(idx);
@@ -2709,8 +2859,6 @@ void MultiButtonWidget::handleEntrySelectInput(uchar value)
     if (value == 0)
         return;
 
-    QLCInputSource* src = inputSource(entrySelectInputSourceId).data();
-    const int slot = slotFromInputValue(value, src);
     const int idx = slotToEntryIndex(slot);
 
     syncEntrySelectInputOutput(value);
@@ -2743,11 +2891,12 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
     if (!visibleInput && !backgroundInput)
         return;
 
+    const bool opInput = acceptsOperationalInput();
     const quint32 pagedCh = (quint32(page()) << 16) | (channel & 0xFFFF);
 
     if (checkInputSource(universe, pagedCh, value, sender(), triggerInputSourceId))
     {
-        if (m_triggerLastValue == 0 && value > 0)
+        if (opInput && m_triggerLastValue == 0 && value > 0)
             cycleNext();
         if (value == 0)
             m_triggerLastValue = 0;
@@ -2757,7 +2906,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     if (checkInputSource(universe, pagedCh, value, sender(), automationInputSourceId))
     {
-        if (m_automationLastValue == 0 && value > 0
+        if (opInput && m_automationLastValue == 0 && value > 0
             && m_automationEnabled && !m_automationSuspended)
         {
             onAutomationTrigger();
@@ -2770,22 +2919,26 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
     }
     if (checkInputSource(universe, pagedCh, value, sender(), presetChooseInputSourceId))
     {
-        handlePresetChooseInput(value);
+        if (opInput)
+            handlePresetChooseInput(value);
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), entrySelectInputSourceId))
     {
-        handleEntrySelectInput(value);
+        if (opInput)
+            handleEntrySelectInput(value);
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), spreadPageInputSourceId))
     {
-        handleSpreadPageInput(value);
+        if (opInput)
+            handleSpreadPageInput(value);
         return;
     }
     if (checkInputSource(universe, pagedCh, value, sender(), commitInputSourceId))
     {
-        handleCommitInput(value);
+        if (opInput)
+            handleCommitInput(value);
         return;
     }
 
@@ -2806,7 +2959,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
         {
             if (checkInputSource(universe, pagedCh, value, sender(), MBInputId::spreadSlot(slot)))
             {
-                if (value > 0)
+                if (opInput && value > 0)
                 {
                     if (stagingActive())
                         stageEntry(m_spreadPageIndex * spp + slot);
@@ -2829,7 +2982,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
                 else
                     endFlashHold();
             }
-            else if (value > 0)
+            else if (opInput && value > 0)
             {
                 if (stagingActive())
                     stageEntry(i);
@@ -2956,6 +3109,8 @@ void MultiButtonWidget::editProperties()
         inputSource(spreadPageInputSourceId),
         inputSource(commitInputSourceId),
         m_stageBeforeCommit,
+        m_entrySelectAutoCommit,
+        m_logPresetChanges,
         m_functionEntryInputs,
         m_functionEntryKeys,
         m_spreadSlotInputs,
@@ -2993,6 +3148,8 @@ void MultiButtonWidget::editProperties()
     setMonitorChannelValues(dlg.monitorChannelValues());
     setReceiveInputOnInactiveFramePage(dlg.receiveInputOnInactiveFramePage());
     setStageBeforeCommit(dlg.stageBeforeCommit());
+    setEntrySelectAutoCommit(dlg.entrySelectAutoCommit());
+    setLogPresetChanges(dlg.logPresetChanges());
     setWidgetLayout(dlg.widgetLayout());
     setSpreadColumns(dlg.spreadColumns());
     setSpreadRows(dlg.spreadRows());
@@ -3052,6 +3209,8 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setMonitorChannelValues(m_monitorChannelValues);
     copy->setReceiveInputOnInactiveFramePage(m_receiveInputOnInactiveFramePage);
     copy->setStageBeforeCommit(m_stageBeforeCommit);
+    copy->setEntrySelectAutoCommit(m_entrySelectAutoCommit);
+    copy->setLogPresetChanges(m_logPresetChanges);
     copy->assignInputSource(cloneInputSource(inputSource(commitInputSourceId)),
                             commitInputSourceId);
     copy->setWidgetLayout(m_layout);
@@ -3236,6 +3395,8 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         setMonitorChannelValues(src->m_monitorChannelValues);
         setReceiveInputOnInactiveFramePage(src->m_receiveInputOnInactiveFramePage);
         setStageBeforeCommit(src->m_stageBeforeCommit);
+        setEntrySelectAutoCommit(src->m_entrySelectAutoCommit);
+        setLogPresetChanges(src->m_logPresetChanges);
         assignInputSource(cloneInputSource(src->inputSource(commitInputSourceId)),
                           commitInputSourceId);
     }
@@ -3257,6 +3418,8 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["monitorChannelValues"] = m_monitorChannelValues;
     obj["receiveInputOnInactiveFramePage"] = m_receiveInputOnInactiveFramePage;
     obj["stageBeforeCommit"] = m_stageBeforeCommit;
+    obj["entrySelectAutoCommit"] = m_entrySelectAutoCommit;
+    obj["logPresetChanges"] = m_logPresetChanges;
 
     QJsonObject spread;
     spread["enabled"]   = (m_layout == MultiButtonLayout::Spread);
@@ -3413,6 +3576,10 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
     m_receiveInputOnInactiveFramePage = obj["receiveInputOnInactiveFramePage"].toBool(false);
     setStageBeforeCommit(obj["stageBeforeCommit"].toBool(false));
+    m_entrySelectAutoCommit = obj.contains(QStringLiteral("entrySelectAutoCommit"))
+        ? obj["entrySelectAutoCommit"].toBool(true)
+        : true;
+    m_logPresetChanges = obj["logPresetChanges"].toBool(false);
 
     if (obj.contains("spread"))
     {
@@ -3765,6 +3932,14 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         {
             setStageBeforeCommit(root.readElementText().toInt() != 0);
         }
+        else if (root.name() == KXMLEntrySelectAutoCommit)
+        {
+            setEntrySelectAutoCommit(root.readElementText().toInt() != 0);
+        }
+        else if (root.name() == KXMLLogPresetChanges)
+        {
+            setLogPresetChanges(root.readElementText().toInt() != 0);
+        }
         else if (root.name() == KXMLLevelFixture)
         {
             legacyFxId = root.attributes().value(KXMLLevelFixtureID).toUInt();
@@ -4008,6 +4183,10 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeTextElement(KXMLReceiveInputInactiveFramePage, QString::number(1));
     if (m_stageBeforeCommit)
         doc->writeTextElement(KXMLStageBeforeCommit, QString::number(1));
+    if (!m_entrySelectAutoCommit)
+        doc->writeTextElement(KXMLEntrySelectAutoCommit, QString::number(0));
+    if (m_logPresetChanges)
+        doc->writeTextElement(KXMLLogPresetChanges, QString::number(1));
 
     doc->writeStartElement(KXMLSpread);
     doc->writeAttribute(KXMLSpreadEnabled,

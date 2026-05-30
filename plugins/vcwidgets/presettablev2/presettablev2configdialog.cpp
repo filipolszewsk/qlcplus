@@ -671,9 +671,9 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     spatialLay->addWidget(spatialHint);
 
     QLabel* xfEfxHint = new QLabel(
-            tr("Crossfade and EFX can be enabled together: with Sweep, the crossfade fader is manual "
-               "sweep progress (0↔255); with Continuous, edits are staged while the fader is ≤127 "
-               "and commit to live when it crosses above 128 (DMX stays on live until then)."),
+            tr("Crossfade sweep: link EFX Engine, selector_sweep (64+o) on, staged primary, fader = sweep "
+               "progress. Continuous: selector_continuous (192+o) + secondary — works without spatial "
+               "checkbox. Continuous wins over crossfade sweep when both are on."),
             spatialGrp);
     xfEfxHint->setWordWrap(true);
   {

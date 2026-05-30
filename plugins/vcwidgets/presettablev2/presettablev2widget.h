@@ -182,6 +182,11 @@ public:
     void refreshTransitionPresetCache() override;
     void requestTableFlash(int tableRowIndex, int transitionPresetIndex) override;
     bool continuousCrossfadeStagedEditing() const override;
+    int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
+                                  const PTGlobalEffectSettings& global) const override;
+    bool spatialGridPreview(const PTTransitionPreset& preset,
+                            const PTGlobalEffectSettings& global,
+                            PTSpatialGridPreview& out) const override;
 
     // ---- VCWidget overrides -----------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
@@ -279,6 +284,13 @@ private:
     bool continuousCrossfadeModeLocked(int outputIdx) const;
     bool crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const;
     bool continuousCrossfadeActiveAnyLocked() const;
+    bool crossfadeManualControlEnabledLocked() const;
+    bool crossfadeIsStagedSideLocked() const;
+    double crossfadeProgress01Locked(uchar xfEffective) const;
+    void tickCrossfadeClockLocked(MasterTimer* timer);
+    void resetCrossfadeClockLocked();
+    quint32 crossfadeClockCycleMsLocked(const PTGlobalEffectSettings& global) const;
+    uchar crossfadeEffectiveLocked(uchar xfPos, uchar xfStartPos) const;
     void ensureStagedSnapshotLocked(int outputIdx);
     void promoteStagedToLiveLocked();
 
@@ -296,12 +308,15 @@ private:
                           const QVector<uchar>& aVals);
 
     bool useMatrixEngineLocked() const;
+    /** Linked EFX Engine with at least one sweep preset (ignores spatial checkbox). */
+    bool matrixProviderReadyLocked() const;
     /** Per-output: bank preset active (efx_selector / Properties default >= 0). */
     bool efxActiveForOutputLocked(int outputIdx) const;
     void ensureMatrixState(int outputIdx);
     void resetMatrixStateLocked(int outputIdx);
     void resetAllMatrixStatesLocked();
-    void beginMatrixSweepLocked(int outputIdx, int prevRow, int newRowIdx);
+    void beginMatrixSweepLocked(int outputIdx, int prevRow, int newRowIdx,
+                                bool forceSpatialSweep = false);
     void releaseMatrixFlashLocked(int outputIdx);
     void writeMatrixSpatial(int outputIdx, MasterTimer* timer, QList<Universe*>& universes,
                             const PTOutput& out, int activeRow, int secondaryRow,
@@ -326,6 +341,9 @@ public:
     uchar             m_crossfadeGlobalPos = 0;      // physical fader position 0-255
     uchar             m_crossfadeStartPos  = 0;      // fader position when first staging was set
     uchar             m_crossfadePrevPos   = 0;      // previous fader pos (127/128 edge detect)
+    quint32           m_crossfadeClockElapsedMs = 0;
+    double            m_crossfadeClockProgress01 = 0.0;
+    bool              m_crossfadeLastManualControl = true;
 
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;

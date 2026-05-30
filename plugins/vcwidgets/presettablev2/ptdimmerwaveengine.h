@@ -42,6 +42,14 @@ public:
 
     static int evenOffsetStepForSpan(int span);
 
+    /** Span along preset axis (after global fxOrientation). 0 if grid invalid. */
+    static int gridSpanAlongAxis(int gridWidth, int gridHeight, PTTransitionAxis axis,
+                                 int fxOrientation);
+
+    static int effectiveOffsetSlotCount(int gridSpanAlongAxis, const PTTransitionPreset& preset);
+    static int maxOffsetStepForGrid(int gridSpanAlongAxis, const PTTransitionPreset& preset);
+    static void clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis);
+
     static PTDimmerWaveSpatialSpan spatialSpanForPoint(int col, int row, int gridWidth, int gridHeight,
                                                        PTTransitionAxis axis);
 
@@ -55,6 +63,9 @@ public:
 
     /** Dimmer 0…1 inside wave packet; phase01 is 0…1 within active width (QLC DimmerWave). */
     static float dimmerAtPhaseInWidth(float phase01, const PTDimmerWaveParams& params);
+
+    /** Sweep spatial: monotonic attack only (no fade-out dip on globalProgress). */
+    static float dimmerSweepAttack01(float phaseInWindow01, const PTDimmerWaveParams& params);
 
     static float calculateDimmerWave(float iteratorRad, const PTDimmerWaveParams& params);
 

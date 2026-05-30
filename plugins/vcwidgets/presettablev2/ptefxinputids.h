@@ -54,14 +54,18 @@ enum Input : quint8
     InputGlobalSpeed = 48,
     InputGlobalDirection = 49,
     InputGlobalIntensity = 50,
-    InputGlobalBlocks = 51
+    InputGlobalBlocks = 51,
+
+    /** >127 = crossfade driven by table fader (manual); <=127 = global speed/min/max clock. */
+    InputCrossfadeManual = 52
 };
 
 inline bool isStableInputId(quint8 id)
 {
     return (id >= InputAxis && id <= InputPropagation)
             || id == InputSpeedMult
-            || (id >= InputGlobalSpeed && id <= InputGlobalIntensity);
+            || (id >= InputGlobalSpeed && id <= InputGlobalIntensity)
+            || id == InputCrossfadeManual;
 }
 
 inline quint8 inputIdForColumn(int col)

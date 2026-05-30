@@ -67,6 +67,8 @@ public:
         QSharedPointer<QLCInputSource>     spreadPageSrc,
         QSharedPointer<QLCInputSource>     commitSrc,
         bool                               stageBeforeCommit,
+        bool                               entrySelectAutoCommit,
+        bool                               logPresetChanges,
         const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
         const QList<QKeySequence>&                   functionEntryKeys,
         const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
@@ -105,6 +107,8 @@ public:
     QSharedPointer<QLCInputSource> spreadPageInputSource()  const;
     QSharedPointer<QLCInputSource> commitInputSource()      const;
     bool                           stageBeforeCommit()     const;
+    bool                           entrySelectAutoCommit() const;
+    bool                           logPresetChanges()      const;
     QList<QSharedPointer<QLCInputSource>> functionEntryInputs() const;
     QList<QKeySequence>                   functionEntryKeys()  const;
     QList<QSharedPointer<QLCInputSource>> spreadSlotInputs()  const;
@@ -301,6 +305,8 @@ private:
     InputSelectionWidget* m_spreadPageInputSel   = nullptr;
     InputSelectionWidget* m_commitInputSel       = nullptr;
     QCheckBox*            m_stageBeforeCommitCheck = nullptr;
+    QCheckBox*            m_entrySelectAutoCommitCheck = nullptr;
+    QCheckBox*            m_logPresetChangesCheck = nullptr;
     QCheckBox*            m_receiveInputInactiveFrameCheck = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 

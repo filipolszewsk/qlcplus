@@ -23,6 +23,7 @@
 class Doc;
 class PresetTableV2ControlIface;
 class PTDimmerWaveCurveWidget;
+class PTSpatialFixtureGridWidget;
 
 class PresetTableV2TransitionWidget : public VCWidget,
                                        public PresetTableV2TransitionProviderIface
@@ -52,6 +53,7 @@ public:
     bool hasLiveColumnOverride(quint8 inputId) const override;
     void requestFlash(int tableRowIndex, int transitionPresetIndex) override;
     void promoteStagedColumnOverrides() override;
+    bool crossfadeManualControlEnabled() const override;
 
     VCWidget* createCopy(VCWidget* parent) override;
     bool loadXML(QXmlStreamReader& root) override;
@@ -114,7 +116,9 @@ private:
     void pushSpatialEnabledToTable();
     void notifyTablePresetCacheRefresh();
     void migrateLegacyInputSources();
-    void updateCurvePreview();
+    void updateEffectPreview();
+    int gridSpanForPreset(const PTTransitionPreset& preset) const;
+    void updateOffsetStepLimitForRow(int row, PTTransitionMode mode);
     bool applyGlobalInput(quint8 inputId, uchar value);
     void mapColumnInput(quint8 inputId, const QString& title);
     PTTransitionPreset presetFromRow(PTTransitionMode mode, int row) const;
@@ -133,6 +137,8 @@ private:
     QVector<PTTransitionPreset> m_sweepPresets;
     QVector<PTTransitionPreset> m_continuousPresets;
     PTGlobalEffectSettings m_globalSettings;
+    bool m_crossfadeManualControl = true;
+    bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
 
     mutable QMutex m_liveMutex;
@@ -144,7 +150,9 @@ private:
     QLabel*       m_globalSummaryLabel = nullptr;
     QCheckBox*    m_enableChk = nullptr;
     QToolBar*     m_toolbar = nullptr;
+    QWidget*                 m_previewRow = nullptr;
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
+    PTSpatialFixtureGridWidget* m_spatialGridWidget = nullptr;
     QTabWidget*   m_bankTabs = nullptr;
     QTableWidget* m_sweepTable = nullptr;
     QTableWidget* m_continuousTable = nullptr;

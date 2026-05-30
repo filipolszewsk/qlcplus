@@ -109,6 +109,13 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         m_intensityInputSel->setInputSource(m_widget->inputSource(PTEfxCol::InputGlobalIntensity));
     inputForm->addRow(tr("Global intensity:"), m_intensityInputSel);
 
+    m_crossfadeManualInputSel = new InputSelectionWidget(doc, inputBox);
+    m_crossfadeManualInputSel->setKeyInputVisibility(false);
+    m_crossfadeManualInputSel->setWidgetPage(widgetPage);
+    if (m_widget)
+        m_crossfadeManualInputSel->setInputSource(m_widget->inputSource(PTEfxCol::InputCrossfadeManual));
+    inputForm->addRow(tr("Crossfade manual (>127=ON):"), m_crossfadeManualInputSel);
+
     root->addWidget(inputBox);
 
     m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -187,6 +194,12 @@ QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalSpeedI
 QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalIntensityInputSource() const
 {
     return m_intensityInputSel ? m_intensityInputSel->inputSource() : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalCrossfadeManualInputSource() const
+{
+    return m_crossfadeManualInputSel ? m_crossfadeManualInputSel->inputSource()
+                                     : QSharedPointer<QLCInputSource>();
 }
 
 void PresetTableV2TransitionConfigDialog::slotValidate()

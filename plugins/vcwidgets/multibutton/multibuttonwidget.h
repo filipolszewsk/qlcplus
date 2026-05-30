@@ -156,6 +156,12 @@ public:
     bool receiveInputOnInactiveFramePage() const { return m_receiveInputOnInactiveFramePage; }
     void setReceiveInputOnInactiveFramePage(bool enable);
 
+    bool entrySelectAutoCommit() const { return m_entrySelectAutoCommit; }
+    void setEntrySelectAutoCommit(bool enable);
+
+    bool logPresetChanges() const { return m_logPresetChanges; }
+    void setLogPresetChanges(bool enable);
+
     bool stageBeforeCommit() const { return m_stageBeforeCommit; }
     void setStageBeforeCommit(bool enable);
 
@@ -260,6 +266,11 @@ private:
     void sendInputFeedback(uchar value, const QSharedPointer<QLCInputSource>& src);
     bool isOnInactiveFrameSubPage() const;
     bool acceptsBackgroundInput() const;
+    bool acceptsOperationalInput() const;
+    bool presetUsesLiveFormulas(const LevelPreset& preset) const;
+    static quint8 staticPresetChannelValue(const LevelPreset& preset, int channelIndex);
+    quint8 monitorExpectedChannelValue(const LevelPreset& preset, int channelIndex,
+                                       const QList<Universe*>& universes) const;
     void activateFromGlobalSlot(int globalSlot);
     void syncEntryInputSources();
     void resizeSpreadSlotInputs();
@@ -269,6 +280,8 @@ private:
     bool stagingActive() const;
     void stageEntry(int idx);
     void commitStaged();
+    void clearStagedOnExternalMonitorChange(int matchIdx);
+    void updateChannelMonitorTimerInterval();
     bool entryIsFlash(int idx) const;
     void beginFlashHold(int idx);
     void endFlashHold();
@@ -379,9 +392,15 @@ private:
     // ---- Monitor --------------------------------------------------------
     bool                         m_monitorChannelValues = false;
     bool                         m_receiveInputOnInactiveFramePage = false;
+    bool                         m_entrySelectAutoCommit         = true;
+    bool                         m_logPresetChanges              = false;
+    QElapsedTimer                m_entrySelectDebounceTime;
+    int                          m_entrySelectDebounceSlot       = -1;
     QTimer*                      m_channelMonitorTimer  = nullptr;
     QList<QList<SceneValue>>     m_cachedSceneValues;
     QElapsedTimer                m_lastActivationTime;
+    int                          m_monitorMatchIndex   = -1;  // bus match (paint only)
+    int                          m_lastMonitorMatchIdx = -2;  // previous tick (staged clear)
 
     // ---- Settings --------------------------------------------------------
     int  m_longPressMs  = 500;

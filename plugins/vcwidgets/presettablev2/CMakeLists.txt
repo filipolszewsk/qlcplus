@@ -34,6 +34,8 @@ add_library(presettablev2_vcwidget MODULE
     presettablev2effectengine.cpp presettablev2effectengine.h
     ptdimmerwaveengine.cpp ptdimmerwaveengine.h
     ptparammatrixengine.cpp ptparammatrixengine.h
+    ptspatialfixtureplan.cpp ptspatialfixtureplan.h
+    ptspatialfixturegridwidget.cpp ptspatialfixturegridwidget.h
     presettablev2controliface.h
     presettablev2transitionprovideriface.h
     presettablev2vclookup.cpp presettablev2vclookup.h

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <QHash>
+#include <QSize>
 #include <QVector>
 #include "qlcpoint.h"
 #include "presettablev2effectengine.h"
@@ -46,6 +47,8 @@ struct PTOutputMatrixState
     bool     sweepRunning  = false;
     /** Crossfade fader drives sweep progress (no auto timer). */
     bool     sweepManualCrossfade = false;
+    double   sweepManualPhase     = 0.0;
+    double   sweepManualPhasePrev = 0.0;
     double   sweepProgress = 0.0;
     int      sweepFromRow  = -1;
     int      sweepToRow    = -1;
@@ -124,4 +127,9 @@ public:
 
     /** Maps offset dir to waveShowNew front: 0=All, 1=LR, 2=RL, 3=center out, 4=outside in. */
     static int waveFrontFromOffset(PTOffsetDirection dir);
+
+    /** Crossfade sweep: blend A→B from spatial phaseStart01 (head offset / 360). */
+    static float crossfadeSweepBlend01(double globalProgress, double phaseStart01,
+                                       const PTTransitionPreset& preset,
+                                       const PTGlobalEffectSettings& global);
 };

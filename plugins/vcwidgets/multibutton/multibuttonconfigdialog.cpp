@@ -94,6 +94,8 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QSharedPointer<QLCInputSource>     spreadPageSrc,
     QSharedPointer<QLCInputSource>     commitSrc,
     bool                               stageBeforeCommit,
+    bool                               entrySelectAutoCommit,
+    bool                               logPresetChanges,
     const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
     const QList<QKeySequence>&                   functionEntryKeys,
     const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
@@ -251,8 +253,8 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     presetLayout->addWidget(m_presetTable, 1);
 
     auto* formulaHint = new QLabel(
-        tr("DMX cells: enter 0–255 or a formula, e.g. IF(u1.ch42 >= 128, 255, 0) "
-           "(uN = universe, chM = channel in universe)."),
+        tr("DMX cells: enter 0–255 or a formula, e.g. IF(u1.ch2 >= 128, 255, 0) "
+           "(uN = universe 1…, chM = DMX channel 1…512, same as patch N.M)."),
         presetGrp);
     formulaHint->setWordWrap(true);
     formulaHint->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
@@ -587,9 +589,9 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_receiveInputInactiveFrameCheck->setChecked(receiveInputOnInactiveFramePage);
     m_receiveInputInactiveFrameCheck->setToolTip(
         tr("When this Multi Button is on a frame sub-page that is not currently shown, "
-           "QLC+ normally disables it and it will not listen to DMX/MIDI. "
-           "Enable this option so the inputs below (profile choose, automation trigger, "
-           "entry select, etc.) still work. Tile and per-entry triggers are not affected."));
+           "QLC+ normally disables and hides it. Enable this only if you need cycle trigger, "
+           "automation, entry select, commit, and spread inputs to work while the sub-page "
+           "is hidden. Otherwise those inputs are ignored until the widget is visible."));
     inputLayout->addWidget(m_receiveInputInactiveFrameCheck);
 
     m_stageBeforeCommitCheck = new QCheckBox(
@@ -600,6 +602,14 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
            "Level DMX and functions apply only after the commit input reaches 255. "
            "Cycle trigger and automation still activate immediately."));
     inputLayout->addWidget(m_stageBeforeCommitCheck);
+
+    m_logPresetChangesCheck = new QCheckBox(
+        tr("Log preset changes (debug)"), inputScrollContent);
+    m_logPresetChangesCheck->setChecked(logPresetChanges);
+    m_logPresetChangesCheck->setToolTip(
+        tr("Writes qDebug lines when this widget activates a preset, commits staging, "
+           "cycles, or runs automation. Use Console / qlc.trace to find unexpected triggers."));
+    inputLayout->addWidget(m_logPresetChangesCheck);
 
     QGroupBox* commitInputGrp = new QGroupBox(tr("Commit staged selection (channel value)"),
                                              inputScrollContent);
@@ -677,6 +687,14 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_entrySelectInputSel->setWidgetPage(widgetPage);
     m_entrySelectInputSel->setInputSource(entrySelectSrc);
     entrySelectLayout->addWidget(m_entrySelectInputSel);
+    m_entrySelectAutoCommitCheck = new QCheckBox(
+        tr("Auto-commit entry select after 500 ms (Single layout popup)"), entrySelectGrp);
+    m_entrySelectAutoCommitCheck->setChecked(entrySelectAutoCommit);
+    m_entrySelectAutoCommitCheck->setToolTip(
+        tr("When enabled, the entry-select popup closes 500 ms after the last input change "
+           "and applies the highlighted preset. Disable to avoid accidental commits from "
+           "noisy faders; you can still pick from the popup with the mouse."));
+    entrySelectLayout->addWidget(m_entrySelectAutoCommitCheck);
     inputLayout->addWidget(entrySelectGrp);
 
     m_spreadPageInputGrp = new QGroupBox(tr("Spread page select (channel value)"), inputScrollContent);
@@ -997,6 +1015,16 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::commitInputSource() cons
 bool MultiButtonConfigDialog::stageBeforeCommit() const
 {
     return m_stageBeforeCommitCheck ? m_stageBeforeCommitCheck->isChecked() : false;
+}
+
+bool MultiButtonConfigDialog::entrySelectAutoCommit() const
+{
+    return m_entrySelectAutoCommitCheck ? m_entrySelectAutoCommitCheck->isChecked() : true;
+}
+
+bool MultiButtonConfigDialog::logPresetChanges() const
+{
+    return m_logPresetChangesCheck ? m_logPresetChangesCheck->isChecked() : false;
 }
 
 void MultiButtonConfigDialog::accept()
@@ -1507,7 +1535,7 @@ QTableWidgetItem* MultiButtonConfigDialog::makePresetValueTableItem(const LevelP
         item->setFont(f);
         const quint8 fallback = valCol < preset.values.size() ? preset.values.at(valCol) : 0;
         item->setData(Qt::UserRole, int(fallback));
-        item->setToolTip(tr("Formula. Syntax: IF(u1.ch42 >= 128, 255, 0)"));
+        item->setToolTip(tr("Formula. Syntax: IF(u1.ch2 >= 128, 255, 0) — ch is 1-based (patch 1.2)"));
         return item;
     }
 

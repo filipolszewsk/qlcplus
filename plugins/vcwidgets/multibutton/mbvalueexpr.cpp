@@ -69,7 +69,17 @@ static bool parseCondition(const QString& cond, MbValueExpr& out, QString* error
     }
 
     out.universe = quint32(uNum - 1);
-    out.channel  = m.captured(2).toUInt();
+
+    bool okCh = false;
+    const uint chNum = m.captured(2).toUInt(&okCh);
+    if (!okCh || chNum < 1 || chNum > 512)
+    {
+        if (error)
+            *error = QStringLiteral("Channel must be 1–512 (ch1 = first DMX channel, like patch 1.1)");
+        return false;
+    }
+    out.channel = chNum - 1;
+
     const QString opStr = m.captured(3);
     if (opStr == QLatin1String("=="))
         out.op = MbCompareOp::Eq;

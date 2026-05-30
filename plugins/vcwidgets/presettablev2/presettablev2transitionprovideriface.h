@@ -25,7 +25,10 @@ public:
 
     /** Copy staged per-preset DMX overrides into live (Continuous crossfade commit). */
     virtual void promoteStagedColumnOverrides() = 0;
+
+    /** True when crossfade progress follows table fader; false = global speed/min/max clock. */
+    virtual bool crossfadeManualControlEnabled() const = 0;
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,
-                    "org.qlcplus.PresetTableV2TransitionProvider/2.4")
+                    "org.qlcplus.PresetTableV2TransitionProvider/2.5")

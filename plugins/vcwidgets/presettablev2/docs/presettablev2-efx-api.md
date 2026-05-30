@@ -29,7 +29,7 @@ Pluginy łączą się przez **Qt interfaces** + **ID widgetów** w Virtual Conso
 | Interface | IID |
 |-----------|-----|
 | `PresetTableV2TransitionProviderIface` | `org.qlcplus.PresetTableV2TransitionProvider/2.3` |
-| `PresetTableV2ControlIface` | `org.qlcplus.PresetTableV2ControlIface/1.2` |
+| `PresetTableV2ControlIface` | `org.qlcplus.PresetTableV2ControlIface/1.4` |
 
 Pliki: `presettablev2transitionprovideriface.h`, `presettablev2controliface.h`.
 
@@ -46,6 +46,9 @@ Implementacja: `PresetTableV2Widget`.
 | `linkedTransitionWidgetId()` / `setLinkedTransitionWidgetId(quint32)` | Properties | ID widgetu engine |
 | `refreshTransitionPresetCache()` | Zmiana presetów / DMX override | Cache `m_cachedTransitionPresetCount` |
 | `requestTableFlash(tableRow, transitionPresetIndex)` | Flash | Ustawia flash matrix na outputach z aktywnym wierszem |
+| `continuousCrossfadeStagedEditing()` | Crossfade | Czy edycje Continuous idą do staged |
+| `fixtureGroupSpanAlongAxis(preset, global)` | EFX podgląd | Span osi FG; 0 = brak |
+| `spatialGridPreview(preset, global, out)` | EFX podgląd | Siatka kolejności/offsetów |
 | `spatialEffectSettings()` / `set…()` | **Deprecated** | Legacy chase bez banku — unikać |
 
 Engine **nie może**: pisać DMX, zmieniać `m_activeRow`, czytać wierszy tabeli (brak API).
@@ -73,7 +76,7 @@ Speed, Intensity, Min/Max ms — **EFX Engine → Properties** (nie na VC). Na w
 |--------|--------|
 | `globalEffectSettings()` | `PTGlobalEffectSettings` |
 
-**Sweep tab:** `applySweepPresetConstraints` przy zapisie z UI (nie w `mergePreset`) — domyślnie width=360, level=255, fade max 50%. Live DMX/UI w Operate **nie** jest nadpisywane co klatkę.
+**Sweep tab:** `applySweepPresetConstraints` — width=360, level=255, fade in max 50%; **fade out wyłączony** na osi sweep (`dimmerSweepAttack01`). Live DMX/UI w Operate **nie** jest nadpisywane co klatkę.
 
 **Continuous dimmer:** tabela pisze DMX z `fadeTime=0` na kanałach (jak QLC EFX DimmerWave). `preset.fadeMs` dotyczy tylko sweep/flash między wierszami.
 
@@ -134,12 +137,26 @@ Kolumny banku: dwuklik nagłówka kolumny (Design), jak wcześniej.
 ID 64/128/192 to **osobne kanały VC** (wewnętrzne ID), nie podział jednego zakresu 0–255.
 | `255` | Crossfade global (direction-locked 0↔255) |
 
-### Crossfade + EFX (oba włączone w Properties)
+### Crossfade + sweep (matrix)
 
-| Tryb | Suwak | Primary / selectory | DMX |
-|------|-------|---------------------|-----|
-| **Sweep** | `xfEffective` 0→255 lub 255→0 (od `m_crossfadeStartPos`) | Primary → `m_stagedRow` do ruchu suwaka | Matrix sweep **active→staged**; promote primary na skrajności (0/255) |
-| **Continuous** | Pozycja **≤127** = edycja staged; **>127** = live | Przy ≤127: primary/secondary/bank → bufory `m_staged*`; przy >127 primary od razu live | **Zawsze live** na wyjściu do commitu; **commit** przy narastającym przejściu **127→128** (`promoteStagedToLive`) |
+- Wymaga **linku do EFX Engine** + **selector_sweep** (64+o) > 0. **Nie** wymaga checkboxa „Enable spatial transition”.
+- Suwak = **`globalProgress` 0…1** (lub zegar — patrz `InputCrossfadeManual`) wzdłuż planu spatial. Blend: `sweepBlend01` + **tylko atak** (bez fade-out). **Continuous** = osobno, pełny cykl 360°.
+
+**Crossfade manual** (EFX Engine Properties → `InputCrossfadeManual`, ID 52): **>127** = suwak tabeli (255) steruje postępem; **≤127** = **XF clock** — postęp 0→1 w czasie `effectiveDurationMs(global, …, honorPreset=false)` (global speed + min/max ms), **jeden** tick MasterTimer na klatkę `writeDMX` (`m_crossfadeClockElapsedMs`). Zegar resetuje się przy nowym staged / nowym sweep crossfade. Domyślnie bez inputu: manual ON.
+- Gdy **Continuous** jest aktywny (192+o + secondary), crossfade sweep **nie** przejmuje warstwy.
+
+### Continuous (matrix)
+
+- Wymaga linku EFX + **selector_continuous** (192+o) + secondary (128+o lub Properties). Matrix działa **bez** checkboxa spatial.
+- **Zegar 360°:** `m_continuousElapsedMs` + min/max + speed → [`matrixDimmerAtPoint`](presettablev2widget.cpp) (fala primary↔secondary). Suwak crossfade **nie** zmienia fazy — tylko staged vs live presetów (patrz niżej).
+- **Nie** używa globalnego `applyFadeValue` na wszystkich kanałach (to dawałoby jednoczesne A→B).
+
+### Crossfade + Continuous (osobno)
+
+| Suwak | Edycje | DMX |
+|-------|--------|-----|
+| ≤127 staged | `m_staged*` | Zamrożone **live** |
+| narastające >128 | commit | `promoteStagedToLive` |
 
 **Global speed / intensity** (engine): zawsze **live**, nigdy staged.
 
@@ -196,7 +213,14 @@ W `writeDMXFixtureGroup` (matrix):
 - **Square** (`waveShape=1`): twardy prostokąt w pakiecie; fade % ignorowane na krawędziach.
 - **Wave width = 0** → dimmer zawsze 0 (to nie bug fade).
 
-Podgląd krzywej: widget `PTDimmerWaveCurveWidget` w EFX Engine (oś X = 0–360°, Y = dimmer).
+Podgląd w EFX Engine (Operate / Design):
+
+| Widget | Zawartość |
+|--------|-----------|
+| `PTDimmerWaveCurveWidget` | Krzywa dimmer: oś X = 0–360°, Y = dimmer |
+| `PTSpatialFixtureGridWidget` | Siatka FG: **#kolejność**, **offset°**, **faza %**; wymaga linku do tabeli w trybie Fixture Group |
+
+Limit **Offset step**: `max = 360 / effectiveSlots`, gdzie `effectiveSlots = wings × ceil((span/wings) / blocks)`; spinbox w banku ma dynamiczny max; kolizje offsetów (duplikaty °) — czerwona obwódka komórki.
 
 Kolumna **Duration** w banku EFX została ukryta — czas cyklu z **global Speed** (`effectiveDurationMs`).
 
@@ -208,7 +232,9 @@ Oba pluginy kompilują z `presettablev2/`:
 |------|------|
 | `presettablev2effectengine.*` | Typy, `mergePreset`, `blendValues`, `transitionPresetIndexFromInput` |
 | `ptparammatrixengine.*` | Speed→duration, sweep, intensity |
-| `ptdimmerwaveengine.*` | `calculateDimmerWave` |
+| `ptdimmerwaveengine.*` | `calculateDimmerWave`, `maxOffsetStepForGrid` |
+| `ptspatialfixtureplan.*` | Kolejka spatial, `buildGridPreview` |
+| `ptspatialfixturegridwidget.*` | Podgląd siatki FG w EFX Engine |
 | `ptefxinputids.h` | Stable input IDs |
 
 `mergePreset(base, liveOverrides)` — mapowanie bajtów DMX na pola `PTTransitionPreset` (patrz `presettablev2effectengine.cpp`).

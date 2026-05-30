@@ -6,6 +6,8 @@
 
 #include <QtPlugin>
 #include "presettablev2effectengine.h"
+#include "ptparammatrixengine.h"
+#include "ptspatialfixtureplan.h"
 
 class PresetTableV2ControlIface
 {
@@ -27,9 +29,17 @@ public:
     /** True when Continuous+crossfade edits go to staged buffers (fader ≤127). */
     virtual bool continuousCrossfadeStagedEditing() const = 0;
 
+    /** Span along preset axis from linked fixture group; 0 if unavailable. */
+    virtual int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
+                                          const PTGlobalEffectSettings& global) const = 0;
+
+    virtual bool spatialGridPreview(const PTTransitionPreset& preset,
+                                    const PTGlobalEffectSettings& global,
+                                    PTSpatialGridPreview& out) const = 0;
+
     /** @deprecated Use transition presets on linked Transition widget. */
     virtual PTSpatialEffectSettings spatialEffectSettings() const = 0;
     virtual void setSpatialEffectSettings(const PTSpatialEffectSettings& settings) = 0;
 };
 
-Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.3")
+Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.4")
