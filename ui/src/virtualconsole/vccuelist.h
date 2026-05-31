@@ -77,6 +77,8 @@ class Doc;
 #define KXMLQLCVCCueListNextPrevSecondary QStringLiteral("NextPrevSecondary")
 #define KXMLQLCVCCueListSecondarySelect QStringLiteral("SecondarySelect")
 #define KXMLQLCVCCueListBehaviourMode   QStringLiteral("BehaviourMode")
+#define KXMLQLCVCCueListBehaviourModeStepsMin QStringLiteral("StepsMin")
+#define KXMLQLCVCCueListBehaviourModeStepsMax QStringLiteral("StepsMax")
 #define KXMLQLCVCCueListStepIndexOutput QStringLiteral("StepIndexOutput")
 #define KXMLQLCVCCueListStepIndexOutputEnabled QStringLiteral("Enabled")
 #define KXMLQLCVCCueListStepIndexOutputFixture QStringLiteral("Fixture")
@@ -419,6 +421,10 @@ public:
     FaderMode stringToFaderMode(QString modeStr);
     QString faderModeToString(FaderMode mode);
 
+    void setBehaviourModeStepsRange(uchar min, uchar max);
+    uchar behaviourModeStepsMin() const;
+    uchar behaviourModeStepsMax() const;
+
     /** Set whether Next/Prev buttons control secondary selection in Crossfade mode */
     void setNextPrevControlsSecondary(bool enable);
 
@@ -468,6 +474,8 @@ private:
     bool m_primaryTop;
     FaderMode m_slidersMode;
     bool m_nextPrevControlsSecondary;
+    uchar m_behaviourModeStepsMin;
+    uchar m_behaviourModeStepsMax;
 
     /*************************************************************************
      * Key sequences

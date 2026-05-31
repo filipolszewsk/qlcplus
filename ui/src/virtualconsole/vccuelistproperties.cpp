@@ -19,6 +19,9 @@
 
 #include <QAction>
 #include <QDebug>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSpinBox>
 #include <QVBoxLayout>
 #include <QTreeWidget>
 #include <QDialogButtonBox>
@@ -34,6 +37,8 @@
 #include "scenevalue.h"
 #include "qlcmacros.h"
 #include "qlcchannel.h"
+
+#include <climits>
 
 VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     : QDialog(cueList)
@@ -176,12 +181,27 @@ VCCueListProperties::VCCueListProperties(VCCueList* cueList, Doc* doc)
     m_nextPrevSecondaryCheck->setChecked(cueList->nextPrevControlsSecondary());
 
     m_behaviourModeInputWidget = new InputSelectionWidget(m_doc, this);
-    m_behaviourModeInputWidget->setTitle(tr("Behaviour Mode External Input (0 = Crossfade, >0 = Steps)"));
+    m_behaviourModeInputWidget->setTitle(tr("Behaviour Mode External Input (inside Steps range = Steps, outside = Crossfade)"));
     m_behaviourModeInputWidget->setKeyInputVisibility(false);
     m_behaviourModeInputWidget->setInputSource(m_cueList->inputSource(VCCueList::behaviourModeInputSourceId));
     m_behaviourModeInputWidget->setWidgetPage(m_cueList->page());
     m_behaviourModeInputWidget->show();
     m_crossFadeLayout->insertWidget(0, m_behaviourModeInputWidget);
+
+    QHBoxLayout *behaviourRangeLayout = new QHBoxLayout();
+    behaviourRangeLayout->setContentsMargins(0, 0, 0, 0);
+    behaviourRangeLayout->addWidget(new QLabel(tr("Steps from"), this));
+    m_behaviourStepsMinSpin = new QSpinBox(this);
+    m_behaviourStepsMinSpin->setRange(0, UCHAR_MAX);
+    m_behaviourStepsMinSpin->setValue(m_cueList->behaviourModeStepsMin());
+    behaviourRangeLayout->addWidget(m_behaviourStepsMinSpin);
+    behaviourRangeLayout->addWidget(new QLabel(tr("to"), this));
+    m_behaviourStepsMaxSpin = new QSpinBox(this);
+    m_behaviourStepsMaxSpin->setRange(0, UCHAR_MAX);
+    m_behaviourStepsMaxSpin->setValue(m_cueList->behaviourModeStepsMax());
+    behaviourRangeLayout->addWidget(m_behaviourStepsMaxSpin);
+    behaviourRangeLayout->addStretch();
+    m_crossFadeLayout->insertLayout(1, behaviourRangeLayout);
 
     m_crossfadeInputWidget = new InputSelectionWidget(m_doc, this);
     m_crossfadeInputWidget->setTitle(tr("Crossfade Slider External Input (Crossfade mode only)"));
@@ -327,6 +347,8 @@ void VCCueListProperties::accept()
     m_cueList->setInputSource(m_stepsFaderInputWidget->inputSource(), VCCueList::stepsFaderInputSourceId);
     m_cueList->setInputSource(m_secondarySelectInputWidget->inputSource(), VCCueList::secondarySelectInputSourceId);
     m_cueList->setInputSource(m_behaviourModeInputWidget->inputSource(), VCCueList::behaviourModeInputSourceId);
+    m_cueList->setBehaviourModeStepsRange(uchar(m_behaviourStepsMinSpin->value()),
+                                          uchar(m_behaviourStepsMaxSpin->value()));
 
     if (m_noneRadio->isChecked())
         m_cueList->setSideFaderMode(VCCueList::None);

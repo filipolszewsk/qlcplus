@@ -29,6 +29,7 @@
 class InputSelectionWidget;
 class VCCueList;
 class Doc;
+class QSpinBox;
 
 /** @addtogroup ui_vc_props
  * @{
@@ -66,6 +67,8 @@ protected:
     InputSelectionWidget *m_secondarySelectInputWidget;
     InputSelectionWidget *m_behaviourModeInputWidget;
     InputSelectionWidget *m_stepsFaderInputWidget;
+    QSpinBox *m_behaviourStepsMinSpin;
+    QSpinBox *m_behaviourStepsMaxSpin;
 
     /************************************************************************
      * Cues

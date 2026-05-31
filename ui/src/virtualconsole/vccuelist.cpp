@@ -294,6 +294,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     , m_primaryTop(true)
     , m_slidersMode(None)
     , m_nextPrevControlsSecondary(false)
+    , m_behaviourModeStepsMin(1)
+    , m_behaviourModeStepsMax(UCHAR_MAX)
     , m_recordAllChannels(true)
     , m_recordNonZeroOnly(false)
     , m_recordCuePrefix("cue")
@@ -644,6 +646,10 @@ bool VCCueList::copyFrom(const VCWidget *widget)
     /* Next/Prev controls secondary */
     setNextPrevControlsSecondary(cuelist->nextPrevControlsSecondary());
 
+    /* Behaviour mode input range */
+    setBehaviourModeStepsRange(cuelist->behaviourModeStepsMin(),
+                               cuelist->behaviourModeStepsMax());
+
     /* Recording settings */
     setRecordAllChannels(cuelist->recordAllChannels());
     setRecordNonZeroOnly(cuelist->recordNonZeroOnly());
@@ -723,6 +729,8 @@ void VCCueList::applyPropertiesFrom(const VCWidget* source, PastePropertyGroups 
         setDeleteKeySequence(cuelist->deleteKeySequence());
         setRenameKeySequence(cuelist->renameKeySequence());
         setNextPrevControlsSecondary(cuelist->nextPrevControlsSecondary());
+        setBehaviourModeStepsRange(cuelist->behaviourModeStepsMin(),
+                                   cuelist->behaviourModeStepsMax());
     }
 
     if (flags & PasteSpecific2)
@@ -855,6 +863,8 @@ void VCCueList::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["deleteKeySeq"]          = deleteKeySequence().toString();
     obj["renameKeySeq"]          = renameKeySequence().toString();
     obj["nextPrevControlsSec"]   = nextPrevControlsSecondary();
+    obj["behaviourStepsMin"]     = behaviourModeStepsMin();
+    obj["behaviourStepsMax"]     = behaviourModeStepsMax();
     /* Side fader */
     obj["sideFaderMode"]         = (int)sideFaderMode();
     /* Recording settings */
@@ -889,6 +899,8 @@ void VCCueList::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     setDeleteKeySequence(QKeySequence(obj["deleteKeySeq"].toString()));
     setRenameKeySequence(QKeySequence(obj["renameKeySeq"].toString()));
     setNextPrevControlsSecondary(obj["nextPrevControlsSec"].toBool());
+    setBehaviourModeStepsRange(uchar(obj["behaviourStepsMin"].toInt(1)),
+                               uchar(obj["behaviourStepsMax"].toInt(UCHAR_MAX)));
     /* Side fader */
     setSideFaderMode(static_cast<FaderMode>(obj["sideFaderMode"].toInt()));
     /* Recording settings */
@@ -2007,6 +2019,22 @@ QString VCCueList::faderModeToString(VCCueList::FaderMode mode)
     return "None";
 }
 
+void VCCueList::setBehaviourModeStepsRange(uchar min, uchar max)
+{
+    m_behaviourModeStepsMin = qMin(min, max);
+    m_behaviourModeStepsMax = qMax(min, max);
+}
+
+uchar VCCueList::behaviourModeStepsMin() const
+{
+    return m_behaviourModeStepsMin;
+}
+
+uchar VCCueList::behaviourModeStepsMax() const
+{
+    return m_behaviourModeStepsMax;
+}
+
 void VCCueList::setNextPrevControlsSecondary(bool enable)
 {
     m_nextPrevControlsSecondary = enable;
@@ -2628,7 +2656,8 @@ void VCCueList::slotInputValueChanged(quint32 universe, quint32 channel, uchar v
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), behaviourModeInputSourceId))
     {
-        FaderMode newMode = (value == 0) ? Crossfade : Steps;
+        FaderMode newMode = (value >= m_behaviourModeStepsMin &&
+                             value <= m_behaviourModeStepsMax) ? Steps : Crossfade;
         if (sideFaderMode() != newMode)
             setSideFaderMode(newMode);
     }
@@ -4239,6 +4268,14 @@ bool VCCueList::loadXML(QXmlStreamReader &root)
         }
         else if (root.name() == KXMLQLCVCCueListBehaviourMode)
         {
+            QXmlStreamAttributes attrs = root.attributes();
+            uchar stepsMin = m_behaviourModeStepsMin;
+            uchar stepsMax = m_behaviourModeStepsMax;
+            if (attrs.hasAttribute(KXMLQLCVCCueListBehaviourModeStepsMin))
+                stepsMin = uchar(attrs.value(KXMLQLCVCCueListBehaviourModeStepsMin).toString().toUInt());
+            if (attrs.hasAttribute(KXMLQLCVCCueListBehaviourModeStepsMax))
+                stepsMax = uchar(attrs.value(KXMLQLCVCCueListBehaviourModeStepsMax).toString().toUInt());
+            setBehaviourModeStepsRange(stepsMin, stepsMax);
             loadXMLSources(root, behaviourModeInputSourceId);
         }
         else if (root.name() == KXMLQLCVCCueListCrossfadeLeft)
@@ -4596,10 +4633,18 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
 
     /* Behaviour mode (Crossfade / Steps) */
     QSharedPointer<QLCInputSource> behaviourSrc = inputSource(behaviourModeInputSourceId);
-    if (!behaviourSrc.isNull() && behaviourSrc->isValid())
+    if ((!behaviourSrc.isNull() && behaviourSrc->isValid()) ||
+        m_behaviourModeStepsMin != 1 || m_behaviourModeStepsMax != UCHAR_MAX)
     {
         doc->writeStartElement(KXMLQLCVCCueListBehaviourMode);
-        saveXMLInput(doc, behaviourSrc);
+        if (m_behaviourModeStepsMin != 1)
+            doc->writeAttribute(KXMLQLCVCCueListBehaviourModeStepsMin,
+                                QString::number(m_behaviourModeStepsMin));
+        if (m_behaviourModeStepsMax != UCHAR_MAX)
+            doc->writeAttribute(KXMLQLCVCCueListBehaviourModeStepsMax,
+                                QString::number(m_behaviourModeStepsMax));
+        if (!behaviourSrc.isNull() && behaviourSrc->isValid())
+            saveXMLInput(doc, behaviourSrc);
         doc->writeEndElement();
     }
 
@@ -4710,5 +4755,3 @@ bool VCCueList::saveXML(QXmlStreamWriter *doc)
 
     return true;
 }
-
-
