@@ -707,6 +707,7 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_crossfadePrevPos   = 0;
             m_crossfadeStagedAtLowSide = true;
             m_crossfadeSessionActive = false;
+            m_crossfadeEditLaneStaged = true;
         }
     }
 
@@ -1548,7 +1549,7 @@ bool PresetTableV2Widget::continuousFxSelectorToStagedLocked() const
 {
     return m_crossfadeEnabled
             && m_continuousFxSelectorMode != PTContinuousFxSelectorMode::Live
-            && crossfadeIsStagedSideLocked();
+            && crossfadeRoutesToStagedLocked();
 }
 
 bool PresetTableV2Widget::crossfadeManualControlEnabledLocked() const
@@ -1558,16 +1559,9 @@ bool PresetTableV2Widget::crossfadeManualControlEnabledLocked() const
     return true;
 }
 
-bool PresetTableV2Widget::crossfadeIsStagedSideLocked() const
+bool PresetTableV2Widget::crossfadeRoutesToStagedLocked() const
 {
-    if (!m_crossfadeEnabled)
-        return false;
-    if (m_crossfadeSessionActive)
-        return true;
-    if (crossfadeManualControlEnabledLocked())
-        return m_crossfadeStagedAtLowSide ? m_crossfadeGlobalPos <= 127
-                                          : m_crossfadeGlobalPos >= 128;
-    return m_crossfadeClockProgress01 <= 0.5;
+    return m_crossfadeEnabled && m_crossfadeEditLaneStaged;
 }
 
 bool PresetTableV2Widget::crossfadeHasStagedChangesLocked() const
@@ -1603,6 +1597,7 @@ void PresetTableV2Widget::armCrossfadeStagingLocked()
         return;
 
     m_crossfadeSessionActive = true;
+    m_crossfadeEditLaneStaged = true;
     m_crossfadeStagedAtLowSide = (m_crossfadeGlobalPos <= 127);
     m_crossfadeStartPos = m_crossfadeGlobalPos;
 }
@@ -1694,7 +1689,7 @@ uchar PresetTableV2Widget::crossfadeEffectiveLocked(uchar xfPos, uchar xfStartPo
 bool PresetTableV2Widget::continuousCrossfadeStagedEditing() const
 {
     QMutexLocker lk(&m_stateMutex);
-    return m_crossfadeEnabled && crossfadeIsStagedSideLocked()
+    return crossfadeRoutesToStagedLocked()
             && continuousCrossfadeActiveAnyLocked();
 }
 
@@ -1759,7 +1754,9 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
     if (outputIdx < m_stagedContinuousValid.size())
         m_stagedContinuousValid[outputIdx] = false;
     if (!crossfadeHasStagedChangesLocked())
+    {
         m_crossfadeSessionActive = false;
+    }
 }
 
 void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
@@ -1850,6 +1847,7 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
         }
     }
     m_crossfadeSessionActive = false;
+    m_crossfadeEditLaneStaged = true;
 
     // EFX parameter overrides are live-only. Staged commit is limited to table
     // selections above, so do not call back into the provider while holding
@@ -3321,6 +3319,16 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             m_crossfadeStartPos = value;
             resetCrossfadeClockLocked();
         }
+        else if (m_crossfadeEnabled && crossfadeManualControlEnabledLocked()
+                 && (value == 0 || value == 255)
+                 && !crossfadeHasStagedChangesLocked())
+        {
+            m_crossfadeEditLaneStaged = true;
+            m_crossfadeStagedAtLowSide = (value == 0);
+            m_crossfadeStartPos = value;
+            m_crossfadeSessionActive = false;
+            resetCrossfadeClockLocked();
+        }
 
         m_crossfadePrevPos = value;
         lk2.unlock();
@@ -3368,15 +3376,14 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             int rowIdx = (value == 0) ? -1 : qMin<int>(int(value) - 1, numRows - 1);
             if (xfEnabled)
             {
-                bool applyLivePrimary = false;
+                bool routeToStaged = false;
                 {
                     QMutexLocker lk2(&m_stateMutex);
-                    applyLivePrimary = continuousCrossfadeModeLocked(o)
-                            && !crossfadeIsStagedSideLocked();
-                    if (applyLivePrimary && o < m_stagedRow.size())
+                    routeToStaged = crossfadeRoutesToStagedLocked();
+                    if (!routeToStaged && o < m_stagedRow.size())
                         m_stagedRow[o] = -1;
                 }
-                if (applyLivePrimary)
+                if (!routeToStaged)
                 {
                     setActiveRow(o, rowIdx);
                     refreshRowHighlights();
@@ -3434,8 +3441,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSweep(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = xfEnabled && crossfadeIsStagedSideLocked()
-                    && continuousCrossfadeModeLocked(o);
+            const bool toStaged = xfEnabled && crossfadeRoutesToStagedLocked();
             const int prevSweep = (o < m_liveSweepPreset.size()) ? m_liveSweepPreset[o] : -1;
             if (toStaged)
             {
@@ -3497,8 +3503,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSecondaryRow(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = xfEnabled && crossfadeIsStagedSideLocked()
-                    && continuousCrossfadeModeLocked(o);
+            const bool toStaged = xfEnabled && crossfadeRoutesToStagedLocked();
             if (toStaged)
             {
                 armCrossfadeStagingLocked();
@@ -3665,6 +3670,7 @@ void PresetTableV2Widget::editProperties()
             m_crossfadePrevPos   = 0;
             m_crossfadeStagedAtLowSide = true;
             m_crossfadeSessionActive = false;
+            m_crossfadeEditLaneStaged = true;
             resetCrossfadeClockLocked();
         }
     }
@@ -3696,6 +3702,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     uchar             xfPosCopy;
     uchar             xfStartPosCopy;
     bool              xfStagedAtLowSideCopy;
+    bool              xfEditLaneStagedCopy;
     PTMode            modeCopy;
     quint32           groupIdCopy;
     PTSpatialEffectSettings spatialCopy;
@@ -3713,6 +3720,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         xfPosCopy       = m_crossfadeGlobalPos;
         xfStartPosCopy  = m_crossfadeStartPos;
         xfStagedAtLowSideCopy = m_crossfadeStagedAtLowSide;
+        xfEditLaneStagedCopy = m_crossfadeEditLaneStaged;
         modeCopy        = m_mode;
         groupIdCopy     = m_fixtureGroupId;
         spatialCopy     = m_spatialEffects;
@@ -3731,6 +3739,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         copy->m_crossfadeGlobalPos = xfPosCopy;
         copy->m_crossfadeStartPos  = xfStartPosCopy;
         copy->m_crossfadeStagedAtLowSide = xfStagedAtLowSideCopy;
+        copy->m_crossfadeEditLaneStaged = xfEditLaneStagedCopy;
         copy->m_mode               = modeCopy;
         copy->m_fixtureGroupId     = groupIdCopy;
         copy->m_spatialEffects             = spatialCopy;
@@ -4204,6 +4213,7 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_crossfadePrevPos   = 0;
         m_crossfadeStagedAtLowSide = true;
         m_crossfadeSessionActive = false;
+        m_crossfadeEditLaneStaged = true;
         m_nameColWidth = (nameColW > 0) ? nameColW : -1;
         m_mode           = loadedMode;
         m_fixtureGroupId = loadedGroupId;

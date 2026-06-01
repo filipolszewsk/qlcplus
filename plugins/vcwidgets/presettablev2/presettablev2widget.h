@@ -311,7 +311,7 @@ private:
     bool continuousFxSelectionStagedAnyLocked() const;
     bool continuousFxSelectorToStagedLocked() const;
     bool crossfadeManualControlEnabledLocked() const;
-    bool crossfadeIsStagedSideLocked() const;
+    bool crossfadeRoutesToStagedLocked() const;
     double crossfadeProgress01Locked(uchar xfEffective) const;
     void armCrossfadeStagingLocked();
     bool crossfadeHasStagedChangesLocked() const;
@@ -402,6 +402,7 @@ public:
     double            m_crossfadeClockProgress01 = 0.0;
     bool              m_crossfadeLastManualControl = true;
     bool              m_crossfadeSessionActive = false;
+    bool              m_crossfadeEditLaneStaged = true;
 
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;
