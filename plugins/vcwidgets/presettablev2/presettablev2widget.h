@@ -413,6 +413,7 @@ public:
     bool              m_crossfadeLastManualControl = true;
     bool              m_crossfadeSessionActive = false;
     bool              m_crossfadeEditLaneStaged = true;
+    bool              m_initialInputSyncPending = false;
 
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;

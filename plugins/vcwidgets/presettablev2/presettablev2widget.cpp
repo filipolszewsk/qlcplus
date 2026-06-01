@@ -29,6 +29,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcinputsource.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 #include <QPainter>
@@ -712,6 +713,10 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
 {
     if (newMode == Doc::Operate)
     {
+        {
+            QMutexLocker lk(&m_stateMutex);
+            m_initialInputSyncPending = true;
+        }
         m_toolbar->setVisible(true);
         // Hide structural actions not appropriate during a live show
         if (m_actAddCol)    m_actAddCol->setVisible(false);
@@ -754,10 +759,18 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_crossfadeStagedAtLowSide = true;
             m_crossfadeSessionActive = false;
             m_crossfadeEditLaneStaged = true;
+            m_initialInputSyncPending = false;
         }
     }
 
     VCWidget::slotModeChanged(newMode);
+
+    if (newMode == Doc::Operate && m_doc && m_doc->inputOutputMap())
+    {
+        m_doc->inputOutputMap()->flushInputs();
+        QMutexLocker lk(&m_stateMutex);
+        m_initialInputSyncPending = false;
+    }
 
     if (newMode == Doc::Design)
     {
@@ -3548,6 +3561,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
     int numOutputs        = m_outputs.size();
     int numRows           = m_rows.size();
     bool xfEnabled        = m_crossfadeEnabled;
+    bool initialSync      = m_initialInputSyncPending;
     lk.unlock();
 
     if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kMultiFxBlend))
@@ -3573,7 +3587,16 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         QMutexLocker lk2(&m_stateMutex);
         m_crossfadeGlobalPos = value;
 
-        if (m_crossfadeEnabled && crossfadeManualControlEnabledLocked()
+        if (initialSync)
+        {
+            const bool atEdge = crossfadeAtLowEdge(value) || crossfadeAtHighEdge(value);
+            m_crossfadeStartPos = atEdge ? crossfadeNormalizedEdge(value) : value;
+            m_crossfadeStagedAtLowSide = crossfadeLowSideFromPosition(value);
+            m_crossfadeEditLaneStaged = true;
+            m_crossfadeSessionActive = false;
+            resetCrossfadeClockLocked();
+        }
+        else if (m_crossfadeEnabled && crossfadeManualControlEnabledLocked()
                 && crossfadeAtTargetEdge(value, m_crossfadeStagedAtLowSide)
                 && crossfadeHasStagedChangesLocked())
         {
@@ -3643,7 +3666,21 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             }
 
             int rowIdx = (value == 0) ? -1 : qMin<int>(int(value) - 1, numRows - 1);
-            if (xfEnabled)
+            if (initialSync)
+            {
+                QMutexLocker lk2(&m_stateMutex);
+                if (o < m_activeRow.size())
+                {
+                    m_activeRow[o] = rowIdx;
+                    if (o < m_stagedRow.size())
+                        m_stagedRow[o] = -1;
+                    syncCommittedPlaybackStateLocked(o, false);
+                }
+                lk2.unlock();
+                refreshRowHighlights();
+                sendFeedback(value, PTInputId::rowSelector(o));
+            }
+            else if (xfEnabled)
             {
                 bool routeToStaged = false;
                 {
@@ -3713,7 +3750,9 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                 if (o < m_stagedSweepPreset.size())
                     m_stagedSweepPreset[o] = -1;
 
-                if (nextSweep != prevSweep)
+                if (!initialSync && nextSweep != prevSweep)
+                    syncCommittedPlaybackStateLocked(o, false);
+                else if (initialSync)
                     syncCommittedPlaybackStateLocked(o, false);
             }
             lk2.unlock();
@@ -3725,7 +3764,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transContinuousBank(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = continuousFxSelectorToStagedLocked();
+            const bool toStaged = !initialSync && continuousFxSelectorToStagedLocked();
             const int presetIdx = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
                     value, continuousPresetCount);
             if (toStaged)
@@ -3739,7 +3778,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             {
                 m_liveContinuousPreset[o] = presetIdx;
                 materializeContinuousRowsLocked(o, false);
-                if (o < m_continuousElapsedMs.size())
+                if (!initialSync && o < m_continuousElapsedMs.size())
                     m_continuousElapsedMs[o] = 0;
             }
             lk2.unlock();
@@ -3751,7 +3790,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSecondaryRow(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = xfEnabled && crossfadeRoutesToStagedLocked();
+            const bool toStaged = !initialSync && xfEnabled && crossfadeRoutesToStagedLocked();
             if (toStaged)
             {
                 armCrossfadeStagingLocked();
