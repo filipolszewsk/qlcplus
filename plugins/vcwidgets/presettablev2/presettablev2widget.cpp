@@ -696,6 +696,7 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedContinuousValid.fill(false);
         m_liveMultiFxPreset.resize(m_outputs.size());
         m_multiFxElapsedMs.resize(m_outputs.size());
+        m_multiFxLastCycleMs.resize(m_outputs.size());
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
         m_spatialChase.resize(m_outputs.size());
@@ -1370,6 +1371,8 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedContinuousValid.fill(false);
     m_continuousElapsedMs.resize(m_outputs.size());
     m_multiFxElapsedMs.resize(m_outputs.size());
+    m_continuousLastCycleMs.resize(m_outputs.size());
+    m_multiFxLastCycleMs.resize(m_outputs.size());
     m_matrixState.resize(m_outputs.size());
     m_flashInputHeldRow.resize(m_outputs.size());
     for (int o = 0; o < m_outputs.size(); ++o)
@@ -1709,10 +1712,15 @@ void PresetTableV2Widget::tickCrossfadeClockLocked(MasterTimer* timer)
 
     const double prev = m_crossfadeClockProgress01;
     const PTGlobalEffectSettings global = globalEffectSettingsLocked();
-    const quint32 cycleMs = crossfadeClockCycleMsLocked(global);
+    const quint32 cycleMs = qMax(quint32(1), crossfadeClockCycleMsLocked(global));
+    if (m_crossfadeClockLastCycleMs > 0 && m_crossfadeClockLastCycleMs != cycleMs)
+        rescaleElapsedForDurationChange(m_crossfadeClockElapsedMs,
+                                        m_crossfadeClockLastCycleMs,
+                                        cycleMs);
+    m_crossfadeClockLastCycleMs = cycleMs;
     m_crossfadeClockElapsedMs += timer->tick();
     m_crossfadeClockProgress01 = qMin(1.0, double(m_crossfadeClockElapsedMs)
-            / double(qMax(quint32(1), cycleMs)));
+            / double(cycleMs));
 
     if (prev < 1.0 && m_crossfadeClockProgress01 >= 1.0
             && crossfadeHasStagedChangesLocked())
@@ -1734,6 +1742,7 @@ double PresetTableV2Widget::crossfadeProgress01Locked(uchar xfEffective) const
 void PresetTableV2Widget::resetCrossfadeClockLocked()
 {
     m_crossfadeClockElapsedMs = 0;
+    m_crossfadeClockLastCycleMs = 0;
     m_crossfadeClockProgress01 = 0.0;
 }
 
@@ -1979,6 +1988,7 @@ void PresetTableV2Widget::syncCommittedPlaybackStateLocked(int outputIdx, bool r
         st.sweepFromRow = -1;
         st.sweepToRow = -1;
         st.sweepElapsedMs = 0;
+        st.sweepLastCycleMs = 0;
         st.sweepPeakDimmer.clear();
         st.sweepHeldValues.clear();
     }
@@ -2081,6 +2091,37 @@ quint32 PresetTableV2Widget::cycleDurationMsLocked(const PTGlobalEffectSettings&
     if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
         honorPresetDuration = provider->hasLiveColumnOverride(PTEfxCol::InputDuration);
     return PTParamMatrixEngine::effectiveDurationMs(global, preset, honorPresetDuration);
+}
+
+void PresetTableV2Widget::rescaleElapsedForDurationChange(quint32& elapsedMs,
+                                                          quint32 oldDurationMs,
+                                                          quint32 newDurationMs)
+{
+    if (elapsedMs == 0 || oldDurationMs == 0 || newDurationMs == 0
+            || oldDurationMs == newDurationMs)
+        return;
+
+    // Match QLC EFXFixture::durationChanged(): preserve current phase when duration changes.
+    const double phase = double(elapsedMs % oldDurationMs) / double(oldDurationMs);
+    elapsedMs = quint32(phase * double(newDurationMs));
+}
+
+void PresetTableV2Widget::ensurePhaseStableCycleLocked(QVector<quint32>& elapsed,
+                                                       QVector<quint32>& lastCycle,
+                                                       int outputIdx,
+                                                       quint32 currentCycleMs)
+{
+    if (outputIdx < 0)
+        return;
+    while (elapsed.size() <= outputIdx)
+        elapsed.append(0);
+    while (lastCycle.size() <= outputIdx)
+        lastCycle.append(0);
+
+    currentCycleMs = qMax(quint32(1), currentCycleMs);
+    if (lastCycle[outputIdx] > 0 && lastCycle[outputIdx] != currentCycleMs)
+        rescaleElapsedForDurationChange(elapsed[outputIdx], lastCycle[outputIdx], currentCycleMs);
+    lastCycle[outputIdx] = currentCycleMs;
 }
 
 PTTransitionPreset PresetTableV2Widget::transitionPresetForOutput(int outputIdx) const
@@ -2588,12 +2629,6 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     if (outputIdx < 0)
         return;
 
-    while (m_continuousElapsedMs.size() <= outputIdx)
-        m_continuousElapsedMs.append(0);
-    while (m_multiFxElapsedMs.size() <= outputIdx)
-        m_multiFxElapsedMs.append(0);
-    m_continuousElapsedMs[outputIdx] += MasterTimer::tick();
-
     const PTTransitionPreset spatialPreset = presetOverride ? *presetOverride
                                                             : continuousPresetForOutputLocked(outputIdx);
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
@@ -2609,6 +2644,11 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     const quint32 stagedDurationMs = qMax(quint32(1), cycleDurationMsLocked(global, stagedPreset));
     const PTDimmerWaveParams multiFxWaveParams = PTDimmerWaveEngine::paramsFromPreset(multiFxPreset, &global);
     const quint32 multiFxDurationMs = qMax(quint32(1), cycleDurationMsLocked(global, multiFxPreset));
+    ensurePhaseStableCycleLocked(m_continuousElapsedMs, m_continuousLastCycleMs,
+                                 outputIdx, durationMs);
+    ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs,
+                                 outputIdx, multiFxDurationMs);
+    m_continuousElapsedMs[outputIdx] += MasterTimer::tick();
     const quint32 elapsedMs = quint32(m_continuousElapsedMs[outputIdx]);
     const quint32 multiFxElapsedMs = quint32(m_multiFxElapsedMs[outputIdx]);
 
@@ -2802,6 +2842,7 @@ void PresetTableV2Widget::resetMatrixStateLocked(int outputIdx)
     st.sweepFromRow = -1;
     st.sweepToRow = -1;
     st.sweepElapsedMs = 0;
+    st.sweepLastCycleMs = 0;
     st.sweepPeakDimmer.clear();
     st.sweepHeldValues.clear();
     st.flashActive = false;
@@ -2810,6 +2851,8 @@ void PresetTableV2Widget::resetMatrixStateLocked(int outputIdx)
     st.appliedRow = -1;
     if (outputIdx < m_continuousElapsedMs.size())
         m_continuousElapsedMs[outputIdx] = 0;
+    if (outputIdx < m_continuousLastCycleMs.size())
+        m_continuousLastCycleMs[outputIdx] = 0;
 }
 
 void PresetTableV2Widget::resetAllMatrixStatesLocked()
@@ -2849,6 +2892,7 @@ void PresetTableV2Widget::beginMatrixSweepLocked(int outputIdx, int prevRow, int
     st.sweepFromRow = prevRow;
     st.sweepToRow = newRowIdx;
     st.sweepElapsedMs = 0;
+    st.sweepLastCycleMs = 0;
     st.sweepPeakDimmer.clear();
     st.sweepHeldValues.clear();
     st.sweepRunning = true;
@@ -3012,10 +3056,12 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
 
     const quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(global, preset));
 
-    while (m_continuousElapsedMs.size() <= outputIdx)
-        m_continuousElapsedMs.append(0);
-    while (m_multiFxElapsedMs.size() <= outputIdx)
-        m_multiFxElapsedMs.append(0);
+    ensurePhaseStableCycleLocked(m_continuousElapsedMs, m_continuousLastCycleMs,
+                                 outputIdx, cycleMs);
+    const quint32 multiFxCycleForOutput = qMax(quint32(1),
+            cycleDurationMsLocked(global, multiFxPreset));
+    ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs,
+                                 outputIdx, multiFxCycleForOutput);
     if (continuousFx && !st.flashActive)
         m_continuousElapsedMs[outputIdx] += MasterTimer::tick();
     const quint32 elapsedMs = quint32(m_continuousElapsedMs[outputIdx]);
@@ -3073,7 +3119,15 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     };
 
     if (st.sweepRunning && !st.sweepManualCrossfade)
+    {
+        const quint32 sweepDurationMs = qMax(quint32(1), cycleMs * 2);
+        if (st.sweepLastCycleMs > 0 && st.sweepLastCycleMs != cycleMs)
+            rescaleElapsedForDurationChange(st.sweepElapsedMs,
+                                            qMax(quint32(1), st.sweepLastCycleMs * 2),
+                                            sweepDurationMs);
+        st.sweepLastCycleMs = cycleMs;
         st.sweepElapsedMs += MasterTimer::tick();
+    }
 
     if (st.flashActive)
     {
@@ -3553,10 +3607,18 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
     {
         while (m_multiFxElapsedMs.size() < m_outputs.size())
             m_multiFxElapsedMs.append(0);
+        while (m_multiFxLastCycleMs.size() < m_outputs.size())
+            m_multiFxLastCycleMs.append(0);
+        const PTGlobalEffectSettings global = globalEffectSettingsLocked();
         for (int o = 0; o < m_outputs.size(); ++o)
         {
             if (multiFxActiveForOutputLocked(o))
+            {
+                const PTTransitionPreset preset = multiFxPresetForOutputLocked(o);
+                const quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(global, preset));
+                ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs, o, cycleMs);
                 m_multiFxElapsedMs[o] += MasterTimer::tick();
+            }
         }
     }
 
@@ -3600,6 +3662,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         {
             QMutexLocker lk2(&m_stateMutex);
             m_multiFxElapsedMs.fill(0, m_outputs.size());
+            m_multiFxLastCycleMs.fill(0, m_outputs.size());
         }
         return;
     }
@@ -3802,7 +3865,11 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                 m_liveContinuousPreset[o] = presetIdx;
                 materializeContinuousRowsLocked(o, false);
                 if (!initialSync && o < m_continuousElapsedMs.size())
+                {
                     m_continuousElapsedMs[o] = 0;
+                    if (o < m_continuousLastCycleMs.size())
+                        m_continuousLastCycleMs[o] = 0;
+                }
             }
             lk2.unlock();
             refreshTransitionPresetCache();

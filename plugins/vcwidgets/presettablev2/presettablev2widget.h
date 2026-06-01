@@ -274,6 +274,13 @@ private:
     PTGlobalEffectSettings globalEffectSettingsLocked() const;
     quint32 cycleDurationMsLocked(const PTGlobalEffectSettings& global,
                                     const PTTransitionPreset& preset) const;
+    static void rescaleElapsedForDurationChange(quint32& elapsedMs,
+                                                quint32 oldDurationMs,
+                                                quint32 newDurationMs);
+    void ensurePhaseStableCycleLocked(QVector<quint32>& elapsed,
+                                      QVector<quint32>& lastCycle,
+                                      int outputIdx,
+                                      quint32 currentCycleMs);
 
     PTTransitionPreset transitionPresetForOutput(int outputIdx) const;
     /** Caller must hold m_stateMutex (writeDMX path). */
@@ -409,6 +416,7 @@ public:
     uchar             m_crossfadePrevPos   = 0;      // previous physical fader position
     bool              m_crossfadeStagedAtLowSide = true;
     quint32           m_crossfadeClockElapsedMs = 0;
+    quint32           m_crossfadeClockLastCycleMs = 0;
     double            m_crossfadeClockProgress01 = 0.0;
     bool              m_crossfadeLastManualControl = true;
     bool              m_crossfadeSessionActive = false;
@@ -437,6 +445,8 @@ public:
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;
+    QVector<quint32>            m_continuousLastCycleMs;
+    QVector<quint32>            m_multiFxLastCycleMs;
     uchar                       m_multiFxBlend = 0;
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;

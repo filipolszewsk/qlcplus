@@ -53,6 +53,7 @@ struct PTOutputMatrixState
     int      sweepFromRow  = -1;
     int      sweepToRow    = -1;
     quint32  sweepElapsedMs = 0;
+    quint32  sweepLastCycleMs = 0;
     QHash<QLCPoint, float> sweepPeakDimmer;
     QHash<QLCPoint, QVector<uchar>> sweepHeldValues;
 
