@@ -184,6 +184,7 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
                                        QSharedPointer<QLCInputSource> rowSrc,
                                        QSharedPointer<QLCInputSource> transSweepSrc,
                                        QSharedPointer<QLCInputSource> transContinuousSrc,
+                                       QSharedPointer<QLCInputSource> multiFxSrc,
                                        QSharedPointer<QLCInputSource> transSecondarySrc,
                                        FixtureGroup* group,
                                        int widgetPage,
@@ -231,6 +232,11 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     m_continuousPresetCombo->setToolTip(tr("Default Continuous FX preset when the Continuous FX selector has no DMX. Off = Instant."));
     topLay->addWidget(m_continuousPresetCombo);
 
+    m_multiFxPresetCombo = new QComboBox(this);
+    m_multiFxPresetCombo->setMinimumWidth(90);
+    m_multiFxPresetCombo->setToolTip(tr("Default MultiFX background preset when the MultiFX selector has no DMX. Off = disabled."));
+    topLay->addWidget(m_multiFxPresetCombo);
+
     m_secondaryRowCombo = new QComboBox(this);
     m_secondaryRowCombo->setMinimumWidth(90);
     m_secondaryRowCombo->setToolTip(tr("Default secondary row for Continuous FX when DMX secondary is 0."));
@@ -244,6 +250,9 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     const int ctIdx = m_continuousPresetCombo->findData(output.continuousPresetIndex);
     if (ctIdx >= 0)
         m_continuousPresetCombo->setCurrentIndex(ctIdx);
+    const int mfIdx = m_multiFxPresetCombo->findData(output.multiFxPresetIndex);
+    if (mfIdx >= 0)
+        m_multiFxPresetCombo->setCurrentIndex(mfIdx);
     const int srIdx = m_secondaryRowCombo->findData(output.secondaryRowIndex);
     if (srIdx >= 0)
         m_secondaryRowCombo->setCurrentIndex(srIdx);
@@ -251,6 +260,8 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     connect(m_sweepPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
     connect(m_continuousPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &FGOutputEditorRow::changed);
+    connect(m_multiFxPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
     connect(m_secondaryRowCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
@@ -294,6 +305,8 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
              tr("Transition preset for primary row recall (can stay ON with Continuous FX). 0 = instant."));
     addInput(tr("Continuous FX selector"), m_transContinuousInputSel, transContinuousSrc,
              tr("Continuous FX blend primary↔secondary (works with Transitions ON). 0 = off."));
+    addInput(tr("MultiFX selector"), m_multiFxInputSel, multiFxSrc,
+             tr("Background MultiFX preset. It runs on the MultiFX clock and is revealed by MultiFX blend."));
     addInput(tr("Secondary row"), m_transSecondaryInputSel, transSecondarySrc,
              tr("Continuous only: DMX 1 = table row 1, 2 = row 2, … 0 = use Secondary combo below."));
     rootLay->addLayout(inLay);
@@ -346,6 +359,7 @@ void FGOutputEditorRow::rebuildTransitionPresetCombos()
     };
     fillCombo(m_sweepPresetCombo, PTTransitionMode::SweepOnly);
     fillCombo(m_continuousPresetCombo, PTTransitionMode::Continuous);
+    fillCombo(m_multiFxPresetCombo, PTTransitionMode::Continuous);
 }
 
 void FGOutputEditorRow::rebuildSecondaryRowCombo()
@@ -381,6 +395,8 @@ PTOutput FGOutputEditorRow::output() const
         out.sweepPresetIndex = m_sweepPresetCombo->currentData().toInt();
     if (m_continuousPresetCombo != nullptr)
         out.continuousPresetIndex = m_continuousPresetCombo->currentData().toInt();
+    if (m_multiFxPresetCombo != nullptr)
+        out.multiFxPresetIndex = m_multiFxPresetCombo->currentData().toInt();
     if (m_secondaryRowCombo != nullptr)
         out.secondaryRowIndex = m_secondaryRowCombo->currentData().toInt();
     for (const QCheckBox* cb : m_rowCBs)
@@ -406,6 +422,12 @@ QSharedPointer<QLCInputSource> FGOutputEditorRow::transContinuousInputSource() c
 {
     return m_transContinuousInputSel ? m_transContinuousInputSel->inputSource()
                                     : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> FGOutputEditorRow::multiFxInputSource() const
+{
+    return m_multiFxInputSel ? m_multiFxInputSel->inputSource()
+                             : QSharedPointer<QLCInputSource>();
 }
 
 QSharedPointer<QLCInputSource> FGOutputEditorRow::transSecondaryInputSource() const
@@ -482,6 +504,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    const QVector<QSharedPointer<QLCInputSource>>& sources,
                                                    bool crossfadeEnabled,
                                                    QSharedPointer<QLCInputSource> crossfadeSrc,
+                                                   QSharedPointer<QLCInputSource> multiFxBlendSrc,
+                                                   QSharedPointer<QLCInputSource> multiFxRestartSrc,
                                                    PTContinuousFxSelectorMode continuousFxSelectorMode,
                                                    int widgetPage,
                                                    PTMode mode,
@@ -643,6 +667,23 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     xfInputRow->addWidget(m_xfadeInputSel, 1);
     xfLayout->addWidget(m_xfadeInputWidget);
 
+    QWidget* multiFxInputWidget = new QWidget(xfGrp);
+    QHBoxLayout* multiFxInputRow = new QHBoxLayout(multiFxInputWidget);
+    multiFxInputRow->setContentsMargins(0, 0, 0, 0);
+    multiFxInputRow->addWidget(new QLabel(tr("MultiFX blend input (0–255):"), multiFxInputWidget));
+    m_multiFxBlendInputSel = new InputSelectionWidget(doc, multiFxInputWidget);
+    m_multiFxBlendInputSel->setKeyInputVisibility(false);
+    m_multiFxBlendInputSel->setWidgetPage(widgetPage);
+    m_multiFxBlendInputSel->setInputSource(multiFxBlendSrc);
+    multiFxInputRow->addWidget(m_multiFxBlendInputSel, 1);
+    multiFxInputRow->addWidget(new QLabel(tr("Restart/start:"), multiFxInputWidget));
+    m_multiFxRestartInputSel = new InputSelectionWidget(doc, multiFxInputWidget);
+    m_multiFxRestartInputSel->setKeyInputVisibility(false);
+    m_multiFxRestartInputSel->setWidgetPage(widgetPage);
+    m_multiFxRestartInputSel->setInputSource(multiFxRestartSrc);
+    multiFxInputRow->addWidget(m_multiFxRestartInputSel, 1);
+    xfLayout->addWidget(multiFxInputWidget);
+
     m_xfadeInputWidget->setVisible(crossfadeEnabled);
     root->addWidget(xfGrp);
 
@@ -744,15 +785,20 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
         {
             QSharedPointer<QLCInputSource> sweepSrc;
             QSharedPointer<QLCInputSource> contSrc;
+            QSharedPointer<QLCInputSource> multiFxSrc;
             QSharedPointer<QLCInputSource> secSrc;
             if (m_ptWidget)
             {
-                sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(i));
-                if (i < 64)
+                if (i < PTInputId::kMaxRoutableOutputs)
+                {
+                    sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(i));
                     contSrc = m_ptWidget->inputSource(PTInputId::transContinuousBank(i));
-                secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(i));
+                    multiFxSrc = m_ptWidget->inputSource(PTInputId::multiFxBank(i));
+                    secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(i));
+                }
             }
-            auto* row = new FGOutputEditorRow(m_doc, outputs[i], src, sweepSrc, contSrc, secSrc,
+            auto* row = new FGOutputEditorRow(m_doc, outputs[i], src, sweepSrc, contSrc,
+                                              multiFxSrc, secSrc,
                                               grp, m_widgetPage, transitionProvider, m_ptWidget, this);
             m_fgOutputRows.append(row);
             QListWidgetItem* item = new QListWidgetItem(m_outputList);
@@ -850,6 +896,13 @@ QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::transContinuousInputSo
     return m_fgOutputRows[outputIdx]->transContinuousInputSource();
 }
 
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::multiFxInputSource(int outputIdx) const
+{
+    if (outputIdx < 0 || outputIdx >= m_fgOutputRows.size())
+        return QSharedPointer<QLCInputSource>();
+    return m_fgOutputRows[outputIdx]->multiFxInputSource();
+}
+
 QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::transSecondaryInputSource(int outputIdx) const
 {
     if (outputIdx < 0 || outputIdx >= m_fgOutputRows.size())
@@ -865,6 +918,18 @@ bool PresetTableV2ConfigDialog::crossfadeEnabled() const
 QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::crossfadeInputSource() const
 {
     return m_xfadeInputSel ? m_xfadeInputSel->inputSource() : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::multiFxBlendInputSource() const
+{
+    return m_multiFxBlendInputSel ? m_multiFxBlendInputSel->inputSource()
+                                  : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::multiFxRestartInputSource() const
+{
+    return m_multiFxRestartInputSel ? m_multiFxRestartInputSel->inputSource()
+                                    : QSharedPointer<QLCInputSource>();
 }
 
 PTContinuousFxSelectorMode PresetTableV2ConfigDialog::continuousFxSelectorMode() const
@@ -1035,17 +1100,21 @@ void PresetTableV2ConfigDialog::slotAddOutput()
                                         : VCWidget::invalidId());
         QSharedPointer<QLCInputSource> sweepSrc;
         QSharedPointer<QLCInputSource> contSrc;
+        QSharedPointer<QLCInputSource> multiFxSrc;
         QSharedPointer<QLCInputSource> secSrc;
         const int o = m_fgOutputRows.size();
         if (m_ptWidget)
         {
-            sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(o));
-            if (o < 64)
+            if (o < PTInputId::kMaxRoutableOutputs)
+            {
+                sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(o));
                 contSrc = m_ptWidget->inputSource(PTInputId::transContinuousBank(o));
-            secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(o));
+                multiFxSrc = m_ptWidget->inputSource(PTInputId::multiFxBank(o));
+                secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(o));
+            }
         }
         auto* row = new FGOutputEditorRow(m_doc, out, QSharedPointer<QLCInputSource>(),
-                                           sweepSrc, contSrc, secSrc, grp, m_widgetPage, provider,
+                                           sweepSrc, contSrc, multiFxSrc, secSrc, grp, m_widgetPage, provider,
                                            m_ptWidget, this);
         m_fgOutputRows.append(row);
 

@@ -80,6 +80,7 @@ public:
                                QSharedPointer<QLCInputSource> rowSrc,
                                QSharedPointer<QLCInputSource> transSweepSrc,
                                QSharedPointer<QLCInputSource> transContinuousSrc,
+                               QSharedPointer<QLCInputSource> multiFxSrc,
                                QSharedPointer<QLCInputSource> transSecondarySrc,
                                FixtureGroup* group,
                                int widgetPage,
@@ -91,6 +92,7 @@ public:
     QSharedPointer<QLCInputSource> inputSource() const;
     QSharedPointer<QLCInputSource> transSweepInputSource() const;
     QSharedPointer<QLCInputSource> transContinuousInputSource() const;
+    QSharedPointer<QLCInputSource> multiFxInputSource() const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource() const;
 
     void setFixtureGroup(FixtureGroup* group);
@@ -113,10 +115,12 @@ private:
     QList<QCheckBox*>     m_rowCBs;                // one per y-row in the group
     QComboBox*            m_sweepPresetCombo = nullptr;
     QComboBox*            m_continuousPresetCombo = nullptr;
+    QComboBox*            m_multiFxPresetCombo = nullptr;
     QComboBox*            m_secondaryRowCombo = nullptr;
     InputSelectionWidget* m_inputSel   = nullptr;
     InputSelectionWidget* m_transSweepInputSel = nullptr;
     InputSelectionWidget* m_transContinuousInputSel = nullptr;
+    InputSelectionWidget* m_multiFxInputSel = nullptr;
     InputSelectionWidget* m_transSecondaryInputSel = nullptr;
 
     void rebuildTransitionPresetCombos();
@@ -138,6 +142,8 @@ public:
                                      const QVector<QSharedPointer<QLCInputSource>>& sources,
                                      bool crossfadeEnabled,
                                      QSharedPointer<QLCInputSource> crossfadeSrc,
+                                     QSharedPointer<QLCInputSource> multiFxBlendSrc,
+                                     QSharedPointer<QLCInputSource> multiFxRestartSrc,
                                      PTContinuousFxSelectorMode continuousFxSelectorMode,
                                      int widgetPage,
                                      PTMode mode,
@@ -154,9 +160,12 @@ public:
     QSharedPointer<QLCInputSource> inputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSweepInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transContinuousInputSource(int outputIdx) const;
+    QSharedPointer<QLCInputSource> multiFxInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
     QSharedPointer<QLCInputSource> crossfadeInputSource() const;
+    QSharedPointer<QLCInputSource> multiFxBlendInputSource() const;
+    QSharedPointer<QLCInputSource> multiFxRestartInputSource() const;
     PTContinuousFxSelectorMode continuousFxSelectorMode() const;
 
     PTMode   widgetMode()            const;
@@ -226,6 +235,8 @@ private:
     QCheckBox*            m_crossfadeChk      = nullptr;
     QComboBox*            m_contFxModeCombo   = nullptr;
     InputSelectionWidget* m_xfadeInputSel     = nullptr;
+    InputSelectionWidget* m_multiFxBlendInputSel = nullptr;
+    InputSelectionWidget* m_multiFxRestartInputSel = nullptr;
     QWidget*              m_xfadeInputWidget  = nullptr;
 
     QCheckBox*            m_spatialChk         = nullptr;

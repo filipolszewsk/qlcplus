@@ -113,6 +113,8 @@ struct PTOutput {
     int        sweepPresetIndex = -1;
     /** Default Continuous FX preset; -1 = off (legacy selector_continuous 0). */
     int        continuousPresetIndex = -1;
+    /** Default MultiFX background preset; -1 = off. */
+    int        multiFxPresetIndex = -1;
     /** Secondary table row for continuous FX (-1 = off). Overridden by external input when mapped. */
     int        secondaryRowIndex = -1;
 };
@@ -280,6 +282,7 @@ private:
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
+    PTTransitionPreset multiFxPresetForOutputLocked(int outputIdx) const;
     struct PTContinuousLayerState
     {
         bool active = false;
@@ -298,8 +301,10 @@ private:
                                                                uchar xfEffective) const;
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
+    int liveMultiFxPresetIndexLocked(int outputIdx) const;
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
+    bool multiFxActiveForOutputLocked(int outputIdx) const;
     /** Sweep on primary row change only when Continuous is not driving the layer. */
     bool sweepOnPrimaryChangeLocked(int outputIdx, int newActiveRow) const;
     /** Secondary table row for Continuous only (DMX 128+ / Properties / activeRow). */
@@ -315,6 +320,9 @@ private:
     double crossfadeProgress01Locked(uchar xfEffective) const;
     void armCrossfadeStagingLocked();
     bool crossfadeHasStagedChangesLocked() const;
+    void stagePrimaryRowLocked(int outputIdx, int rowIdx);
+    void materializeContinuousRowsLocked(int outputIdx, bool toStaged);
+    void syncCommittedPlaybackStateLocked(int outputIdx, bool resetFxPlayback);
     void clearStagedLayerLocked(int outputIdx);
     void stageSecondaryRowLocked(int outputIdx, int rowIdx);
     void stageSweepPresetLocked(int outputIdx, int presetIdx);
@@ -335,7 +343,8 @@ private:
                                 const QVector<uchar>* stagedPriVals = nullptr,
                                 const QVector<uchar>* stagedSecVals = nullptr,
                                 const PTTransitionPreset* stagedPresetOverride = nullptr,
-                                double morphProgress = 0.0);
+                                double morphProgress = 0.0,
+                                bool useMultiFx = false);
 
     void startSpatialChase(int outputIdx, int rowIdx, const QList<QLCPoint>& points,
                           const PTTransitionPreset& preset, int gridWidth, int gridHeight);
@@ -380,7 +389,8 @@ private:
                             const QVector<uchar>* stagedPrimaryOverride = nullptr,
                             const QVector<uchar>* stagedSecondaryOverride = nullptr,
                             const PTTransitionPreset* stagedPresetOverride = nullptr,
-                            double morphProgress = 0.0);
+                            double morphProgress = 0.0,
+                            bool useMultiFx = false);
 
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
@@ -422,8 +432,11 @@ public:
     int                         m_cachedTransitionContinuousCount = 0;
     QVector<int>                m_liveSweepPreset;
     QVector<int>                m_liveContinuousPreset;
+    QVector<int>                m_liveMultiFxPreset;
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
+    QVector<quint32>            m_multiFxElapsedMs;
+    uchar                       m_multiFxBlend = 0;
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;
     QVector<PTOutputMatrixState>    m_matrixState;
