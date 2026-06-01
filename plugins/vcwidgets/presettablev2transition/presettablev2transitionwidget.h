@@ -143,7 +143,6 @@ private:
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
-    QHash<quint8, uchar> m_stagedColumnOverrides;
 
     QVBoxLayout*  m_layout = nullptr;
     QLabel*       m_linkLabel = nullptr;

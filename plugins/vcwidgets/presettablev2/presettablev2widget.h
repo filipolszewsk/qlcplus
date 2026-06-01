@@ -59,6 +59,13 @@ enum class PTOutputScope
     RowsAndMask
 };
 
+enum class PTContinuousFxSelectorMode
+{
+    Live = 0,
+    StagedCommit,
+    SmoothMorph
+};
+
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
@@ -102,9 +109,9 @@ struct PTOutput {
     quint32    fixtureId = UINT_MAX;    // used in PTMode::Legacy
     QList<int> groupRows;               // used in PTMode::FixtureGroup: y-coords in group grid
     PTOutputScope scope = PTOutputScope::RowsAndMask;
-    /** Default sweep bank preset when no DMX; -1 = off (selector_sweep 0). */
+    /** Default Transition preset when no DMX; -1 = instant (legacy selector_sweep 0). */
     int        sweepPresetIndex = -1;
-    /** Default continuous bank preset; -1 = off (selector_continuous 0). */
+    /** Default Continuous FX preset; -1 = off (legacy selector_continuous 0). */
     int        continuousPresetIndex = -1;
     /** Secondary table row for continuous FX (-1 = off). Overridden by external input when mapped. */
     int        secondaryRowIndex = -1;
@@ -272,6 +279,23 @@ private:
     PTTransitionPreset transitionPresetAtIndexLocked(PTTransitionMode mode, int presetIndex) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
+    PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
+    struct PTContinuousLayerState
+    {
+        bool active = false;
+        int primaryRow = -1;
+        int secondaryRow = -1;
+        QVector<uchar> livePrimaryValues;
+        QVector<uchar> liveSecondaryValues;
+        QVector<uchar> primaryValues;
+        QVector<uchar> secondaryValues;
+        PTTransitionPreset livePreset;
+        PTTransitionPreset preset;
+        bool hasStaged = false;
+    };
+    PTContinuousLayerState continuousLayerStateForOutputLocked(int outputIdx,
+                                                               int activeRow,
+                                                               uchar xfEffective) const;
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
@@ -284,14 +308,21 @@ private:
     bool continuousCrossfadeModeLocked(int outputIdx) const;
     bool crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const;
     bool continuousCrossfadeActiveAnyLocked() const;
+    bool continuousFxSelectionStagedAnyLocked() const;
+    bool continuousFxSelectorToStagedLocked() const;
     bool crossfadeManualControlEnabledLocked() const;
     bool crossfadeIsStagedSideLocked() const;
     double crossfadeProgress01Locked(uchar xfEffective) const;
+    void armCrossfadeStagingLocked();
+    bool crossfadeHasStagedChangesLocked() const;
+    void clearStagedLayerLocked(int outputIdx);
+    void stageSecondaryRowLocked(int outputIdx, int rowIdx);
+    void stageSweepPresetLocked(int outputIdx, int presetIdx);
+    void stageContinuousPresetLocked(int outputIdx, int presetIdx);
     void tickCrossfadeClockLocked(MasterTimer* timer);
     void resetCrossfadeClockLocked();
     quint32 crossfadeClockCycleMsLocked(const PTGlobalEffectSettings& global) const;
     uchar crossfadeEffectiveLocked(uchar xfPos, uchar xfStartPos) const;
-    void ensureStagedSnapshotLocked(int outputIdx);
     void promoteStagedToLiveLocked();
 
     void syncLiveTransitionFromOutputs();
@@ -299,7 +330,12 @@ private:
                                 QList<Universe*>& universes, const PTOutput& out,
                                 const QVector<uchar>& priVals, const QVector<uchar>& secVals,
                                 const QSize& gridSize,
-                                const QMap<QLCPoint, GroupHead>& headsMap);
+                                const QMap<QLCPoint, GroupHead>& headsMap,
+                                const PTTransitionPreset* presetOverride = nullptr,
+                                const QVector<uchar>* stagedPriVals = nullptr,
+                                const QVector<uchar>* stagedSecVals = nullptr,
+                                const PTTransitionPreset* stagedPresetOverride = nullptr,
+                                double morphProgress = 0.0);
 
     void startSpatialChase(int outputIdx, int rowIdx, const QList<QLCPoint>& points,
                           const PTTransitionPreset& preset, int gridWidth, int gridHeight);
@@ -312,6 +348,20 @@ private:
     bool matrixProviderReadyLocked() const;
     /** Per-output: bank preset active (efx_selector / Properties default >= 0). */
     bool efxActiveForOutputLocked(int outputIdx) const;
+    struct PTOutputPlaybackState
+    {
+        bool transitionOn = false;
+        bool continuousFxOn = false;
+        int secondaryRow = -1;
+        bool crossfadeTransition = false;
+        bool crossfadeContinuous = false;
+        bool blockMatrixForStaged = false;
+        bool matrixForOutput = false;
+    };
+    PTOutputPlaybackState resolveOutputPlaybackStateLocked(int outputIdx, int activeRow,
+                                                           bool hasStaged,
+                                                           bool matrixReady,
+                                                           bool spatialOn) const;
     void ensureMatrixState(int outputIdx);
     void resetMatrixStateLocked(int outputIdx);
     void resetAllMatrixStatesLocked();
@@ -324,7 +374,13 @@ private:
                             const PTGlobalEffectSettings& global,
                             const QSize& gridSize,
                             const QMap<QLCPoint, GroupHead>& headsMap,
-                            bool forceContinuousBlend = false);
+                            bool forceContinuousBlend = false,
+                            const QVector<uchar>* primaryOverride = nullptr,
+                            const QVector<uchar>* secondaryOverride = nullptr,
+                            const QVector<uchar>* stagedPrimaryOverride = nullptr,
+                            const QVector<uchar>* stagedSecondaryOverride = nullptr,
+                            const PTTransitionPreset* stagedPresetOverride = nullptr,
+                            double morphProgress = 0.0);
 
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
@@ -340,20 +396,25 @@ public:
     bool              m_crossfadeEnabled   = false;  // widget-level toggle
     uchar             m_crossfadeGlobalPos = 0;      // physical fader position 0-255
     uchar             m_crossfadeStartPos  = 0;      // fader position when first staging was set
-    uchar             m_crossfadePrevPos   = 0;      // previous fader pos (127/128 edge detect)
+    uchar             m_crossfadePrevPos   = 0;      // previous physical fader position
+    bool              m_crossfadeStagedAtLowSide = true;
     quint32           m_crossfadeClockElapsedMs = 0;
     double            m_crossfadeClockProgress01 = 0.0;
     bool              m_crossfadeLastManualControl = true;
+    bool              m_crossfadeSessionActive = false;
 
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;
     QVector<int>      m_stagedContinuousPreset;
-    QVector<bool>     m_stagedSnapshotValid;
+    QVector<bool>     m_stagedSecondaryValid;
+    QVector<bool>     m_stagedSweepValid;
+    QVector<bool>     m_stagedContinuousValid;
 
     PTMode            m_mode            = PTMode::Legacy;
     quint32           m_fixtureGroupId  = UINT_MAX;  // valid only when m_mode == FixtureGroup
 
     PTSpatialEffectSettings m_spatialEffects;
+    PTContinuousFxSelectorMode m_continuousFxSelectorMode = PTContinuousFxSelectorMode::StagedCommit;
     quint32                 m_linkedTransitionWidgetId = VCWidget::invalidId();
     quint32                     m_cachedTransitionWidgetId = VCWidget::invalidId();
     int                         m_cachedTransitionSweepCount = 0;

@@ -14,11 +14,11 @@ static const quint8 kTransSecondaryRowBase = 128;
 static const quint8 kTransContinuousBankBase = 192;
 
 inline quint8 rowSelector(int outputIdx) { return quint8(outputIdx); }
-/** DMX selector_sweep — bank preset index (0 = off, 1 = first sweep preset). */
+/** Transition selector (legacy selector_sweep) — bank preset index (0 = instant). */
 inline quint8 transSweep(int outputIdx) { return quint8(kTransSweepBase + outputIdx); }
 /** Secondary table row for Continuous only (DMX 0 = Properties default; 1 = row 1, …). */
 inline quint8 transSecondaryRow(int outputIdx) { return quint8(kTransSecondaryRowBase + outputIdx); }
-/** DMX selector_continuous — bank preset index (0 = off). */
+/** Continuous FX selector (legacy selector_continuous) — bank preset index (0 = off). */
 inline quint8 transContinuousBank(int outputIdx) { return quint8(kTransContinuousBankBase + outputIdx); }
 
 /** @deprecated Use transSweep */

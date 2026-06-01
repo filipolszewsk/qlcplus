@@ -23,7 +23,7 @@ public:
     virtual bool hasLiveColumnOverride(quint8 inputId) const = 0;
     virtual void requestFlash(int tableRowIndex, int transitionPresetIndex) = 0;
 
-    /** Copy staged per-preset DMX overrides into live (Continuous crossfade commit). */
+    /** @deprecated EFX parameter overrides are always live; kept for ABI/IID compatibility. */
     virtual void promoteStagedColumnOverrides() = 0;
 
     /** True when crossfade progress follows table fader; false = global speed/min/max clock. */

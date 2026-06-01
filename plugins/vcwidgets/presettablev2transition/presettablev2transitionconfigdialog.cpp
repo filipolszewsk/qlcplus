@@ -24,7 +24,7 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
 
     QLabel* hint = new QLabel(
             tr("Global speed, intensity and min/max cycle times are edited here only.\n"
-               "Preset banks: Sweep / Continuous tabs on the widget.\n"
+               "Preset banks: Transitions / Continuous FX tabs on the widget.\n"
                "Per-column external inputs: double-click column headers on the widget."),
             this);
     hint->setWordWrap(true);

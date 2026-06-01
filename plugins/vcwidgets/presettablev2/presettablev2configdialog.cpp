@@ -223,12 +223,12 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
 
     m_sweepPresetCombo = new QComboBox(this);
     m_sweepPresetCombo->setMinimumWidth(90);
-    m_sweepPresetCombo->setToolTip(tr("Default sweep bank preset when selector_sweep has no DMX. Off = Instant."));
+    m_sweepPresetCombo->setToolTip(tr("Default Transition preset when the Transition selector has no DMX. Off = Instant."));
     topLay->addWidget(m_sweepPresetCombo);
 
     m_continuousPresetCombo = new QComboBox(this);
     m_continuousPresetCombo->setMinimumWidth(90);
-    m_continuousPresetCombo->setToolTip(tr("Default continuous bank preset when selector_continuous has no DMX. Off = Instant."));
+    m_continuousPresetCombo->setToolTip(tr("Default Continuous FX preset when the Continuous FX selector has no DMX. Off = Instant."));
     topLay->addWidget(m_continuousPresetCombo);
 
     m_secondaryRowCombo = new QComboBox(this);
@@ -290,10 +290,10 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
 
     addInput(tr("Primary preset selector"), m_inputSel, rowSrc,
              tr("DMX 1–N = table row (primary content). 0 = off. 101+ = flash that row."));
-    addInput(tr("selector_sweep"), m_transSweepInputSel, transSweepSrc,
-             tr("Profile for primary row change (can stay ON with Continuous). 0 = off."));
-    addInput(tr("selector_continuous"), m_transContinuousInputSel, transContinuousSrc,
-             tr("Continuous blend primary↔secondary (works with Sweep ON). 0 = off."));
+    addInput(tr("Transition selector"), m_transSweepInputSel, transSweepSrc,
+             tr("Transition preset for primary row recall (can stay ON with Continuous FX). 0 = instant."));
+    addInput(tr("Continuous FX selector"), m_transContinuousInputSel, transContinuousSrc,
+             tr("Continuous FX blend primary↔secondary (works with Transitions ON). 0 = off."));
     addInput(tr("Secondary row"), m_transSecondaryInputSel, transSecondarySrc,
              tr("Continuous only: DMX 1 = table row 1, 2 = row 2, … 0 = use Secondary combo below."));
     rootLay->addLayout(inLay);
@@ -482,6 +482,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    const QVector<QSharedPointer<QLCInputSource>>& sources,
                                                    bool crossfadeEnabled,
                                                    QSharedPointer<QLCInputSource> crossfadeSrc,
+                                                   PTContinuousFxSelectorMode continuousFxSelectorMode,
                                                    int widgetPage,
                                                    PTMode mode,
                                                    quint32 fixtureGroupId,
@@ -617,6 +618,20 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     m_crossfadeChk->setChecked(crossfadeEnabled);
     xfLayout->addWidget(m_crossfadeChk);
 
+    QWidget* contFxModeWidget = new QWidget(xfGrp);
+    QHBoxLayout* contFxModeRow = new QHBoxLayout(contFxModeWidget);
+    contFxModeRow->setContentsMargins(0, 0, 0, 0);
+    contFxModeRow->addWidget(new QLabel(tr("Continuous FX selector mode:"), contFxModeWidget));
+    m_contFxModeCombo = new QComboBox(contFxModeWidget);
+    m_contFxModeCombo->addItem(tr("Live"), int(PTContinuousFxSelectorMode::Live));
+    m_contFxModeCombo->addItem(tr("Staged commit"), int(PTContinuousFxSelectorMode::StagedCommit));
+    m_contFxModeCombo->addItem(tr("Smooth morph"), int(PTContinuousFxSelectorMode::SmoothMorph));
+    const int contFxModeIdx = m_contFxModeCombo->findData(int(continuousFxSelectorMode));
+    m_contFxModeCombo->setCurrentIndex(contFxModeIdx >= 0 ? contFxModeIdx : 1);
+    m_contFxModeCombo->setToolTip(tr("Controls only Continuous FX preset selection. EFX parameters remain live."));
+    contFxModeRow->addWidget(m_contFxModeCombo, 1);
+    xfLayout->addWidget(contFxModeWidget);
+
     m_xfadeInputWidget = new QWidget(xfGrp);
     QHBoxLayout* xfInputRow = new QHBoxLayout(m_xfadeInputWidget);
     xfInputRow->setContentsMargins(0, 0, 0, 0);
@@ -634,7 +649,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     connect(m_crossfadeChk, &QCheckBox::toggled, m_xfadeInputWidget, &QWidget::setVisible);
 
     // ---- Transition panel link ----------------------------------------------
-    QGroupBox* spatialGrp = new QGroupBox(tr("Transition panel"), this);
+    QGroupBox* spatialGrp = new QGroupBox(tr("Transitions + Continuous FX"), this);
     QVBoxLayout* spatialLay = new QVBoxLayout(spatialGrp);
 
     m_spatialChk = new QCheckBox(tr("Enable spatial transition on row recall"), spatialGrp);
@@ -660,7 +675,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
 
     QLabel* spatialHint = new QLabel(
             tr("Add a „Preset Table v2 Transition” widget on the VC and select it here. "
-               "Each output chooses which transition preset to use. Edit presets on that widget."),
+               "Each output chooses a Transition preset for row recall and a Continuous FX preset for live primary↔secondary interpolation."),
             spatialGrp);
     spatialHint->setWordWrap(true);
     {
@@ -671,9 +686,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     spatialLay->addWidget(spatialHint);
 
     QLabel* xfEfxHint = new QLabel(
-            tr("Crossfade sweep: link EFX Engine, selector_sweep (64+o) on, staged primary, fader = sweep "
-               "progress. Continuous: selector_continuous (192+o) + secondary — works without spatial "
-               "checkbox. Continuous wins over crossfade sweep when both are on."),
+            tr("Crossfade commits staged selections: primary row, secondary row, Transition preset and Continuous FX preset. "
+               "EFX parameters are always live. Continuous FX wins over Transitions when both are on and a secondary row is active."),
             spatialGrp);
     xfEfxHint->setWordWrap(true);
   {
@@ -851,6 +865,13 @@ bool PresetTableV2ConfigDialog::crossfadeEnabled() const
 QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::crossfadeInputSource() const
 {
     return m_xfadeInputSel ? m_xfadeInputSel->inputSource() : QSharedPointer<QLCInputSource>();
+}
+
+PTContinuousFxSelectorMode PresetTableV2ConfigDialog::continuousFxSelectorMode() const
+{
+    if (!m_contFxModeCombo)
+        return PTContinuousFxSelectorMode::StagedCommit;
+    return static_cast<PTContinuousFxSelectorMode>(m_contFxModeCombo->currentData().toInt());
 }
 
 bool PresetTableV2ConfigDialog::spatialEffectsEnabled() const

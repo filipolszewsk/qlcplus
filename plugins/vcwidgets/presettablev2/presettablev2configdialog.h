@@ -138,6 +138,7 @@ public:
                                      const QVector<QSharedPointer<QLCInputSource>>& sources,
                                      bool crossfadeEnabled,
                                      QSharedPointer<QLCInputSource> crossfadeSrc,
+                                     PTContinuousFxSelectorMode continuousFxSelectorMode,
                                      int widgetPage,
                                      PTMode mode,
                                      quint32 fixtureGroupId,
@@ -156,6 +157,7 @@ public:
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
     QSharedPointer<QLCInputSource> crossfadeInputSource() const;
+    PTContinuousFxSelectorMode continuousFxSelectorMode() const;
 
     PTMode   widgetMode()            const;
     quint32  selectedFixtureGroupId() const;
@@ -222,6 +224,7 @@ private:
 
     // Crossfade section (widget-level)
     QCheckBox*            m_crossfadeChk      = nullptr;
+    QComboBox*            m_contFxModeCombo   = nullptr;
     InputSelectionWidget* m_xfadeInputSel     = nullptr;
     QWidget*              m_xfadeInputWidget  = nullptr;
 

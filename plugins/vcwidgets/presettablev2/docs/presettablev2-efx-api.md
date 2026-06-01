@@ -2,11 +2,24 @@
 
 Dokument opisuje kontrakt między widgetem **Preset Table v2** (DMX, wiersze, outputy) a **EFX Engine** (bank presetów, global FX, inputy VC). EFX Engine **nie pisze DMX** — tylko udostępnia dane i steruje flagą spatial na tabeli.
 
+Model użytkowy ma dwie warstwy:
+
+- **Transitions** — sposób wejścia nowego primary row na scenę: instant albo preset przejścia.
+- **Continuous FX** — ciągły efekt interpolujący primary row ↔ secondary row na fixture group.
+
+Crossfade/staged/commit dotyczy tylko wyborów: primary row, secondary row, Transition preset i Continuous FX preset. Parametry EFX (`Duration`, `WaveWidth`, `OffsetDir`, `Shape`, itd.) są zawsze **live** i zmieniają aktualny efekt od razu.
+
+Preset Table Properties → Crossfade ma globalny tryb **Continuous FX selector mode**:
+
+- **Live** — `transContinuousBank(o)` zmienia preset natychmiast.
+- **Staged commit** — wybór presetu trafia do staged i wchodzi live dopiero przy commicie crossfade.
+- **Smooth morph** — wybór presetu trafia do staged, a parametry Continuous FX morphują się live→staged zgodnie z progressem crossfade.
+
 ## Podział odpowiedzialności
 
 | Warstwa | Klasa | Odpowiedzialność |
 |---------|--------|------------------|
-| Tabela | `PresetTableV2Widget` | Wiersze presetów, binding kolumn→fixture, outputy FG, **całe DMX**, `efx_selector` / secondary per output, matrix / sweep / continuous / flash |
+| Tabela | `PresetTableV2Widget` | Wiersze presetów, binding kolumn→fixture, outputy FG, **całe DMX**, Transition selector / Continuous FX selector / secondary per output, matrix / transitions / continuous FX / flash |
 | Engine | `PresetTableV2TransitionWidget` | Bank `PTTransitionPreset`, global speed + min/max ms + intensity, mapowanie inputów DMX, **brak DMX** |
 
 Pluginy łączą się przez **Qt interfaces** + **ID widgetów** w Virtual Console (osobne `.dylib`).
@@ -46,7 +59,7 @@ Implementacja: `PresetTableV2Widget`.
 | `linkedTransitionWidgetId()` / `setLinkedTransitionWidgetId(quint32)` | Properties | ID widgetu engine |
 | `refreshTransitionPresetCache()` | Zmiana presetów / DMX override | Cache `m_cachedTransitionPresetCount` |
 | `requestTableFlash(tableRow, transitionPresetIndex)` | Flash | Ustawia flash matrix na outputach z aktywnym wierszem |
-| `continuousCrossfadeStagedEditing()` | Crossfade | Czy edycje Continuous idą do staged |
+| `continuousCrossfadeStagedEditing()` | Legacy compat | Historycznie sterowało staged parametrami engine; parametry EFX są teraz zawsze live |
 | `fixtureGroupSpanAlongAxis(preset, global)` | EFX podgląd | Span osi FG; 0 = brak |
 | `spatialGridPreview(preset, global, out)` | EFX podgląd | Siatka kolejności/offsetów |
 | `spatialEffectSettings()` / `set…()` | **Deprecated** | Legacy chase bez banku — unikać |
@@ -59,14 +72,14 @@ Engine **nie może**: pisać DMX, zmieniać `m_activeRow`, czytać wierszy tabel
 
 Implementacja: `PresetTableV2TransitionWidget`.
 
-### Bank presetów (osobno Sweep / Continuous)
+### Bank presetów (Transitions / Continuous FX)
 
 | Metoda | Użycie |
 |--------|--------|
-| `transitionPresetCount(PTTransitionMode mode)` | Liczba presetów w banku Sweep lub Continuous |
+| `transitionPresetCount(PTTransitionMode mode)` | Liczba presetów w banku Transitions lub Continuous FX |
 | `effectiveTransitionPreset(mode, index)` | Preset + live DMX (`mergePreset`) |
 
-Engine VC: taby **Sweep** | **Continuous** (bez kolumny Mode). XML: `<SweepPresets>`, `<ContinuousPresets>`.
+Engine VC: taby **Transitions** | **Continuous FX** (bez kolumny Mode). XML pozostaje kompatybilny: `<SweepPresets>`, `<ContinuousPresets>`.
 
 ### Global FX (tylko Properties)
 
@@ -76,9 +89,9 @@ Speed, Intensity, Min/Max ms — **EFX Engine → Properties** (nie na VC). Na w
 |--------|--------|
 | `globalEffectSettings()` | `PTGlobalEffectSettings` |
 
-**Sweep tab:** `applySweepPresetConstraints` — width=360, level=255, fade in max 50%; **fade out wyłączony** na osi sweep (`dimmerSweepAttack01`). Live DMX/UI w Operate **nie** jest nadpisywane co klatkę.
+**Transitions tab:** `applySweepPresetConstraints` — width=360, level=255, fade in max 50%; **fade out wyłączony** na osi transition (`dimmerSweepAttack01`). Live DMX/UI w Operate **nie** jest nadpisywane co klatkę.
 
-**Continuous dimmer:** tabela pisze DMX z `fadeTime=0` na kanałach (jak QLC EFX DimmerWave). `preset.fadeMs` dotyczy tylko sweep/flash między wierszami.
+**Continuous FX dimmer:** tabela pisze DMX z `fadeTime=0` na kanałach (jak QLC EFX DimmerWave). `preset.fadeMs` dotyczy tylko transition/flash między wierszami.
 
 ### Persistencja global Min/Max (workspace)
 
@@ -119,9 +132,9 @@ Kolumny banku: dwuklik nagłówka kolumny (Design), jak wcześniej.
 |------|-----------|
 | `m_rows[]` | Wartości kanałów |
 | `m_activeRow[o]` | Primary row (-1 = off) |
-| `m_liveSweepPreset[o]` | **selector_sweep** (64+o): -1 off, 0…N-1 |
-| `m_liveContinuousPreset[o]` | **selector_continuous** (192+o): -1 off |
-| `m_liveSecondaryRow[o]` | Secondary z DMX 128+o (Continuous; 0=Properties combo, 1=wiersz 1 jak primary) |
+| `m_liveSweepPreset[o]` | **Transition selector** / legacy `selector_sweep` (64+o): -1 off, 0…N-1 |
+| `m_liveContinuousPreset[o]` | **Continuous FX selector** / legacy `selector_continuous` (192+o): -1 off |
+| `m_liveSecondaryRow[o]` | Secondary z DMX 128+o (Continuous FX; 0=Properties combo, 1=wiersz 1 jak primary) |
 | `m_outputs[o].sweepPresetIndex` / `continuousPresetIndex` | Domyślne bez DMX |
 | `m_matrixState[o]` | Sweep / flash |
 
@@ -130,37 +143,37 @@ Kolumny banku: dwuklik nagłówka kolumny (Design), jak wcześniej.
 | ID | Funkcja |
 |----|---------|
 | `0…63` | `rowSelector(output)` — **primary** 0–255 (0=off, 1…N=wiersze, 101–110=flash) |
-| `64+o` | `transSweep(o)` — bank Sweep (0=off); sweep przy zmianie **primary** |
-| `128+o` | `transSecondaryRow(o)` — **tylko Continuous**: 0=Properties, 1=wiersz 1, 2=wiersz 2… |
-| `192+o` | `transContinuousBank(o)` — bank Continuous (0=off) |
+| `64+o` | `transSweep(o)` — Transition selector (0=instant); transition przy zmianie **primary** |
+| `128+o` | `transSecondaryRow(o)` — **tylko Continuous FX**: 0=Properties, 1=wiersz 1, 2=wiersz 2… |
+| `192+o` | `transContinuousBank(o)` — Continuous FX selector (0=off) |
 
 ID 64/128/192 to **osobne kanały VC** (wewnętrzne ID), nie podział jednego zakresu 0–255.
 | `255` | Crossfade global (direction-locked 0↔255) |
 
-### Crossfade + sweep (matrix)
+### Crossfade + Transitions (matrix)
 
-- Wymaga **linku do EFX Engine** + **selector_sweep** (64+o) > 0. **Nie** wymaga checkboxa „Enable spatial transition”.
+- Wymaga **linku do EFX Engine** + **Transition selector** (64+o) > 0. **Nie** wymaga checkboxa „Enable spatial transition”.
 - Suwak = **`globalProgress` 0…1** (lub zegar — patrz `InputCrossfadeManual`) wzdłuż planu spatial. Blend: `sweepBlend01` + **tylko atak** (bez fade-out). **Continuous** = osobno, pełny cykl 360°.
 
 **Crossfade manual** (EFX Engine Properties → `InputCrossfadeManual`, ID 52): **>127** = suwak tabeli (255) steruje postępem; **≤127** = **XF clock** — postęp 0→1 w czasie `effectiveDurationMs(global, …, honorPreset=false)` (global speed + min/max ms), **jeden** tick MasterTimer na klatkę `writeDMX` (`m_crossfadeClockElapsedMs`). Zegar resetuje się przy nowym staged / nowym sweep crossfade. Domyślnie bez inputu: manual ON.
-- Gdy **Continuous** jest aktywny (192+o + secondary), crossfade sweep **nie** przejmuje warstwy.
+- Gdy **Continuous FX** jest aktywny (192+o + secondary), transition crossfade **nie** przejmuje warstwy.
 
-### Continuous (matrix)
+### Continuous FX (matrix)
 
-- Wymaga linku EFX + **selector_continuous** (192+o) + secondary (128+o lub Properties). Matrix działa **bez** checkboxa spatial.
+- Wymaga linku EFX + **Continuous FX selector** (192+o) + secondary (128+o lub Properties). Matrix działa **bez** checkboxa spatial.
 - **Zegar 360°:** `m_continuousElapsedMs` + min/max + speed → [`matrixDimmerAtPoint`](presettablev2widget.cpp) (fala primary↔secondary). Suwak crossfade **nie** zmienia fazy — tylko staged vs live presetów (patrz niżej).
 - **Nie** używa globalnego `applyFadeValue` na wszystkich kanałach (to dawałoby jednoczesne A→B).
 
-### Crossfade + Continuous (osobno)
+### Crossfade + staged selections
 
-| Suwak | Edycje | DMX |
+| Suwak | Wybory | DMX |
 |-------|--------|-----|
 | ≤127 staged | `m_staged*` | Zamrożone **live** |
 | narastające >128 | commit | `promoteStagedToLive` |
 
-**Global speed / intensity** (engine): zawsze **live**, nigdy staged.
+**Parametry EFX** (global i per-column): zawsze **live**, nigdy staged. Dotyczy to Transitions i Continuous FX.
 
-Bufory staged (Continuous): `m_stagedRow`, `m_stagedSecondaryRow`, `m_stagedSweepPreset`, `m_stagedContinuousPreset`, engine `m_stagedColumnOverrides`.
+Bufory staged selection: `m_stagedRow`, `m_stagedSecondaryRow`, `m_stagedSweepPreset`, `m_stagedContinuousPreset`. Engine nie trzyma już staged overrides parametrów. Tryb Continuous FX selector decyduje, czy `m_stagedContinuousPreset` jest używany jako commit-only, morph target, czy omijany przez tryb live.
 
 ### Input ID — engine (`ptefxinputids.h`)
 
@@ -170,34 +183,36 @@ Stable IDs **32–51** (nie indeks kolumny UI): `InputAxis`, `InputDuration`, `I
 
 ## Przepływ DMX — Instant vs EFX
 
-**Matrix engine** (`useMatrixEngineLocked`):
+**Matrix engine**:
 
 ```
-spatialEffects.enabled && linkedTransitionWidgetId valid && presetCount > 0
+linkedTransitionWidgetId valid && presetCount > 0
 ```
+
+Per-output decyzję zbiera `resolveOutputPlaybackStateLocked()`: matrix jest używany, gdy jest aktywny spatial checkbox, crossfade, Transition selector albo Continuous FX selector. Dzięki temu Continuous FX i crossfade mogą działać bez legacy checkboxa spatial.
 
 **Warstwy (selectory NIE wykluczają się):**
 
 | Warstwa | Selector | Działanie |
 |---------|----------|-----------|
-| **Continuous** | `192+o` > 0 | Stała fala primary↔secondary (bank Continuous) |
-| **Sweep** | `64+o` > 0 | Przejście przy **zmianie primary** tylko gdy Continuous **nie** działa (bank Sweep) |
+| **Continuous FX** | `192+o` > 0 | Stała fala primary↔secondary (bank Continuous FX) |
+| **Transitions** | `64+o` > 0 | Przejście przy **zmianie primary** tylko gdy Continuous FX **nie** działa (bank Transitions) |
 
-Oba selectory mogą być **ON**: Continuous steruje falą primary↔secondary. **Zmiana primary przy aktywnym Continuous nie uruchamia Sweep** (nowy primary od razu w fali). Sweep przy zmianie primary tylko gdy Continuous wyłączony lub brak secondary.
+Oba selectory mogą być **ON**: Continuous FX steruje falą primary↔secondary. **Zmiana primary przy aktywnym Continuous FX nie uruchamia Transition** (nowy primary od razu w fali). Transition przy zmianie primary tylko gdy Continuous FX wyłączony lub brak secondary.
 
 **EFX aktywny:** `sweep >= 0 OR continuous >= 0`.
 
 W `writeDMXFixtureGroup` (matrix):
 
-1. `sweepRunning` → preset **Sweep** (old primary → new primary).
-2. `contActive` + secondary → preset **Continuous** (`forceContinuousBlend`).
-3. Tylko `sweepOn` → preset Sweep (hold primary).
+1. `sweepRunning` → preset **Transitions** (old primary → new primary).
+2. `contActive` + secondary → preset **Continuous FX** (`forceContinuousBlend`).
+3. Tylko `sweepOn` → preset Transitions (hold primary).
 4. Fallback: `writeContinuousSpatial` / spatial chase / instant row.
 
 ### Checklist użytkownika (Instant działa)
 
-1. Properties outputu: combo Sweep/Continuous = **Instant** (-1).
-2. DMX `selector_sweep` / `selector_continuous` = **0**.
+1. Properties outputu: combo Transitions/Continuous FX = **Instant** / **Off** (-1).
+2. DMX Transition selector / Continuous FX selector = **0**.
 3. DMX **row selector** ≥ 1 (wybrany wiersz tabeli).
 4. Przy problemach: wyłącz **Enable EFX** na engine albo odlinkuj — wtedy zawsze tryb tabeli.
 

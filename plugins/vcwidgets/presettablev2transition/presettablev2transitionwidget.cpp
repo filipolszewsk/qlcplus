@@ -298,8 +298,8 @@ void PresetTableV2TransitionWidget::buildUi()
         connect(table->horizontalHeader(), &QHeaderView::sectionDoubleClicked,
                 this, &PresetTableV2TransitionWidget::slotColumnHeaderDoubleClicked);
     }
-    m_bankTabs->addTab(m_sweepTable, tr("Sweep"));
-    m_bankTabs->addTab(m_continuousTable, tr("Continuous"));
+    m_bankTabs->addTab(m_sweepTable, tr("Transitions"));
+    m_bankTabs->addTab(m_continuousTable, tr("Continuous FX"));
     m_layout->addWidget(m_bankTabs, 1);
 
     connect(m_enableChk, &QCheckBox::toggled, this, [this]() {
@@ -717,13 +717,8 @@ bool PresetTableV2TransitionWidget::hasLiveColumnOverride(quint8 inputId) const
 
 void PresetTableV2TransitionWidget::promoteStagedColumnOverrides()
 {
-    QMutexLocker lk(&m_liveMutex);
-    for (auto it = m_stagedColumnOverrides.constBegin();
-         it != m_stagedColumnOverrides.constEnd(); ++it)
-        m_liveColumnOverrides.insert(it.key(), it.value());
-    m_stagedColumnOverrides.clear();
-    lk.unlock();
-    notifyTablePresetCacheRefresh();
+    // EFX parameters are always live. Staged/commit is owned by the table and
+    // applies only to primary/secondary row and bank preset selections.
 }
 
 void PresetTableV2TransitionWidget::migrateLegacyInputSources()
@@ -1075,17 +1070,8 @@ void PresetTableV2TransitionWidget::slotInputValueChanged(quint32 universe, quin
             return;
         }
 
-        const bool stagedEditing = [this]() {
-            if (PresetTableV2ControlIface* table = linkedTable())
-                return table->continuousCrossfadeStagedEditing();
-            return false;
-        }();
-
         QMutexLocker lk(&m_liveMutex);
-        if (stagedEditing)
-            m_stagedColumnOverrides.insert(inputId, value);
-        else
-            m_liveColumnOverrides.insert(inputId, value);
+        m_liveColumnOverrides.insert(inputId, value);
         lk.unlock();
         notifyTablePresetCacheRefresh();
         sendFeedback(value, inputId);

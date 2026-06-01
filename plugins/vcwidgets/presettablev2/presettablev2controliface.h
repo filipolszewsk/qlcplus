@@ -26,7 +26,7 @@ public:
     /** Flash table row across outputs (Operate, MasterTimer thread safe). */
     virtual void requestTableFlash(int tableRowIndex, int transitionPresetIndex) = 0;
 
-    /** True when Continuous+crossfade edits go to staged buffers (fader ≤127). */
+    /** True when Continuous FX selection edits go to staged buffers (fader ≤127). */
     virtual bool continuousCrossfadeStagedEditing() const = 0;
 
     /** Span along preset axis from linked fixture group; 0 if unavailable. */
