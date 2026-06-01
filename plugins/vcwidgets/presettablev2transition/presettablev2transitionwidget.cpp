@@ -5,6 +5,7 @@
 #include "presettablev2transitionwidget.h"
 #include "presettablev2transitionconfigdialog.h"
 #include "presettablev2transitioncolumndialog.h"
+#include "ptcustomcurvedialog.h"
 #include "presettablev2controliface.h"
 #include "presettablev2effectengine.h"
 #include "ptdimmerwaveengine.h"
@@ -22,6 +23,7 @@
 #include <QSignalBlocker>
 #include <QHBoxLayout>
 #include <QSpinBox>
+#include <QStringList>
 
 static const QString KXMLRoot = QStringLiteral("PluginWidget");
 static const QString KXMLPluginId = QStringLiteral("PluginId");
@@ -53,6 +55,12 @@ static const QString KXMLPresetPhase = QStringLiteral("Phase");
 static const QString KXMLPresetPropagation = QStringLiteral("Propagation");
 static const QString KXMLPresetPlaybackMode = QStringLiteral("PlaybackMode");
 static const QString KXMLPresetSpeedMult = QStringLiteral("SpeedMult");
+static const QString KXMLPresetCustomCurveEnabled = QStringLiteral("CustomCurveEnabled");
+static const QString KXMLPresetCustomCurve = QStringLiteral("CustomCurve");
+static const QString KXMLCustomCurveGallery = QStringLiteral("CustomCurveGallery");
+static const QString KXMLCustomCurveItem = QStringLiteral("CustomCurveItem");
+static const QString KXMLCustomCurveItemName = QStringLiteral("Name");
+static const QString KXMLCustomCurveItemCurve = QStringLiteral("Curve");
 static const QString KXMLGlobalSpeedInput = QStringLiteral("GlobalSpeedInput");
 static const QString KXMLGlobalIntensityInput = QStringLiteral("GlobalIntensityInput");
 static const QString KXMLGlobalCrossfadeManualInput = QStringLiteral("GlobalCrossfadeManualInput");
@@ -82,6 +90,76 @@ static PTTransitionPreset defaultPreset(int index, PTTransitionMode bankMode)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     PresetTableV2SpatialEngine::applySweepPresetConstraints(p);
     return p;
+}
+
+static QVector<PTCustomCurvePoint> defaultTransitionCustomCurve()
+{
+    QVector<PTCustomCurvePoint> pts;
+    PTCustomCurvePoint a;
+    a.xDeg = 0.0; a.yValue = 0.0;
+    a.leftHandleXDeg = 0.0; a.leftHandleYValue = 0.0;
+    a.rightHandleXDeg = 60.0; a.rightHandleYValue = 0.0;
+    PTCustomCurvePoint b;
+    b.xDeg = 180.0; b.yValue = 255.0;
+    b.leftHandleXDeg = 120.0; b.leftHandleYValue = 255.0;
+    b.rightHandleXDeg = 240.0; b.rightHandleYValue = 255.0;
+    PTCustomCurvePoint c;
+    c.xDeg = 360.0; c.yValue = 0.0;
+    c.leftHandleXDeg = 300.0; c.leftHandleYValue = 0.0;
+    c.rightHandleXDeg = 360.0; c.rightHandleYValue = 0.0;
+    pts << a << b << c;
+    return pts;
+}
+
+static QString serializeCustomCurve(const QVector<PTCustomCurvePoint>& points)
+{
+    QStringList encoded;
+    for (const PTCustomCurvePoint& p : points)
+    {
+        encoded << QStringLiteral("%1,%2,%3,%4,%5,%6")
+                .arg(p.xDeg, 0, 'f', 2)
+                .arg(p.yValue, 0, 'f', 2)
+                .arg(p.leftHandleXDeg, 0, 'f', 2)
+                .arg(p.leftHandleYValue, 0, 'f', 2)
+                .arg(p.rightHandleXDeg, 0, 'f', 2)
+                .arg(p.rightHandleYValue, 0, 'f', 2);
+    }
+    return encoded.join(QLatin1Char(';'));
+}
+
+static QVector<PTCustomCurvePoint> parseCustomCurve(const QString& text)
+{
+    QVector<PTCustomCurvePoint> points;
+    const QStringList encodedPoints = text.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (const QString& encoded : encodedPoints)
+    {
+        const QStringList values = encoded.split(QLatin1Char(','));
+        if (values.size() != 6)
+            continue;
+        PTCustomCurvePoint p;
+        p.xDeg = values.at(0).toDouble();
+        p.yValue = values.at(1).toDouble();
+        p.leftHandleXDeg = values.at(2).toDouble();
+        p.leftHandleYValue = values.at(3).toDouble();
+        p.rightHandleXDeg = values.at(4).toDouble();
+        p.rightHandleYValue = values.at(5).toDouble();
+        points.append(p);
+    }
+    return points;
+}
+
+static void setComboDataIndex(QComboBox* combo, int value)
+{
+    if (!combo)
+        return;
+    for (int i = 0; i < combo->count(); ++i)
+    {
+        if (combo->itemData(i).toInt() == value)
+        {
+            combo->setCurrentIndex(i);
+            return;
+        }
+    }
 }
 
 QString PresetTableV2TransitionWidget::columnTitle(int col)
@@ -181,6 +259,7 @@ QComboBox* PresetTableV2TransitionWidget::makeWaveShapeCombo(QWidget* parent)
     c->addItem(QStringLiteral("Sine"), 0);
     c->addItem(QStringLiteral("Square"), 1);
     c->addItem(QStringLiteral("Triangle"), 2);
+    c->addItem(QStringLiteral("Custom"), 3);
     return c;
 }
 
@@ -274,6 +353,8 @@ void PresetTableV2TransitionWidget::buildUi()
     previewLayout->setContentsMargins(0, 0, 0, 0);
     previewLayout->setSpacing(6);
     m_curveWidget = new PTDimmerWaveCurveWidget(m_previewRow);
+    connect(m_curveWidget, &PTDimmerWaveCurveWidget::customCurveEditRequested,
+            this, &PresetTableV2TransitionWidget::slotOpenCustomCurveEditor);
     m_spatialGridWidget = new PTSpatialFixtureGridWidget(m_previewRow);
     m_spatialGridWidget->setToolTip(
             tr("Fixture group: sweep order, head offset (°), phase start. "
@@ -487,7 +568,7 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
         }
         spinCell(ColDuration, int(p.durationMs), 20, 60000);
         spinCell(ColWaveWidth, p.waveWidth, 1, 360);
-        waveShapeCell(ColWaveShape, p.waveShape);
+        waveShapeCell(ColWaveShape, p.customCurveEnabled ? 3 : p.waveShape);
         spinCell(ColFadeIn, p.waveFadeIn, 0, 100);
         spinCell(ColFadeOut, p.waveFadeOut, 0, 100);
         spinCell(ColWaveLevel, p.waveLevel, 0, 255);
@@ -551,7 +632,13 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromRow(PTTransitionMode
     if (auto* ww = qobject_cast<QSpinBox*>(table->cellWidget(row, ColWaveWidth)))
         p.waveWidth = ww->value();
     if (auto* ws = qobject_cast<QComboBox*>(table->cellWidget(row, ColWaveShape)))
-        p.waveShape = ws->currentData().toInt();
+    {
+        const int shape = ws->currentData().toInt();
+        p.customCurveEnabled = (shape == 3);
+        p.waveShape = p.customCurveEnabled ? 0 : shape;
+        if (p.customCurveEnabled && p.customCurve.size() < 2)
+            p.customCurve = defaultTransitionCustomCurve();
+    }
     if (auto* fi = qobject_cast<QSpinBox*>(table->cellWidget(row, ColFadeIn)))
         p.waveFadeIn = fi->value();
     if (auto* fo = qobject_cast<QSpinBox*>(table->cellWidget(row, ColFadeOut)))
@@ -639,14 +726,32 @@ void PresetTableV2TransitionWidget::syncActiveBankFromTable()
 
 void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int row, int col)
 {
-    Q_UNUSED(col);
-
     if (m_rebuildingTable)
         return;
 
     const QVector<PTTransitionPreset>& presets = presetsForMode(mode);
     if (row < 0 || row >= presets.size())
         return;
+
+    if (col == ColWaveShape)
+    {
+        QTableWidget* table = tableForMode(mode);
+        QComboBox* combo = table ? qobject_cast<QComboBox*>(table->cellWidget(row, ColWaveShape)) : nullptr;
+        if (combo && combo->currentData().toInt() == 3)
+        {
+            const PTTransitionPreset before = presets.at(row);
+            if (!editCustomCurveForPreset(mode, row))
+            {
+                QSignalBlocker blocker(combo);
+                setComboDataIndex(combo, before.customCurveEnabled ? 3 : before.waveShape);
+            }
+            updatePresetRowUiForMode(row, mode);
+            updateOffsetStepLimitForRow(row, mode);
+            notifyTablePresetCacheRefresh();
+            updateEffectPreview();
+            return;
+        }
+    }
 
     updatePresetRowUiForMode(row, mode);
     syncPresetFromTable(mode, row);
@@ -669,6 +774,52 @@ void PresetTableV2TransitionWidget::slotPresetCellChanged(int row, int col)
         return;
 
     slotPresetChanged(mode, row, col);
+}
+
+void PresetTableV2TransitionWidget::slotOpenCustomCurveEditor()
+{
+    QTableWidget* table = activeTable();
+    if (!table)
+        return;
+    editCustomCurveForPreset(activeBankMode(), table->currentRow());
+}
+
+bool PresetTableV2TransitionWidget::editCustomCurveForPreset(PTTransitionMode mode, int row)
+{
+    QVector<PTTransitionPreset>& presets = presetsForMode(mode);
+    if (row < 0 || row >= presets.size())
+        return false;
+
+    PTTransitionPreset candidate = presets.at(row);
+    candidate.customCurveEnabled = true;
+    candidate.waveShape = 0;
+    if (candidate.customCurve.size() < 2)
+        candidate.customCurve = defaultTransitionCustomCurve();
+
+    PTCustomCurveDialog dlg(candidate, m_customCurveGallery, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+
+    candidate.customCurve = dlg.customCurve();
+    candidate.customCurveEnabled = true;
+    candidate.waveShape = 0;
+    presets[row] = candidate;
+    m_customCurveGallery = dlg.gallery();
+
+    QTableWidget* table = tableForMode(mode);
+    if (table)
+    {
+        if (auto* combo = qobject_cast<QComboBox*>(table->cellWidget(row, ColWaveShape)))
+        {
+            QSignalBlocker blocker(combo);
+            setComboDataIndex(combo, 3);
+        }
+    }
+    notifyTablePresetCacheRefresh();
+    updateEffectPreview();
+    if (m_doc)
+        m_doc->setModified();
+    return true;
 }
 
 void PresetTableV2TransitionWidget::slotBankTabChanged(int)
@@ -869,6 +1020,9 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
     const PTDimmerWaveParams params = PTDimmerWaveEngine::paramsFromPreset(preset, &m_globalSettings);
     const quint32 cycleMs = PTParamMatrixEngine::effectiveDurationMs(m_globalSettings, preset, false);
     m_curveWidget->setParams(params);
+    m_curveWidget->setEditable(false);
+    if (preset.customCurveEnabled)
+        m_curveWidget->setCustomCurve(preset.customCurve);
     m_curveWidget->setCycleDurationMs(cycleMs);
 
     if (!m_spatialGridWidget)
@@ -1140,6 +1294,7 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     copy->m_targetTableId = m_targetTableId;
     copy->m_sweepPresets = m_sweepPresets;
     copy->m_continuousPresets = m_continuousPresets;
+    copy->m_customCurveGallery = m_customCurveGallery;
     copy->m_globalSettings = m_globalSettings;
     copy->rebuildAllPresetTables();
     copy->updateGlobalSummaryLabel();
@@ -1190,6 +1345,12 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
         p.waveWidth = qBound(1, int(pattrs.value(KXMLPresetLength).toUInt()) * 360 / 255, 360);
     if (pattrs.hasAttribute(KXMLPresetWaveShape))
         p.waveShape = pattrs.value(KXMLPresetWaveShape).toInt();
+    if (pattrs.hasAttribute(KXMLPresetCustomCurveEnabled))
+        p.customCurveEnabled = pattrs.value(KXMLPresetCustomCurveEnabled).toInt() != 0;
+    if (pattrs.hasAttribute(KXMLPresetCustomCurve))
+        p.customCurve = parseCustomCurve(pattrs.value(KXMLPresetCustomCurve).toString());
+    if (p.customCurveEnabled && p.customCurve.size() < 2)
+        p.customCurve = defaultTransitionCustomCurve();
     if (pattrs.hasAttribute(KXMLPresetFadeIn))
     {
         const int fi = pattrs.value(KXMLPresetFadeIn).toInt();
@@ -1238,6 +1399,11 @@ void PresetTableV2TransitionWidget::writePresetXml(QXmlStreamWriter* doc, const 
     doc->writeAttribute(KXMLPresetDuration, QString::number(p.durationMs));
     doc->writeAttribute(KXMLPresetWaveWidth, QString::number(p.waveWidth));
     doc->writeAttribute(KXMLPresetWaveShape, QString::number(p.waveShape));
+    if (p.customCurveEnabled)
+    {
+        doc->writeAttribute(KXMLPresetCustomCurveEnabled, QStringLiteral("1"));
+        doc->writeAttribute(KXMLPresetCustomCurve, serializeCustomCurve(p.customCurve));
+    }
     doc->writeAttribute(KXMLPresetFadeIn, QString::number(p.waveFadeIn));
     doc->writeAttribute(KXMLPresetFadeOut, QString::number(p.waveFadeOut));
     doc->writeAttribute(KXMLPresetWaveLevel, QString::number(p.waveLevel));
@@ -1266,6 +1432,7 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
 
     m_sweepPresets.clear();
     m_continuousPresets.clear();
+    m_customCurveGallery.clear();
     int legacySweepDir = 0;
     int legacySpeedMult = 1;
 
@@ -1389,6 +1556,24 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                     root.skipCurrentElement();
             }
         }
+        else if (root.name() == KXMLCustomCurveGallery)
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLCustomCurveItem)
+                {
+                    const auto attrs = root.attributes();
+                    PTCustomCurveGalleryItem item;
+                    item.name = attrs.value(KXMLCustomCurveItemName).toString();
+                    item.points = parseCustomCurve(attrs.value(KXMLCustomCurveItemCurve).toString());
+                    if (!item.name.isEmpty() && item.points.size() >= 2)
+                        m_customCurveGallery.append(item);
+                    root.skipCurrentElement();
+                }
+                else
+                    root.skipCurrentElement();
+            }
+        }
         else if (root.name() == KXMLPreset)
         {
             const auto pattrs = root.attributes();
@@ -1478,6 +1663,18 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeStartElement(KXMLContinuousPresets);
     for (const PTTransitionPreset& p : m_continuousPresets)
         writePresetXml(doc, p);
+    doc->writeEndElement();
+
+    doc->writeStartElement(KXMLCustomCurveGallery);
+    for (const PTCustomCurveGalleryItem& item : m_customCurveGallery)
+    {
+        if (item.name.isEmpty() || item.points.size() < 2)
+            continue;
+        doc->writeStartElement(KXMLCustomCurveItem);
+        doc->writeAttribute(KXMLCustomCurveItemName, item.name);
+        doc->writeAttribute(KXMLCustomCurveItemCurve, serializeCustomCurve(item.points));
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
 
     doc->writeEndElement();

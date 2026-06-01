@@ -72,6 +72,22 @@ enum class PTTransitionMode
     Continuous
 };
 
+struct PTCustomCurvePoint
+{
+    double xDeg = 0.0;
+    double yValue = 0.0;
+    double leftHandleXDeg = 0.0;
+    double leftHandleYValue = 0.0;
+    double rightHandleXDeg = 0.0;
+    double rightHandleYValue = 0.0;
+};
+
+struct PTCustomCurveGalleryItem
+{
+    QString name;
+    QVector<PTCustomCurvePoint> points;
+};
+
 /** EFX DimmerWave-aligned transition preset (per spatial preset row). */
 struct PTTransitionPreset
 {
@@ -90,6 +106,8 @@ struct PTTransitionPreset
     int                waveFadeOut = 25;
     int                waveLevel = 255;
     int                startOffset = 0;
+    bool               customCurveEnabled = false;
+    QVector<PTCustomCurvePoint> customCurve;
     PTPropagationMode  propagation = PTPropagationMode::Parallel;
     PTTransitionMode   playbackMode = PTTransitionMode::SweepOnly;
     /** Sweep / flash wave front: 0=All, 1=LR, 2=RL, 3=CenterOut, 4=OutsideIn */

@@ -11,8 +11,9 @@ namespace {
 
 QColor offsetFillColor(int offsetDeg)
 {
-    const int hue = ((offsetDeg % 360) + 360) % 360;
-    return QColor::fromHsv(hue, 78, 212);
+    const int deg = ((offsetDeg % 360) + 360) % 360;
+    const int value = 35 + int(double(deg) / 360.0 * 200.0);
+    return QColor(value, value, value);
 }
 
 QColor outputBorderColor(int outputIndex)
@@ -26,6 +27,11 @@ QColor outputBorderColor(int outputIndex)
         QColor(55, 155, 95)
     };
     return colors[qAbs(outputIndex) % (int(sizeof(colors) / sizeof(colors[0])))];
+}
+
+QColor textColorForFill(const QColor& fill)
+{
+    return fill.lightness() < 135 ? QColor(245, 245, 245) : QColor(25, 25, 25);
 }
 
 void drawOutputBorder(QPainter& p, const QRect& rect, const QList<int>& outputIndexes)
@@ -143,7 +149,8 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             const PTSpatialGridCellData cell = m_preview.cells.value(pt);
             const QRect cr(ox + x * cellW, oy + y * cellH, cellW - 2, cellH - 2);
 
-            p.fillRect(cr, cell.occupied ? offsetFillColor(cell.headOffsetDeg) : emptyBg);
+            const QColor fill = cell.occupied ? offsetFillColor(cell.headOffsetDeg) : emptyBg;
+            p.fillRect(cr, fill);
 
             QPen border = QPen(gridPen, 1);
             p.setPen(border);
@@ -168,19 +175,21 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             numberFont.setPointSize(qMax(9, baseFont.pointSize() + 1));
 
             p.setFont(smallFont);
-            p.setPen(mutedText);
+            const QColor cellText = textColorForFill(fill);
+            const QColor cellMuted = fill.lightness() < 135 ? QColor(215, 215, 215) : QColor(55, 55, 55);
+            p.setPen(cellMuted);
             p.drawText(cr.adjusted(3, 0, -3, -3), Qt::AlignBottom | Qt::AlignHCenter,
                        QStringLiteral("%1°").arg(cell.headOffsetDeg));
 
             p.setFont(numberFont);
-            p.setPen(textColor);
+            p.setPen(cellText);
             p.drawText(cr.adjusted(2, 2, -2, -2), Qt::AlignCenter,
                        QString::number(cell.localOrder));
 
             if (cellW >= 44 && cellH >= 38)
             {
                 p.setFont(smallFont);
-                p.setPen(mutedText);
+                p.setPen(cellMuted);
                 p.drawText(cr.adjusted(3, 0, -3, -3), Qt::AlignBottom | Qt::AlignRight,
                            QStringLiteral("%1%").arg(int(cell.phaseStart01 * 100.0 + 0.5)));
             }
@@ -195,7 +204,7 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             .arg(m_preview.blocks)
             .arg(m_preview.slotsPerWing)
             .arg(m_preview.maxOffsetStep);
-    legend += tr("  · fill = offset · border = output");
+    legend += tr("  · fill = offset shade · colored border = output");
     if (m_preview.hasOffsetCollisions)
         legend += tr("  · offset collision");
     if (!m_preview.offsetStepOk)

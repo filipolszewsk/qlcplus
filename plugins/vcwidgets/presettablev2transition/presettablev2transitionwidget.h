@@ -76,6 +76,7 @@ private slots:
     void slotRefreshTableLink();
     void slotColumnHeaderDoubleClicked(int logicalIndex);
     void slotBankTabChanged(int index);
+    void slotOpenCustomCurveEditor();
 
 private:
     enum PresetColumn {
@@ -115,6 +116,7 @@ private:
     void syncActiveBankFromTable();
     void pushSpatialEnabledToTable();
     void notifyTablePresetCacheRefresh();
+    bool editCustomCurveForPreset(PTTransitionMode mode, int row);
     void migrateLegacyInputSources();
     void updateEffectPreview();
     int gridSpanForPreset(const PTTransitionPreset& preset) const;
@@ -136,6 +138,7 @@ private:
     quint32 m_targetTableId = VCWidget::invalidId();
     QVector<PTTransitionPreset> m_sweepPresets;
     QVector<PTTransitionPreset> m_continuousPresets;
+    QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
     bool m_crossfadeManualInputMapped = false;

@@ -20,6 +20,8 @@ struct PTDimmerWaveParams
     int waveLevel = 255;
     int startOffset = 0;
     int offsetStep = 20;
+    bool customCurveEnabled = false;
+    QVector<PTCustomCurvePoint> customCurve;
     int wings = 1;
     int blocks = 1;
     int wingsSymmetry = 0;
@@ -75,6 +77,7 @@ public:
                                                      const PTDimmerWaveParams& params);
 
     static float applyWaveShape(float input, int shape);
+    static float sampleCustomCurve01(float phase01, const QVector<PTCustomCurvePoint>& points);
 
     /** Dimmer 0…1 inside wave packet; phase01 is 0…1 within active width (QLC DimmerWave). */
     static float dimmerAtPhaseInWidth(float phase01, const PTDimmerWaveParams& params);

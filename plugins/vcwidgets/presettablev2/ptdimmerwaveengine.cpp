@@ -5,7 +5,9 @@
 #include "ptdimmerwaveengine.h"
 #include "ptparammatrixengine.h"
 
+#include <QPointF>
 #include <QtMath>
+#include <algorithm>
 #include <cmath>
 
 #ifndef M_PI
@@ -28,6 +30,8 @@ PTDimmerWaveParams PTDimmerWaveEngine::paramsFromPreset(const PTTransitionPreset
     p.waveFadeOut = preset.waveFadeOut;
     p.waveLevel = preset.waveLevel;
     p.startOffset = preset.startOffset;
+    p.customCurveEnabled = preset.customCurveEnabled;
+    p.customCurve = preset.customCurve;
     p.offsetStep = preset.offsetStep;
     p.wings = preset.wings;
     p.blocks = preset.blocks > 0 ? preset.blocks : 1;
@@ -179,10 +183,69 @@ float PTDimmerWaveEngine::applyWaveShape(float input, int shape)
     }
 }
 
+static QPointF cubicPoint(const QPointF& p0, const QPointF& c1,
+                          const QPointF& c2, const QPointF& p1, double t)
+{
+    const double mt = 1.0 - t;
+    return p0 * (mt * mt * mt)
+            + c1 * (3.0 * mt * mt * t)
+            + c2 * (3.0 * mt * t * t)
+            + p1 * (t * t * t);
+}
+
+float PTDimmerWaveEngine::sampleCustomCurve01(float phase01,
+                                              const QVector<PTCustomCurvePoint>& points)
+{
+    if (points.size() < 2)
+        return 0.0f;
+
+    QVector<PTCustomCurvePoint> sorted = points;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const PTCustomCurvePoint& a, const PTCustomCurvePoint& b) {
+                  return a.xDeg < b.xDeg;
+              });
+
+    const double x = qBound(0.0, phase01, 1.0) * 360.0;
+    if (x <= sorted.first().xDeg)
+        return float(qBound(0.0, sorted.first().yValue / 255.0, 1.0));
+    if (x >= sorted.last().xDeg)
+        return float(qBound(0.0, sorted.last().yValue / 255.0, 1.0));
+
+    for (int i = 0; i < sorted.size() - 1; ++i)
+    {
+        const PTCustomCurvePoint& a = sorted.at(i);
+        const PTCustomCurvePoint& b = sorted.at(i + 1);
+        if (x < a.xDeg || x > b.xDeg)
+            continue;
+
+        const QPointF p0(a.xDeg, a.yValue);
+        const QPointF c1(a.rightHandleXDeg, a.rightHandleYValue);
+        const QPointF c2(b.leftHandleXDeg, b.leftHandleYValue);
+        const QPointF p1(b.xDeg, b.yValue);
+
+        double lo = 0.0;
+        double hi = 1.0;
+        for (int n = 0; n < 18; ++n)
+        {
+            const double mid = (lo + hi) * 0.5;
+            if (cubicPoint(p0, c1, c2, p1, mid).x() < x)
+                lo = mid;
+            else
+                hi = mid;
+        }
+        const QPointF pt = cubicPoint(p0, c1, c2, p1, (lo + hi) * 0.5);
+        return float(qBound(0.0, pt.y() / 255.0, 1.0));
+    }
+    return 0.0f;
+}
+
 float PTDimmerWaveEngine::dimmerAtPhaseInWidth(float phaseInWidth, const PTDimmerWaveParams& params)
 {
     const float maxValue = float(params.waveLevel) / 255.0f;
     const float phase = qBound(0.0f, phaseInWidth, 1.0f);
+
+    if (params.customCurveEnabled && params.customCurve.size() >= 2)
+        return sampleCustomCurve01(phase, params.customCurve) * maxValue;
 
     // Square: hard on/off inside wave width (no fade-in/out ramp on packet edges).
     if (params.waveShape == 1)

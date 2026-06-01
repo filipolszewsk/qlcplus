@@ -277,7 +277,10 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     if (liveByColumn.contains(PTEfxCol::InputWaveWidth))
         p.waveWidth = qBound(1, int(val(PTEfxCol::InputWaveWidth)) * 360 / 255, 360);
     if (liveByColumn.contains(PTEfxCol::InputWaveShape))
+    {
         p.waveShape = int(val(PTEfxCol::InputWaveShape)) % 3;
+        p.customCurveEnabled = false;
+    }
     if (liveByColumn.contains(PTEfxCol::InputFadeIn))
         p.waveFadeIn = qBound(0, int(val(PTEfxCol::InputFadeIn)) * 100 / 255, 100);
     if (liveByColumn.contains(PTEfxCol::InputFadeOut))
