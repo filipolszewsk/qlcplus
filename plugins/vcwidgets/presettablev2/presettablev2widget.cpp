@@ -1818,6 +1818,29 @@ bool PresetTableV2Widget::spatialGridPreview(const PTTransitionPreset& preset,
 
     out = PTSpatialFixturePlan::buildGridPreview(
             points, preset, global, sz.width(), sz.height());
+    if (!out.valid)
+        return false;
+
+    const FixtureGroupMask docMask = m_doc->fixtureGroupMask(m_fixtureGroupId);
+    const QMap<QLCPoint, GroupHead> maskedHeads = m_doc->effectiveHeadsMap(grp);
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        const PTOutput& ptOut = m_outputs[o];
+        if (ptOut.scope == PTOutputScope::Mask && !docMask.isActive())
+            continue;
+
+        const QMap<QLCPoint, GroupHead>& scopeHeads =
+                (ptOut.scope == PTOutputScope::Rows) ? heads : maskedHeads;
+        for (auto it = scopeHeads.constBegin(); it != scopeHeads.constEnd(); ++it)
+        {
+            const QLCPoint& pt = it.key();
+            if (!outputScopeAllowsPoint(ptOut.scope, pt, ptOut))
+                continue;
+            auto cellIt = out.cells.find(pt);
+            if (cellIt != out.cells.end() && !cellIt->outputIndexes.contains(o))
+                cellIt->outputIndexes.append(o);
+        }
+    }
     return out.valid;
 }
 

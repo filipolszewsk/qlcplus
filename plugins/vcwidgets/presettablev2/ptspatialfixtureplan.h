@@ -23,6 +23,12 @@ struct PTSpatialGridCellData
 {
     bool   occupied = false;
     int    chaseOrder = 0;
+    int    wingIndex = 0;
+    int    localIndex = 0;
+    int    blockIndex = 0;
+    int    localOrder = 1;
+    int    offsetSlot = 0;
+    QList<int> outputIndexes;
     int    headOffsetDeg = 0;
     double phaseStart01 = 0.0;
     bool   offsetCollision = false;
@@ -34,6 +40,9 @@ struct PTSpatialGridPreview
     QSize gridSize;
     QHash<QLCPoint, PTSpatialGridCellData> cells;
     int   effectiveOffsetSlots = 1;
+    int   wings = 1;
+    int   blocks = 1;
+    int   slotsPerWing = 1;
     int   maxOffsetStep = 360;
     bool  offsetStepOk = true;
     bool  hasOffsetCollisions = false;

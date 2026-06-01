@@ -34,6 +34,17 @@ struct PTDimmerWaveSpatialSpan
     int span     = 1;
 };
 
+struct PTDimmerWaveOffsetInfo
+{
+    int wingIndex = 0;
+    int localIndex = 0;
+    int blockIndex = 0;
+    int localOrder = 1;
+    int offsetSlot = 0;
+    int slotsPerWing = 1;
+    int headOffsetDeg = 0;
+};
+
 class PTDimmerWaveEngine
 {
 public:
@@ -47,6 +58,7 @@ public:
                                  int fxOrientation);
 
     static int effectiveOffsetSlotCount(int gridSpanAlongAxis, const PTTransitionPreset& preset);
+    static int offsetSlotCountForWing(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static int maxOffsetStepForGrid(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static void clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis);
 
@@ -58,6 +70,9 @@ public:
 
     static int calculateHeadStartOffsetExtended(int col, int row, int gridWidth, int gridHeight,
                                                 const PTDimmerWaveParams& params);
+
+    static PTDimmerWaveOffsetInfo offsetInfoForPoint(int col, int row, int gridWidth, int gridHeight,
+                                                     const PTDimmerWaveParams& params);
 
     static float applyWaveShape(float input, int shape);
 

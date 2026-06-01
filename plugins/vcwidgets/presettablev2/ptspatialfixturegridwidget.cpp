@@ -7,6 +7,66 @@
 #include <QPainter>
 #include <QPaintEvent>
 
+namespace {
+
+QColor offsetFillColor(int offsetDeg)
+{
+    const int hue = ((offsetDeg % 360) + 360) % 360;
+    return QColor::fromHsv(hue, 78, 212);
+}
+
+QColor outputBorderColor(int outputIndex)
+{
+    static const QColor colors[] = {
+        QColor(230, 80, 80), QColor(60, 150, 240), QColor(80, 180, 110),
+        QColor(235, 170, 55), QColor(170, 105, 230), QColor(50, 190, 190),
+        QColor(230, 105, 170), QColor(135, 155, 55), QColor(95, 115, 230),
+        QColor(210, 115, 55), QColor(75, 170, 150), QColor(185, 85, 115),
+        QColor(115, 135, 155), QColor(160, 140, 65), QColor(100, 100, 220),
+        QColor(55, 155, 95)
+    };
+    return colors[qAbs(outputIndex) % (int(sizeof(colors) / sizeof(colors[0])))];
+}
+
+void drawOutputBorder(QPainter& p, const QRect& rect, const QList<int>& outputIndexes)
+{
+    if (outputIndexes.isEmpty())
+        return;
+
+    if (outputIndexes.size() == 1)
+    {
+        p.setPen(QPen(outputBorderColor(outputIndexes.first()), 3));
+        p.drawRect(rect.adjusted(1, 1, -1, -1));
+        return;
+    }
+
+    const int n = outputIndexes.size();
+    const int left = rect.left() + 1;
+    const int right = rect.right() - 1;
+    const int top = rect.top() + 1;
+    const int bottom = rect.bottom() - 1;
+    const int w = qMax(1, right - left + 1);
+    const int h = qMax(1, bottom - top + 1);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const QColor color = outputBorderColor(outputIndexes.at(i));
+        p.setPen(QPen(color, 3));
+
+        const int x1 = left + (w * i) / n;
+        const int x2 = left + (w * (i + 1)) / n - 1;
+        p.drawLine(QPoint(x1, top), QPoint(x2, top));
+        p.drawLine(QPoint(x1, bottom), QPoint(x2, bottom));
+
+        if (i == 0)
+            p.drawLine(QPoint(left, top), QPoint(left, bottom));
+        if (i == n - 1)
+            p.drawLine(QPoint(right, top), QPoint(right, bottom));
+    }
+}
+
+} // namespace
+
 PTSpatialFixtureGridWidget::PTSpatialFixtureGridWidget(QWidget* parent)
     : QWidget(parent)
 {
@@ -69,7 +129,11 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
     const int ox = area.left() + (area.width() - totalW) / 2;
     const int oy = area.top() + (area.height() - totalH) / 2;
 
-    const int maxOrder = qMax(1, m_preview.cells.size());
+    const QFont baseFont = p.font();
+    const QColor emptyBg = palette().color(QPalette::Base).darker(105);
+    const QColor gridPen = palette().color(QPalette::Mid);
+    const QColor textColor = palette().color(QPalette::Text);
+    const QColor mutedText = palette().color(QPalette::Mid).darker(135);
 
     for (int y = 0; y < rows; ++y)
     {
@@ -79,43 +143,61 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             const PTSpatialGridCellData cell = m_preview.cells.value(pt);
             const QRect cr(ox + x * cellW, oy + y * cellH, cellW - 2, cellH - 2);
 
-            QColor bg = palette().color(QPalette::Mid).lighter(140);
-            if (cell.occupied)
-            {
-                const float hue = 240.0f - 240.0f * float(cell.chaseOrder) / float(maxOrder);
-                bg = QColor::fromHsv(int(hue) % 360, 160, 200);
-            }
-            p.fillRect(cr, bg);
+            p.fillRect(cr, cell.occupied ? offsetFillColor(cell.headOffsetDeg) : emptyBg);
 
-            QPen border = QPen(palette().color(QPalette::Dark), 1);
-            if (cell.offsetCollision)
-                border = QPen(QColor(220, 60, 40), 2);
-            else if (!m_preview.offsetStepOk && cell.occupied)
-                border = QPen(QColor(220, 160, 40), 2);
+            QPen border = QPen(gridPen, 1);
             p.setPen(border);
             p.drawRect(cr);
 
             if (!cell.occupied)
                 continue;
 
-            p.setPen(palette().color(QPalette::Text));
-            p.drawText(cr.adjusted(2, 2, -2, -2), Qt::AlignTop | Qt::AlignHCenter,
-                       QStringLiteral("#%1").arg(cell.chaseOrder));
-            p.setFont(QFont(p.font().family(), qMax(7, p.font().pointSize() - 2)));
-            p.drawText(cr.adjusted(2, 0, -2, -2), Qt::AlignBottom | Qt::AlignHCenter,
+            drawOutputBorder(p, cr, cell.outputIndexes);
+
+            if (cell.offsetCollision || !m_preview.offsetStepOk)
+            {
+                const QColor warn = cell.offsetCollision ? QColor(220, 60, 40) : QColor(220, 160, 40);
+                p.setPen(QPen(warn, 2));
+                p.drawRect(cr.adjusted(4, 4, -4, -4));
+            }
+
+            QFont smallFont = baseFont;
+            smallFont.setPointSize(qMax(7, baseFont.pointSize() - 2));
+            QFont numberFont = baseFont;
+            numberFont.setBold(true);
+            numberFont.setPointSize(qMax(9, baseFont.pointSize() + 1));
+
+            p.setFont(smallFont);
+            p.setPen(mutedText);
+            p.drawText(cr.adjusted(3, 0, -3, -3), Qt::AlignBottom | Qt::AlignHCenter,
                        QStringLiteral("%1°").arg(cell.headOffsetDeg));
-            p.setFont(QFont());
-            p.drawText(cr, Qt::AlignCenter,
-                       QStringLiteral("%1%").arg(int(cell.phaseStart01 * 100.0 + 0.5)));
+
+            p.setFont(numberFont);
+            p.setPen(textColor);
+            p.drawText(cr.adjusted(2, 2, -2, -2), Qt::AlignCenter,
+                       QString::number(cell.localOrder));
+
+            if (cellW >= 44 && cellH >= 38)
+            {
+                p.setFont(smallFont);
+                p.setPen(mutedText);
+                p.drawText(cr.adjusted(3, 0, -3, -3), Qt::AlignBottom | Qt::AlignRight,
+                           QStringLiteral("%1%").arg(int(cell.phaseStart01 * 100.0 + 0.5)));
+            }
+            p.setFont(baseFont);
         }
     }
 
-    p.setPen(palette().color(QPalette::Text));
-    QString legend = tr("Order · offset° · phase%  |  slots %1  max step %2°")
-            .arg(m_preview.effectiveOffsetSlots)
+    p.setFont(baseFont);
+    p.setPen(textColor);
+    QString legend = tr("wings %1 · blocks %2 · slots/wing %3 · max step %4°")
+            .arg(m_preview.wings)
+            .arg(m_preview.blocks)
+            .arg(m_preview.slotsPerWing)
             .arg(m_preview.maxOffsetStep);
+    legend += tr("  · fill = offset · border = output");
     if (m_preview.hasOffsetCollisions)
-        legend += tr("  · duplicate offsets!");
+        legend += tr("  · offset collision");
     if (!m_preview.offsetStepOk)
         legend += tr("  · step too large");
     p.drawText(QRect(6, height() - 22, width() - 12, 18), Qt::AlignLeft, legend);

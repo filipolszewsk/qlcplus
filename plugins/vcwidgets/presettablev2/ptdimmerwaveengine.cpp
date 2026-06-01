@@ -12,6 +12,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+static int ceilDivPositive(int numerator, int denominator)
+{
+    return int(std::ceil(double(qMax(1, numerator)) / double(qMax(1, denominator))));
+}
+
 PTDimmerWaveParams PTDimmerWaveEngine::paramsFromPreset(const PTTransitionPreset& preset,
                                                         const PTGlobalEffectSettings* global)
 {
@@ -62,17 +67,26 @@ int PTDimmerWaveEngine::effectiveOffsetSlotCount(int gridSpanAlongAxis,
 {
     const int span = qMax(1, gridSpanAlongAxis);
     const int wings = qBound(1, preset.wings, span);
+    return qMax(1, wings * offsetSlotCountForWing(span, preset));
+}
+
+int PTDimmerWaveEngine::offsetSlotCountForWing(int gridSpanAlongAxis,
+                                               const PTTransitionPreset& preset)
+{
+    const int span = qMax(1, gridSpanAlongAxis);
+    const int wings = qBound(1, preset.wings, span);
     const int blocks = qMax(1, preset.blocks);
-    const int ppw = qMax(1, span / wings);
-    const int blocksPerWing = int(std::ceil(double(ppw) / double(blocks)));
-    return qMax(1, wings * blocksPerWing);
+    const int positionsPerWing = ceilDivPositive(span, wings);
+    return qMax(1, ceilDivPositive(positionsPerWing, blocks));
 }
 
 int PTDimmerWaveEngine::maxOffsetStepForGrid(int gridSpanAlongAxis,
                                              const PTTransitionPreset& preset)
 {
-    const int slotCount = effectiveOffsetSlotCount(gridSpanAlongAxis, preset);
-    return qMax(1, 360 / slotCount);
+    const int slotsPerWing = offsetSlotCountForWing(gridSpanAlongAxis, preset);
+    if (slotsPerWing <= 1)
+        return 360;
+    return qMax(1, 360 / (slotsPerWing - 1));
 }
 
 void PTDimmerWaveEngine::clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis)
@@ -285,6 +299,13 @@ static int templateOffsetIndex(int position, int span, PTOffsetDirection directi
 int PTDimmerWaveEngine::calculateHeadStartOffsetExtended(int col, int row, int gridWidth, int gridHeight,
                                                          const PTDimmerWaveParams& params)
 {
+    return offsetInfoForPoint(col, row, gridWidth, gridHeight, params).headOffsetDeg;
+}
+
+PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, int gridWidth, int gridHeight,
+                                                              const PTDimmerWaveParams& params)
+{
+    PTDimmerWaveOffsetInfo info;
     const PTDimmerWaveSpatialSpan spatial = spatialSpanForPoint(col, row, gridWidth, gridHeight, params.axis);
     const int span = qMax(1, spatial.span);
     const int position = qBound(0, spatial.position, span - 1);
@@ -296,16 +317,23 @@ int PTDimmerWaveEngine::calculateHeadStartOffsetExtended(int col, int row, int g
     if (step <= 0)
         step = evenOffsetStepForSpan(span);
 
-    const int ppw = qMax(1, span / wings);
-    const int wingIndex = qMin(wings - 1, position / ppw);
-    const int localIndex = position - wingIndex * ppw;
-    const int blocksPerWing = int(std::ceil(double(ppw) / double(blocks)));
+    const int positionsPerWing = ceilDivPositive(span, wings);
+    const int wingIndex = qMin(wings - 1, position / positionsPerWing);
+    const int localIndex = qMax(0, position - wingIndex * positionsPerWing);
+    const int blocksPerWing = qMax(1, ceilDivPositive(positionsPerWing, blocks));
     const int blockIndex = qMin(blocksPerWing - 1, localIndex / blocks);
 
     const PTOffsetDirection wingDir = wingOffsetDirection(wingIndex, params.offsetDirection,
                                                           params.wingsSymmetry, wings);
     const int index = templateOffsetIndex(blockIndex, qMax(1, blocksPerWing), wingDir);
-    return (step * index) % 360;
+    info.wingIndex = wingIndex;
+    info.localIndex = localIndex;
+    info.blockIndex = blockIndex;
+    info.localOrder = localIndex + 1;
+    info.offsetSlot = index;
+    info.slotsPerWing = blocksPerWing;
+    info.headOffsetDeg = (step * index) % 360;
+    return info;
 }
 
 int PTDimmerWaveEngine::calculateHeadStartOffset(int col, int row, int gridWidth, int gridHeight,

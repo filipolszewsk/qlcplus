@@ -134,14 +134,25 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
     const int span = PTDimmerWaveEngine::gridSpanAlongAxis(
             gridWidth, gridHeight, preset.axis, global.fxOrientation);
     preview.effectiveOffsetSlots = PTDimmerWaveEngine::effectiveOffsetSlotCount(span, preset);
+    preview.wings = qBound(1, preset.wings, qMax(1, span));
+    preview.blocks = qMax(1, preset.blocks);
+    preview.slotsPerWing = PTDimmerWaveEngine::offsetSlotCountForWing(span, preset);
     preview.maxOffsetStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
     preview.offsetStepOk = preset.offsetStep <= preview.maxOffsetStep;
 
     const PTSpatialFixturePlan plan = build(scopePoints, preset, global, gridWidth, gridHeight);
 
-    QHash<int, int> offsetUseCount;
+    QHash<int, QSet<int>> offsetSlotsByDegree;
+    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, &global);
+    if (global.fxOrientation == 1)
+        waveParams.axis = PTTransitionAxis::Y;
+
     for (const PTSpatialFixtureEntry& e : plan.entries)
-        offsetUseCount[e.headOffsetDeg]++;
+    {
+        const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
+                e.pt.x(), e.pt.y(), gridWidth, gridHeight, waveParams);
+        offsetSlotsByDegree[info.wingIndex * 10000 + info.headOffsetDeg].insert(info.offsetSlot);
+    }
 
     for (int y = 0; y < gridHeight; ++y)
     {
@@ -154,9 +165,16 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
             {
                 cell.occupied = true;
                 cell.chaseOrder = e->serialIndex + 1;
+                const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
+                        x, y, gridWidth, gridHeight, waveParams);
+                cell.wingIndex = info.wingIndex;
+                cell.localIndex = info.localIndex;
+                cell.blockIndex = info.blockIndex;
+                cell.localOrder = info.localOrder;
+                cell.offsetSlot = info.offsetSlot;
                 cell.headOffsetDeg = e->headOffsetDeg;
                 cell.phaseStart01 = e->phaseStart01;
-                if (offsetUseCount.value(e->headOffsetDeg, 0) > 1)
+                if (offsetSlotsByDegree.value(info.wingIndex * 10000 + info.headOffsetDeg).size() > 1)
                 {
                     cell.offsetCollision = true;
                     preview.hasOffsetCollisions = true;
