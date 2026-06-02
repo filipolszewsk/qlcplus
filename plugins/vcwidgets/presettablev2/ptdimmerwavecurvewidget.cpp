@@ -6,6 +6,7 @@
 
 #include <QKeyEvent>
 #include <QLineF>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -103,16 +104,27 @@ QRectF PTDimmerWaveCurveWidget::plotRect() const
     return rect().adjusted(28, 8, -10, -28);
 }
 
+QRectF PTDimmerWaveCurveWidget::customCurveRect() const
+{
+    QRectF r = plotRect();
+    if (!m_params.customCurveEnabled)
+        return r;
+    const int waveW = qBound(0, m_params.waveWidth, 360);
+    const qreal width = (waveW > 0) ? qMax<qreal>(1.0, r.width() * qreal(waveW) / 360.0) : 1.0;
+    r.setWidth(width);
+    return r;
+}
+
 QPointF PTDimmerWaveCurveWidget::curveToScreen(double xDeg, double yValue) const
 {
-    const QRectF r = plotRect();
+    const QRectF r = customCurveRect();
     return QPointF(r.left() + qBound(0.0, xDeg, 360.0) / 360.0 * r.width(),
                    r.bottom() - qBound(0.0, yValue, 255.0) / 255.0 * r.height());
 }
 
 QPointF PTDimmerWaveCurveWidget::screenToCurve(const QPointF& pt) const
 {
-    const QRectF r = plotRect();
+    const QRectF r = customCurveRect();
     return QPointF(qBound(0.0, (pt.x() - r.left()) / qMax(1.0, r.width()) * 360.0, 360.0),
                    qBound(0.0, (r.bottom() - pt.y()) / qMax(1.0, r.height()) * 255.0, 255.0));
 }
@@ -132,6 +144,30 @@ QPointF PTDimmerWaveCurveWidget::snappedCurvePoint(const QPointF& pt, int moving
                    snapValue(pt.y(), ySnaps, 5.0));
 }
 
+QPointF PTDimmerWaveCurveWidget::constrainedCurvePoint(const QPointF& pt) const
+{
+    const qreal dx = pt.x() - m_dragStartCurvePoint.x();
+    const qreal dy = pt.y() - m_dragStartCurvePoint.y();
+    if (qAbs(dx) < 0.001 && qAbs(dy) < 0.001)
+        return pt;
+
+    const qreal adx = qAbs(dx);
+    const qreal ady = qAbs(dy);
+    QPointF constrained = m_dragStartCurvePoint;
+    if (adx > ady * 2.0)
+        constrained.setX(m_dragStartCurvePoint.x() + dx);
+    else if (ady > adx * 2.0)
+        constrained.setY(m_dragStartCurvePoint.y() + dy);
+    else
+    {
+        const qreal d = qMin(adx, ady);
+        constrained.setX(m_dragStartCurvePoint.x() + (dx < 0.0 ? -d : d));
+        constrained.setY(m_dragStartCurvePoint.y() + (dy < 0.0 ? -d : d));
+    }
+    return QPointF(qBound(0.0, constrained.x(), 360.0),
+                   qBound(0.0, constrained.y(), 255.0));
+}
+
 QPainterPath PTDimmerWaveCurveWidget::customCurvePath(const QVector<PTCustomCurvePoint>& points) const
 {
     QPainterPath path;
@@ -143,9 +179,12 @@ QPainterPath PTDimmerWaveCurveWidget::customCurvePath(const QVector<PTCustomCurv
     {
         const PTCustomCurvePoint& a = points.at(i);
         const PTCustomCurvePoint& b = points.at(i + 1);
-        path.cubicTo(curveToScreen(a.rightHandleXDeg, a.rightHandleYValue),
-                     curveToScreen(b.leftHandleXDeg, b.leftHandleYValue),
-                     curveToScreen(b.xDeg, b.yValue));
+        if (a.segmentMode == PTCustomCurvePoint::Linear)
+            path.lineTo(curveToScreen(b.xDeg, b.yValue));
+        else
+            path.cubicTo(curveToScreen(a.rightHandleXDeg, a.rightHandleYValue),
+                         curveToScreen(b.leftHandleXDeg, b.leftHandleYValue),
+                         curveToScreen(b.xDeg, b.yValue));
     }
     return path;
 }
@@ -168,6 +207,7 @@ void PTDimmerWaveCurveWidget::normalizeCustomCurve()
         p.leftHandleYValue = qBound(0.0, p.leftHandleYValue, 255.0);
         p.rightHandleXDeg = qBound(0.0, p.rightHandleXDeg, 360.0);
         p.rightHandleYValue = qBound(0.0, p.rightHandleYValue, 255.0);
+        p.segmentMode = qBound(0, p.segmentMode, 1);
     }
     m_params.customCurve = m_customCurve;
 }
@@ -195,13 +235,15 @@ int PTDimmerWaveCurveWidget::hitPoint(const QPointF& pos, DragTarget* target) co
                 *target = DragTarget::Point;
             return i;
         }
-        if (QLineF(pos, curveToScreen(c.leftHandleXDeg, c.leftHandleYValue)).length() <= 6.0)
+        const bool leftLinear = (i > 0 && m_customCurve.at(i - 1).segmentMode == PTCustomCurvePoint::Linear);
+        const bool rightLinear = (c.segmentMode == PTCustomCurvePoint::Linear);
+        if (!leftLinear && QLineF(pos, curveToScreen(c.leftHandleXDeg, c.leftHandleYValue)).length() <= 6.0)
         {
             if (target)
                 *target = DragTarget::LeftHandle;
             return i;
         }
-        if (QLineF(pos, curveToScreen(c.rightHandleXDeg, c.rightHandleYValue)).length() <= 6.0)
+        if (!rightLinear && QLineF(pos, curveToScreen(c.rightHandleXDeg, c.rightHandleYValue)).length() <= 6.0)
         {
             if (target)
                 *target = DragTarget::RightHandle;
@@ -224,14 +266,14 @@ void PTDimmerWaveCurveWidget::paintEvent(QPaintEvent* event)
     p.setPen(QPen(palette().color(QPalette::Mid), 1));
     for (int deg : {0, 90, 180, 270, 360})
     {
-        const qreal x = curveToScreen(deg, 0).x();
+        const qreal x = r.left() + qBound(0, deg, 360) / 360.0 * r.width();
         p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()));
         p.drawText(QRectF(x - 18, r.bottom() + 2, 36, 14), Qt::AlignCenter,
                    QString::number(deg));
     }
     for (int value : {0, 64, 128, 192, 255})
     {
-        const qreal y = curveToScreen(0, value).y();
+        const qreal y = r.bottom() - qBound(0, value, 255) / 255.0 * r.height();
         p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
         p.drawText(QRectF(0, y - 7, 24, 14), Qt::AlignRight | Qt::AlignVCenter,
                    QString::number(value));
@@ -300,15 +342,21 @@ void PTDimmerWaveCurveWidget::paintEvent(QPaintEvent* event)
             const QPointF lh = curveToScreen(c.leftHandleXDeg, c.leftHandleYValue);
             const QPointF rh = curveToScreen(c.rightHandleXDeg, c.rightHandleYValue);
             const bool selected = (i == m_selectedIndex);
+            const bool leftLinear = (i > 0 && pts.at(i - 1).segmentMode == PTCustomCurvePoint::Linear);
+            const bool rightLinear = (c.segmentMode == PTCustomCurvePoint::Linear);
             p.setPen(QPen(selected ? palette().color(QPalette::BrightText)
                                    : palette().color(QPalette::Mid),
                          selected ? 2 : 1, Qt::DashLine));
-            p.drawLine(point, lh);
-            p.drawLine(point, rh);
+            if (!leftLinear)
+                p.drawLine(point, lh);
+            if (!rightLinear)
+                p.drawLine(point, rh);
             p.setPen(QPen(palette().color(QPalette::BrightText), 1));
             p.setBrush(palette().color(QPalette::Mid));
-            p.drawEllipse(lh, selected ? 4 : 3, selected ? 4 : 3);
-            p.drawEllipse(rh, selected ? 4 : 3, selected ? 4 : 3);
+            if (!leftLinear)
+                p.drawEllipse(lh, selected ? 4 : 3, selected ? 4 : 3);
+            if (!rightLinear)
+                p.drawEllipse(rh, selected ? 4 : 3, selected ? 4 : 3);
             p.setBrush(selected ? palette().color(QPalette::Highlight)
                                 : palette().color(QPalette::Button));
             p.drawEllipse(point, selected ? 7 : 5, selected ? 7 : 5);
@@ -337,10 +385,46 @@ void PTDimmerWaveCurveWidget::mousePressEvent(QMouseEvent* event)
     setFocus();
     DragTarget target;
     const int idx = hitPoint(event->pos(), &target);
+    if (event->button() == Qt::RightButton && idx >= 0)
+    {
+        m_selectedIndex = idx;
+        update();
+        if (idx < m_customCurve.size() - 1)
+        {
+            QMenu menu(this);
+            QAction* bezier = menu.addAction(tr("Bezier"));
+            bezier->setCheckable(true);
+            bezier->setChecked(m_customCurve.at(idx).segmentMode == PTCustomCurvePoint::Bezier);
+            QAction* linear = menu.addAction(tr("Linear"));
+            linear->setCheckable(true);
+            linear->setChecked(m_customCurve.at(idx).segmentMode == PTCustomCurvePoint::Linear);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            QAction* selected = menu.exec(event->globalPosition().toPoint());
+#else
+            QAction* selected = menu.exec(event->globalPos());
+#endif
+            if (selected == bezier || selected == linear)
+            {
+                m_customCurve[idx].segmentMode = (selected == linear)
+                        ? PTCustomCurvePoint::Linear : PTCustomCurvePoint::Bezier;
+                emitCustomCurveChanged();
+            }
+        }
+        return;
+    }
     if (idx >= 0)
     {
         m_selectedIndex = idx;
         m_dragTarget = target;
+        if (target == DragTarget::Point)
+            m_dragStartCurvePoint = QPointF(m_customCurve.at(idx).xDeg,
+                                            m_customCurve.at(idx).yValue);
+        else if (target == DragTarget::LeftHandle)
+            m_dragStartCurvePoint = QPointF(m_customCurve.at(idx).leftHandleXDeg,
+                                            m_customCurve.at(idx).leftHandleYValue);
+        else if (target == DragTarget::RightHandle)
+            m_dragStartCurvePoint = QPointF(m_customCurve.at(idx).rightHandleXDeg,
+                                            m_customCurve.at(idx).rightHandleYValue);
         update();
         return;
     }
@@ -356,7 +440,10 @@ void PTDimmerWaveCurveWidget::mouseMoveEvent(QMouseEvent* event)
         return;
     }
 
-    QPointF pt = snappedCurvePoint(screenToCurve(event->pos()), m_selectedIndex);
+    QPointF pt = screenToCurve(event->pos());
+    if (event->modifiers() & Qt::ShiftModifier)
+        pt = constrainedCurvePoint(pt);
+    pt = snappedCurvePoint(pt, m_selectedIndex);
     PTCustomCurvePoint& c = m_customCurve[m_selectedIndex];
     if (m_dragTarget == DragTarget::Point)
     {
@@ -390,6 +477,7 @@ void PTDimmerWaveCurveWidget::mouseReleaseEvent(QMouseEvent* event)
 {
     Q_UNUSED(event);
     m_dragTarget = DragTarget::None;
+    m_dragStartCurvePoint = QPointF();
 }
 
 void PTDimmerWaveCurveWidget::mouseDoubleClickEvent(QMouseEvent* event)

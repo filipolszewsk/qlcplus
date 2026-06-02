@@ -43,7 +43,9 @@ private:
     QRectF plotRect() const;
     QPointF curveToScreen(double xDeg, double yValue) const;
     QPointF screenToCurve(const QPointF& pt) const;
+    QRectF customCurveRect() const;
     QPointF snappedCurvePoint(const QPointF& pt, int movingIndex) const;
+    QPointF constrainedCurvePoint(const QPointF& pt) const;
     QPainterPath customCurvePath(const QVector<PTCustomCurvePoint>& points) const;
     void normalizeCustomCurve();
     void emitCustomCurveChanged();
@@ -55,4 +57,5 @@ private:
     bool m_editable = false;
     int m_selectedIndex = -1;
     DragTarget m_dragTarget = DragTarget::None;
+    QPointF m_dragStartCurvePoint;
 };

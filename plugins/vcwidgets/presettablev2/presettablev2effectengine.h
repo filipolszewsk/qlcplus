@@ -74,12 +74,19 @@ enum class PTTransitionMode
 
 struct PTCustomCurvePoint
 {
+    enum SegmentMode
+    {
+        Bezier = 0,
+        Linear = 1
+    };
+
     double xDeg = 0.0;
     double yValue = 0.0;
     double leftHandleXDeg = 0.0;
     double leftHandleYValue = 0.0;
     double rightHandleXDeg = 0.0;
     double rightHandleYValue = 0.0;
+    int segmentMode = Bezier;
 };
 
 struct PTCustomCurveGalleryItem

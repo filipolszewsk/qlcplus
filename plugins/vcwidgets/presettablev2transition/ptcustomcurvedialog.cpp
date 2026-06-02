@@ -6,12 +6,76 @@
 #include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QInputDialog>
 #include <QLabel>
+#include <QListView>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
+#include <QSize>
 #include <QVBoxLayout>
+#include <algorithm>
+
+namespace {
+
+QPointF thumbPoint(const QRectF& r, double xDeg, double yValue)
+{
+    return QPointF(r.left() + qBound(0.0, xDeg, 360.0) / 360.0 * r.width(),
+                   r.bottom() - qBound(0.0, yValue, 255.0) / 255.0 * r.height());
+}
+
+QPixmap renderCurveThumbnail(const QVector<PTCustomCurvePoint>& points, const QSize& size)
+{
+    QPixmap pix(size);
+    pix.fill(QColor(30, 30, 30));
+
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    const QRectF r = pix.rect().adjusted(6, 6, -6, -6);
+    p.setPen(QPen(QColor(70, 70, 70), 1));
+    for (int i = 0; i <= 4; ++i)
+    {
+        const qreal x = r.left() + r.width() * i / 4.0;
+        p.drawLine(QPointF(x, r.top()), QPointF(x, r.bottom()));
+    }
+    for (int i = 0; i <= 2; ++i)
+    {
+        const qreal y = r.top() + r.height() * i / 2.0;
+        p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
+    }
+
+    if (points.size() >= 2)
+    {
+        QVector<PTCustomCurvePoint> sorted = points;
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const PTCustomCurvePoint& a, const PTCustomCurvePoint& b) {
+                      return a.xDeg < b.xDeg;
+                  });
+        QPainterPath path;
+        path.moveTo(thumbPoint(r, sorted.first().xDeg, sorted.first().yValue));
+        for (int i = 0; i < sorted.size() - 1; ++i)
+        {
+            const PTCustomCurvePoint& a = sorted.at(i);
+            const PTCustomCurvePoint& b = sorted.at(i + 1);
+            if (a.segmentMode == PTCustomCurvePoint::Linear)
+                path.lineTo(thumbPoint(r, b.xDeg, b.yValue));
+            else
+                path.cubicTo(thumbPoint(r, a.rightHandleXDeg, a.rightHandleYValue),
+                             thumbPoint(r, b.leftHandleXDeg, b.leftHandleYValue),
+                             thumbPoint(r, b.xDeg, b.yValue));
+        }
+        p.setPen(QPen(QColor(235, 235, 235), 3));
+        p.drawPath(path);
+    }
+    p.setPen(QPen(QColor(115, 115, 115), 1));
+    p.drawRect(pix.rect().adjusted(0, 0, -1, -1));
+    return pix;
+}
+
+} // namespace
 
 PTCustomCurveDialog::PTCustomCurveDialog(const PTTransitionPreset& preset,
                                          const QVector<PTCustomCurveGalleryItem>& gallery,
@@ -45,6 +109,12 @@ PTCustomCurveDialog::PTCustomCurveDialog(const PTTransitionPreset& preset,
     QGroupBox* galleryBox = new QGroupBox(tr("Gallery"), this);
     QVBoxLayout* galleryLayout = new QVBoxLayout(galleryBox);
     m_galleryList = new QListWidget(galleryBox);
+    m_galleryList->setViewMode(QListView::IconMode);
+    m_galleryList->setIconSize(QSize(132, 58));
+    m_galleryList->setGridSize(QSize(150, 86));
+    m_galleryList->setResizeMode(QListView::Adjust);
+    m_galleryList->setMovement(QListView::Static);
+    m_galleryList->setUniformItemSizes(true);
     galleryLayout->addWidget(m_galleryList, 1);
     QPushButton* useButton = new QPushButton(tr("Use"), galleryBox);
     QPushButton* saveButton = new QPushButton(tr("Save current..."), galleryBox);
@@ -71,6 +141,11 @@ PTCustomCurveDialog::PTCustomCurveDialog(const PTTransitionPreset& preset,
         m_curve->deleteSelectedPoint();
     });
     connect(useButton, &QPushButton::clicked, this, [this]() {
+        const int idx = selectedGalleryIndex();
+        if (idx >= 0 && idx < m_gallery.size())
+            m_curve->setCustomCurve(m_gallery.at(idx).points);
+    });
+    connect(m_galleryList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) {
         const int idx = selectedGalleryIndex();
         if (idx >= 0 && idx < m_gallery.size())
             m_curve->setCustomCurve(m_gallery.at(idx).points);
@@ -137,7 +212,11 @@ void PTCustomCurveDialog::rebuildGalleryList()
     const int oldRow = m_galleryList->currentRow();
     m_galleryList->clear();
     for (const PTCustomCurveGalleryItem& item : m_gallery)
-        m_galleryList->addItem(item.name);
+    {
+        QListWidgetItem* row = new QListWidgetItem(
+                QIcon(renderCurveThumbnail(item.points, QSize(132, 58))), item.name, m_galleryList);
+        row->setTextAlignment(Qt::AlignCenter);
+    }
     if (!m_gallery.isEmpty())
         m_galleryList->setCurrentRow(qBound(0, oldRow, m_gallery.size() - 1));
 }

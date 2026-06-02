@@ -116,13 +116,14 @@ static QString serializeCustomCurve(const QVector<PTCustomCurvePoint>& points)
     QStringList encoded;
     for (const PTCustomCurvePoint& p : points)
     {
-        encoded << QStringLiteral("%1,%2,%3,%4,%5,%6")
+        encoded << QStringLiteral("%1,%2,%3,%4,%5,%6,%7")
                 .arg(p.xDeg, 0, 'f', 2)
                 .arg(p.yValue, 0, 'f', 2)
                 .arg(p.leftHandleXDeg, 0, 'f', 2)
                 .arg(p.leftHandleYValue, 0, 'f', 2)
                 .arg(p.rightHandleXDeg, 0, 'f', 2)
-                .arg(p.rightHandleYValue, 0, 'f', 2);
+                .arg(p.rightHandleYValue, 0, 'f', 2)
+                .arg(qBound(0, p.segmentMode, 1));
     }
     return encoded.join(QLatin1Char(';'));
 }
@@ -134,7 +135,7 @@ static QVector<PTCustomCurvePoint> parseCustomCurve(const QString& text)
     for (const QString& encoded : encodedPoints)
     {
         const QStringList values = encoded.split(QLatin1Char(','));
-        if (values.size() != 6)
+        if (values.size() != 6 && values.size() != 7)
             continue;
         PTCustomCurvePoint p;
         p.xDeg = values.at(0).toDouble();
@@ -143,6 +144,8 @@ static QVector<PTCustomCurvePoint> parseCustomCurve(const QString& text)
         p.leftHandleYValue = values.at(3).toDouble();
         p.rightHandleXDeg = values.at(4).toDouble();
         p.rightHandleYValue = values.at(5).toDouble();
+        p.segmentMode = values.size() >= 7 ? qBound(0, values.at(6).toInt(), 1)
+                                           : PTCustomCurvePoint::Bezier;
         points.append(p);
     }
     return points;

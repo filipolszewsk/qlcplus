@@ -219,9 +219,18 @@ float PTDimmerWaveEngine::sampleCustomCurve01(float phase01,
             continue;
 
         const QPointF p0(a.xDeg, a.yValue);
+        const QPointF p1(b.xDeg, b.yValue);
+
+        if (a.segmentMode == PTCustomCurvePoint::Linear)
+        {
+            const double span = qMax(0.001, b.xDeg - a.xDeg);
+            const double t = qBound(0.0, (x - a.xDeg) / span, 1.0);
+            const double y = a.yValue + (b.yValue - a.yValue) * t;
+            return float(qBound(0.0, y / 255.0, 1.0));
+        }
+
         const QPointF c1(a.rightHandleXDeg, a.rightHandleYValue);
         const QPointF c2(b.leftHandleXDeg, b.leftHandleYValue);
-        const QPointF p1(b.xDeg, b.yValue);
 
         double lo = 0.0;
         double hi = 1.0;
