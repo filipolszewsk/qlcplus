@@ -359,7 +359,7 @@ void FGOutputEditorRow::rebuildTransitionPresetCombos()
     };
     fillCombo(m_sweepPresetCombo, PTTransitionMode::SweepOnly);
     fillCombo(m_continuousPresetCombo, PTTransitionMode::Continuous);
-    fillCombo(m_multiFxPresetCombo, PTTransitionMode::Continuous);
+    fillCombo(m_multiFxPresetCombo, PTTransitionMode::MultiFx);
 }
 
 void FGOutputEditorRow::rebuildSecondaryRowCombo()

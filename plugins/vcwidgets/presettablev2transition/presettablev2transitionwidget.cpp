@@ -33,6 +33,7 @@ static const QString KXMLTransitionMode = QStringLiteral("TransitionMode");
 static const QString KXMLPreset = QStringLiteral("TransitionPreset");
 static const QString KXMLSweepPresets = QStringLiteral("SweepPresets");
 static const QString KXMLContinuousPresets = QStringLiteral("ContinuousPresets");
+static const QString KXMLMultiFxPresets = QStringLiteral("MultiFxPresets");
 static const QString KXMLPresetName = QStringLiteral("Name");
 static const QString KXMLPresetAxis = QStringLiteral("Axis");
 static const QString KXMLPresetOffsetDir = QStringLiteral("OffsetDir");
@@ -86,7 +87,7 @@ static PTTransitionPreset defaultPreset(int index, PTTransitionMode bankMode)
     PTTransitionPreset p;
     p.name = QObject::tr("Preset %1").arg(index + 1);
     p.enabled = true;
-    p.playbackMode = (bankMode == PTTransitionMode::Continuous)
+    p.playbackMode = (bankMode == PTTransitionMode::Continuous || bankMode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     PresetTableV2SpatialEngine::applySweepPresetConstraints(p);
     return p;
@@ -199,6 +200,8 @@ PresetTableV2TransitionWidget::PresetTableV2TransitionWidget(QWidget* parent, Do
         m_sweepPresets.append(defaultPreset(0, PTTransitionMode::SweepOnly));
     if (m_continuousPresets.isEmpty())
         m_continuousPresets.append(defaultPreset(0, PTTransitionMode::Continuous));
+    if (m_multiFxPresets.isEmpty())
+        m_multiFxPresets.append(defaultPreset(0, PTTransitionMode::MultiFx));
 
     buildUi();
     rebuildAllPresetTables();
@@ -210,23 +213,33 @@ PresetTableV2TransitionWidget::~PresetTableV2TransitionWidget() = default;
 
 PTTransitionMode PresetTableV2TransitionWidget::activeBankMode() const
 {
-    if (!m_bankTabs || m_bankTabs->currentIndex() <= 0)
+    if (!m_bankTabs)
         return PTTransitionMode::SweepOnly;
-    return PTTransitionMode::Continuous;
+    if (m_bankTabs->currentIndex() == 1)
+        return PTTransitionMode::Continuous;
+    if (m_bankTabs->currentIndex() == 2)
+        return PTTransitionMode::MultiFx;
+    return PTTransitionMode::SweepOnly;
 }
 
 QVector<PTTransitionPreset>& PresetTableV2TransitionWidget::presetsForMode(PTTransitionMode mode)
 {
+    if (mode == PTTransitionMode::MultiFx)
+        return m_multiFxPresets;
     return (mode == PTTransitionMode::Continuous) ? m_continuousPresets : m_sweepPresets;
 }
 
 const QVector<PTTransitionPreset>& PresetTableV2TransitionWidget::presetsForMode(PTTransitionMode mode) const
 {
+    if (mode == PTTransitionMode::MultiFx)
+        return m_multiFxPresets;
     return (mode == PTTransitionMode::Continuous) ? m_continuousPresets : m_sweepPresets;
 }
 
 QTableWidget* PresetTableV2TransitionWidget::tableForMode(PTTransitionMode mode) const
 {
+    if (mode == PTTransitionMode::MultiFx)
+        return m_multiFxTable;
     return (mode == PTTransitionMode::Continuous) ? m_continuousTable : m_sweepTable;
 }
 
@@ -369,7 +382,8 @@ void PresetTableV2TransitionWidget::buildUi()
     m_bankTabs = new QTabWidget(this);
     m_sweepTable = new QTableWidget(m_bankTabs);
     m_continuousTable = new QTableWidget(m_bankTabs);
-    for (QTableWidget* table : { m_sweepTable, m_continuousTable })
+    m_multiFxTable = new QTableWidget(m_bankTabs);
+    for (QTableWidget* table : { m_sweepTable, m_continuousTable, m_multiFxTable })
     {
         table->setColumnCount(ColCount);
         table->horizontalHeader()->setStretchLastSection(true);
@@ -384,6 +398,7 @@ void PresetTableV2TransitionWidget::buildUi()
     }
     m_bankTabs->addTab(m_sweepTable, tr("Transitions"));
     m_bankTabs->addTab(m_continuousTable, tr("Continuous FX"));
+    m_bankTabs->addTab(m_multiFxTable, tr("MultiFX"));
     m_layout->addWidget(m_bankTabs, 1);
 
     connect(m_enableChk, &QCheckBox::toggled, this, [this]() {
@@ -398,6 +413,7 @@ void PresetTableV2TransitionWidget::rebuildAllPresetTables()
 {
     rebuildPresetTable(PTTransitionMode::SweepOnly);
     rebuildPresetTable(PTTransitionMode::Continuous);
+    rebuildPresetTable(PTTransitionMode::MultiFx);
 }
 
 void PresetTableV2TransitionWidget::updateColumnHeaders(QTableWidget* table)
@@ -612,7 +628,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromRow(PTTransitionMode
         return p;
 
     p = presets[row];
-    p.playbackMode = (mode == PTTransitionMode::Continuous)
+    p.playbackMode = (mode == PTTransitionMode::Continuous || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
 
     if (QTableWidgetItem* nameItem = table->item(row, ColName))
@@ -668,7 +684,7 @@ void PresetTableV2TransitionWidget::updatePresetRowUiForMode(int row, PTTransiti
     if (!table || row < 0 || row >= table->rowCount())
         return;
 
-    const bool sweep = (bankMode != PTTransitionMode::Continuous);
+    const bool sweep = (bankMode == PTTransitionMode::SweepOnly);
 
     auto tuneSpin = [&](int col, bool enabled, int minV, int maxV, int value) {
         QSpinBox* s = qobject_cast<QSpinBox*>(table->cellWidget(row, col));
@@ -773,6 +789,8 @@ void PresetTableV2TransitionWidget::slotPresetCellChanged(int row, int col)
     PTTransitionMode mode = PTTransitionMode::SweepOnly;
     if (table == m_continuousTable)
         mode = PTTransitionMode::Continuous;
+    else if (table == m_multiFxTable)
+        mode = PTTransitionMode::MultiFx;
     else if (table != m_sweepTable)
         return;
 
@@ -836,6 +854,11 @@ void PresetTableV2TransitionWidget::slotBankTabChanged(int)
     {
         for (int r = 0; r < m_continuousTable->rowCount(); ++r)
             syncPresetFromTable(PTTransitionMode::Continuous, r);
+    }
+    if (m_multiFxTable)
+    {
+        for (int r = 0; r < m_multiFxTable->rowCount(); ++r)
+            syncPresetFromTable(PTTransitionMode::MultiFx, r);
     }
     notifyTablePresetCacheRefresh();
     updateEffectPreview();
@@ -1137,11 +1160,15 @@ void PresetTableV2TransitionWidget::slotRefreshTableLink()
         updateOffsetStepLimitForRow(r, PTTransitionMode::SweepOnly);
     for (int r = 0; m_continuousTable && r < m_continuousTable->rowCount(); ++r)
         updateOffsetStepLimitForRow(r, PTTransitionMode::Continuous);
+    for (int r = 0; m_multiFxTable && r < m_multiFxTable->rowCount(); ++r)
+        updateOffsetStepLimitForRow(r, PTTransitionMode::MultiFx);
     updateEffectPreview();
 }
 
 int PresetTableV2TransitionWidget::transitionPresetCount(PTTransitionMode mode) const
 {
+    if (mode == PTTransitionMode::MultiFx)
+        return m_multiFxPresets.size();
     if (mode == PTTransitionMode::Continuous)
         return m_continuousPresets.size();
     if (mode == PTTransitionMode::SweepOnly)
@@ -1166,7 +1193,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::effectiveTransitionPreset(PTTr
         live = m_liveColumnOverrides;
     }
     PTTransitionPreset p = PresetTableV2SpatialEngine::mergePreset(transitionPreset(mode, index), live);
-    p.playbackMode = (mode == PTTransitionMode::Continuous)
+    p.playbackMode = (mode == PTTransitionMode::Continuous || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     PTDimmerWaveEngine::clampOffsetStep(p, gridSpanForPreset(p));
     return p;
@@ -1245,6 +1272,8 @@ void PresetTableV2TransitionWidget::slotModeChanged(Doc::Mode mode)
         m_sweepTable->setEnabled(enabled);
     if (m_continuousTable)
         m_continuousTable->setEnabled(enabled);
+    if (m_multiFxTable)
+        m_multiFxTable->setEnabled(enabled);
     if (m_toolbar)
         m_toolbar->setEnabled(enabled);
     if (m_bankTabs)
@@ -1297,6 +1326,7 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     copy->m_targetTableId = m_targetTableId;
     copy->m_sweepPresets = m_sweepPresets;
     copy->m_continuousPresets = m_continuousPresets;
+    copy->m_multiFxPresets = m_multiFxPresets;
     copy->m_customCurveGallery = m_customCurveGallery;
     copy->m_globalSettings = m_globalSettings;
     copy->rebuildAllPresetTables();
@@ -1376,7 +1406,7 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
     if (pattrs.hasAttribute(KXMLPresetPlaybackMode))
     {
         const int m = pattrs.value(KXMLPresetPlaybackMode).toInt();
-        p.playbackMode = (m == int(PTTransitionMode::Continuous))
+        p.playbackMode = (m == int(PTTransitionMode::Continuous) || m == int(PTTransitionMode::MultiFx))
                 ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     }
     if (pattrs.hasAttribute(KXMLPresetSpeedMult))
@@ -1435,6 +1465,7 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
 
     m_sweepPresets.clear();
     m_continuousPresets.clear();
+    m_multiFxPresets.clear();
     m_customCurveGallery.clear();
     int legacySweepDir = 0;
     int legacySpeedMult = 1;
@@ -1444,6 +1475,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
         if (!pattrs.hasAttribute(KXMLPresetPlaybackMode))
         {
             if (bankHint == PTTransitionMode::Continuous)
+                p.playbackMode = PTTransitionMode::Continuous;
+            else if (bankHint == PTTransitionMode::MultiFx)
                 p.playbackMode = PTTransitionMode::Continuous;
             else if (bankHint == PTTransitionMode::SweepOnly)
                 p.playbackMode = PTTransitionMode::SweepOnly;
@@ -1463,10 +1496,14 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
         PTTransitionPreset stored = p;
         if (bankHint == PTTransitionMode::Continuous)
             stored.playbackMode = PTTransitionMode::Continuous;
+        else if (bankHint == PTTransitionMode::MultiFx)
+            stored.playbackMode = PTTransitionMode::Continuous;
         else if (bankHint == PTTransitionMode::SweepOnly)
             stored.playbackMode = PTTransitionMode::SweepOnly;
 
-        if (stored.playbackMode == PTTransitionMode::Continuous)
+        if (bankHint == PTTransitionMode::MultiFx)
+            m_multiFxPresets.append(stored);
+        else if (stored.playbackMode == PTTransitionMode::Continuous)
             m_continuousPresets.append(stored);
         else
             m_sweepPresets.append(stored);
@@ -1559,6 +1596,23 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                     root.skipCurrentElement();
             }
         }
+        else if (root.name() == KXMLMultiFxPresets)
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLPreset)
+                {
+                    const auto pattrs = root.attributes();
+                    PTTransitionPreset p;
+                    readPresetAttrs(p, pattrs, legacySpeedMult);
+                    finalizePreset(p, PTTransitionMode::MultiFx, pattrs);
+                    m_multiFxPresets.append(p);
+                    root.skipCurrentElement();
+                }
+                else
+                    root.skipCurrentElement();
+            }
+        }
         else if (root.name() == KXMLCustomCurveGallery)
         {
             while (root.readNextStartElement())
@@ -1594,6 +1648,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
         m_sweepPresets.append(defaultPreset(0, PTTransitionMode::SweepOnly));
     if (m_continuousPresets.isEmpty())
         m_continuousPresets.append(defaultPreset(0, PTTransitionMode::Continuous));
+    if (m_multiFxPresets.isEmpty())
+        m_multiFxPresets.append(defaultPreset(0, PTTransitionMode::MultiFx));
 
     migrateLegacyInputSources();
 
@@ -1617,6 +1673,11 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
     {
         for (int r = 0; r < m_continuousTable->rowCount(); ++r)
             syncPresetFromTable(PTTransitionMode::Continuous, r);
+    }
+    if (m_multiFxTable)
+    {
+        for (int r = 0; r < m_multiFxTable->rowCount(); ++r)
+            syncPresetFromTable(PTTransitionMode::MultiFx, r);
     }
 
     doc->writeStartElement(KXMLRoot);
@@ -1665,6 +1726,11 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
 
     doc->writeStartElement(KXMLContinuousPresets);
     for (const PTTransitionPreset& p : m_continuousPresets)
+        writePresetXml(doc, p);
+    doc->writeEndElement();
+
+    doc->writeStartElement(KXMLMultiFxPresets);
+    for (const PTTransitionPreset& p : m_multiFxPresets)
         writePresetXml(doc, p);
     doc->writeEndElement();
 

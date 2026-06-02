@@ -1344,6 +1344,7 @@ void PresetTableV2Widget::refreshTransitionPresetCache()
     m_cachedTransitionWidgetId = m_linkedTransitionWidgetId;
     m_cachedTransitionSweepCount = 0;
     m_cachedTransitionContinuousCount = 0;
+    m_cachedTransitionMultiFxCount = 0;
     if (m_linkedTransitionWidgetId == VCWidget::invalidId())
         return;
 
@@ -1351,6 +1352,7 @@ void PresetTableV2Widget::refreshTransitionPresetCache()
     {
         m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
         m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
+        m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
     }
 }
 
@@ -1453,7 +1455,7 @@ PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outp
 
 PTTransitionPreset PresetTableV2Widget::multiFxPresetForOutputLocked(int outputIdx) const
 {
-    return transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
+    return transitionPresetAtIndexLocked(PTTransitionMode::MultiFx,
                                          liveMultiFxPresetIndexLocked(outputIdx));
 }
 
@@ -2783,7 +2785,8 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
 bool PresetTableV2Widget::matrixProviderReadyLocked() const
 {
     return m_linkedTransitionWidgetId != VCWidget::invalidId()
-            && (m_cachedTransitionSweepCount > 0 || m_cachedTransitionContinuousCount > 0);
+            && (m_cachedTransitionSweepCount > 0 || m_cachedTransitionContinuousCount > 0
+                || m_cachedTransitionMultiFxCount > 0);
 }
 
 bool PresetTableV2Widget::useMatrixEngineLocked() const
@@ -3336,6 +3339,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
     {
         m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
         m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
+        m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
     }
 
     const bool matrixReady = matrixProviderReadyLocked();
@@ -3803,16 +3807,19 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
 
     int sweepPresetCount = 0;
     int continuousPresetCount = 0;
+    int multiFxPresetCount = 0;
     {
         QMutexLocker lk3(&m_stateMutex);
         sweepPresetCount = m_cachedTransitionSweepCount;
         continuousPresetCount = m_cachedTransitionContinuousCount;
-        if (sweepPresetCount <= 0 && continuousPresetCount <= 0)
+        multiFxPresetCount = m_cachedTransitionMultiFxCount;
+        if (sweepPresetCount <= 0 && continuousPresetCount <= 0 && multiFxPresetCount <= 0)
         {
             if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
             {
                 sweepPresetCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
                 continuousPresetCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
+                multiFxPresetCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
             }
         }
     }
@@ -3904,7 +3911,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             while (m_liveMultiFxPreset.size() <= o)
                 m_liveMultiFxPreset.append(-1);
             m_liveMultiFxPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
-                    value, continuousPresetCount);
+                    value, multiFxPresetCount);
             lk2.unlock();
             sendFeedback(value, PTInputId::multiFxBank(o));
             return;

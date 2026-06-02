@@ -43,6 +43,7 @@ public:
 
     const QVector<PTTransitionPreset>& sweepPresets() const { return m_sweepPresets; }
     const QVector<PTTransitionPreset>& continuousPresets() const { return m_continuousPresets; }
+    const QVector<PTTransitionPreset>& multiFxPresets() const { return m_multiFxPresets; }
 
     int transitionPresetCount(PTTransitionMode mode) const override;
     PTTransitionPreset transitionPreset(PTTransitionMode mode, int index) const override;
@@ -138,6 +139,7 @@ private:
     quint32 m_targetTableId = VCWidget::invalidId();
     QVector<PTTransitionPreset> m_sweepPresets;
     QVector<PTTransitionPreset> m_continuousPresets;
+    QVector<PTTransitionPreset> m_multiFxPresets;
     QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
@@ -158,4 +160,5 @@ private:
     QTabWidget*   m_bankTabs = nullptr;
     QTableWidget* m_sweepTable = nullptr;
     QTableWidget* m_continuousTable = nullptr;
+    QTableWidget* m_multiFxTable = nullptr;
 };

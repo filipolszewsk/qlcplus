@@ -439,6 +439,7 @@ public:
     quint32                     m_cachedTransitionWidgetId = VCWidget::invalidId();
     int                         m_cachedTransitionSweepCount = 0;
     int                         m_cachedTransitionContinuousCount = 0;
+    int                         m_cachedTransitionMultiFxCount = 0;
     QVector<int>                m_liveSweepPreset;
     QVector<int>                m_liveContinuousPreset;
     QVector<int>                m_liveMultiFxPreset;

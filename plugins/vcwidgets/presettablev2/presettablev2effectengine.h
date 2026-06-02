@@ -69,7 +69,8 @@ enum class PTTransitionMode
 {
     Off = 0,
     SweepOnly,
-    Continuous
+    Continuous,
+    MultiFx = 3
 };
 
 struct PTCustomCurvePoint
