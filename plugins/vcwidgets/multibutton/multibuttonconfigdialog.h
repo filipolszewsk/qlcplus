@@ -80,6 +80,7 @@ public:
         int                                widgetOutputIndex,
         int                                widgetParameter,
         QSharedPointer<QLCInputSource>     widgetLiveInputSource,
+        MultiButtonWidgetBusPolicy         widgetBusPolicy,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -124,6 +125,7 @@ public:
     int                                   widgetOutputIndex() const;
     int                                   widgetParameter() const;
     QSharedPointer<QLCInputSource>        widgetLiveInputSource() const;
+    MultiButtonWidgetBusPolicy            widgetBusPolicy() const;
 
     void accept() override;
 
@@ -283,11 +285,13 @@ private:
     QComboBox*    m_widgetParameterCombo = nullptr;
     QListWidget*  m_widgetPreviewList = nullptr;
     QLabel*       m_widgetLiveInputStatus = nullptr;
+    QComboBox*    m_widgetBusPolicyCombo = nullptr;
     InputSelectionWidget* m_widgetLiveInputSel = nullptr;
     quint32       m_widgetTargetId = VCWidget::invalidId();
     int           m_widgetOutputIndex = 0;
     int           m_widgetParameter = 0;
     QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
+    MultiButtonWidgetBusPolicy m_widgetBusPolicy = MultiButtonWidgetBusPolicy::SharedBus;
 
     QSpinBox*     m_longPressSpin     = nullptr;
     QCheckBox*    m_offAtEndCheck     = nullptr;

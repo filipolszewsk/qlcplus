@@ -34,6 +34,7 @@
 class Doc;
 class Function;
 class EntrySelectOverlay;
+class PresetTableV2MultiButtonTargetIface;
 
 enum class MultiButtonMode
 {
@@ -46,6 +47,15 @@ enum class MultiButtonLayout
 {
     Single,
     Spread
+};
+
+/** How Widget mode publishes the selector/recall DMX channel. */
+enum class MultiButtonWidgetBusPolicy
+{
+  /** Publish on UI change via sendFeedback; cuelist can own the bus between publishes. */
+    SharedBus = 0,
+  /** Legacy: hold Universe::Override on the channel every MasterTimer tick. */
+    HoldOverride
 };
 
 struct SpreadTileInfo
@@ -118,6 +128,7 @@ public:
     static const quint8 entrySelectInputSourceId  = 4;   // scaled entry/preset (knob/fader)
     static const quint8 spreadPageInputSourceId   = 5;   // spread page index (0-based channel value)
     static const quint8 commitInputSourceId       = 6;   // 0 = idle, upper (255) = apply staged
+    static const quint8 widgetRecallInputSourceId = 7;   // widget selector/recall channel
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -305,6 +316,16 @@ private:
     QSharedPointer<QLCInputSource> widgetLiveInputSourceResolved() const;
     void syncWidgetLiveInputSourceToTarget();
     void markWidgetSelectorPublishPending();
+    void setWidgetSelectorLatchedIndex(int idx);
+    void publishSelectorToBus(int selectorIdx);
+    void commitWidgetBusFromUi(int selectorIdx);
+    void applyWidgetRecallInput(uchar value);
+    bool widgetBusInPublishGrace() const;
+    void writeWidgetBusChannel(QList<Universe*>& universes, quint32 universe,
+                               quint32 channel, uchar value,
+                               Universe::FaderPriority priority, bool forceLtp);
+    int  widgetBusTargetIndex(PresetTableV2MultiButtonTargetIface* target) const;
+    static uchar selectorIndexToBusValue(int selectorIdx);
     int  displayedEntryIndex() const;
     void syncEntrySelectInputOutput(uchar rawValue);
     uchar entrySelectOutputValueForSlot(int slot) const;
@@ -390,6 +411,7 @@ private:
     int                        m_widgetParameter = 0;
     int                        m_lastResolvedEntryCount = -1;
     QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
+    MultiButtonWidgetBusPolicy m_widgetBusPolicy = MultiButtonWidgetBusPolicy::SharedBus;
     mutable QMutex     m_dmxMutex;
     QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
     QMap<quint32, QSharedPointer<GenericFader>> m_widgetLiveFaders;
@@ -397,6 +419,13 @@ private:
     quint32        m_widgetLiveLastUniverse = UINT_MAX;
     quint32        m_widgetLiveLastChannel = UINT_MAX;
     uchar          m_widgetLiveLastValue = 0;
+    uchar          m_lastPublishedValue = 0;
+    uchar          m_widgetBusCommittedValue = 0;
+    uchar          m_widgetBusLastSeen = 0;
+    bool           m_widgetBusForceReassert = false;
+    QElapsedTimer  m_publishSuppressTimer;
+    bool           m_widgetSelectorLatchedValid = false;
+    int            m_widgetSelectorLatchedIndex = -1;
     int            m_lastWrittenPresetIndex = -1;
     QList<uchar>   m_lastWrittenPresetValues;
 

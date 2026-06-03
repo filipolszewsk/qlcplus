@@ -109,6 +109,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     int                                widgetOutputIndex,
     int                                widgetParameter,
     QSharedPointer<QLCInputSource>     widgetLiveInputSource,
+    MultiButtonWidgetBusPolicy         widgetBusPolicy,
     int                                widgetPage,
     QWidget*                           parent)
     : QDialog(parent)
@@ -128,6 +129,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     , m_widgetOutputIndex(qMax(0, widgetOutputIndex))
     , m_widgetParameter(qMax(0, widgetParameter))
     , m_widgetLiveInputSource(widgetLiveInputSource)
+    , m_widgetBusPolicy(widgetBusPolicy)
     , m_automationProfiles(automationProfiles)
     , m_activeAutomationProfile(activeAutomationProfile)
 {
@@ -366,6 +368,19 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_widgetLiveInputStatus = new QLabel(widgetLiveGrp);
     m_widgetLiveInputStatus->setWordWrap(true);
     widgetLiveLay->addWidget(m_widgetLiveInputStatus);
+    m_widgetBusPolicyCombo = new QComboBox(widgetLiveGrp);
+    m_widgetBusPolicyCombo->addItem(tr("Shared bus (cue + snapshot)"),
+                                    int(MultiButtonWidgetBusPolicy::SharedBus));
+    m_widgetBusPolicyCombo->addItem(tr("Hold override (legacy)"),
+                                    int(MultiButtonWidgetBusPolicy::HoldOverride));
+    const int policyIdx = m_widgetBusPolicyCombo->findData(int(m_widgetBusPolicy));
+    m_widgetBusPolicyCombo->setCurrentIndex(policyIdx >= 0 ? policyIdx : 0);
+    m_widgetBusPolicyCombo->setToolTip(
+            tr("Shared bus: last action wins on a raw (LTP) DMX channel. Button click re-asserts staged; "
+               "a newly started cue can take over; your click wins over a held cue. Hold override locks the channel."));
+    connect(m_widgetBusPolicyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MultiButtonConfigDialog::updateWidgetLiveInputUi);
+    widgetLiveLay->addWidget(m_widgetBusPolicyCombo);
     m_widgetLiveInputSel = new InputSelectionWidget(doc, widgetLiveGrp);
     m_widgetLiveInputSel->setKeyInputVisibility(false);
     m_widgetLiveInputSel->setWidgetPage(widgetPage);
@@ -1164,6 +1179,16 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::widgetLiveInputSource() 
     return m_widgetLiveInputSource;
 }
 
+MultiButtonWidgetBusPolicy MultiButtonConfigDialog::widgetBusPolicy() const
+{
+    if (m_widgetBusPolicyCombo)
+    {
+        return MultiButtonWidgetBusPolicy(
+                m_widgetBusPolicyCombo->currentData().toInt());
+    }
+    return m_widgetBusPolicy;
+}
+
 QString MultiButtonConfigDialog::formatInputPatch(const QSharedPointer<QLCInputSource>& src,
                                                   const QKeySequence& key)
 {
@@ -1667,23 +1692,14 @@ void MultiButtonConfigDialog::updateWidgetLiveInputUi()
     if (!m_widgetLiveInputSel || !m_widgetLiveInputStatus)
         return;
 
-    PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget();
-    QSharedPointer<QLCInputSource> autoSrc = target
-            ? target->multiButtonLiveInputSource(widgetOutputIndex(), widgetParameter())
-            : QSharedPointer<QLCInputSource>();
-
-    if (!autoSrc.isNull() && autoSrc->isValid())
-    {
-        m_widgetLiveInputStatus->setText(
-                tr("Auto from PresetTable: %1. This channel carries the staged selector/recall value.")
-                .arg(formatInputPatch(autoSrc, QKeySequence())));
-        m_widgetLiveInputSel->setInputSource(autoSrc);
-        m_widgetLiveInputSel->setEnabled(false);
-        return;
-    }
-
+    const bool sharedBus = widgetBusPolicy() == MultiButtonWidgetBusPolicy::SharedBus;
     m_widgetLiveInputStatus->setText(
-            tr("Choose a channel here to write the staged selector/recall value. It will also be patched as the PresetTable external input for this parameter."));
+            sharedBus
+            ? tr("One raw DMX channel (not a patched fixture intensity channel) shared with cuelist/snapshots. "
+                 "Multi Button and cues take turns via LTP: last action wins. Button click holds staged over a held cue; "
+                 "starting a cue adopts into Preset Table. Not wired into Preset Table inputs.")
+            : tr("Selector/recall channel: Multi Button holds Override on this channel every frame (legacy). "
+                 "Cuelists may not be able to override the value."));
     m_widgetLiveInputSel->setEnabled(true);
     m_widgetLiveInputSel->setInputSource(m_widgetLiveInputSource);
 }

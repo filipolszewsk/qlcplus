@@ -62,6 +62,22 @@ static const QString KXMLWidgetLinkTarget  = QStringLiteral("TargetWidgetId");
 static const QString KXMLWidgetLinkOutput  = QStringLiteral("OutputIndex");
 static const QString KXMLWidgetLinkParam   = QStringLiteral("Parameter");
 static const QString KXMLWidgetLiveInput   = QStringLiteral("WidgetLiveInput");
+static const QString KXMLWidgetBusPolicy   = QStringLiteral("WidgetBusPolicy");
+
+static const int kWidgetBusPublishSuppressMs = 250;
+
+static QString widgetBusPolicyToString(MultiButtonWidgetBusPolicy policy)
+{
+    return policy == MultiButtonWidgetBusPolicy::HoldOverride
+            ? QStringLiteral("holdOverride") : QStringLiteral("shared");
+}
+
+static MultiButtonWidgetBusPolicy stringToWidgetBusPolicy(const QString& s)
+{
+    if (s.compare(QStringLiteral("holdOverride"), Qt::CaseInsensitive) == 0)
+        return MultiButtonWidgetBusPolicy::HoldOverride;
+    return MultiButtonWidgetBusPolicy::SharedBus;
+}
 static const QString KXMLCurrentIndex      = QStringLiteral("CurrentIndex");
 static const QString KXMLLongPressMs       = QStringLiteral("LongPressMs");
 static const QString KXMLFunction          = QStringLiteral("Function");
@@ -373,6 +389,11 @@ void MultiButtonWidget::releaseWidgetLiveFaders()
     m_widgetLiveLastUniverse = UINT_MAX;
     m_widgetLiveLastChannel = UINT_MAX;
     m_widgetLiveLastValue = 0;
+    m_widgetSelectorLatchedValid = false;
+    m_widgetSelectorLatchedIndex = -1;
+    m_widgetBusCommittedValue = 0;
+    m_widgetBusLastSeen = 0;
+    m_widgetBusForceReassert = false;
 }
 
 void MultiButtonWidget::reactivateLevelPreset()
@@ -1160,35 +1181,13 @@ QSharedPointer<QLCInputSource> MultiButtonWidget::widgetLiveInputSourceResolved(
     if (m_mode != MultiButtonMode::Widget)
         return QSharedPointer<QLCInputSource>();
 
-    if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
-    {
-        QSharedPointer<QLCInputSource> autoSrc =
-                target->multiButtonLiveInputSource(m_widgetOutputIndex, m_widgetParameter);
-        if (!autoSrc.isNull() && autoSrc->isValid())
-            return autoSrc;
-    }
-
     return (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
             ? m_widgetLiveInputSource : QSharedPointer<QLCInputSource>();
 }
 
 void MultiButtonWidget::syncWidgetLiveInputSourceToTarget()
 {
-    if (m_mode != MultiButtonMode::Widget)
-        return;
-
-    PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-    if (!target)
-        return;
-
-    QSharedPointer<QLCInputSource> autoSrc =
-            target->multiButtonLiveInputSource(m_widgetOutputIndex, m_widgetParameter);
-    if (!autoSrc.isNull() && autoSrc->isValid())
-        return;
-
-    if (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
-        target->multiButtonSetLiveInputSource(m_widgetOutputIndex, m_widgetParameter,
-                                              cloneInputSource(m_widgetLiveInputSource));
+    setInputSource(cloneInputSource(m_widgetLiveInputSource), widgetRecallInputSourceId);
 }
 
 void MultiButtonWidget::markWidgetSelectorPublishPending()
@@ -1197,15 +1196,170 @@ void MultiButtonWidget::markWidgetSelectorPublishPending()
     m_widgetLiveWriteDirty = true;
 }
 
-void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
+void MultiButtonWidget::setWidgetSelectorLatchedIndex(int idx)
 {
     QMutexLocker lock(&m_dmxMutex);
+    m_widgetSelectorLatchedValid = true;
+    m_widgetSelectorLatchedIndex = idx;
+    m_widgetLiveWriteDirty = true;
+}
 
+uchar MultiButtonWidget::selectorIndexToBusValue(int selectorIdx)
+{
+    return selectorIdx < 0 ? 0 : uchar(qBound(0, selectorIdx + 1, 255));
+}
+
+bool MultiButtonWidget::widgetBusInPublishGrace() const
+{
+    QMutexLocker lock(&m_dmxMutex);
+    return m_publishSuppressTimer.isValid()
+            && m_publishSuppressTimer.elapsed() < kWidgetBusPublishSuppressMs;
+}
+
+int MultiButtonWidget::widgetBusTargetIndex(PresetTableV2MultiButtonTargetIface* target) const
+{
+    if (!target)
+        return -1;
+
+    if (widgetLinkUsesInternalStaging())
+    {
+        if (target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter))
+            return target->multiButtonStagedIndex(m_widgetOutputIndex, m_widgetParameter);
+    }
+    return target->multiButtonLiveIndex(m_widgetOutputIndex, m_widgetParameter);
+}
+
+void MultiButtonWidget::commitWidgetBusFromUi(int selectorIdx)
+{
+    const uchar busValue = selectorIndexToBusValue(selectorIdx);
+    QMutexLocker lock(&m_dmxMutex);
+    m_lastPublishedValue = busValue;
+    m_widgetBusCommittedValue = busValue;
+    m_widgetBusLastSeen = busValue;
+    m_widgetBusForceReassert = true;
+    m_publishSuppressTimer.start();
+    m_widgetLiveWriteDirty = true;
+    m_widgetSelectorLatchedValid = false;
+    m_widgetSelectorLatchedIndex = -1;
+}
+
+void MultiButtonWidget::publishSelectorToBus(int selectorIdx)
+{
+    if (m_mode != MultiButtonMode::Widget)
+        return;
+
+    QSharedPointer<QLCInputSource> src = widgetLiveInputSourceResolved();
+    if (src.isNull() || !src->isValid() || !m_doc)
+        return;
+
+    commitWidgetBusFromUi(selectorIdx);
+
+    const uchar busValue = selectorIndexToBusValue(selectorIdx);
+    m_doc->inputOutputMap()->sendFeedBack(
+            src->universe(), src->channel(), busValue,
+            src->feedbackExtraParams(QLCInputFeedback::UpperValue));
+
+    QSharedPointer<QLCInputSource> recall = inputSource(widgetRecallInputSourceId);
+    if (!recall.isNull() && recall->isValid() && recall->needsUpdate())
+        recall->updateOuputValue(busValue);
+}
+
+void MultiButtonWidget::writeWidgetBusChannel(QList<Universe*>& universes,
+                                              quint32 universe, quint32 channel,
+                                              uchar value, Universe::FaderPriority priority,
+                                              bool forceLtp)
+{
+    if (int(universe) >= universes.size() || channel >= 512 || !universes[int(universe)])
+        return;
+
+    QMutexLocker lock(&m_dmxMutex);
+
+    const bool sourceChanged = (m_widgetLiveLastUniverse != universe
+                                || m_widgetLiveLastChannel != channel);
+
+    const QList<quint32> liveFaderUniverses = m_widgetLiveFaders.keys();
+    for (quint32 oldUniverse : liveFaderUniverses)
+    {
+        if (oldUniverse == universe)
+            continue;
+        QSharedPointer<GenericFader> oldFader = m_widgetLiveFaders.take(oldUniverse);
+        if (!oldFader.isNull())
+            oldFader->requestDelete();
+    }
+
+    QSharedPointer<GenericFader> fader =
+            m_widgetLiveFaders.value(universe, QSharedPointer<GenericFader>());
+    if (fader.isNull())
+    {
+        fader = universes[int(universe)]->requestFader(priority);
+        fader->adjustIntensity(intensity());
+        m_widgetLiveFaders.insert(universe, fader);
+    }
+    else if (fader->priority() != priority)
+    {
+        universes[int(universe)]->requestFaderPriority(fader, priority);
+    }
+    if (sourceChanged)
+        fader->removeAll();
+
+    FadeChannel* fc = fader->getChannelFader(m_doc, universes[int(universe)],
+                                             Fixture::invalidId(), channel);
+    if (fc->universe() == Universe::invalid())
+    {
+        fader->remove(fc);
+        return;
+    }
+
+    fc->removeFlag(FadeChannel::AutoRemove);
+    if (forceLtp)
+        fc->addFlag(FadeChannel::Override);
+    else
+        fc->removeFlag(FadeChannel::Override);
+    fc->setStart(value);
+    fc->setCurrent(value);
+    fc->setTarget(value);
+    fc->setReady(false);
+    fc->setElapsed(0);
+    m_widgetLiveLastUniverse = universe;
+    m_widgetLiveLastChannel = channel;
+    m_widgetLiveLastValue = value;
+    m_widgetLiveWriteDirty = false;
+}
+
+void MultiButtonWidget::applyWidgetRecallInput(uchar value)
+{
+    if (m_mode != MultiButtonMode::Widget)
+        return;
+
+    if (widgetBusInPublishGrace())
+        return;
+
+    PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+    if (!target)
+        return;
+
+    const int idx = value == 0 ? -1 : int(value) - 1;
+    const bool ok = widgetLinkUsesInternalStaging()
+            ? target->multiButtonActivateStaged(m_widgetOutputIndex, m_widgetParameter, idx)
+            : target->multiButtonActivate(m_widgetOutputIndex, m_widgetParameter, idx);
+    if (!ok)
+        return;
+
+    {
+        QMutexLocker lock(&m_dmxMutex);
+        m_widgetBusCommittedValue = value;
+        m_widgetBusLastSeen = value;
+    }
+
+    syncWidgetLinkLiveStagedState();
+    updateFeedback();
+    update();
+}
+
+void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> universes)
+{
     if (m_mode == MultiButtonMode::Widget)
     {
-        if (!m_widgetLiveWriteDirty)
-            return;
-
         PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
         if (!target)
             return;
@@ -1213,16 +1367,7 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         QSharedPointer<QLCInputSource> src = widgetLiveInputSourceResolved();
         if (src.isNull() || !src->isValid())
         {
-            for (auto& fader : m_widgetLiveFaders)
-            {
-                if (!fader.isNull())
-                    fader->requestDelete();
-            }
-            m_widgetLiveFaders.clear();
-            m_widgetLiveWriteDirty = true;
-            m_widgetLiveLastUniverse = UINT_MAX;
-            m_widgetLiveLastChannel = UINT_MAX;
-            m_widgetLiveLastValue = 0;
+            releaseWidgetLiveFaders();
             return;
         }
         const quint32 universe = src->universe();
@@ -1230,58 +1375,58 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         if (int(universe) >= universes.size() || channel >= 512 || !universes[int(universe)])
             return;
 
-        int selectorIdx = target->multiButtonLiveIndex(m_widgetOutputIndex, m_widgetParameter);
-        if (widgetLinkUsesInternalStaging())
-        {
-            if (target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter))
-                selectorIdx = target->multiButtonStagedIndex(m_widgetOutputIndex,
-                                                             m_widgetParameter);
-        }
-        const uchar value = selectorIdx < 0 ? 0 : uchar(qBound(0, selectorIdx + 1, 255));
-        const bool sourceChanged = (m_widgetLiveLastUniverse != universe
-                                    || m_widgetLiveLastChannel != channel);
+        const int selectorIdx = widgetBusTargetIndex(target);
+        const uchar targetValue = selectorIndexToBusValue(selectorIdx);
+        const uchar busValue = universes[int(universe)]->preGMValue(int(channel));
 
-        const QList<quint32> liveFaderUniverses = m_widgetLiveFaders.keys();
-        for (quint32 oldUniverse : liveFaderUniverses)
+        if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
         {
-            if (oldUniverse == universe)
-                continue;
-            QSharedPointer<GenericFader> oldFader = m_widgetLiveFaders.take(oldUniverse);
-            if (!oldFader.isNull())
-                oldFader->requestDelete();
-        }
+            bool forceReassert = false;
+            bool inGrace = false;
+            uchar lastSeen = 0;
+            {
+                QMutexLocker lock(&m_dmxMutex);
+                forceReassert = m_widgetBusForceReassert;
+                inGrace = m_publishSuppressTimer.isValid()
+                        && m_publishSuppressTimer.elapsed() < kWidgetBusPublishSuppressMs;
+                lastSeen = m_widgetBusLastSeen;
+            }
 
-        QSharedPointer<GenericFader> fader =
-                m_widgetLiveFaders.value(universe, QSharedPointer<GenericFader>());
-        if (fader.isNull())
-        {
-            fader = universes[int(universe)]->requestFader(Universe::Auto);
-            fader->adjustIntensity(intensity());
-            m_widgetLiveFaders.insert(universe, fader);
-        }
-        if (sourceChanged)
-            fader->removeAll();
+            if (forceReassert)
+            {
+                releaseWidgetLiveFaders();
+                QMutexLocker lock(&m_dmxMutex);
+                m_widgetBusForceReassert = false;
+            }
 
-        FadeChannel* fc = fader->getChannelFader(m_doc, universes[int(universe)],
-                                                 Fixture::invalidId(), channel);
-        if (fc->universe() == Universe::invalid())
-        {
-            fader->remove(fc);
+            if (!inGrace && !forceReassert && busValue != lastSeen)
+            {
+                applyWidgetRecallInput(busValue);
+                return;
+            }
+
+            writeWidgetBusChannel(universes, universe, channel, targetValue,
+                                  Universe::Auto, false);
+            {
+                QMutexLocker lock(&m_dmxMutex);
+                m_widgetBusCommittedValue = targetValue;
+                m_widgetBusLastSeen = targetValue;
+            }
             return;
         }
 
-        fc->addFlag(FadeChannel::AutoRemove);
-        fc->setStart(value);
-        fc->setCurrent(value);
-        fc->setTarget(value);
-        fc->setReady(false);
-        fc->setElapsed(0);
-        m_widgetLiveLastUniverse = universe;
-        m_widgetLiveLastChannel = channel;
-        m_widgetLiveLastValue = value;
-        m_widgetLiveWriteDirty = false;
+        QMutexLocker lock(&m_dmxMutex);
+
+        int holdIdx = m_widgetSelectorLatchedValid
+                ? m_widgetSelectorLatchedIndex : selectorIdx;
+        const uchar value = selectorIndexToBusValue(holdIdx);
+        lock.unlock();
+        writeWidgetBusChannel(universes, universe, channel, value,
+                              Universe::Override, true);
         return;
     }
+
+    QMutexLocker lock(&m_dmxMutex);
 
     if (m_mode != MultiButtonMode::Level)
         return;
@@ -2154,7 +2299,10 @@ void MultiButtonWidget::activate(int idx)
             if (ok)
             {
                 syncWidgetLinkLiveStagedState();
-                markWidgetSelectorPublishPending();
+                if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+                    publishSelectorToBus(-1);
+                else
+                    setWidgetSelectorLatchedIndex(-1);
                 updateFeedback();
                 update();
                 return;
@@ -2192,7 +2340,10 @@ void MultiButtonWidget::activate(int idx)
         if (widgetInternalStage)
         {
             m_stagedIndex = idx;
-            markWidgetSelectorPublishPending();
+            if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+                publishSelectorToBus(idx);
+            else
+                setWidgetSelectorLatchedIndex(idx);
             updateFeedback();
             update();
             return;
@@ -2206,7 +2357,12 @@ void MultiButtonWidget::activate(int idx)
     m_lastMonitorMatchIdx = idx;
     m_lastActivationTime.restart();
     if (m_mode == MultiButtonMode::Widget)
-        markWidgetSelectorPublishPending();
+    {
+        if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+            publishSelectorToBus(idx);
+        else
+            setWidgetSelectorLatchedIndex(idx);
+    }
     updateFeedback();
     update();
 }
@@ -2255,7 +2411,12 @@ void MultiButtonWidget::stageEntry(int idx)
     m_stagedIndex = idx;
     syncWidgetLinkLiveStagedState();
     if (m_mode == MultiButtonMode::Widget)
-        markWidgetSelectorPublishPending();
+    {
+        if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+            publishSelectorToBus(idx);
+        else
+            setWidgetSelectorLatchedIndex(idx);
+    }
     update();
 }
 
@@ -2730,10 +2891,21 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
     m_lastMonitorMatchIdx = liveIdx;
     m_stagedIndex = stagedIdx;
 
-    return m_currentIndex != prevLive
+    const bool changed = m_currentIndex != prevLive
             || m_monitorMatchIndex != prevMonitor
             || m_lastMonitorMatchIdx != prevLastMonitor
             || m_stagedIndex != prevStaged;
+
+    if (changed && m_mode == MultiButtonMode::Widget)
+    {
+        QMutexLocker lock(&m_dmxMutex);
+        m_widgetSelectorLatchedValid = false;
+        m_widgetSelectorLatchedIndex = -1;
+        if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+            m_widgetLiveWriteDirty = true;
+    }
+
+    return changed;
 }
 
 int MultiButtonWidget::monitorHighlightIndex() const
@@ -3277,6 +3449,13 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
     const bool opInput = acceptsOperationalInput();
     const quint32 pagedCh = (quint32(page()) << 16) | (channel & 0xFFFF);
 
+    if (checkInputSource(universe, pagedCh, value, sender(), widgetRecallInputSourceId))
+    {
+        if (opInput)
+            applyWidgetRecallInput(value);
+        return;
+    }
+
     if (checkInputSource(universe, pagedCh, value, sender(), triggerInputSourceId))
     {
         if (opInput && m_triggerLastValue == 0 && value > 0)
@@ -3504,6 +3683,7 @@ void MultiButtonWidget::editProperties()
         m_widgetOutputIndex,
         m_widgetParameter,
         m_widgetLiveInputSource,
+        m_widgetBusPolicy,
         page(),
         this);
 
@@ -3541,6 +3721,7 @@ void MultiButtonWidget::editProperties()
     m_widgetOutputIndex = dlg.widgetOutputIndex();
     m_widgetParameter = dlg.widgetParameter();
     m_widgetLiveInputSource = cloneInputSource(dlg.widgetLiveInputSource());
+    m_widgetBusPolicy = dlg.widgetBusPolicy();
     releaseWidgetLiveFaders();
     syncWidgetLiveInputSourceToTarget();
     m_lastResolvedEntryCount = -1;
@@ -3610,6 +3791,7 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->m_widgetOutputIndex = m_widgetOutputIndex;
     copy->m_widgetParameter = m_widgetParameter;
     copy->m_widgetLiveInputSource = cloneInputSource(m_widgetLiveInputSource);
+    copy->m_widgetBusPolicy = m_widgetBusPolicy;
     copy->assignInputSource(cloneInputSource(inputSource(commitInputSourceId)),
                             commitInputSourceId);
     copy->setWidgetLayout(m_layout);
@@ -3761,6 +3943,7 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         m_widgetOutputIndex = src->m_widgetOutputIndex;
         m_widgetParameter = src->m_widgetParameter;
         m_widgetLiveInputSource = cloneInputSource(src->m_widgetLiveInputSource);
+        m_widgetBusPolicy = src->m_widgetBusPolicy;
         releaseWidgetLiveFaders();
         syncWidgetLiveInputSourceToTarget();
         updateDmxRegistration();
@@ -3825,6 +4008,7 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     widgetLink["targetWidgetId"] = QString::number(m_widgetTargetId);
     widgetLink["outputIndex"] = m_widgetOutputIndex;
     widgetLink["parameter"] = m_widgetParameter;
+    widgetLink["busPolicy"] = widgetBusPolicyToString(m_widgetBusPolicy);
     if (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
     {
         widgetLink["liveInputUniverse"] = int(m_widgetLiveInputSource->universe());
@@ -3994,6 +4178,11 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
             QString::number(VCWidget::invalidId())).toUInt();
     m_widgetOutputIndex = qMax(0, widgetLink["outputIndex"].toInt(0));
     m_widgetParameter = qMax(0, widgetLink["parameter"].toInt(0));
+    if (widgetLink.contains(QStringLiteral("busPolicy")))
+    {
+        m_widgetBusPolicy = stringToWidgetBusPolicy(
+                widgetLink["busPolicy"].toString());
+    }
     if (widgetLink.contains(QStringLiteral("liveInputUniverse"))
             && widgetLink.contains(QStringLiteral("liveInputChannel")))
     {
@@ -4307,6 +4496,11 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             widgetTargetId = attrs.value(KXMLWidgetLinkTarget).toUInt();
             widgetOutputIndex = attrs.value(KXMLWidgetLinkOutput).toInt();
             widgetParameter = attrs.value(KXMLWidgetLinkParam).toInt();
+            if (attrs.hasAttribute(KXMLWidgetBusPolicy))
+            {
+                m_widgetBusPolicy = stringToWidgetBusPolicy(
+                        attrs.value(KXMLWidgetBusPolicy).toString());
+            }
             while (root.readNextStartElement())
             {
                 if (root.name() == KXMLWidgetLiveInput)
@@ -4641,6 +4835,7 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLWidgetLinkTarget, QString::number(m_widgetTargetId));
         doc->writeAttribute(KXMLWidgetLinkOutput, QString::number(m_widgetOutputIndex));
         doc->writeAttribute(KXMLWidgetLinkParam, QString::number(m_widgetParameter));
+        doc->writeAttribute(KXMLWidgetBusPolicy, widgetBusPolicyToString(m_widgetBusPolicy));
         if (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
         {
             doc->writeStartElement(KXMLWidgetLiveInput);
