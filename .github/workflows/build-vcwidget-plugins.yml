@@ -10,6 +10,11 @@ on:
       - 'engine/src/*.h'
       - '.github/workflows/build-vcwidget-plugins.yml'
   workflow_dispatch:
+    inputs:
+      windows_only:
+        description: Build Windows VC plugins only (faster retry)
+        type: boolean
+        default: false
   workflow_call:
 
 concurrency:
@@ -63,6 +68,10 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     name: Build plugins (${{ matrix.platform_key }})
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.windows_only != 'true' ||
+      matrix.platform_key == 'windows_x64'
 
     steps:
       - name: Checkout
@@ -70,8 +79,9 @@ jobs:
         with:
           submodules: false
 
-      # ---- Qt ----
+      # ---- Qt (macOS / Linux) ----
       - name: Install Qt ${{ env.QT_VERSION }}
+        if: runner.os != 'Windows'
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
@@ -81,11 +91,29 @@ jobs:
           dir: "${{ github.workspace }}/Qt/"
           modules: 'qt5compat qtimageformats qtmultimedia qtserialport qtwebsockets'
           cache: true
+          cache-key-prefix: vcwidget-qt68
+
+      # ---- Qt (Windows) — match build-windows-v4.yml; no cache (bad cache restores break the job) ----
+      - name: Install Qt ${{ env.QT_VERSION }} (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          dir: "${{ github.workspace }}/qt/"
+          modules: 'qt3d qtimageformats qtmultimedia qtserialport qtwebsockets'
+          cache: false
 
       - name: Set QTDIR + NPROC
         shell: bash
         run: |
-          echo "QTDIR=${{ github.workspace }}/Qt/Qt/${{ env.QT_VERSION }}/${{ matrix.qt_dir_suffix }}" >> $GITHUB_ENV
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo "QTDIR=/d/a/qlcplus/qlcplus/qt/Qt/${{ env.QT_VERSION }}/mingw_64" >> $GITHUB_ENV
+          else
+            echo "QTDIR=${{ github.workspace }}/Qt/Qt/${{ env.QT_VERSION }}/${{ matrix.qt_dir_suffix }}" >> $GITHUB_ENV
+          fi
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             echo "NPROC=$(sysctl -n hw.ncpu)" >> $GITHUB_ENV
           else
