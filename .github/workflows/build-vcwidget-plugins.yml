@@ -10,11 +10,6 @@ on:
       - 'engine/src/*.h'
       - '.github/workflows/build-vcwidget-plugins.yml'
   workflow_dispatch:
-    inputs:
-      windows_only:
-        description: Build Windows VC plugins only (faster retry)
-        type: boolean
-        default: false
   workflow_call:
 
 concurrency:
@@ -68,10 +63,6 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     name: Build plugins (${{ matrix.platform_key }})
-    if: >-
-      github.event_name != 'workflow_dispatch' ||
-      inputs.windows_only != 'true' ||
-      matrix.platform_key == 'windows_x64'
 
     steps:
       - name: Checkout
