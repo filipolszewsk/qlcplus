@@ -14,12 +14,19 @@ on:
 
 concurrency:
   group: vcwidget-plugins-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   QT_VERSION: "6.8.1"
-  # Plugins to build — all that have a manifest.json
-  PLUGINS: "presettable multibutton dmxnumeric infinityencoder"
+  # Folder names under plugins/vcwidgets/ — build order: v2 stack first, then others
+  PLUGINS: >-
+    presettablev2
+    presettablev2transition
+    multibutton
+    fixturegrouplayout
+    dmxnumeric
+    infinityencoder
+    presettable
 
 jobs:
   # ============================================================
@@ -275,7 +282,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [presettable, multibutton, dmxnumeric, infinityencoder]
+        plugin:
+          - presettablev2
+          - presettablev2transition
+          - multibutton
+          - fixturegrouplayout
+          - dmxnumeric
+          - infinityencoder
+          - presettable
 
     steps:
       - name: Checkout
