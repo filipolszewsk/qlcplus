@@ -241,4 +241,5 @@ private:
 
     QCheckBox*            m_spatialChk         = nullptr;
     QComboBox*            m_transitionLinkCombo = nullptr;
+
 };

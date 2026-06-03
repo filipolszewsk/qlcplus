@@ -34,6 +34,7 @@
 #include "qlcchannel.h"
 #include "presettablev2effectengine.h"
 #include "presettablev2controliface.h"
+#include "presettablev2multibuttoniface.h"
 #include "presettablev2transitionprovideriface.h"
 #include "ptparammatrixengine.h"
 
@@ -157,10 +158,12 @@ private:
 // Main widget
 // ---------------------------------------------------------------------------
 
-class PresetTableV2Widget : public VCWidget, public DMXSource, public PresetTableV2ControlIface
+class PresetTableV2Widget : public VCWidget, public DMXSource, public PresetTableV2ControlIface,
+                            public PresetTableV2MultiButtonTargetIface
 {
     Q_OBJECT
     Q_INTERFACES(PresetTableV2ControlIface)
+    Q_INTERFACES(PresetTableV2MultiButtonTargetIface)
 
 public:
     explicit PresetTableV2Widget(QWidget* parent, Doc* doc);
@@ -196,6 +199,22 @@ public:
     bool spatialGridPreview(const PTTransitionPreset& preset,
                             const PTGlobalEffectSettings& global,
                             PTSpatialGridPreview& out) const override;
+
+    int multiButtonOutputCount() const override;
+    QString multiButtonOutputName(int outputIdx) const override;
+    int multiButtonParameterCount() const override;
+    QString multiButtonParameterName(int parameter) const override;
+    int multiButtonEntryCount(int outputIdx, int parameter) const override;
+    QString multiButtonEntryName(int outputIdx, int parameter, int index) const override;
+    int multiButtonCurrentIndex(int outputIdx, int parameter) const override;
+    int multiButtonLiveIndex(int outputIdx, int parameter) const override;
+    bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
+    int multiButtonStagedIndex(int outputIdx, int parameter) const override;
+    bool multiButtonActivate(int outputIdx, int parameter, int index) override;
+    bool multiButtonActivateStaged(int outputIdx, int parameter, int index) override;
+    QSharedPointer<QLCInputSource> multiButtonLiveInputSource(int outputIdx, int parameter) const override;
+    bool multiButtonSetLiveInputSource(int outputIdx, int parameter,
+                                       QSharedPointer<QLCInputSource> src) override;
 
     // ---- VCWidget overrides -----------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
@@ -309,9 +328,12 @@ private:
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
     int liveMultiFxPresetIndexLocked(int outputIdx) const;
+    int liveSecondaryRowIndexLocked(int outputIdx) const;
+    void sendLiveSelectorFeedbackLocked(int outputIdx);
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
     bool multiFxActiveForOutputLocked(int outputIdx) const;
+    int stagedMultiFxPresetIndexLocked(int outputIdx) const;
     /** Sweep on primary row change only when Continuous is not driving the layer. */
     bool sweepOnPrimaryChangeLocked(int outputIdx, int newActiveRow) const;
     /** Secondary table row for Continuous only (DMX 128+ / Properties / activeRow). */
@@ -334,6 +356,7 @@ private:
     void stageSecondaryRowLocked(int outputIdx, int rowIdx);
     void stageSweepPresetLocked(int outputIdx, int presetIdx);
     void stageContinuousPresetLocked(int outputIdx, int presetIdx);
+    void stageMultiFxPresetLocked(int outputIdx, int presetIdx);
     void tickCrossfadeClockLocked(MasterTimer* timer);
     void resetCrossfadeClockLocked();
     quint32 crossfadeClockCycleMsLocked(const PTGlobalEffectSettings& global) const;
@@ -426,9 +449,11 @@ public:
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;
     QVector<int>      m_stagedContinuousPreset;
+    QVector<int>      m_stagedMultiFxPreset;
     QVector<bool>     m_stagedSecondaryValid;
     QVector<bool>     m_stagedSweepValid;
     QVector<bool>     m_stagedContinuousValid;
+    QVector<bool>     m_stagedMultiFxValid;
 
     PTMode            m_mode            = PTMode::Legacy;
     quint32           m_fixtureGroupId  = UINT_MAX;  // valid only when m_mode == FixtureGroup

@@ -92,6 +92,7 @@ static const QString KXMLCrossfadeEn     = QStringLiteral("CrossfadeEnabled");
 static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
 static const QString KXMLMultiFxBlendInput = QStringLiteral("MultiFxBlendInput");
 static const QString KXMLMultiFxRestartInput = QStringLiteral("MultiFxRestartInput");
+static const QString KXMLSelectorStateOutput = QStringLiteral("SelectorStateOutput");
 static const QString KXMLContinuousFxSelectorMode = QStringLiteral("ContinuousFxSelectorMode");
 static const QString KXMLColWidth        = QStringLiteral("Width");
 static const QString KXMLNameColWidth    = QStringLiteral("NameColWidth");
@@ -688,12 +689,16 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedSweepPreset.fill(-1);
         m_stagedContinuousPreset.resize(m_outputs.size());
         m_stagedContinuousPreset.fill(-1);
+        m_stagedMultiFxPreset.resize(m_outputs.size());
+        m_stagedMultiFxPreset.fill(-1);
         m_stagedSecondaryValid.resize(m_outputs.size());
         m_stagedSecondaryValid.fill(false);
         m_stagedSweepValid.resize(m_outputs.size());
         m_stagedSweepValid.fill(false);
         m_stagedContinuousValid.resize(m_outputs.size());
         m_stagedContinuousValid.fill(false);
+        m_stagedMultiFxValid.resize(m_outputs.size());
+        m_stagedMultiFxValid.fill(false);
         m_liveMultiFxPreset.resize(m_outputs.size());
         m_multiFxElapsedMs.resize(m_outputs.size());
         m_multiFxLastCycleMs.resize(m_outputs.size());
@@ -751,9 +756,13 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
+        if (m_stagedMultiFxPreset.size() > 0)
+            m_stagedMultiFxPreset.fill(-1, m_stagedMultiFxPreset.size());
             m_stagedSecondaryValid.fill(false, m_stagedSecondaryValid.size());
             m_stagedSweepValid.fill(false, m_stagedSweepValid.size());
             m_stagedContinuousValid.fill(false, m_stagedContinuousValid.size());
+        if (m_stagedMultiFxValid.size() > 0)
+            m_stagedMultiFxValid.fill(false, m_stagedMultiFxValid.size());
             m_crossfadeGlobalPos = 0;
             m_crossfadeStartPos  = 0;
             m_crossfadePrevPos   = 0;
@@ -1365,12 +1374,15 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedSecondaryRow.resize(m_outputs.size());
     m_stagedSweepPreset.resize(m_outputs.size());
     m_stagedContinuousPreset.resize(m_outputs.size());
+    m_stagedMultiFxPreset.resize(m_outputs.size());
     m_stagedSecondaryValid.resize(m_outputs.size());
     m_stagedSweepValid.resize(m_outputs.size());
     m_stagedContinuousValid.resize(m_outputs.size());
+    m_stagedMultiFxValid.resize(m_outputs.size());
     m_stagedSecondaryValid.fill(false);
     m_stagedSweepValid.fill(false);
     m_stagedContinuousValid.fill(false);
+    m_stagedMultiFxValid.fill(false);
     m_continuousElapsedMs.resize(m_outputs.size());
     m_multiFxElapsedMs.resize(m_outputs.size());
     m_continuousLastCycleMs.resize(m_outputs.size());
@@ -1512,6 +1524,7 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
             && m_stagedSecondaryRow[outputIdx] < m_rows.size();
     const bool hasStagedContinuous = outputIdx < m_stagedContinuousValid.size()
             && m_stagedContinuousValid[outputIdx];
+    const bool hasStagedMultiFx = stagedMultiFxPresetIndexLocked(outputIdx) >= 0;
 
     const int liveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
     state.primaryRow = activeRow;
@@ -1534,7 +1547,8 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
     state.preset = hasStagedContinuous
             ? continuousPresetForOutputLocked(outputIdx, xfEffective)
             : state.livePreset;
-    state.hasStaged = hasStagedPrimary || hasStagedSecondary || hasStagedContinuous;
+    state.hasStaged = hasStagedPrimary || hasStagedSecondary
+            || hasStagedContinuous || hasStagedMultiFx;
     state.active = (state.livePreset.enabled || state.preset.enabled
                     || multiFxActiveForOutputLocked(outputIdx))
             && (state.secondaryRow >= 0 || hasStagedSecondary || hasStagedContinuous);
@@ -1556,7 +1570,17 @@ bool PresetTableV2Widget::continuousEfxActiveForOutputLocked(int outputIdx) cons
 
 bool PresetTableV2Widget::multiFxActiveForOutputLocked(int outputIdx) const
 {
-    return liveMultiFxPresetIndexLocked(outputIdx) >= 0;
+    return liveMultiFxPresetIndexLocked(outputIdx) >= 0
+            || stagedMultiFxPresetIndexLocked(outputIdx) >= 0;
+}
+
+int PresetTableV2Widget::stagedMultiFxPresetIndexLocked(int outputIdx) const
+{
+    if (outputIdx < 0 || outputIdx >= m_stagedMultiFxValid.size()
+            || outputIdx >= m_stagedMultiFxPreset.size()
+            || !m_stagedMultiFxValid[outputIdx])
+        return -1;
+    return m_stagedMultiFxPreset[outputIdx];
 }
 
 bool PresetTableV2Widget::sweepOnPrimaryChangeLocked(int outputIdx, int newActiveRow) const
@@ -1575,7 +1599,11 @@ bool PresetTableV2Widget::sweepOnPrimaryChangeLocked(int outputIdx, int newActiv
 int PresetTableV2Widget::effectiveSecondaryRowLocked(int outputIdx, int activeRow) const
 {
     Q_UNUSED(activeRow);
+    return liveSecondaryRowIndexLocked(outputIdx);
+}
 
+int PresetTableV2Widget::liveSecondaryRowIndexLocked(int outputIdx) const
+{
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
         return -1;
 
@@ -1588,6 +1616,30 @@ int PresetTableV2Widget::effectiveSecondaryRowLocked(int outputIdx, int activeRo
         return prop;
 
     return -1;
+}
+
+void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size()
+            || outputIdx >= PTInputId::kMaxRoutableOutputs)
+        return;
+
+    const int livePrimary = (outputIdx < m_activeRow.size()) ? m_activeRow[outputIdx] : -1;
+    sendFeedback(livePrimary < 0 ? 0 : livePrimary + 1, PTInputId::rowSelector(outputIdx));
+
+    const int liveSweep = liveSweepPresetIndexLocked(outputIdx);
+    sendFeedback(liveSweep < 0 ? 0 : liveSweep + 1, PTInputId::transSweep(outputIdx));
+
+    const int liveContinuous = liveContinuousPresetIndexLocked(outputIdx);
+    sendFeedback(liveContinuous < 0 ? 0 : liveContinuous + 1,
+                 PTInputId::transContinuousBank(outputIdx));
+
+    const int liveMultiFx = liveMultiFxPresetIndexLocked(outputIdx);
+    sendFeedback(liveMultiFx < 0 ? 0 : liveMultiFx + 1, PTInputId::multiFxBank(outputIdx));
+
+    const int liveSecondary = liveSecondaryRowIndexLocked(outputIdx);
+    sendFeedback(liveSecondary < 0 ? 0 : liveSecondary + 1,
+                 PTInputId::transSecondaryRow(outputIdx));
 }
 
 bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
@@ -1630,6 +1682,11 @@ bool PresetTableV2Widget::continuousFxSelectionStagedAnyLocked() const
         if (m_stagedContinuousValid[o])
             return true;
     }
+    for (int o = 0; o < m_stagedMultiFxValid.size(); ++o)
+    {
+        if (m_stagedMultiFxValid[o])
+            return true;
+    }
     return false;
 }
 
@@ -1668,6 +1725,11 @@ bool PresetTableV2Widget::crossfadeHasStagedChangesLocked() const
     for (int o = 0; o < m_stagedContinuousValid.size(); ++o)
     {
         if (m_stagedContinuousValid[o])
+            return true;
+    }
+    for (int o = 0; o < m_stagedMultiFxValid.size(); ++o)
+    {
+        if (m_stagedMultiFxValid[o])
             return true;
     }
     return false;
@@ -1855,6 +1917,401 @@ bool PresetTableV2Widget::spatialGridPreview(const PTTransitionPreset& preset,
     return out.valid;
 }
 
+int PresetTableV2Widget::multiButtonOutputCount() const
+{
+    QMutexLocker lk(&m_stateMutex);
+    return m_outputs.size();
+}
+
+QString PresetTableV2Widget::multiButtonOutputName(int outputIdx) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return QString();
+    const QString name = m_outputs.at(outputIdx).name;
+    return name.isEmpty() ? tr("Output %1").arg(outputIdx + 1) : name;
+}
+
+int PresetTableV2Widget::multiButtonParameterCount() const
+{
+    return 5;
+}
+
+QString PresetTableV2Widget::multiButtonParameterName(int parameter) const
+{
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::TransitionPreset:
+            return tr("Transition preset");
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return tr("Continuous FX preset");
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return tr("MultiFX preset");
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            return tr("Primary row");
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            return tr("Secondary row");
+        default:
+            return QString();
+    }
+}
+
+static PTTransitionMode multiButtonParamToTransitionMode(int parameter)
+{
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::TransitionPreset:
+            return PTTransitionMode::SweepOnly;
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return PTTransitionMode::Continuous;
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return PTTransitionMode::MultiFx;
+        default:
+            return PTTransitionMode::Off;
+    }
+}
+
+static quint8 multiButtonParamToPresetTableInputId(int outputIdx, int parameter)
+{
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            return PTInputId::rowSelector(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::TransitionPreset:
+            return PTInputId::transSweep(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            return PTInputId::transSecondaryRow(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return PTInputId::transContinuousBank(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return PTInputId::multiFxBank(outputIdx);
+        default:
+            return 0;
+    }
+}
+
+int PresetTableV2Widget::multiButtonEntryCount(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return 0;
+    if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            || parameter == PresetTableV2MultiButtonTargetIface::SecondaryRow)
+        return m_rows.size();
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    if (mode == PTTransitionMode::Off)
+        return 0;
+    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
+        return provider->transitionPresetCount(mode);
+    return 0;
+}
+
+QString PresetTableV2Widget::multiButtonEntryName(int outputIdx, int parameter, int index) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return QString();
+    if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            || parameter == PresetTableV2MultiButtonTargetIface::SecondaryRow)
+    {
+        if (index < 0 || index >= m_rows.size())
+            return QString();
+        const QString name = m_rows.at(index).name;
+        return name.isEmpty() ? tr("Row %1").arg(index + 1) : name;
+    }
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    if (mode == PTTransitionMode::Off)
+        return QString();
+    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
+        return provider->transitionPresetName(mode, index);
+    return QString();
+}
+
+int PresetTableV2Widget::multiButtonCurrentIndex(int outputIdx, int parameter) const
+{
+    return multiButtonLiveIndex(outputIdx, parameter);
+}
+
+int PresetTableV2Widget::multiButtonLiveIndex(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return -1;
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            return outputIdx < m_activeRow.size() ? m_activeRow.at(outputIdx) : -1;
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            return liveSecondaryRowIndexLocked(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::TransitionPreset:
+            return liveSweepPresetIndexLocked(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return liveContinuousPresetIndexLocked(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return liveMultiFxPresetIndexLocked(outputIdx);
+        default:
+            return -1;
+    }
+}
+
+bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return false;
+
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            return outputIdx < m_stagedRow.size() && m_stagedRow.at(outputIdx) >= 0;
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            return outputIdx < m_stagedSecondaryValid.size()
+                    && m_stagedSecondaryValid.at(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return outputIdx < m_stagedContinuousValid.size()
+                    && m_stagedContinuousValid.at(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return outputIdx < m_stagedMultiFxValid.size()
+                    && m_stagedMultiFxValid.at(outputIdx);
+        default:
+            return false;
+    }
+}
+
+int PresetTableV2Widget::multiButtonStagedIndex(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return -1;
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            if (outputIdx < m_stagedRow.size())
+                return m_stagedRow.at(outputIdx);
+            return -1;
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            if (outputIdx < m_stagedSecondaryValid.size()
+                    && outputIdx < m_stagedSecondaryRow.size()
+                    && m_stagedSecondaryValid.at(outputIdx))
+                return m_stagedSecondaryRow.at(outputIdx);
+            return -1;
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            if (outputIdx < m_stagedContinuousValid.size()
+                    && outputIdx < m_stagedContinuousPreset.size()
+                    && m_stagedContinuousValid[outputIdx])
+                return m_stagedContinuousPreset[outputIdx];
+            return -1;
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            if (outputIdx < m_stagedMultiFxValid.size()
+                    && outputIdx < m_stagedMultiFxPreset.size()
+                    && m_stagedMultiFxValid[outputIdx])
+                return m_stagedMultiFxPreset[outputIdx];
+            return -1;
+        default:
+            return -1;
+    }
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2Widget::multiButtonLiveInputSource(int outputIdx,
+                                                                               int parameter) const
+{
+    if (outputIdx < 0 || outputIdx >= PTInputId::kMaxRoutableOutputs)
+        return QSharedPointer<QLCInputSource>();
+    if (outputIdx >= m_outputs.size())
+        return QSharedPointer<QLCInputSource>();
+    const quint8 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
+    if (id == 0 && parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
+        return QSharedPointer<QLCInputSource>();
+    return inputSource(id);
+}
+
+bool PresetTableV2Widget::multiButtonSetLiveInputSource(int outputIdx, int parameter,
+                                                        QSharedPointer<QLCInputSource> src)
+{
+    if (outputIdx < 0 || outputIdx >= PTInputId::kMaxRoutableOutputs)
+        return false;
+    if (outputIdx >= m_outputs.size())
+        return false;
+    const quint8 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
+    if (id == 0 && parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
+        return false;
+    setInputSource(src, id);
+    if (m_doc)
+        m_doc->setModified();
+    return true;
+}
+
+bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter, int index)
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return false;
+
+    if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            || parameter == PresetTableV2MultiButtonTargetIface::SecondaryRow)
+    {
+        if (index < -1 || index >= m_rows.size() || !m_crossfadeEnabled)
+            return false;
+        armCrossfadeStagingLocked();
+        if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow)
+            stagePrimaryRowLocked(outputIdx, index);
+        else
+            stageSecondaryRowLocked(outputIdx, index);
+        resetCrossfadeClockLocked();
+        update();
+        if (m_doc)
+            m_doc->setModified();
+        return true;
+    }
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    PresetTableV2TransitionProviderIface* provider = transitionProviderLocked();
+    if (!provider || mode == PTTransitionMode::Off
+            || index < -1 || index >= provider->transitionPresetCount(mode))
+        return false;
+
+    if (parameter == PresetTableV2MultiButtonTargetIface::TransitionPreset)
+    {
+        while (m_liveSweepPreset.size() <= outputIdx)
+            m_liveSweepPreset.append(-1);
+        const int prevSweep = m_liveSweepPreset[outputIdx];
+        m_liveSweepPreset[outputIdx] = index;
+        if (outputIdx < m_stagedSweepValid.size())
+            m_stagedSweepValid[outputIdx] = false;
+        if (outputIdx < m_stagedSweepPreset.size())
+            m_stagedSweepPreset[outputIdx] = -1;
+        if (prevSweep != index)
+            syncCommittedPlaybackStateLocked(outputIdx, false);
+        sendFeedback(index + 1, PTInputId::transSweep(outputIdx));
+    }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset)
+    {
+        if (!m_crossfadeEnabled)
+            return false;
+        armCrossfadeStagingLocked();
+        materializeContinuousRowsLocked(outputIdx, true);
+        stageContinuousPresetLocked(outputIdx, index);
+        resetCrossfadeClockLocked();
+    }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
+    {
+        if (!m_crossfadeEnabled)
+            return false;
+        armCrossfadeStagingLocked();
+        stageMultiFxPresetLocked(outputIdx, index);
+        resetCrossfadeClockLocked();
+    }
+    else
+        return false;
+
+    m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
+    m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
+    m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
+    update();
+    if (m_doc)
+        m_doc->setModified();
+    return true;
+}
+
+bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int index)
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return false;
+
+    if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow)
+    {
+        if (index < -1 || index >= m_rows.size())
+            return false;
+        if (outputIdx < m_stagedRow.size())
+            m_stagedRow[outputIdx] = -1;
+        lk.unlock();
+        setActiveRow(outputIdx, index);
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::rowSelector(outputIdx));
+        refreshRowHighlights();
+        if (m_doc)
+            m_doc->setModified();
+        return true;
+    }
+
+    if (parameter == PresetTableV2MultiButtonTargetIface::SecondaryRow)
+    {
+        if (index < -1 || index >= m_rows.size())
+            return false;
+        while (m_liveSecondaryRow.size() <= outputIdx)
+            m_liveSecondaryRow.append(-1);
+        m_liveSecondaryRow[outputIdx] = index;
+        if (outputIdx < m_stagedSecondaryValid.size())
+            m_stagedSecondaryValid[outputIdx] = false;
+        if (outputIdx < m_stagedSecondaryRow.size())
+            m_stagedSecondaryRow[outputIdx] = -1;
+        materializeContinuousRowsLocked(outputIdx, false);
+        lk.unlock();
+        refreshTransitionPresetCache();
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSecondaryRow(outputIdx));
+        update();
+        if (m_doc)
+            m_doc->setModified();
+        return true;
+    }
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    PresetTableV2TransitionProviderIface* provider = transitionProviderLocked();
+    if (!provider || mode == PTTransitionMode::Off
+            || index < -1 || index >= provider->transitionPresetCount(mode))
+        return false;
+
+    if (parameter == PresetTableV2MultiButtonTargetIface::TransitionPreset)
+    {
+        while (m_liveSweepPreset.size() <= outputIdx)
+            m_liveSweepPreset.append(-1);
+        const int prevSweep = m_liveSweepPreset[outputIdx];
+        m_liveSweepPreset[outputIdx] = index;
+        if (outputIdx < m_stagedSweepValid.size())
+            m_stagedSweepValid[outputIdx] = false;
+        if (outputIdx < m_stagedSweepPreset.size())
+            m_stagedSweepPreset[outputIdx] = -1;
+        if (prevSweep != index)
+            syncCommittedPlaybackStateLocked(outputIdx, false);
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSweep(outputIdx));
+    }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset)
+    {
+        while (m_liveContinuousPreset.size() <= outputIdx)
+            m_liveContinuousPreset.append(-1);
+        m_liveContinuousPreset[outputIdx] = index;
+        if (outputIdx < m_stagedContinuousValid.size())
+            m_stagedContinuousValid[outputIdx] = false;
+        if (outputIdx < m_stagedContinuousPreset.size())
+            m_stagedContinuousPreset[outputIdx] = -1;
+        materializeContinuousRowsLocked(outputIdx, false);
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transContinuousBank(outputIdx));
+    }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
+    {
+        while (m_liveMultiFxPreset.size() <= outputIdx)
+            m_liveMultiFxPreset.append(-1);
+        m_liveMultiFxPreset[outputIdx] = index;
+        if (outputIdx < m_stagedMultiFxValid.size())
+            m_stagedMultiFxValid[outputIdx] = false;
+        if (outputIdx < m_stagedMultiFxPreset.size())
+            m_stagedMultiFxPreset[outputIdx] = -1;
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::multiFxBank(outputIdx));
+    }
+    else
+        return false;
+
+    m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
+    m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
+    m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
+    update();
+    if (m_doc)
+        m_doc->setModified();
+    return true;
+}
+
 void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
 {
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
@@ -1868,12 +2325,16 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
         m_stagedSweepPreset[outputIdx] = -1;
     if (outputIdx < m_stagedContinuousPreset.size())
         m_stagedContinuousPreset[outputIdx] = -1;
+    if (outputIdx < m_stagedMultiFxPreset.size())
+        m_stagedMultiFxPreset[outputIdx] = -1;
     if (outputIdx < m_stagedSecondaryValid.size())
         m_stagedSecondaryValid[outputIdx] = false;
     if (outputIdx < m_stagedSweepValid.size())
         m_stagedSweepValid[outputIdx] = false;
     if (outputIdx < m_stagedContinuousValid.size())
         m_stagedContinuousValid[outputIdx] = false;
+    if (outputIdx < m_stagedMultiFxValid.size())
+        m_stagedMultiFxValid[outputIdx] = false;
     if (!crossfadeHasStagedChangesLocked())
     {
         m_crossfadeSessionActive = false;
@@ -1888,6 +2349,17 @@ void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
         m_stagedSecondaryRow.append(-1);
     while (m_stagedSecondaryValid.size() <= outputIdx)
         m_stagedSecondaryValid.append(false);
+
+    const int liveRow = liveSecondaryRowIndexLocked(outputIdx);
+    if (rowIdx == liveRow)
+    {
+        m_stagedSecondaryRow[outputIdx] = -1;
+        m_stagedSecondaryValid[outputIdx] = false;
+        if (!crossfadeHasStagedChangesLocked())
+            m_crossfadeSessionActive = false;
+        return;
+    }
+
     m_stagedSecondaryRow[outputIdx] = rowIdx;
     m_stagedSecondaryValid[outputIdx] = true;
 }
@@ -1914,6 +2386,18 @@ void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetI
         m_stagedContinuousValid.append(false);
     m_stagedContinuousPreset[outputIdx] = presetIdx;
     m_stagedContinuousValid[outputIdx] = true;
+}
+
+void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return;
+    while (m_stagedMultiFxPreset.size() <= outputIdx)
+        m_stagedMultiFxPreset.append(-1);
+    while (m_stagedMultiFxValid.size() <= outputIdx)
+        m_stagedMultiFxValid.append(false);
+    m_stagedMultiFxPreset[outputIdx] = presetIdx;
+    m_stagedMultiFxValid[outputIdx] = true;
 }
 
 void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
@@ -2018,7 +2502,9 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
 
         if (o < m_stagedSecondaryValid.size() && m_stagedSecondaryValid[o])
         {
-            if (o < m_liveSecondaryRow.size() && o < m_stagedSecondaryRow.size())
+            while (m_liveSecondaryRow.size() <= o)
+                m_liveSecondaryRow.append(-1);
+            if (o < m_stagedSecondaryRow.size())
                 m_liveSecondaryRow[o] = m_stagedSecondaryRow[o];
             m_stagedSecondaryValid[o] = false;
             if (o < m_stagedSecondaryRow.size())
@@ -2042,8 +2528,22 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
             promotedFxPreset = true;
         }
 
+        if (o < m_stagedMultiFxValid.size() && m_stagedMultiFxValid[o])
+        {
+            if (o < m_liveMultiFxPreset.size() && o < m_stagedMultiFxPreset.size())
+                m_liveMultiFxPreset[o] = m_stagedMultiFxPreset[o];
+            m_stagedMultiFxValid[o] = false;
+            if (o < m_stagedMultiFxPreset.size())
+                m_stagedMultiFxPreset[o] = -1;
+            promoted = true;
+            promotedFxPreset = true;
+        }
+
         if (promoted)
+        {
             syncCommittedPlaybackStateLocked(o, promotedFxPreset);
+            sendLiveSelectorFeedbackLocked(o);
+        }
     }
     m_crossfadeSessionActive = false;
     m_crossfadeEditLaneStaged = true;
@@ -2634,7 +3134,13 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     const PTTransitionPreset spatialPreset = presetOverride ? *presetOverride
                                                             : continuousPresetForOutputLocked(outputIdx);
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
-    const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0 && multiFxPreset.enabled;
+    const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
+    const bool hasStagedMultiFx = stagedMultiFxIdx >= 0;
+    const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
+            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
+            : multiFxPreset;
+    const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
+            && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
     if (!continuousEfxActiveForOutputLocked(outputIdx) && !mixMultiFx)
         return;
     const bool morphOutput = stagedPresetOverride && stagedPriVals && stagedSecVals;
@@ -2646,6 +3152,10 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     const quint32 stagedDurationMs = qMax(quint32(1), cycleDurationMsLocked(global, stagedPreset));
     const PTDimmerWaveParams multiFxWaveParams = PTDimmerWaveEngine::paramsFromPreset(multiFxPreset, &global);
     const quint32 multiFxDurationMs = qMax(quint32(1), cycleDurationMsLocked(global, multiFxPreset));
+    const PTDimmerWaveParams stagedMultiFxWaveParams =
+            PTDimmerWaveEngine::paramsFromPreset(stagedMultiFxPreset, &global);
+    const quint32 stagedMultiFxDurationMs =
+            qMax(quint32(1), cycleDurationMsLocked(global, stagedMultiFxPreset));
     ensurePhaseStableCycleLocked(m_continuousElapsedMs, m_continuousLastCycleMs,
                                  outputIdx, durationMs);
     ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs,
@@ -2687,6 +3197,14 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     QHash<QLCPoint, int> multiFxSerialIndex;
     for (int i = 0; i < multiFxOrderCount; ++i)
         multiFxSerialIndex.insert(multiFxOrder.at(i), i);
+    const QList<QLCPoint> stagedMultiFxOrder = mixMultiFx && hasStagedMultiFx
+            ? PresetTableV2SpatialEngine::buildChaseOrder(
+                points, stagedMultiFxPreset, gridSize.width(), gridSize.height())
+            : QList<QLCPoint>();
+    const int stagedMultiFxOrderCount = stagedMultiFxOrder.size();
+    QHash<QLCPoint, int> stagedMultiFxSerialIndex;
+    for (int i = 0; i < stagedMultiFxOrderCount; ++i)
+        stagedMultiFxSerialIndex.insert(stagedMultiFxOrder.at(i), i);
 
     const quint32 fadeMs = 0;
 
@@ -2718,6 +3236,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
             stagedDimmer = PTDimmerWaveEngine::calculateDimmerWave(stagedIterator, stagedWaveParams);
         }
         float multiFxDimmer = dimmer;
+        float stagedMultiFxDimmer = multiFxDimmer;
         if (mixMultiFx)
         {
             const int multiFxHeadOffset = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
@@ -2731,6 +3250,21 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                     multiFxHeadOffset, multiFxTimeOffset);
             multiFxDimmer = PTDimmerWaveEngine::calculateDimmerWave(
                     multiFxIterator, multiFxWaveParams);
+            if (hasStagedMultiFx)
+            {
+                const int stagedMultiFxHeadOffset = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
+                        pt.x(), pt.y(), gridSize.width(), gridSize.height(), stagedMultiFxWaveParams);
+                const int stagedMultiFxSerialIdx = stagedMultiFxSerialIndex.value(pt, 0);
+                const quint32 stagedMultiFxTimeOffset = PTDimmerWaveEngine::serialTimeOffsetMs(
+                        stagedMultiFxSerialIdx, qMax(1, stagedMultiFxOrderCount),
+                        stagedMultiFxDurationMs, stagedMultiFxPreset.propagation);
+                const float stagedMultiFxIterator = PTDimmerWaveEngine::iteratorFromElapsed(
+                        multiFxElapsedMs, stagedMultiFxDurationMs,
+                        stagedMultiFxPreset.startOffset, stagedMultiFxHeadOffset,
+                        stagedMultiFxTimeOffset);
+                stagedMultiFxDimmer = PTDimmerWaveEngine::calculateDimmerWave(
+                        stagedMultiFxIterator, stagedMultiFxWaveParams);
+            }
         }
 
         const GroupHead& head = hit.value();
@@ -2768,14 +3302,31 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         }
         if (mixMultiFx)
         {
-            const QVector<uchar> multiValues = continuousColumnValues(
-                    m_columns,
-                    morphOutput && stagedPriVals ? *stagedPriVals : priVals,
-                    morphOutput && stagedSecVals ? *stagedSecVals : secVals,
-                    double(multiFxDimmer), multiFxPreset.waveShape,
-                    multiFxPreset.waveFadeIn, multiFxPreset.waveFadeOut,
-                    global.intensity);
-            normalValues = blendRowValues(normalValues, multiValues,
+            const QVector<uchar> multiValues = multiFxPreset.enabled
+                    ? continuousColumnValues(
+                        m_columns,
+                        morphOutput && stagedPriVals ? *stagedPriVals : priVals,
+                        morphOutput && stagedSecVals ? *stagedSecVals : secVals,
+                        double(multiFxDimmer), multiFxPreset.waveShape,
+                        multiFxPreset.waveFadeIn, multiFxPreset.waveFadeOut,
+                        global.intensity)
+                    : QVector<uchar>(m_columns.size(), 0);
+            QVector<uchar> effectiveMultiValues = multiValues;
+            if (hasStagedMultiFx)
+            {
+                const QVector<uchar> stagedMultiValues = stagedMultiFxPreset.enabled
+                        ? continuousColumnValues(
+                            m_columns,
+                            morphOutput && stagedPriVals ? *stagedPriVals : priVals,
+                            morphOutput && stagedSecVals ? *stagedSecVals : secVals,
+                            double(stagedMultiFxDimmer), stagedMultiFxPreset.waveShape,
+                            stagedMultiFxPreset.waveFadeIn, stagedMultiFxPreset.waveFadeOut,
+                            global.intensity)
+                        : QVector<uchar>(m_columns.size(), 0);
+                effectiveMultiValues = blendRowValues(multiValues, stagedMultiValues,
+                                                       morphProgress);
+            }
+            normalValues = blendRowValues(normalValues, effectiveMultiValues,
                                           double(m_multiFxBlend) / 255.0);
         }
         applyPointChannels(fader.data(), universes[uni], head, fxi, pt, normalValues, fadeMs);
@@ -3042,7 +3593,13 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const bool morphOutput = stagedPresetOverride && stagedPrimaryOverride && stagedSecondaryOverride;
     const PTTransitionPreset stagedPreset = morphOutput ? *stagedPresetOverride : preset;
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
-    const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0 && multiFxPreset.enabled;
+    const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
+    const bool hasStagedMultiFx = stagedMultiFxIdx >= 0;
+    const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
+            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
+            : multiFxPreset;
+    const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
+            && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
 
     const double increment = PTParamMatrixEngine::transitionIncrement(global, preset);
     const PTTransitionAxis spatialAxis = (global.fxOrientation == 1)
@@ -3090,6 +3647,11 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                                           gridSize.width(), gridSize.height())
             : PTSpatialFixturePlan();
     const int multiFxSerialCount = qMax(1, multiFxSpatialPlan.count());
+    const PTSpatialFixturePlan stagedMultiFxSpatialPlan = mixMultiFx && hasStagedMultiFx
+            ? PTSpatialFixturePlan::build(points, stagedMultiFxPreset, global,
+                                          gridSize.width(), gridSize.height())
+            : PTSpatialFixturePlan();
+    const int stagedMultiFxSerialCount = qMax(1, stagedMultiFxSpatialPlan.count());
 
     auto dimmerAtPoint = [&](const QLCPoint& pt, quint32 timeMs) -> float {
         const int serialIdx = spatialPlan.indexByPoint.value(pt, 0);
@@ -3107,6 +3669,14 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         const quint32 multiFxCycleMs = qMax(quint32(1), cycleDurationMsLocked(global, multiFxPreset));
         return matrixDimmerAtPoint(pt, timeMs, multiFxCycleMs, multiFxPreset, global,
                                    gridSize, serialIdx, multiFxSerialCount);
+    };
+    auto stagedMultiFxDimmerAtPoint = [&](const QLCPoint& pt, quint32 timeMs) -> float {
+        const int serialIdx = stagedMultiFxSpatialPlan.indexByPoint.value(pt, 0);
+        const quint32 stagedMultiFxCycleMs =
+                qMax(quint32(1), cycleDurationMsLocked(global, stagedMultiFxPreset));
+        return matrixDimmerAtPoint(pt, timeMs, stagedMultiFxCycleMs,
+                                   stagedMultiFxPreset, global, gridSize, serialIdx,
+                                   stagedMultiFxSerialCount);
     };
 
     const bool snapBlend = (preset.waveShape == 1);
@@ -3216,14 +3786,33 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             if (mixMultiFx)
             {
                 const float multiFxDimmer = multiFxDimmerAtPoint(pt, multiFxElapsedMs);
-                const QVector<uchar> multiValues = continuousColumnValues(
-                        m_columns,
-                        morphOutput ? *stagedPrimaryOverride : priVals,
-                        morphOutput ? *stagedSecondaryOverride : secVals,
-                        double(multiFxDimmer), multiFxPreset.waveShape,
-                        multiFxPreset.waveFadeIn, multiFxPreset.waveFadeOut,
-                        global.intensity);
-                finalValues = blendRowValues(finalValues, multiValues,
+                const QVector<uchar> multiValues = multiFxPreset.enabled
+                        ? continuousColumnValues(
+                            m_columns,
+                            morphOutput ? *stagedPrimaryOverride : priVals,
+                            morphOutput ? *stagedSecondaryOverride : secVals,
+                            double(multiFxDimmer), multiFxPreset.waveShape,
+                            multiFxPreset.waveFadeIn, multiFxPreset.waveFadeOut,
+                            global.intensity)
+                        : QVector<uchar>(m_columns.size(), 0);
+                QVector<uchar> effectiveMultiValues = multiValues;
+                if (hasStagedMultiFx)
+                {
+                    const float stagedMultiFxDimmer = stagedMultiFxDimmerAtPoint(
+                            pt, multiFxElapsedMs);
+                    const QVector<uchar> stagedMultiValues = stagedMultiFxPreset.enabled
+                            ? continuousColumnValues(
+                                m_columns,
+                                morphOutput ? *stagedPrimaryOverride : priVals,
+                                morphOutput ? *stagedSecondaryOverride : secVals,
+                                double(stagedMultiFxDimmer), stagedMultiFxPreset.waveShape,
+                                stagedMultiFxPreset.waveFadeIn, stagedMultiFxPreset.waveFadeOut,
+                                global.intensity)
+                            : QVector<uchar>(m_columns.size(), 0);
+                    effectiveMultiValues = blendRowValues(multiValues, stagedMultiValues,
+                                                           morphProgress);
+                }
+                finalValues = blendRowValues(finalValues, effectiveMultiValues,
                                              double(m_multiFxBlend) / 255.0);
             }
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues, 0);
@@ -3634,6 +4223,7 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
         writeDMXFixtureGroup(timer, universes, xfEffective);
     else
         writeDMXLegacy(universes, xfEffective);
+
 }
 
 // ==========================================================================
@@ -3870,6 +4460,10 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             else if (o < m_liveContinuousPreset.size())
             {
                 m_liveContinuousPreset[o] = presetIdx;
+                if (o < m_stagedContinuousValid.size())
+                    m_stagedContinuousValid[o] = false;
+                if (o < m_stagedContinuousPreset.size())
+                    m_stagedContinuousPreset[o] = -1;
                 materializeContinuousRowsLocked(o, false);
                 if (!initialSync && o < m_continuousElapsedMs.size())
                 {
@@ -3880,7 +4474,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             }
             lk2.unlock();
             refreshTransitionPresetCache();
-            sendFeedback(value, PTInputId::transContinuousBank(o));
+            if (!toStaged)
+                sendFeedback(value, PTInputId::transContinuousBank(o));
             return;
         }
 
@@ -3888,32 +4483,54 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         {
             QMutexLocker lk2(&m_stateMutex);
             const bool toStaged = !initialSync && xfEnabled && crossfadeRoutesToStagedLocked();
+            const int rowIdx = PresetTableV2SpatialEngine::tableRowIndexFromInput(value, numRows);
             if (toStaged)
             {
                 armCrossfadeStagingLocked();
-                stageSecondaryRowLocked(o, PresetTableV2SpatialEngine::tableRowIndexFromInput(
-                        value, numRows));
+                stageSecondaryRowLocked(o, rowIdx);
             }
-            else if (o < m_liveSecondaryRow.size())
+            else
             {
-                m_liveSecondaryRow[o] = PresetTableV2SpatialEngine::tableRowIndexFromInput(
-                        value, numRows);
+                while (m_liveSecondaryRow.size() <= o)
+                    m_liveSecondaryRow.append(-1);
+                m_liveSecondaryRow[o] = rowIdx;
+                if (o < m_stagedSecondaryValid.size())
+                    m_stagedSecondaryValid[o] = false;
+                if (o < m_stagedSecondaryRow.size())
+                    m_stagedSecondaryRow[o] = -1;
             }
             lk2.unlock();
             refreshTransitionPresetCache();
-            sendFeedback(value, PTInputId::transSecondaryRow(o));
+            if (!toStaged)
+                sendFeedback(value, PTInputId::transSecondaryRow(o));
             return;
         }
 
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::multiFxBank(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            while (m_liveMultiFxPreset.size() <= o)
-                m_liveMultiFxPreset.append(-1);
-            m_liveMultiFxPreset[o] = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
+            const bool toStaged = !initialSync && xfEnabled && crossfadeRoutesToStagedLocked();
+            const int presetIdx = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
                     value, multiFxPresetCount);
+            if (toStaged)
+            {
+                armCrossfadeStagingLocked();
+                stageMultiFxPresetLocked(o, presetIdx);
+                resetCrossfadeClockLocked();
+            }
+            else
+            {
+                while (m_liveMultiFxPreset.size() <= o)
+                    m_liveMultiFxPreset.append(-1);
+                m_liveMultiFxPreset[o] = presetIdx;
+                if (o < m_stagedMultiFxValid.size())
+                    m_stagedMultiFxValid[o] = false;
+                if (o < m_stagedMultiFxPreset.size())
+                    m_stagedMultiFxPreset[o] = -1;
+            }
             lk2.unlock();
-            sendFeedback(value, PTInputId::multiFxBank(o));
+            if (!toStaged)
+                sendFeedback(value, PTInputId::multiFxBank(o));
             return;
         }
     }
@@ -3924,31 +4541,7 @@ void PresetTableV2Widget::updateFeedback()
     QMutexLocker lk(&m_stateMutex);
     for (int o = 0; o < m_activeRow.size(); ++o)
     {
-        if (o >= PTInputId::kMaxRoutableOutputs)
-            break;
-
-        int ar = m_activeRow[o];
-        sendFeedback(ar < 0 ? 0 : ar + 1, quint8(o));
-
-        const int liveSweep = (o < m_liveSweepPreset.size())
-                ? m_liveSweepPreset[o] : m_outputs[o].sweepPresetIndex;
-        sendFeedback(liveSweep < 0 ? 0 : liveSweep + 1, PTInputId::transSweep(o));
-
-        const int liveCont = (o < m_liveContinuousPreset.size())
-                ? m_liveContinuousPreset[o] : m_outputs[o].continuousPresetIndex;
-        sendFeedback(liveCont < 0 ? 0 : liveCont + 1, PTInputId::transContinuousBank(o));
-
-        const int liveMulti = (o < m_liveMultiFxPreset.size())
-                ? m_liveMultiFxPreset[o] : m_outputs[o].multiFxPresetIndex;
-        sendFeedback(liveMulti < 0 ? 0 : liveMulti + 1, PTInputId::multiFxBank(o));
-
-        const int liveSec = (o < m_liveSecondaryRow.size()) ? m_liveSecondaryRow[o] : -1;
-        if (liveSec >= 0)
-            sendFeedback(liveSec + 1, PTInputId::transSecondaryRow(o));
-        else if (o < m_outputs.size() && m_outputs[o].secondaryRowIndex >= 0)
-            sendFeedback(m_outputs[o].secondaryRowIndex + 1, PTInputId::transSecondaryRow(o));
-        else
-            sendFeedback(0, PTInputId::transSecondaryRow(o));
+        sendLiveSelectorFeedbackLocked(o);
     }
     sendFeedback(m_multiFxBlend, PTInputId::kMultiFxBlend);
 }
@@ -4001,7 +4594,8 @@ void PresetTableV2Widget::editProperties()
     PresetTableV2ConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy,
                                 xfEnabled, xfSrc, multiFxBlendSrc, multiFxRestartSrc,
                                 contFxSelectorMode, page(),
-                                modeCopy, groupIdCopy, spatialCopy, linkedTransitionId, this);
+                                modeCopy, groupIdCopy, spatialCopy, linkedTransitionId,
+                                this);
 
     if (dlg.exec() != QDialog::Accepted) return;
 
@@ -4075,9 +4669,11 @@ void PresetTableV2Widget::editProperties()
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
+            m_stagedMultiFxPreset.fill(-1, m_stagedMultiFxPreset.size());
             m_stagedSecondaryValid.fill(false, m_stagedSecondaryValid.size());
             m_stagedSweepValid.fill(false, m_stagedSweepValid.size());
             m_stagedContinuousValid.fill(false, m_stagedContinuousValid.size());
+            m_stagedMultiFxValid.fill(false, m_stagedMultiFxValid.size());
             m_crossfadeGlobalPos = 0;
             m_crossfadeStartPos  = 0;
             m_crossfadePrevPos   = 0;
@@ -4210,7 +4806,6 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
     obj["continuousFxSelectorMode"] = continuousFxSelectorModeToString(m_continuousFxSelectorMode);
     obj["mode"] = (m_mode == PTMode::FixtureGroup) ? QStringLiteral("FixtureGroup")
                                                     : QStringLiteral("Legacy");
-
     if (m_mode == PTMode::FixtureGroup)
     {
         FixtureGroup *grp = doc->fixtureGroup(m_fixtureGroupId);
@@ -4659,6 +5254,10 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLMultiFxRestartInput)
         {
             loadXMLSources(root, PTInputId::kMultiFxRestart);
+        }
+        else if (root.name() == KXMLSelectorStateOutput)
+        {
+            root.skipCurrentElement();
         }
         else
         {

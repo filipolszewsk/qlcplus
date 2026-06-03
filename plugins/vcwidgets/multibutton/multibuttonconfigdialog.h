@@ -30,6 +30,7 @@
 
 class Doc;
 class InputSelectionWidget;
+class PresetTableV2MultiButtonTargetIface;
 
 class MultiButtonConfigDialog : public QDialog
 {
@@ -75,6 +76,10 @@ public:
         const QList<QKeySequence>&                   spreadSlotKeys,
         const QList<bool>&                           functionEntryFlash,
         const QList<QColor>&                         functionEntryLabelColors,
+        quint32                            widgetTargetId,
+        int                                widgetOutputIndex,
+        int                                widgetParameter,
+        QSharedPointer<QLCInputSource>     widgetLiveInputSource,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -115,6 +120,10 @@ public:
     QList<QKeySequence>                   spreadSlotKeys()   const;
     QList<bool>                           functionEntryFlash() const;
     QList<QColor>                         functionEntryLabelColors() const;
+    quint32                               widgetTargetId() const;
+    int                                   widgetOutputIndex() const;
+    int                                   widgetParameter() const;
+    QSharedPointer<QLCInputSource>        widgetLiveInputSource() const;
 
     void accept() override;
 
@@ -177,6 +186,9 @@ private slots:
     void slotLevelMoveDown();
     void slotLevelSelectionChanged();
     void slotPresetTableItemChanged(QTableWidgetItem* item);
+    void slotWidgetTargetChanged(int index);
+    void slotWidgetOutputChanged(int index);
+    void slotWidgetParameterChanged(int index);
 
 private:
     void rebuildList();
@@ -209,6 +221,12 @@ private:
     void toggleExcludeRow(int row);
     int  entryCountForAutomation() const;
     QString entryLabelForAutomation(int index) const;
+    void rebuildWidgetTargetCombo(quint32 preferredId);
+    void rebuildWidgetOutputCombo();
+    void rebuildWidgetParameterCombo();
+    void rebuildWidgetPreview();
+    void updateWidgetLiveInputUi();
+    PresetTableV2MultiButtonTargetIface* selectedWidgetTarget() const;
     static quint64 bindingKey(quint32 fixtureId, quint32 channel);
     static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
 
@@ -231,6 +249,7 @@ private:
     QStackedWidget*  m_modeStack    = nullptr;
     QWidget*         m_functionPage = nullptr;
     QWidget*         m_levelPage    = nullptr;
+    QWidget*         m_widgetPage   = nullptr;
 
     QListWidget*  m_listWidget    = nullptr;
     QPushButton*  m_addBtn        = nullptr;
@@ -258,6 +277,17 @@ private:
     QCheckBox*    m_functionFlashCheck     = nullptr;
     QPushButton*  m_lvlUpBtn         = nullptr;
     QPushButton*  m_lvlDownBtn       = nullptr;
+
+    QComboBox*    m_widgetTargetCombo = nullptr;
+    QComboBox*    m_widgetOutputCombo = nullptr;
+    QComboBox*    m_widgetParameterCombo = nullptr;
+    QListWidget*  m_widgetPreviewList = nullptr;
+    QLabel*       m_widgetLiveInputStatus = nullptr;
+    InputSelectionWidget* m_widgetLiveInputSel = nullptr;
+    quint32       m_widgetTargetId = VCWidget::invalidId();
+    int           m_widgetOutputIndex = 0;
+    int           m_widgetParameter = 0;
+    QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
 
     QSpinBox*     m_longPressSpin     = nullptr;
     QCheckBox*    m_offAtEndCheck     = nullptr;

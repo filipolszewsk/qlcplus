@@ -38,7 +38,8 @@ class EntrySelectOverlay;
 enum class MultiButtonMode
 {
     Function,
-    Level
+    Level,
+    Widget
 };
 
 enum class MultiButtonLayout
@@ -300,6 +301,10 @@ private:
     void cancelEntrySelectPreview();
     void commitEntrySelectPreview();
     void armEntrySelectPopupDismissTimer();
+    bool syncWidgetLinkLiveStagedState();
+    QSharedPointer<QLCInputSource> widgetLiveInputSourceResolved() const;
+    void syncWidgetLiveInputSourceToTarget();
+    void markWidgetSelectorPublishPending();
     int  displayedEntryIndex() const;
     void syncEntrySelectInputOutput(uchar rawValue);
     uchar entrySelectOutputValueForSlot(int slot) const;
@@ -311,6 +316,8 @@ private:
     QString popupMenuTextForEntry(int idx) const;
 
     void recalcLayoutSize();
+    bool widgetLinkEntryCountDynamic() const;
+    void syncDynamicEntryCountLayout();
     void clampSpreadPageIndex();
     int  totalSpreadSlots() const;
     int  spreadSlotsPerPage(bool forPaging) const;
@@ -327,6 +334,7 @@ private:
                   bool isSelected, bool isPressed, bool showMonitorBorder) const;
     int monitorHighlightIndex() const;
     int stagedHighlightIndex() const;
+    bool widgetLinkUsesInternalStaging() const;
     void paintSpread(QPainter& p);
     void paintSingle(QPainter& p);
     QColor buttonTextColor(const QColor& tileBg) const;
@@ -359,6 +367,8 @@ private:
                                       const QList<Universe*>& universes) const;
     quint8 resolvedPresetChannelValue(const LevelPreset& preset, int channelIndex,
                                       const QList<Universe*>& universes) const;
+    class PresetTableV2MultiButtonTargetIface* widgetLinkTarget() const;
+    void releaseWidgetLiveFaders();
 
     // ---- Mode ------------------------------------------------------------
     MultiButtonMode m_mode = MultiButtonMode::Function;
@@ -375,13 +385,24 @@ private:
     // ---- Level mode state -----------------------------------------------
     QList<LevelChannelBinding> m_levelChannelBindings;
     QList<LevelPreset>         m_levelPresets;
+    quint32                    m_widgetTargetId = VCWidget::invalidId();
+    int                        m_widgetOutputIndex = 0;
+    int                        m_widgetParameter = 0;
+    int                        m_lastResolvedEntryCount = -1;
+    QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
     mutable QMutex     m_dmxMutex;
     QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
+    QMap<quint32, QSharedPointer<GenericFader>> m_widgetLiveFaders;
+    bool           m_widgetLiveWriteDirty = true;
+    quint32        m_widgetLiveLastUniverse = UINT_MAX;
+    quint32        m_widgetLiveLastChannel = UINT_MAX;
+    uchar          m_widgetLiveLastValue = 0;
     int            m_lastWrittenPresetIndex = -1;
     QList<uchar>   m_lastWrittenPresetValues;
 
     int            m_currentIndex = -1;
     bool           m_visualOnly   = false;
+    bool           m_widgetLiveActivationOverride = false;
     bool           m_stageBeforeCommit    = false;
     int            m_stagedIndex          = -1;
     uchar          m_commitInputLastValue = 0;

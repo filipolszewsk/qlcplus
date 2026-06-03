@@ -37,6 +37,7 @@ add_library(presettablev2_vcwidget MODULE
     ptspatialfixtureplan.cpp ptspatialfixtureplan.h
     ptspatialfixturegridwidget.cpp ptspatialfixturegridwidget.h
     presettablev2controliface.h
+    presettablev2multibuttoniface.h
     presettablev2transitionprovideriface.h
     presettablev2vclookup.cpp presettablev2vclookup.h
 )

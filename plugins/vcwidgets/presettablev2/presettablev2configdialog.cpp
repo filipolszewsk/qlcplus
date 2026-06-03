@@ -299,16 +299,16 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
         inLay->addWidget(box);
     };
 
-    addInput(tr("Primary preset selector"), m_inputSel, rowSrc,
-             tr("DMX 1–N = table row (primary content). 0 = off. 101+ = flash that row."));
-    addInput(tr("Transition selector"), m_transSweepInputSel, transSweepSrc,
-             tr("Transition preset for primary row recall (can stay ON with Continuous FX). 0 = instant."));
-    addInput(tr("Continuous FX selector"), m_transContinuousInputSel, transContinuousSrc,
-             tr("Continuous FX blend primary↔secondary (works with Transitions ON). 0 = off."));
-    addInput(tr("MultiFX selector"), m_multiFxInputSel, multiFxSrc,
-             tr("Background MultiFX preset. It runs on the MultiFX clock and is revealed by MultiFX blend."));
-    addInput(tr("Secondary row"), m_transSecondaryInputSel, transSecondarySrc,
-             tr("Continuous only: DMX 1 = table row 1, 2 = row 2, … 0 = use Secondary combo below."));
+    addInput(tr("Primary live selector / snapshot"), m_inputSel, rowSrc,
+             tr("Live primary row for snapshots/cuelists. DMX 1–N = table row, 0 = off. 101+ = flash that row."));
+    addInput(tr("Transition live selector / snapshot"), m_transSweepInputSel, transSweepSrc,
+             tr("Live transition preset for snapshots/cuelists. 0 = instant."));
+    addInput(tr("Continuous FX live selector / snapshot"), m_transContinuousInputSel, transContinuousSrc,
+             tr("Live Continuous FX preset for snapshots/cuelists. 0 = off."));
+    addInput(tr("MultiFX live selector / snapshot"), m_multiFxInputSel, multiFxSrc,
+             tr("Live MultiFX preset for snapshots/cuelists. MultiFX blend still controls how much is revealed."));
+    addInput(tr("Secondary live selector / snapshot"), m_transSecondaryInputSel, transSecondarySrc,
+             tr("Live secondary row for snapshots/cuelists. DMX 1 = table row 1, 2 = row 2, 0 = use Secondary combo below."));
     rootLay->addLayout(inLay);
 
     rebuildRowCheckboxes();
