@@ -2028,6 +2028,13 @@ bool VCFrame::loadXML(QXmlStreamReader &root)
 
             if (widget->loadXML(root) == false)
             {
+                const QXmlStreamAttributes attrs = root.attributes();
+                qWarning() << Q_FUNC_INFO
+                           << "Plugin widget loadXML failed — removing widget."
+                           << "pluginId:" << pluginId
+                           << "id:" << attrs.value(KXMLQLCVCWidgetID).toString()
+                           << "caption:" << attrs.value(KXMLQLCVCCaption).toString();
+                root.skipCurrentElement();
                 delete widget;
             }
             else

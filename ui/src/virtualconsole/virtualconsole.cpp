@@ -1795,28 +1795,47 @@ void VirtualConsole::slotEditPaste()
         && !m_selectedWidgets.isEmpty()
         && !m_clipboard.isEmpty())
     {
-        int sourceType = m_clipboard.first()->type();
-        bool allSameType = true;
-        foreach (VCWidget* w, m_selectedWidgets)
+        bool selectionIsClipboard = (m_selectedWidgets.size() == m_clipboard.size());
+        if (selectionIsClipboard)
         {
-            if (w->type() != sourceType || w->allowChildren())
+            for (int i = 0; i < m_selectedWidgets.size(); ++i)
             {
-                allSameType = false;
-                break;
+                if (m_selectedWidgets.at(i) != m_clipboard.at(i))
+                {
+                    selectionIsClipboard = false;
+                    break;
+                }
             }
         }
-        if (allSameType)
+
+        if (!selectionIsClipboard)
         {
-            VCWidget* source = m_clipboard.first();
-            VCPastePropertiesDialog dlg(source, m_selectedWidgets.first(), this);
-            if (dlg.exec() == QDialog::Accepted)
+            int sourceType = m_clipboard.first()->type();
+            bool allSameType = true;
+            foreach (VCWidget* w, m_selectedWidgets)
             {
-                VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
-                if (flags != 0)
-                    foreach (VCWidget* w, m_selectedWidgets)
-                        w->applyPropertiesFrom(source, flags);
+                if (w->type() != sourceType || w->allowChildren())
+                {
+                    allSameType = false;
+                    break;
+                }
             }
-            return;
+            if (allSameType)
+            {
+                VCWidget* source = m_clipboard.first();
+                VCPastePropertiesDialog dlg(source, m_selectedWidgets.first(), this);
+                if (dlg.exec() == QDialog::Accepted)
+                {
+                    VCWidget::PastePropertyGroups flags = dlg.selectedFlags();
+                    if (flags != 0)
+                    {
+                        foreach (VCWidget* w, m_selectedWidgets)
+                            w->applyPropertiesFrom(source, flags);
+                        m_doc->setModified();
+                    }
+                }
+                return;
+            }
         }
     }
 
@@ -1892,6 +1911,8 @@ void VirtualConsole::slotEditPaste()
             copy->move(p);
             copy->show();
         }
+
+        m_doc->setModified();
     }
 
     updateActions();
@@ -2933,21 +2954,8 @@ QList<VCWidget *> VirtualConsole::getChildren(VCWidget *obj)
 
 void VirtualConsole::postLoad()
 {
-    m_contents->postLoad();
-
-    /* apply GM values
-      this should probably be placed in another place, but at the moment m_properties
-      is just loaded in VirtualConsole */
-    m_doc->inputOutputMap()->setGrandMasterValue(255);
-    m_doc->inputOutputMap()->setGrandMasterValueMode(m_properties.grandMasterValueMode());
-    m_doc->inputOutputMap()->setGrandMasterChannelMode(m_properties.grandMasterChannelMode());
-
-    /* Go through widgets, check IDs and register */
-    /* widgets to the map */
-    /* This code is the same as the one in addWidgetInMap() */
-    /* We have to repeat it to limit conflicts if */
-    /* one widget was not saved with a valid ID, */
-    /* as addWidgetInMap ensures the widget WILL be added */
+    /* Register widgets before postLoad() so plugin widgets can resolve cross-links
+       (e.g. Multi Button → Preset Table via VirtualConsole::widget()). */
     QList<VCWidget *> widgetsList = getChildren(m_contents);
     QList<VCWidget *> invalidWidgetsList;
     foreach (VCWidget *widget, widgetsList)
@@ -2965,6 +2973,15 @@ void VirtualConsole::postLoad()
     }
     foreach (VCWidget *widget, invalidWidgetsList)
         addWidgetInMap(widget);
+
+    m_contents->postLoad();
+
+    /* apply GM values
+      this should probably be placed in another place, but at the moment m_properties
+      is just loaded in VirtualConsole */
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+    m_doc->inputOutputMap()->setGrandMasterValueMode(m_properties.grandMasterValueMode());
+    m_doc->inputOutputMap()->setGrandMasterChannelMode(m_properties.grandMasterChannelMode());
 
     m_dockArea->setGrandMasterVisible(m_properties.grandMasterVisible());
     m_dockArea->setGrandMasterInvertedAppearance(m_properties.grandMasterSliderMode());

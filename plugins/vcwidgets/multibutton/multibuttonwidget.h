@@ -240,6 +240,7 @@ public:
     void      updateFeedback() override;
     bool      loadXML(QXmlStreamReader& root) override;
     bool      saveXML(QXmlStreamWriter* doc) override;
+    void      postLoad() override;
     void      editProperties() override;
 
     QMenu*    customMenu(QMenu* parentMenu) override;

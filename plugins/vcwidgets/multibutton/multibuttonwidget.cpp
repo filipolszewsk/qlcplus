@@ -228,7 +228,10 @@ static EntryInputBinding readInputBlock(QXmlStreamReader& root, VCWidget* widget
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLQLCVCWidgetInput)
+        {
             binding.source = widget->getXMLInput(root);
+            root.skipCurrentElement();
+        }
         else if (root.name() == KXMLQLCVCWidgetKey)
             binding.key = VCWidget::stripKeySequence(QKeySequence(root.readElementText()));
         else
@@ -1363,6 +1366,9 @@ void MultiButtonWidget::writeDMX(MasterTimer* /*timer*/, QList<Universe*> univer
         PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
         if (!target)
             return;
+
+        if (syncWidgetLinkLiveStagedState())
+            update();
 
         QSharedPointer<QLCInputSource> src = widgetLiveInputSourceResolved();
         if (src.isNull() || !src->isValid())
@@ -2911,7 +2917,11 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
 int MultiButtonWidget::monitorHighlightIndex() const
 {
     if (m_mode == MultiButtonMode::Widget)
+    {
+        if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
+            return target->multiButtonLiveIndex(m_widgetOutputIndex, m_widgetParameter);
         return m_monitorMatchIndex >= 0 ? m_monitorMatchIndex : m_currentIndex;
+    }
 
     if (!m_monitorChannelValues)
         return -1;
@@ -2934,6 +2944,16 @@ int MultiButtonWidget::stagedHighlightIndex() const
 {
     if (!stagingActive() && !widgetLinkUsesInternalStaging())
         return -1;
+
+    if (widgetLinkUsesInternalStaging())
+    {
+        PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+        if (!target
+                || !target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter))
+            return -1;
+        return target->multiButtonStagedIndex(m_widgetOutputIndex, m_widgetParameter);
+    }
+
     return m_stagedIndex;
 }
 
@@ -3183,6 +3203,8 @@ void MultiButtonWidget::setPage(int pNum)
 void MultiButtonWidget::showEvent(QShowEvent* event)
 {
     VCWidget::showEvent(event);
+    syncDynamicEntryCountLayout();
+    recalcLayoutSize();
     if (m_doc != nullptr && m_doc->mode() == Doc::Operate)
         syncAllInputSourcePages();
 }
@@ -3807,7 +3829,10 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setAutomationProfiles(m_automationProfiles, m_activeAutomationProfile);
     copy->m_functionEntryFlash = m_functionEntryFlash;
     copy->m_functionEntryLabelColors = m_functionEntryLabelColors;
+    copy->setPluginId(KXMLPluginIdVal);
+    copy->syncWidgetLiveInputSourceToTarget();
     copy->syncEntryInputSources();
+    copy->updateDmxRegistration();
     return copy;
 }
 
@@ -4444,11 +4469,23 @@ static QString normalizeIconPath(const QString& path, Doc* doc)
     return doc->normalizeComponentPath(path);
 }
 
+void MultiButtonWidget::postLoad()
+{
+    syncDynamicEntryCountLayout();
+    recalcLayoutSize();
+    update();
+}
+
 bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 {
-    if (root.name() != KXMLRoot) return false;
+    if (root.name() != KXMLRoot)
+        return false;
 
-    loadXMLCommon(root);
+    if (!loadXMLCommon(root))
+    {
+        qWarning() << Q_FUNC_INFO << "loadXMLCommon failed for Multi Button id" << id();
+        return false;
+    }
 
     QList<quint32>       ids;
     QStringList          labels;
@@ -4520,8 +4557,7 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLSpread)
         {
             const auto attrs = root.attributes();
-            if (attrs.value(KXMLSpreadEnabled).toInt() != 0)
-                m_layout = MultiButtonLayout::Spread;
+            const bool spreadEnabled = attrs.value(KXMLSpreadEnabled).toInt() != 0;
             setSpreadColumns(attrs.value(KXMLSpreadColumns).toInt());
             setSpreadRows(attrs.value(KXMLSpreadRows).toInt());
             setSpreadHMargin(attrs.value(KXMLSpreadHMargin).toInt());
@@ -4529,6 +4565,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             setSpreadTileWidth(attrs.value(KXMLSpreadTileW).toInt());
             setSpreadTileHeight(attrs.value(KXMLSpreadTileH).toInt());
             setSpreadPages(attrs.value(KXMLSpreadPages).toInt());
+            setWidgetLayout(spreadEnabled ? MultiButtonLayout::Spread
+                                          : MultiButtonLayout::Single);
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLAutomation)
@@ -4654,11 +4692,19 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
                 else if (root.name() == KXMLLevelValueFormula)
                 {
                     const int fi = root.attributes().value(KXMLLevelValueFormulaIndex).toInt();
-                    const QString text = root.attributes().value(KXMLLevelValueFormulaText).toString();
+                    QString text = root.attributes().value(KXMLLevelValueFormulaText).toString();
+                    while (root.readNext() != QXmlStreamReader::EndElement)
+                    {
+                        if (root.tokenType() == QXmlStreamReader::Characters)
+                        {
+                            const QString body = root.text().toString().trimmed();
+                            if (!body.isEmpty())
+                                text = body;
+                        }
+                    }
                     while (preset.valueFormulas.size() <= fi)
                         preset.valueFormulas.append(QString());
                     preset.valueFormulas[fi] = text;
-                    root.skipCurrentElement();
                 }
                 else
                     root.skipCurrentElement();
@@ -4812,6 +4858,12 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     m_automationLastValue = 0;
     recalcLayoutSize();
 
+    if (root.hasError())
+    {
+        qWarning() << Q_FUNC_INFO << "XML reader warning after load for Multi Button id"
+                   << id() << root.errorString();
+    }
+
     return true;
 }
 
@@ -4940,13 +4992,13 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
                     continue;
                 doc->writeStartElement(KXMLLevelValueFormula);
                 doc->writeAttribute(KXMLLevelValueFormulaIndex, QString::number(fi));
-                doc->writeAttribute(KXMLLevelValueFormulaText, formula);
+                doc->writeCharacters(formula);
                 doc->writeEndElement();
             }
             doc->writeEndElement();
         }
     }
-    else
+    else if (m_mode == MultiButtonMode::Function)
     {
         for (int i = 0; i < m_functionIds.size(); ++i)
         {
