@@ -341,6 +341,7 @@ private:
     int effectiveSecondaryRowLocked(int outputIdx, int activeRow) const;
 
     bool continuousCrossfadeModeLocked(int outputIdx) const;
+    bool multiFxCrossfadeModeLocked(int outputIdx) const;
     bool crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const;
     bool continuousCrossfadeActiveAnyLocked() const;
     bool continuousFxSelectionStagedAnyLocked() const;
