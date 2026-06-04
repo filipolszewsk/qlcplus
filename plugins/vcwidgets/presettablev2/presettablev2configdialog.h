@@ -141,6 +141,8 @@ public:
                                      const QVector<PTOutput>&  outputs,
                                      const QVector<QSharedPointer<QLCInputSource>>& sources,
                                      bool crossfadeEnabled,
+                                     bool syncMultiFxPhaseToCrossfade,
+                                     int multiFxCrossfadeSyncOffsetMs,
                                      QSharedPointer<QLCInputSource> crossfadeSrc,
                                      QSharedPointer<QLCInputSource> multiFxBlendSrc,
                                      QSharedPointer<QLCInputSource> multiFxRestartSrc,
@@ -163,6 +165,8 @@ public:
     QSharedPointer<QLCInputSource> multiFxInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
+    bool syncMultiFxPhaseToCrossfade() const;
+    int multiFxCrossfadeSyncOffsetMs() const;
     QSharedPointer<QLCInputSource> crossfadeInputSource() const;
     QSharedPointer<QLCInputSource> multiFxBlendInputSource() const;
     QSharedPointer<QLCInputSource> multiFxRestartInputSource() const;
@@ -233,6 +237,8 @@ private:
 
     // Crossfade section (widget-level)
     QCheckBox*            m_crossfadeChk      = nullptr;
+    QCheckBox*            m_syncMultiFxPhaseChk = nullptr;
+    QSpinBox*             m_multiFxSyncOffsetSpin = nullptr;
     QComboBox*            m_contFxModeCombo   = nullptr;
     InputSelectionWidget* m_xfadeInputSel     = nullptr;
     InputSelectionWidget* m_multiFxBlendInputSel = nullptr;

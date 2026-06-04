@@ -334,6 +334,7 @@ private:
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
     bool multiFxActiveForOutputLocked(int outputIdx) const;
     int stagedMultiFxPresetIndexLocked(int outputIdx) const;
+    bool hasStagedMultiFxAnyLocked() const;
     /** Sweep on primary row change only when Continuous is not driving the layer. */
     bool sweepOnPrimaryChangeLocked(int outputIdx, int newActiveRow) const;
     /** Secondary table row for Continuous only (DMX 128+ / Properties / activeRow). */
@@ -359,6 +360,9 @@ private:
     void stageMultiFxPresetLocked(int outputIdx, int presetIdx);
     void tickCrossfadeClockLocked(MasterTimer* timer);
     void resetCrossfadeClockLocked();
+    /** Reset MultiFX phase when crossfade fader leaves the start edge (mirror cue-list EFX lazy-start). */
+    void syncMultiFxPhaseOnCrossfadeMotionLocked();
+    void resetMultiFxCrossfadePhaseAnchorLocked();
     quint32 crossfadeClockCycleMsLocked(const PTGlobalEffectSettings& global) const;
     uchar crossfadeEffectiveLocked(uchar xfPos, uchar xfStartPos) const;
     void promoteStagedToLiveLocked();
@@ -445,6 +449,12 @@ public:
     bool              m_crossfadeSessionActive = false;
     bool              m_crossfadeEditLaneStaged = true;
     bool              m_initialInputSyncPending = false;
+    /** When true, reset MultiFX phase as manual crossfade leaves the start edge. */
+    bool              m_syncMultiFxPhaseToCrossfade = false;
+    /** Hold staged MultiFX clock at 0 for this many ms after crossfade anchor (tune vs cue-list EFX). */
+    int               m_multiFxCrossfadeSyncOffsetMs = 40;
+    bool              m_multiFxXfPhaseAnchored = false;
+    int               m_multiFxStagedHoldTicksRemaining = 0;
 
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;
@@ -471,8 +481,10 @@ public:
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;
+    QVector<quint32>            m_multiFxStagedElapsedMs;
     QVector<quint32>            m_continuousLastCycleMs;
     QVector<quint32>            m_multiFxLastCycleMs;
+    QVector<quint32>            m_multiFxStagedLastCycleMs;
     uchar                       m_multiFxBlend = 0;
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;

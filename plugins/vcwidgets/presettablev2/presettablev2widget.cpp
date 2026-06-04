@@ -89,6 +89,8 @@ static const QString KXMLOutName    = QStringLiteral("Name");
 static const QString KXMLOutFxId    = QStringLiteral("FixtureID");
 static const QString KXMLOutInput        = QStringLiteral("OutInput");
 static const QString KXMLCrossfadeEn     = QStringLiteral("CrossfadeEnabled");
+static const QString KXMLSyncMultiFxPhaseToCrossfade = QStringLiteral("SyncMultiFxPhaseToCrossfade");
+static const QString KXMLMultiFxCrossfadeSyncOffsetMs = QStringLiteral("MultiFxCrossfadeSyncOffsetMs");
 static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
 static const QString KXMLMultiFxBlendInput = QStringLiteral("MultiFxBlendInput");
 static const QString KXMLMultiFxRestartInput = QStringLiteral("MultiFxRestartInput");
@@ -114,16 +116,20 @@ static const QString KXMLOutTransContinuousInput = QStringLiteral("OutTransConti
 static const QString KXMLOutTransSecondaryInput = QStringLiteral("OutTransSecondaryInput");
 static const QString KXMLOutMultiFxInput = QStringLiteral("OutMultiFxInput");
 
-static const uchar kCrossfadeEdgeMargin = 10;
+static int cueListCrossfadeSliderValue(uchar value)
+{
+    // Match VCCueList: SCALE(raw 0..255 -> slider 0..100), then QSlider stores int.
+    return qBound(0, int(value) * 100 / 255, 100);
+}
 
 static bool crossfadeAtLowEdge(uchar value)
 {
-    return value <= kCrossfadeEdgeMargin;
+    return cueListCrossfadeSliderValue(value) == 0;
 }
 
 static bool crossfadeAtHighEdge(uchar value)
 {
-    return value >= uchar(255 - kCrossfadeEdgeMargin);
+    return cueListCrossfadeSliderValue(value) == 100;
 }
 
 static bool crossfadeAtTargetEdge(uchar value, bool stagedAtLowSide)
@@ -136,22 +142,26 @@ static uchar crossfadeNormalizedEdge(uchar value)
     return crossfadeAtLowEdge(value) ? 0 : 255;
 }
 
-static uchar crossfadeEffectivePosition(uchar value)
-{
-    if (crossfadeAtLowEdge(value))
-        return 0;
-    if (crossfadeAtHighEdge(value))
-        return 255;
-    return value;
-}
-
 static bool crossfadeLowSideFromPosition(uchar value)
 {
     if (crossfadeAtLowEdge(value))
         return true;
     if (crossfadeAtHighEdge(value))
         return false;
-    return value <= 127;
+    return cueListCrossfadeSliderValue(value) <= 50;
+}
+
+static double cueListCrossfadeProgress01(uchar xfPos, uchar xfStartPos, bool stagedAtLowSide)
+{
+    const int pos = cueListCrossfadeSliderValue(xfPos);
+    const int start = cueListCrossfadeSliderValue(xfStartPos);
+    const int target = stagedAtLowSide ? 100 : 0;
+    const int maxTravel = qAbs(target - start);
+    if (maxTravel <= 0)
+        return 0.0;
+
+    const int traveled = stagedAtLowSide ? (pos - start) : (start - pos);
+    return qBound(0.0, double(traveled) / double(maxTravel), 1.0);
 }
 
 static PTOutputScope scopeFromString(const QString& value)
@@ -701,7 +711,9 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedMultiFxValid.fill(false);
         m_liveMultiFxPreset.resize(m_outputs.size());
         m_multiFxElapsedMs.resize(m_outputs.size());
+        m_multiFxStagedElapsedMs.resize(m_outputs.size());
         m_multiFxLastCycleMs.resize(m_outputs.size());
+        m_multiFxStagedLastCycleMs.resize(m_outputs.size());
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
         m_spatialChase.resize(m_outputs.size());
@@ -1385,8 +1397,10 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedMultiFxValid.fill(false);
     m_continuousElapsedMs.resize(m_outputs.size());
     m_multiFxElapsedMs.resize(m_outputs.size());
+    m_multiFxStagedElapsedMs.resize(m_outputs.size());
     m_continuousLastCycleMs.resize(m_outputs.size());
     m_multiFxLastCycleMs.resize(m_outputs.size());
+    m_multiFxStagedLastCycleMs.resize(m_outputs.size());
     m_matrixState.resize(m_outputs.size());
     m_flashInputHeldRow.resize(m_outputs.size());
     for (int o = 0; o < m_outputs.size(); ++o)
@@ -1583,6 +1597,16 @@ int PresetTableV2Widget::stagedMultiFxPresetIndexLocked(int outputIdx) const
     return m_stagedMultiFxPreset[outputIdx];
 }
 
+bool PresetTableV2Widget::hasStagedMultiFxAnyLocked() const
+{
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        if (stagedMultiFxPresetIndexLocked(o) >= 0)
+            return true;
+    }
+    return false;
+}
+
 bool PresetTableV2Widget::sweepOnPrimaryChangeLocked(int outputIdx, int newActiveRow) const
 {
     if (!sweepEfxActiveForOutputLocked(outputIdx))
@@ -1744,6 +1768,7 @@ void PresetTableV2Widget::armCrossfadeStagingLocked()
 
     m_crossfadeSessionActive = true;
     m_crossfadeEditLaneStaged = true;
+    resetMultiFxCrossfadePhaseAnchorLocked();
     m_crossfadeStagedAtLowSide = crossfadeLowSideFromPosition(m_crossfadeGlobalPos);
     m_crossfadeStartPos = (crossfadeAtLowEdge(m_crossfadeGlobalPos)
             || crossfadeAtHighEdge(m_crossfadeGlobalPos))
@@ -1792,14 +1817,57 @@ void PresetTableV2Widget::tickCrossfadeClockLocked(MasterTimer* timer)
         promoteStagedToLiveLocked();
         resetCrossfadeClockLocked();
     }
+
+    syncMultiFxPhaseOnCrossfadeMotionLocked();
+}
+
+void PresetTableV2Widget::resetMultiFxCrossfadePhaseAnchorLocked()
+{
+    m_multiFxXfPhaseAnchored = false;
+    m_multiFxStagedHoldTicksRemaining = 0;
+}
+
+void PresetTableV2Widget::syncMultiFxPhaseOnCrossfadeMotionLocked()
+{
+    if (!m_syncMultiFxPhaseToCrossfade || !m_crossfadeEnabled
+            || !hasStagedMultiFxAnyLocked())
+        return;
+
+    double prerunFraction01 = 0.0;
+    if (!crossfadeManualControlEnabledLocked())
+        prerunFraction01 = m_crossfadeClockProgress01;
+    else
+        prerunFraction01 = cueListCrossfadeProgress01(
+                m_crossfadeGlobalPos, m_crossfadeStartPos, m_crossfadeStagedAtLowSide);
+
+    if (prerunFraction01 <= 0.0)
+    {
+        resetMultiFxCrossfadePhaseAnchorLocked();
+        return;
+    }
+
+    if (m_multiFxXfPhaseAnchored)
+        return;
+
+    while (m_multiFxStagedElapsedMs.size() < m_outputs.size())
+        m_multiFxStagedElapsedMs.append(0);
+    while (m_multiFxStagedLastCycleMs.size() < m_outputs.size())
+        m_multiFxStagedLastCycleMs.append(0);
+    m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
+    m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+    m_multiFxStagedHoldTicksRemaining = 0;
+    m_multiFxXfPhaseAnchored = true;
 }
 
 double PresetTableV2Widget::crossfadeProgress01Locked(uchar xfEffective) const
 {
+    Q_UNUSED(xfEffective);
+
     if (!m_crossfadeEnabled)
         return 0.0;
     if (crossfadeManualControlEnabledLocked())
-        return double(xfEffective) / 255.0;
+        return cueListCrossfadeProgress01(
+                m_crossfadeGlobalPos, m_crossfadeStartPos, m_crossfadeStagedAtLowSide);
     return m_crossfadeClockProgress01;
 }
 
@@ -1826,24 +1894,9 @@ uchar PresetTableV2Widget::crossfadeEffectiveLocked(uchar xfPos, uchar xfStartPo
     if (!crossfadeManualControlEnabledLocked())
         return uchar(qBound(0, int(m_crossfadeClockProgress01 * 255.0 + 0.5), 255));
 
-    const uchar xfTarget = m_crossfadeStagedAtLowSide ? 255 : 0;
-    const uchar xfLogicalPos = crossfadeEffectivePosition(xfPos);
-    const uchar xfLogicalStart = crossfadeEffectivePosition(xfStartPos);
-    qint16 xfTraveled = 0;
-    qint16 xfMaxTravel = 0;
-    if (xfTarget == 255)
-    {
-        xfTraveled = qint16(xfLogicalPos) - qint16(xfLogicalStart);
-        xfMaxTravel = qint16(255) - qint16(xfLogicalStart);
-    }
-    else
-    {
-        xfTraveled = qint16(xfLogicalStart) - qint16(xfLogicalPos);
-        xfMaxTravel = qint16(xfLogicalStart);
-    }
-    if (xfMaxTravel <= 0)
-        xfMaxTravel = 1;
-    return uchar(qBound(qint16(0), qint16(xfTraveled * 255 / xfMaxTravel), qint16(255)));
+    const double progress = cueListCrossfadeProgress01(
+            xfPos, xfStartPos, m_crossfadeStagedAtLowSide);
+    return uchar(qBound(0, int(progress * 255.0 + 0.5), 255));
 }
 
 bool PresetTableV2Widget::continuousCrossfadeStagedEditing() const
@@ -2532,6 +2585,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
         {
             if (o < m_liveMultiFxPreset.size() && o < m_stagedMultiFxPreset.size())
                 m_liveMultiFxPreset[o] = m_stagedMultiFxPreset[o];
+            if (o < m_multiFxElapsedMs.size() && o < m_multiFxStagedElapsedMs.size())
+                m_multiFxElapsedMs[o] = m_multiFxStagedElapsedMs[o];
             m_stagedMultiFxValid[o] = false;
             if (o < m_stagedMultiFxPreset.size())
                 m_stagedMultiFxPreset[o] = -1;
@@ -2547,6 +2602,7 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
     }
     m_crossfadeSessionActive = false;
     m_crossfadeEditLaneStaged = true;
+    resetMultiFxCrossfadePhaseAnchorLocked();
 
     // EFX parameter overrides are live-only. Staged commit is limited to table
     // selections above, so do not call back into the provider while holding
@@ -3160,9 +3216,18 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                                  outputIdx, durationMs);
     ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs,
                                  outputIdx, multiFxDurationMs);
+    if (hasStagedMultiFx)
+    {
+        ensurePhaseStableCycleLocked(m_multiFxStagedElapsedMs, m_multiFxStagedLastCycleMs,
+                                     outputIdx, stagedMultiFxDurationMs);
+    }
     m_continuousElapsedMs[outputIdx] += MasterTimer::tick();
+    if (m_continuousElapsedMs[outputIdx] > durationMs)
+        m_continuousElapsedMs[outputIdx] = 0;
     const quint32 elapsedMs = quint32(m_continuousElapsedMs[outputIdx]);
     const quint32 multiFxElapsedMs = quint32(m_multiFxElapsedMs[outputIdx]);
+    const quint32 stagedMultiFxElapsedMs = hasStagedMultiFx
+            ? quint32(m_multiFxStagedElapsedMs[outputIdx]) : multiFxElapsedMs;
 
     QList<QLCPoint> points;
     for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
@@ -3259,7 +3324,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                         stagedMultiFxSerialIdx, qMax(1, stagedMultiFxOrderCount),
                         stagedMultiFxDurationMs, stagedMultiFxPreset.propagation);
                 const float stagedMultiFxIterator = PTDimmerWaveEngine::iteratorFromElapsed(
-                        multiFxElapsedMs, stagedMultiFxDurationMs,
+                        stagedMultiFxElapsedMs, stagedMultiFxDurationMs,
                         stagedMultiFxPreset.startOffset, stagedMultiFxHeadOffset,
                         stagedMultiFxTimeOffset);
                 stagedMultiFxDimmer = PTDimmerWaveEngine::calculateDimmerWave(
@@ -3622,10 +3687,23 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             cycleDurationMsLocked(global, multiFxPreset));
     ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs,
                                  outputIdx, multiFxCycleForOutput);
+    if (hasStagedMultiFx)
+    {
+        const quint32 stagedMultiFxCycleMs = qMax(quint32(1),
+                cycleDurationMsLocked(global, stagedMultiFxPreset));
+        ensurePhaseStableCycleLocked(m_multiFxStagedElapsedMs, m_multiFxStagedLastCycleMs,
+                                     outputIdx, stagedMultiFxCycleMs);
+    }
     if (continuousFx && !st.flashActive)
+    {
         m_continuousElapsedMs[outputIdx] += MasterTimer::tick();
+        if (m_continuousElapsedMs[outputIdx] > cycleMs)
+            m_continuousElapsedMs[outputIdx] = 0;
+    }
     const quint32 elapsedMs = quint32(m_continuousElapsedMs[outputIdx]);
     const quint32 multiFxElapsedMs = quint32(m_multiFxElapsedMs[outputIdx]);
+    const quint32 stagedMultiFxElapsedMs = hasStagedMultiFx
+            ? quint32(m_multiFxStagedElapsedMs[outputIdx]) : multiFxElapsedMs;
 
     QList<QLCPoint> points;
     for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
@@ -3799,7 +3877,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 if (hasStagedMultiFx)
                 {
                     const float stagedMultiFxDimmer = stagedMultiFxDimmerAtPoint(
-                            pt, multiFxElapsedMs);
+                            pt, stagedMultiFxElapsedMs);
                     const QVector<uchar> stagedMultiValues = stagedMultiFxPreset.enabled
                             ? continuousColumnValues(
                                 m_columns,
@@ -4196,13 +4274,23 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
 
     if (m_crossfadeEnabled && timer)
         tickCrossfadeClockLocked(timer);
+    if (m_crossfadeEnabled && timer)
+        syncMultiFxPhaseOnCrossfadeMotionLocked();
     if (timer)
     {
         while (m_multiFxElapsedMs.size() < m_outputs.size())
             m_multiFxElapsedMs.append(0);
+        while (m_multiFxStagedElapsedMs.size() < m_outputs.size())
+            m_multiFxStagedElapsedMs.append(0);
         while (m_multiFxLastCycleMs.size() < m_outputs.size())
             m_multiFxLastCycleMs.append(0);
+        while (m_multiFxStagedLastCycleMs.size() < m_outputs.size())
+            m_multiFxStagedLastCycleMs.append(0);
         const PTGlobalEffectSettings global = globalEffectSettingsLocked();
+        const bool holdStagedMultiFxClock = m_syncMultiFxPhaseToCrossfade
+                && m_crossfadeEnabled
+                && hasStagedMultiFxAnyLocked()
+                && !m_multiFxXfPhaseAnchored;
         for (int o = 0; o < m_outputs.size(); ++o)
         {
             if (multiFxActiveForOutputLocked(o))
@@ -4211,6 +4299,31 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
                 const quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(global, preset));
                 ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs, o, cycleMs);
                 m_multiFxElapsedMs[o] += MasterTimer::tick();
+                // Match native EFXFixture wrap (strict >, reset to 0) so the loop
+                // period equals the native EFX (loopDuration + 1 tick) and stays
+                // frame-locked to a cue-list EFX of the same duration.
+                if (m_multiFxElapsedMs[o] > cycleMs)
+                    m_multiFxElapsedMs[o] = 0;
+            }
+            const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(o);
+            if (stagedMultiFxIdx >= 0)
+            {
+                const PTTransitionPreset stagedPreset =
+                        transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx);
+                const quint32 stagedCycleMs = qMax(quint32(1),
+                        cycleDurationMsLocked(global, stagedPreset));
+                ensurePhaseStableCycleLocked(m_multiFxStagedElapsedMs, m_multiFxStagedLastCycleMs,
+                                             o, stagedCycleMs);
+                if (holdStagedMultiFxClock)
+                {
+                    m_multiFxStagedElapsedMs[o] = 0;
+                }
+                else
+                {
+                    m_multiFxStagedElapsedMs[o] += MasterTimer::tick();
+                    if (m_multiFxStagedElapsedMs[o] > stagedCycleMs)
+                        m_multiFxStagedElapsedMs[o] = 0;
+                }
             }
         }
     }
@@ -4256,7 +4369,10 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         {
             QMutexLocker lk2(&m_stateMutex);
             m_multiFxElapsedMs.fill(0, m_outputs.size());
+            m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
             m_multiFxLastCycleMs.fill(0, m_outputs.size());
+            m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+            resetMultiFxCrossfadePhaseAnchorLocked();
         }
         return;
     }
@@ -4286,6 +4402,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             m_crossfadeStagedAtLowSide = !m_crossfadeStagedAtLowSide;
             m_crossfadeStartPos = edge;
             resetCrossfadeClockLocked();
+            resetMultiFxCrossfadePhaseAnchorLocked();
         }
         else if (m_crossfadeEnabled && crossfadeManualControlEnabledLocked()
                  && (crossfadeAtLowEdge(value) || crossfadeAtHighEdge(value))
@@ -4297,8 +4414,10 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             m_crossfadeStartPos = edge;
             m_crossfadeSessionActive = false;
             resetCrossfadeClockLocked();
+            resetMultiFxCrossfadePhaseAnchorLocked();
         }
 
+        syncMultiFxPhaseOnCrossfadeMotionLocked();
         m_crossfadePrevPos = value;
         lk2.unlock();
         refreshRowHighlights();
@@ -4574,6 +4693,8 @@ void PresetTableV2Widget::editProperties()
                         : QSharedPointer<QLCInputSource>());
 
     bool xfEnabled;
+    bool syncMultiFxPhase;
+    int multiFxSyncOffsetMs;
     PTContinuousFxSelectorMode contFxSelectorMode;
     PTSpatialEffectSettings spatialCopy;
     quint32 linkedTransitionId;
@@ -4583,6 +4704,8 @@ void PresetTableV2Widget::editProperties()
     {
         QMutexLocker lk(&m_stateMutex);
         xfEnabled = m_crossfadeEnabled;
+        syncMultiFxPhase = m_syncMultiFxPhaseToCrossfade;
+        multiFxSyncOffsetMs = m_multiFxCrossfadeSyncOffsetMs;
         contFxSelectorMode = m_continuousFxSelectorMode;
         spatialCopy = m_spatialEffects;
         linkedTransitionId = m_linkedTransitionWidgetId;
@@ -4592,7 +4715,8 @@ void PresetTableV2Widget::editProperties()
     multiFxRestartSrc = inputSource(PTInputId::kMultiFxRestart);
 
     PresetTableV2ConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy,
-                                xfEnabled, xfSrc, multiFxBlendSrc, multiFxRestartSrc,
+                                xfEnabled, syncMultiFxPhase, multiFxSyncOffsetMs,
+                                xfSrc, multiFxBlendSrc, multiFxRestartSrc,
                                 contFxSelectorMode, page(),
                                 modeCopy, groupIdCopy, spatialCopy, linkedTransitionId,
                                 this);
@@ -4662,6 +4786,8 @@ void PresetTableV2Widget::editProperties()
     {
         QMutexLocker lk(&m_stateMutex);
         m_crossfadeEnabled = dlg.crossfadeEnabled();
+        m_syncMultiFxPhaseToCrossfade = dlg.syncMultiFxPhaseToCrossfade();
+        m_multiFxCrossfadeSyncOffsetMs = dlg.multiFxCrossfadeSyncOffsetMs();
         m_continuousFxSelectorMode = dlg.continuousFxSelectorMode();
         if (!m_crossfadeEnabled)
         {
@@ -4681,6 +4807,7 @@ void PresetTableV2Widget::editProperties()
             m_crossfadeSessionActive = false;
             m_crossfadeEditLaneStaged = true;
             resetCrossfadeClockLocked();
+            resetMultiFxCrossfadePhaseAnchorLocked();
         }
     }
 
@@ -4708,6 +4835,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     QVector<int>      activeRowCopy;
     QVector<int>      stagedRowCopy;
     bool              xfEnabledCopy;
+    bool              syncMultiFxPhaseCopy;
+    int               multiFxSyncOffsetMsCopy;
     uchar             xfPosCopy;
     uchar             xfStartPosCopy;
     bool              xfStagedAtLowSideCopy;
@@ -4726,6 +4855,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         activeRowCopy = m_activeRow;
         stagedRowCopy = m_stagedRow;
         xfEnabledCopy   = m_crossfadeEnabled;
+        syncMultiFxPhaseCopy = m_syncMultiFxPhaseToCrossfade;
+        multiFxSyncOffsetMsCopy = m_multiFxCrossfadeSyncOffsetMs;
         xfPosCopy       = m_crossfadeGlobalPos;
         xfStartPosCopy  = m_crossfadeStartPos;
         xfStagedAtLowSideCopy = m_crossfadeStagedAtLowSide;
@@ -4745,6 +4876,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         copy->m_activeRow          = activeRowCopy;
         copy->m_stagedRow          = stagedRowCopy;
         copy->m_crossfadeEnabled   = xfEnabledCopy;
+        copy->m_syncMultiFxPhaseToCrossfade = syncMultiFxPhaseCopy;
+        copy->m_multiFxCrossfadeSyncOffsetMs = multiFxSyncOffsetMsCopy;
         copy->m_crossfadeGlobalPos = xfPosCopy;
         copy->m_crossfadeStartPos  = xfStartPosCopy;
         copy->m_crossfadeStagedAtLowSide = xfStagedAtLowSideCopy;
@@ -4803,6 +4936,8 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
     QMutexLocker lk(const_cast<QMutex*>(&m_stateMutex));
 
     obj["crossfadeEnabled"] = m_crossfadeEnabled;
+    obj["syncMultiFxPhaseToCrossfade"] = m_syncMultiFxPhaseToCrossfade;
+    obj["multiFxCrossfadeSyncOffsetMs"] = m_multiFxCrossfadeSyncOffsetMs;
     obj["continuousFxSelectorMode"] = continuousFxSelectorModeToString(m_continuousFxSelectorMode);
     obj["mode"] = (m_mode == PTMode::FixtureGroup) ? QStringLiteral("FixtureGroup")
                                                     : QStringLiteral("Legacy");
@@ -4902,6 +5037,11 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     QMutexLocker lk(&m_stateMutex);
 
     m_crossfadeEnabled = obj["crossfadeEnabled"].toBool(false);
+    m_syncMultiFxPhaseToCrossfade = obj["syncMultiFxPhaseToCrossfade"].toBool(false);
+    m_multiFxCrossfadeSyncOffsetMs = qBound(0,
+            obj.contains(QStringLiteral("multiFxCrossfadeSyncOffsetMs"))
+                    ? obj["multiFxCrossfadeSyncOffsetMs"].toInt(40) : 40,
+            200);
     m_continuousFxSelectorMode = continuousFxSelectorModeFromString(
             obj["continuousFxSelectorMode"].toString());
     m_mode = (obj["mode"].toString() == QLatin1String("FixtureGroup"))
@@ -5043,6 +5183,10 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
     loadXMLCommon(root);
 
     bool xfEnabled = (root.attributes().value(KXMLCrossfadeEn).toString() == QLatin1String("True"));
+    bool syncMultiFxPhase = (root.attributes().value(KXMLSyncMultiFxPhaseToCrossfade).toString()
+            == QLatin1String("True"));
+    int multiFxSyncOffsetMs = root.attributes().hasAttribute(KXMLMultiFxCrossfadeSyncOffsetMs)
+            ? root.attributes().value(KXMLMultiFxCrossfadeSyncOffsetMs).toInt() : 40;
     int  nameColW  = root.attributes().value(KXMLNameColWidth).toInt();
     PTContinuousFxSelectorMode loadedContFxSelectorMode = continuousFxSelectorModeFromString(
             root.attributes().value(KXMLContinuousFxSelectorMode).toString());
@@ -5278,6 +5422,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
         m_crossfadeEnabled   = xfEnabled;
+        m_syncMultiFxPhaseToCrossfade = syncMultiFxPhase;
+        m_multiFxCrossfadeSyncOffsetMs = qBound(0, multiFxSyncOffsetMs, 200);
         m_continuousFxSelectorMode = loadedContFxSelectorMode;
         m_crossfadeGlobalPos = 0;
         m_crossfadeStartPos  = 0;
@@ -5296,6 +5442,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_spatialChase.fill(PTSpatialChaseOutput(), m_spatialChase.size());
         m_liveMultiFxPreset.resize(m_outputs.size());
         m_multiFxElapsedMs.resize(m_outputs.size());
+        m_multiFxStagedElapsedMs.resize(m_outputs.size());
+        m_multiFxStagedLastCycleMs.resize(m_outputs.size());
     }
 
     refreshTransitionPresetCache();
@@ -5318,6 +5466,10 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
     {
         QMutexLocker lk2(&m_stateMutex);
         doc->writeAttribute(KXMLCrossfadeEn, m_crossfadeEnabled ? QLatin1String("True") : QLatin1String("False"));
+        doc->writeAttribute(KXMLSyncMultiFxPhaseToCrossfade,
+                            m_syncMultiFxPhaseToCrossfade ? QLatin1String("True") : QLatin1String("False"));
+        doc->writeAttribute(KXMLMultiFxCrossfadeSyncOffsetMs,
+                            QString::number(qBound(0, m_multiFxCrossfadeSyncOffsetMs, 200)));
         doc->writeAttribute(KXMLContinuousFxSelectorMode,
                             continuousFxSelectorModeToString(m_continuousFxSelectorMode));
         if (m_nameColWidth > 0)

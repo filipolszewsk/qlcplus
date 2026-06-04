@@ -503,6 +503,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    const QVector<PTOutput>&  outputs,
                                                    const QVector<QSharedPointer<QLCInputSource>>& sources,
                                                    bool crossfadeEnabled,
+                                                   bool syncMultiFxPhaseToCrossfade,
+                                                   int multiFxCrossfadeSyncOffsetMs,
                                                    QSharedPointer<QLCInputSource> crossfadeSrc,
                                                    QSharedPointer<QLCInputSource> multiFxBlendSrc,
                                                    QSharedPointer<QLCInputSource> multiFxRestartSrc,
@@ -642,6 +644,30 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     m_crossfadeChk->setChecked(crossfadeEnabled);
     xfLayout->addWidget(m_crossfadeChk);
 
+    m_syncMultiFxPhaseChk = new QCheckBox(
+            tr("Sync MultiFX phase to crossfade start (match cue list EFX lazy-start)"), xfGrp);
+    m_syncMultiFxPhaseChk->setChecked(syncMultiFxPhaseToCrossfade);
+    m_syncMultiFxPhaseChk->setEnabled(crossfadeEnabled);
+    xfLayout->addWidget(m_syncMultiFxPhaseChk);
+
+    QWidget* multiFxSyncOffsetWidget = new QWidget(xfGrp);
+    QHBoxLayout* multiFxSyncOffsetRow = new QHBoxLayout(multiFxSyncOffsetWidget);
+    multiFxSyncOffsetRow->setContentsMargins(20, 0, 0, 0);
+    multiFxSyncOffsetRow->addWidget(new QLabel(
+            tr("MultiFX crossfade sync offset (ms):"), multiFxSyncOffsetWidget));
+    m_multiFxSyncOffsetSpin = new QSpinBox(multiFxSyncOffsetWidget);
+    m_multiFxSyncOffsetSpin->setRange(0, 200);
+    m_multiFxSyncOffsetSpin->setSingleStep(20);
+    m_multiFxSyncOffsetSpin->setSuffix(tr(" ms"));
+    m_multiFxSyncOffsetSpin->setValue(qBound(0, multiFxCrossfadeSyncOffsetMs, 200));
+    m_multiFxSyncOffsetSpin->setToolTip(tr(
+            "Hold staged MultiFX at phase 0 for this long after crossfade starts, "
+            "to match cue-list EFX lazy-start. Tune until DMX matches native EFX (default 40)."));
+    m_multiFxSyncOffsetSpin->setEnabled(crossfadeEnabled && syncMultiFxPhaseToCrossfade);
+    multiFxSyncOffsetRow->addWidget(m_multiFxSyncOffsetSpin);
+    multiFxSyncOffsetRow->addStretch();
+    xfLayout->addWidget(multiFxSyncOffsetWidget);
+
     QWidget* contFxModeWidget = new QWidget(xfGrp);
     QHBoxLayout* contFxModeRow = new QHBoxLayout(contFxModeWidget);
     contFxModeRow->setContentsMargins(0, 0, 0, 0);
@@ -688,6 +714,16 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     root->addWidget(xfGrp);
 
     connect(m_crossfadeChk, &QCheckBox::toggled, m_xfadeInputWidget, &QWidget::setVisible);
+    connect(m_crossfadeChk, &QCheckBox::toggled, m_syncMultiFxPhaseChk, &QWidget::setEnabled);
+    auto updateMultiFxSyncOffsetEnabled = [this]() {
+        if (!m_multiFxSyncOffsetSpin)
+            return;
+        const bool on = m_crossfadeChk && m_crossfadeChk->isChecked()
+                && m_syncMultiFxPhaseChk && m_syncMultiFxPhaseChk->isChecked();
+        m_multiFxSyncOffsetSpin->setEnabled(on);
+    };
+    connect(m_crossfadeChk, &QCheckBox::toggled, this, updateMultiFxSyncOffsetEnabled);
+    connect(m_syncMultiFxPhaseChk, &QCheckBox::toggled, this, updateMultiFxSyncOffsetEnabled);
 
     // ---- Transition panel link ----------------------------------------------
     QGroupBox* spatialGrp = new QGroupBox(tr("Transitions + Continuous FX"), this);
@@ -913,6 +949,16 @@ QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::transSecondaryInputSou
 bool PresetTableV2ConfigDialog::crossfadeEnabled() const
 {
     return m_crossfadeChk ? m_crossfadeChk->isChecked() : false;
+}
+
+bool PresetTableV2ConfigDialog::syncMultiFxPhaseToCrossfade() const
+{
+    return m_syncMultiFxPhaseChk ? m_syncMultiFxPhaseChk->isChecked() : false;
+}
+
+int PresetTableV2ConfigDialog::multiFxCrossfadeSyncOffsetMs() const
+{
+    return m_multiFxSyncOffsetSpin ? m_multiFxSyncOffsetSpin->value() : 40;
 }
 
 QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::crossfadeInputSource() const
