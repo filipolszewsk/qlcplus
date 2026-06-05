@@ -2410,33 +2410,27 @@ void MultiButtonWidget::activateAutomationLive(int idx)
         const bool previousOverride = m_widgetLiveActivationOverride;
         m_widgetLiveActivationOverride = true;
 
-        if (idx < 0)
+        PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+        const bool ok = target && target->multiButtonActivate(m_widgetOutputIndex,
+                                                              m_widgetParameter, idx);
+        if (ok)
         {
-            PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-            const bool ok = target && target->multiButtonActivate(m_widgetOutputIndex,
-                                                                  m_widgetParameter, -1);
-            if (ok)
-                syncWidgetLinkLiveStagedState();
-            else
-            {
-                m_currentIndex = -1;
-                m_visualOnly = false;
-                m_monitorMatchIndex = -1;
-                m_lastMonitorMatchIdx = -1;
-            }
-
+            syncWidgetLinkLiveStagedState();
             if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
-                publishSelectorToBus(-1);
+                publishSelectorToBus(idx);
             else
-                setWidgetSelectorLatchedIndex(-1);
-            updateFeedback();
-            update();
+                setWidgetSelectorLatchedIndex(idx);
         }
         else
         {
-            activate(idx);
+            m_currentIndex = -1;
+            m_visualOnly = false;
+            m_monitorMatchIndex = -1;
+            m_lastMonitorMatchIdx = -1;
         }
 
+        updateFeedback();
+        update();
         m_widgetLiveActivationOverride = previousOverride;
         return;
     }

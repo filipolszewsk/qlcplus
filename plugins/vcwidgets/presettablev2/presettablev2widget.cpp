@@ -680,6 +680,7 @@ void PresetTableV2Widget::setRows(const QVector<PTRow>& rows)
         // Reset active rows
         m_activeRow.fill(-1, m_outputs.size());
         m_stagedRow.fill(-1, m_outputs.size());
+        m_stagedRowValid.fill(false, m_outputs.size());
     }
     rebuildTable();
 }
@@ -693,6 +694,8 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
+        m_stagedRowValid.resize(m_outputs.size());
+        m_stagedRowValid.fill(false);
         m_stagedSecondaryRow.resize(m_outputs.size());
         m_stagedSecondaryRow.fill(-1);
         m_stagedSweepPreset.resize(m_outputs.size());
@@ -765,6 +768,7 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_faders.clear();
             m_activeRow.fill(-1, m_activeRow.size());
             m_stagedRow.fill(-1, m_stagedRow.size());
+            m_stagedRowValid.fill(false, m_stagedRowValid.size());
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
@@ -1383,10 +1387,14 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_liveContinuousPreset.resize(m_outputs.size());
     m_liveMultiFxPreset.resize(m_outputs.size());
     m_liveSecondaryRow.resize(m_outputs.size());
+    m_stagedRow.resize(m_outputs.size());
+    m_stagedRow.fill(-1);
+    m_stagedRowValid.resize(m_outputs.size());
     m_stagedSecondaryRow.resize(m_outputs.size());
     m_stagedSweepPreset.resize(m_outputs.size());
     m_stagedContinuousPreset.resize(m_outputs.size());
     m_stagedMultiFxPreset.resize(m_outputs.size());
+    m_stagedRowValid.fill(false);
     m_stagedSecondaryValid.resize(m_outputs.size());
     m_stagedSweepValid.resize(m_outputs.size());
     m_stagedContinuousValid.resize(m_outputs.size());
@@ -1527,26 +1535,33 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
         return state;
 
     Q_UNUSED(xfEffective);
-    const bool hasStagedPrimary = outputIdx < m_stagedRow.size()
-            && m_stagedRow[outputIdx] >= 0
+    const bool hasStagedPrimary = outputIdx < m_stagedRowValid.size()
+            && m_stagedRowValid[outputIdx]
+            && outputIdx < m_stagedRow.size()
             && m_stagedRow[outputIdx] != activeRow
             && m_stagedRow[outputIdx] < m_rows.size();
     const bool hasStagedSecondary = outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx]
-            && outputIdx < m_stagedSecondaryRow.size()
-            && m_stagedSecondaryRow[outputIdx] >= 0
-            && m_stagedSecondaryRow[outputIdx] < m_rows.size();
+            && outputIdx < m_stagedSecondaryRow.size();
     const bool hasStagedContinuous = outputIdx < m_stagedContinuousValid.size()
             && m_stagedContinuousValid[outputIdx];
     const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
 
     const int liveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
     state.primaryRow = activeRow;
-    state.secondaryRow = hasStagedSecondary ? m_stagedSecondaryRow[outputIdx] : liveSecondary;
+    const int stagedSecondary = hasStagedSecondary
+            ? ((m_stagedSecondaryRow[outputIdx] >= 0
+                && m_stagedSecondaryRow[outputIdx] < m_rows.size())
+               ? m_stagedSecondaryRow[outputIdx]
+               : liveSecondary)
+            : -1;
+    state.secondaryRow = hasStagedSecondary ? stagedSecondary : liveSecondary;
     state.livePrimaryValues = m_rows[activeRow].values;
     state.primaryValues = state.livePrimaryValues;
-    if (hasStagedPrimary)
+    if (hasStagedPrimary && m_stagedRow[outputIdx] >= 0)
         state.primaryValues = m_rows[m_stagedRow[outputIdx]].values;
+    else if (hasStagedPrimary)
+        state.primaryValues = QVector<uchar>(m_columns.size(), uchar(0));
 
     if (liveSecondary >= 0 && liveSecondary < m_rows.size())
         state.liveSecondaryValues = m_rows[liveSecondary].values;
@@ -1554,8 +1569,8 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
         state.liveSecondaryValues = state.livePrimaryValues;
     state.secondaryValues = state.liveSecondaryValues;
 
-    if (hasStagedSecondary)
-        state.secondaryValues = m_rows[m_stagedSecondaryRow[outputIdx]].values;
+    if (hasStagedSecondary && stagedSecondary >= 0 && stagedSecondary < m_rows.size())
+        state.secondaryValues = m_rows[stagedSecondary].values;
 
     state.livePreset = continuousPresetForOutputLocked(outputIdx);
     state.preset = hasStagedContinuous
@@ -1627,10 +1642,12 @@ bool PresetTableV2Widget::sweepOnPrimaryChangeLocked(int outputIdx, int newActiv
     return true;
 }
 
-int PresetTableV2Widget::effectiveSecondaryRowLocked(int outputIdx, int activeRow) const
+int PresetTableV2Widget::rawLiveSecondaryRowIndexLocked(int outputIdx) const
 {
-    Q_UNUSED(activeRow);
-    return liveSecondaryRowIndexLocked(outputIdx);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return -1;
+
+    return (outputIdx < m_liveSecondaryRow.size()) ? m_liveSecondaryRow[outputIdx] : -1;
 }
 
 int PresetTableV2Widget::liveSecondaryRowIndexLocked(int outputIdx) const
@@ -1638,7 +1655,7 @@ int PresetTableV2Widget::liveSecondaryRowIndexLocked(int outputIdx) const
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
         return -1;
 
-    const int live = (outputIdx < m_liveSecondaryRow.size()) ? m_liveSecondaryRow[outputIdx] : -1;
+    const int live = rawLiveSecondaryRowIndexLocked(outputIdx);
     if (live >= 0 && live < m_rows.size())
         return live;
 
@@ -1647,6 +1664,12 @@ int PresetTableV2Widget::liveSecondaryRowIndexLocked(int outputIdx) const
         return prop;
 
     return -1;
+}
+
+int PresetTableV2Widget::effectiveSecondaryRowLocked(int outputIdx, int activeRow) const
+{
+    Q_UNUSED(activeRow);
+    return liveSecondaryRowIndexLocked(outputIdx);
 }
 
 void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
@@ -1668,7 +1691,7 @@ void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
     const int liveMultiFx = liveMultiFxPresetIndexLocked(outputIdx);
     sendFeedback(liveMultiFx < 0 ? 0 : liveMultiFx + 1, PTInputId::multiFxBank(outputIdx));
 
-    const int liveSecondary = liveSecondaryRowIndexLocked(outputIdx);
+    const int liveSecondary = rawLiveSecondaryRowIndexLocked(outputIdx);
     sendFeedback(liveSecondary < 0 ? 0 : liveSecondary + 1,
                  PTInputId::transSecondaryRow(outputIdx));
 }
@@ -1697,8 +1720,9 @@ bool PresetTableV2Widget::multiFxCrossfadeModeLocked(int outputIdx) const
             && outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx];
     const bool hasStagedPrimary = outputIdx >= 0
+            && outputIdx < m_stagedRowValid.size()
+            && m_stagedRowValid[outputIdx]
             && outputIdx < m_stagedRow.size()
-            && m_stagedRow[outputIdx] >= 0
             && m_stagedRow[outputIdx] != activeRow
             && m_stagedRow[outputIdx] < m_rows.size();
     return hasStagedSecondary || hasStagedPrimary
@@ -1768,7 +1792,8 @@ bool PresetTableV2Widget::crossfadeHasStagedChangesLocked() const
     for (int o = 0; o < m_stagedRow.size(); ++o)
     {
         const int liveRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
-        if (m_stagedRow[o] >= 0 && m_stagedRow[o] != liveRow)
+        const bool stagedValid = o < m_stagedRowValid.size() && m_stagedRowValid[o];
+        if (stagedValid && m_stagedRow[o] != liveRow)
             return true;
     }
     for (int o = 0; o < m_stagedSecondaryValid.size(); ++o)
@@ -2127,7 +2152,7 @@ int PresetTableV2Widget::multiButtonLiveIndex(int outputIdx, int parameter) cons
         case PresetTableV2MultiButtonTargetIface::PrimaryRow:
             return outputIdx < m_activeRow.size() ? m_activeRow.at(outputIdx) : -1;
         case PresetTableV2MultiButtonTargetIface::SecondaryRow:
-            return liveSecondaryRowIndexLocked(outputIdx);
+            return rawLiveSecondaryRowIndexLocked(outputIdx);
         case PresetTableV2MultiButtonTargetIface::TransitionPreset:
             return liveSweepPresetIndexLocked(outputIdx);
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
@@ -2148,7 +2173,8 @@ bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter
     switch (parameter)
     {
         case PresetTableV2MultiButtonTargetIface::PrimaryRow:
-            return outputIdx < m_stagedRow.size() && m_stagedRow.at(outputIdx) >= 0;
+            return outputIdx < m_stagedRowValid.size()
+                    && m_stagedRowValid.at(outputIdx);
         case PresetTableV2MultiButtonTargetIface::SecondaryRow:
             return outputIdx < m_stagedSecondaryValid.size()
                     && m_stagedSecondaryValid.at(outputIdx);
@@ -2171,7 +2197,9 @@ int PresetTableV2Widget::multiButtonStagedIndex(int outputIdx, int parameter) co
     switch (parameter)
     {
         case PresetTableV2MultiButtonTargetIface::PrimaryRow:
-            if (outputIdx < m_stagedRow.size())
+            if (outputIdx < m_stagedRowValid.size()
+                    && outputIdx < m_stagedRow.size()
+                    && m_stagedRowValid.at(outputIdx))
                 return m_stagedRow.at(outputIdx);
             return -1;
         case PresetTableV2MultiButtonTargetIface::SecondaryRow:
@@ -2317,6 +2345,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             return false;
         if (outputIdx < m_stagedRow.size())
             m_stagedRow[outputIdx] = -1;
+        if (outputIdx < m_stagedRowValid.size())
+            m_stagedRowValid[outputIdx] = false;
         clearCrossfadeSessionIfNoStaged();
         lk.unlock();
         setActiveRow(outputIdx, index);
@@ -2413,6 +2443,8 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
 
     if (outputIdx < m_stagedRow.size())
         m_stagedRow[outputIdx] = -1;
+    if (outputIdx < m_stagedRowValid.size())
+        m_stagedRowValid[outputIdx] = false;
     if (outputIdx < m_stagedSecondaryRow.size())
         m_stagedSecondaryRow[outputIdx] = -1;
     if (outputIdx < m_stagedSweepPreset.size())
@@ -2516,11 +2548,14 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
         return;
     while (m_stagedRow.size() <= outputIdx)
         m_stagedRow.append(-1);
+    while (m_stagedRowValid.size() <= outputIdx)
+        m_stagedRowValid.append(false);
 
     const int liveRow = (outputIdx < m_activeRow.size()) ? m_activeRow[outputIdx] : -1;
     if (rowIdx == liveRow)
     {
         m_stagedRow[outputIdx] = -1;
+        m_stagedRowValid[outputIdx] = false;
         syncCommittedPlaybackStateLocked(outputIdx, false);
         if (!crossfadeHasStagedChangesLocked())
             m_crossfadeSessionActive = false;
@@ -2528,6 +2563,7 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
     }
 
     m_stagedRow[outputIdx] = rowIdx;
+    m_stagedRowValid[outputIdx] = true;
 }
 
 void PresetTableV2Widget::materializeContinuousRowsLocked(int outputIdx, bool toStaged)
@@ -2544,9 +2580,7 @@ void PresetTableV2Widget::materializeContinuousRowsLocked(int outputIdx, bool to
     const bool hasLiveSecondary = liveSecondary >= 0 && liveSecondary < m_rows.size();
     const bool hasStagedSecondary = outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx]
-            && outputIdx < m_stagedSecondaryRow.size()
-            && m_stagedSecondaryRow[outputIdx] >= 0
-            && m_stagedSecondaryRow[outputIdx] < m_rows.size();
+            && outputIdx < m_stagedSecondaryRow.size();
 
     if (toStaged)
     {
@@ -2555,12 +2589,7 @@ void PresetTableV2Widget::materializeContinuousRowsLocked(int outputIdx, bool to
         return;
     }
 
-    if (!hasLiveSecondary)
-    {
-        while (m_liveSecondaryRow.size() <= outputIdx)
-            m_liveSecondaryRow.append(-1);
-        m_liveSecondaryRow[outputIdx] = propSecondary;
-    }
+    Q_UNUSED(hasLiveSecondary);
 }
 
 void PresetTableV2Widget::syncCommittedPlaybackStateLocked(int outputIdx, bool resetFxPlayback)
@@ -2603,10 +2632,12 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
     {
         bool promoted = false;
         bool promotedFxPreset = false;
-        if (o < m_stagedRow.size() && m_stagedRow[o] >= 0)
+        if (o < m_stagedRowValid.size() && m_stagedRowValid[o]
+                && o < m_stagedRow.size())
         {
             m_activeRow[o] = m_stagedRow[o];
             m_stagedRow[o] = -1;
+            m_stagedRowValid[o] = false;
             promoted = true;
         }
 
@@ -2981,9 +3012,10 @@ void PresetTableV2Widget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEf
     for (int o = 0; o < m_outputs.size(); ++o)
     {
         const int activeRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
-        const int stagedRow = (o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
+        const bool stagedPrimaryValid = o < m_stagedRowValid.size() && m_stagedRowValid[o];
+        const int stagedRow = (stagedPrimaryValid && o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
 
-        if (activeRow < 0) continue;
+        if (activeRow < 0 && !stagedPrimaryValid) continue;
 
         const PTOutput& out = m_outputs[o];
         if (out.fixtureId == UINT_MAX) continue;
@@ -3004,9 +3036,10 @@ void PresetTableV2Widget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEf
 
         if (activeRow >= m_rows.size()) continue;
 
-        const QVector<uchar>& aVals = m_rows[activeRow].values;
+        const QVector<uchar> offVals(m_columns.size(), uchar(0));
+        const QVector<uchar>& aVals = activeRow >= 0 ? m_rows[activeRow].values : offVals;
         const QVector<uchar>* bVals = (stagedRow >= 0 && stagedRow < m_rows.size())
-            ? &m_rows[stagedRow].values : nullptr;
+            ? &m_rows[stagedRow].values : (stagedPrimaryValid ? &offVals : nullptr);
 
         for (int c = 0; c < m_columns.size(); ++c)
         {
@@ -3015,7 +3048,7 @@ void PresetTableV2Widget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEf
             applyFadeValue(fader.data(), m_doc, universes[uni],
                            out.fixtureId, quint32(c),
                            aVal, bVal,
-                           m_crossfadeEnabled, (stagedRow >= 0),
+                           m_crossfadeEnabled, stagedPrimaryValid,
                            m_columns[c].fade, xfEffective);
         }
     }
@@ -3493,8 +3526,13 @@ PresetTableV2Widget::resolveOutputPlaybackStateLocked(int outputIdx, int activeR
             && outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx]
             && outputIdx < m_stagedSecondaryRow.size();
-    state.secondaryRow = hasStagedSecondary ? m_stagedSecondaryRow[outputIdx]
-                                            : effectiveSecondaryRowLocked(outputIdx, activeRow);
+    const int effectiveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
+    state.secondaryRow = hasStagedSecondary
+            ? ((m_stagedSecondaryRow[outputIdx] >= 0
+                && m_stagedSecondaryRow[outputIdx] < m_rows.size())
+               ? m_stagedSecondaryRow[outputIdx]
+               : effectiveSecondary)
+            : effectiveSecondary;
     state.crossfadeTransition = crossfadeSweepModeLocked(outputIdx, activeRow, hasStaged);
     state.crossfadeContinuous = continuousCrossfadeModeLocked(outputIdx)
             || multiFxCrossfadeModeLocked(outputIdx);
@@ -4080,31 +4118,45 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
     for (int o = 0; o < m_outputs.size(); ++o)
     {
         const int activeRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
-        const int stagedRow = (o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
+        const bool stagedPrimaryValid = o < m_stagedRowValid.size() && m_stagedRowValid[o];
+        const int stagedRow = (stagedPrimaryValid && o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
 
-        if (activeRow < 0 || activeRow >= m_rows.size()) continue;
+        const bool activeRowValid = activeRow >= 0 && activeRow < m_rows.size();
+        const bool stagedRowValid = stagedRow >= 0 && stagedRow < m_rows.size();
+        if (!activeRowValid && !stagedRowValid) continue;
 
         const PTOutput& out = m_outputs[o];
         if (out.scope == PTOutputScope::Mask && !docMask.isActive())
             continue;
 
-        const QVector<uchar>& aVals = m_rows[activeRow].values;
-        const QVector<uchar>* bVals = (stagedRow >= 0 && stagedRow < m_rows.size())
-            ? &m_rows[stagedRow].values : nullptr;
+        const QVector<uchar> offVals(m_columns.size(), uchar(0));
+        const QVector<uchar>& aVals = activeRowValid ? m_rows[activeRow].values : offVals;
+        const QVector<uchar>* bVals = stagedRowValid
+            ? &m_rows[stagedRow].values : (stagedPrimaryValid ? &offVals : nullptr);
 
         const QMap<QLCPoint, GroupHead>& headsMap =
                 (out.scope == PTOutputScope::Rows) ? fullHeads : maskedHeads;
 
-        const bool hasStaged = (stagedRow >= 0 && stagedRow != activeRow);
-        const PTOutputPlaybackState playback = resolveOutputPlaybackStateLocked(
-                o, activeRow, hasStaged, matrixReady, spatialOn);
-        const bool sweepOn = playback.transitionOn;
-        const bool contOn = playback.continuousFxOn;
-        const int secRow = playback.secondaryRow;
-        const bool crossfadeSweep = playback.crossfadeTransition;
-        const bool crossfadeCont = playback.crossfadeContinuous;
-        const bool blockMatrixForStaged = playback.blockMatrixForStaged;
-        const bool matrixForOutput = playback.matrixForOutput;
+        const bool hasStaged = stagedPrimaryValid && stagedRow != activeRow;
+        bool sweepOn = false;
+        bool contOn = false;
+        int secRow = -1;
+        bool crossfadeSweep = false;
+        bool crossfadeCont = false;
+        bool blockMatrixForStaged = false;
+        bool matrixForOutput = false;
+        if (activeRowValid)
+        {
+            const PTOutputPlaybackState playback = resolveOutputPlaybackStateLocked(
+                    o, activeRow, hasStaged, matrixReady, spatialOn);
+            sweepOn = playback.transitionOn;
+            contOn = playback.continuousFxOn;
+            secRow = playback.secondaryRow;
+            crossfadeSweep = playback.crossfadeTransition;
+            crossfadeCont = playback.crossfadeContinuous;
+            blockMatrixForStaged = playback.blockMatrixForStaged;
+            matrixForOutput = playback.matrixForOutput;
+        }
 
         if (matrixForOutput && !blockMatrixForStaged)
         {
@@ -4538,6 +4590,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     m_activeRow[o] = rowIdx;
                     if (o < m_stagedRow.size())
                         m_stagedRow[o] = -1;
+                    if (o < m_stagedRowValid.size())
+                        m_stagedRowValid[o] = false;
                     syncCommittedPlaybackStateLocked(o, false);
                 }
                 lk2.unlock();
@@ -4552,6 +4606,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     routeToStaged = crossfadeRoutesToStagedLocked();
                     if (!routeToStaged && o < m_stagedRow.size())
                         m_stagedRow[o] = -1;
+                    if (!routeToStaged && o < m_stagedRowValid.size())
+                        m_stagedRowValid[o] = false;
                 }
                 if (!routeToStaged)
                 {
@@ -4812,6 +4868,8 @@ void PresetTableV2Widget::editProperties()
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
+        m_stagedRowValid.resize(m_outputs.size());
+        m_stagedRowValid.fill(false);
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
 
@@ -4858,6 +4916,7 @@ void PresetTableV2Widget::editProperties()
         if (!m_crossfadeEnabled)
         {
             m_stagedRow.fill(-1, m_stagedRow.size());
+            m_stagedRowValid.fill(false, m_stagedRowValid.size());
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
@@ -4900,6 +4959,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     QVector<PTOutput> outsCopy;
     QVector<int>      activeRowCopy;
     QVector<int>      stagedRowCopy;
+    QVector<bool>     stagedRowValidCopy;
     bool              xfEnabledCopy;
     bool              syncMultiFxPhaseCopy;
     int               multiFxSyncOffsetMsCopy;
@@ -4920,6 +4980,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         outsCopy      = m_outputs;
         activeRowCopy = m_activeRow;
         stagedRowCopy = m_stagedRow;
+        stagedRowValidCopy = m_stagedRowValid;
         xfEnabledCopy   = m_crossfadeEnabled;
         syncMultiFxPhaseCopy = m_syncMultiFxPhaseToCrossfade;
         multiFxSyncOffsetMsCopy = m_multiFxCrossfadeSyncOffsetMs;
@@ -4941,6 +5002,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         copy->m_outputs            = outsCopy;
         copy->m_activeRow          = activeRowCopy;
         copy->m_stagedRow          = stagedRowCopy;
+        copy->m_stagedRowValid     = stagedRowValidCopy;
         copy->m_crossfadeEnabled   = xfEnabledCopy;
         copy->m_syncMultiFxPhaseToCrossfade = syncMultiFxPhaseCopy;
         copy->m_multiFxCrossfadeSyncOffsetMs = multiFxSyncOffsetMsCopy;
@@ -5219,6 +5281,7 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
 
     m_activeRow.fill(-1, m_outputs.size());
     m_stagedRow.fill(-1, m_outputs.size());
+    m_stagedRowValid.fill(false, m_outputs.size());
     syncLiveTransitionFromOutputs();
 
     lk.unlock();
@@ -5487,6 +5550,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
+        m_stagedRowValid.resize(m_outputs.size());
+        m_stagedRowValid.fill(false);
         m_crossfadeEnabled   = xfEnabled;
         m_syncMultiFxPhaseToCrossfade = syncMultiFxPhase;
         m_multiFxCrossfadeSyncOffsetMs = qBound(0, multiFxSyncOffsetMs, 200);

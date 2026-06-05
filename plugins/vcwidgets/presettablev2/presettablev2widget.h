@@ -328,6 +328,7 @@ private:
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
     int liveMultiFxPresetIndexLocked(int outputIdx) const;
+    int rawLiveSecondaryRowIndexLocked(int outputIdx) const;
     int liveSecondaryRowIndexLocked(int outputIdx) const;
     void sendLiveSelectorFeedbackLocked(int outputIdx);
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
@@ -438,7 +439,8 @@ public:
     QVector<PTRow>    m_rows;
     QVector<PTOutput> m_outputs;
     QVector<int>      m_activeRow;           // per output, -1 = off
-    QVector<int>      m_stagedRow;           // per output, -1 = no staging (only used when crossfade enabled)
+    QVector<int>      m_stagedRow;           // per output, -1 = off/no row; m_stagedRowValid disambiguates
+    QVector<bool>     m_stagedRowValid;
     bool              m_crossfadeEnabled   = false;  // widget-level toggle
     uchar             m_crossfadeGlobalPos = 0;      // physical fader position 0-255
     uchar             m_crossfadeStartPos  = 0;      // fader position when first staging was set

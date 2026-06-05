@@ -2655,8 +2655,8 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
             canMoveDown = row < cnt - 1;
         }
     }
-    m_lvlUpBtn->setEnabled(canMoveUp);
-    m_lvlDownBtn->setEnabled(canMoveDown);
+    m_lvlUpBtn->setEnabled(levelMode && canMoveUp);
+    m_lvlDownBtn->setEnabled(levelMode && canMoveDown);
 }
 
 void MultiButtonConfigDialog::slotLevelAddPreset()
@@ -2696,7 +2696,9 @@ void MultiButtonConfigDialog::slotLevelEditLabel()
         return;
 
     const int row = rows.first();
-    if (row < 0 || row >= m_levelPresets.size()) return;
+    QList<LevelPreset>& presets = widgetMode() == MultiButtonMode::Widget
+            ? m_widgetEntryAppearance : m_levelPresets;
+    if (row < 0 || row >= presets.size()) return;
 
     commitLevelPresetsFromTable();
 
@@ -2738,8 +2740,10 @@ void MultiButtonConfigDialog::slotLevelChooseIcon()
 
     commitLevelPresetsFromTable();
     QString startPath;
-    if (rows.first() >= 0 && rows.first() < m_levelPresets.size())
-        startPath = m_levelPresets.at(rows.first()).iconPath;
+    const QList<LevelPreset>& presets = widgetMode() == MultiButtonMode::Widget
+            ? m_widgetEntryAppearance : m_levelPresets;
+    if (rows.first() >= 0 && rows.first() < presets.size())
+        startPath = presets.at(rows.first()).iconPath;
 
     const QString path = QFileDialog::getOpenFileName(
         this, tr("Select icon image"), startPath,
@@ -2769,10 +2773,12 @@ void MultiButtonConfigDialog::slotLevelChooseColor()
 
     commitLevelPresetsFromTable();
     QColor initial = Qt::white;
-    if (rows.first() >= 0 && rows.first() < m_levelPresets.size()
-        && m_levelPresets.at(rows.first()).color.isValid())
+    const QList<LevelPreset>& presets = widgetMode() == MultiButtonMode::Widget
+            ? m_widgetEntryAppearance : m_levelPresets;
+    if (rows.first() >= 0 && rows.first() < presets.size()
+        && presets.at(rows.first()).color.isValid())
     {
-        initial = m_levelPresets.at(rows.first()).color;
+        initial = presets.at(rows.first()).color;
     }
 
     const QColor chosen = QColorDialog::getColor(initial, this, tr("Preset button color"));
@@ -2802,10 +2808,12 @@ void MultiButtonConfigDialog::slotLevelChooseLabelColor()
 
     commitLevelPresetsFromTable();
     QColor initial = Qt::black;
-    if (rows.first() >= 0 && rows.first() < m_levelPresets.size()
-        && m_levelPresets.at(rows.first()).labelColor.isValid())
+    const QList<LevelPreset>& presets = widgetMode() == MultiButtonMode::Widget
+            ? m_widgetEntryAppearance : m_levelPresets;
+    if (rows.first() >= 0 && rows.first() < presets.size()
+        && presets.at(rows.first()).labelColor.isValid())
     {
-        initial = m_levelPresets.at(rows.first()).labelColor;
+        initial = presets.at(rows.first()).labelColor;
     }
 
     const QColor chosen = QColorDialog::getColor(initial, this, tr("Preset label color"));
