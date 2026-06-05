@@ -149,6 +149,8 @@ public:
                         const QList<LevelPreset>& presets);
     QList<LevelChannelBinding> levelChannelBindings() const { return m_levelChannelBindings; }
     QList<LevelPreset>         levelPresets()         const { return m_levelPresets; }
+    void setWidgetEntryAppearance(const QList<LevelPreset>& appearance);
+    QList<LevelPreset> widgetEntryAppearance() const { return m_widgetEntryAppearance; }
 
     void setCurrentIndex(int idx);    // -1 = none active (calls activate internally)
     int  currentIndex()  const { return m_currentIndex; }
@@ -288,9 +290,12 @@ private:
     void syncEntryInputSources();
     void resizeSpreadSlotInputs();
     int  entryInputLocalSlot(int globalRow) const;
+    void activateAutomationLive(int idx);
     void activate(int idx);
     void stopCurrent();
     bool stagingActive() const;
+    bool hasLocalStagedSelection() const;
+    void clearLocalStagedSelection();
     void stageEntry(int idx);
     void commitStaged();
     void clearStagedOnExternalMonitorChange(int matchIdx);
@@ -300,7 +305,7 @@ private:
     void endFlashHold();
     int  levelDmxPresetIndex() const;
     void paintTileBackground(QPainter& p, const QRect& rect, int tileIndex,
-                             bool isActive, bool isPressed, bool monitoring,
+                             bool isLive, bool isStaged, bool isPressed,
                              QColor& outBg) const;
     void showPopupMenu(const QPoint& globalPos);
     int  pickEntryIndexModal(const QPoint& globalPos);
@@ -334,6 +339,10 @@ private:
     int selectableSlotCount() const;
     int slotFromInputValue(uchar value, const QLCInputSource* src) const;
     int slotToEntryIndex(int slot) const;
+    void syncWidgetEntryAppearanceCount();
+    const LevelPreset* entryAppearancePreset(int idx) const;
+    LevelPreset* mutableEntryAppearancePreset(int idx);
+    QString linkedWidgetEntryName(int idx) const;
 
     QString popupMenuTextForEntry(int idx) const;
 
@@ -353,9 +362,10 @@ private:
     int   spreadHitTest(const QPoint& pos) const;
     QString tileCaption(int idx) const;
     void drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
-                  bool isSelected, bool isPressed, bool showMonitorBorder) const;
+                  bool isLive, bool isStaged, bool isPressed) const;
     int monitorHighlightIndex() const;
     int stagedHighlightIndex() const;
+    bool stagedHighlightValid() const;
     bool widgetLinkUsesInternalStaging() const;
     void paintSpread(QPainter& p);
     void paintSingle(QPainter& p);
@@ -407,6 +417,8 @@ private:
     // ---- Level mode state -----------------------------------------------
     QList<LevelChannelBinding> m_levelChannelBindings;
     QList<LevelPreset>         m_levelPresets;
+    QList<LevelPreset>         m_widgetEntryAppearance;
+    int                        m_contextMenuEntryIndex = -2;
     quint32                    m_widgetTargetId = VCWidget::invalidId();
     int                        m_widgetOutputIndex = 0;
     int                        m_widgetParameter = 0;
@@ -435,6 +447,7 @@ private:
     bool           m_widgetLiveActivationOverride = false;
     bool           m_stageBeforeCommit    = false;
     int            m_stagedIndex          = -1;
+    bool           m_stagedValid          = false;
     uchar          m_commitInputLastValue = 0;
 
     // ---- Icon cache (keyed by entry index) ------------------------------

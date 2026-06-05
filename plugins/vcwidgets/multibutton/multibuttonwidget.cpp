@@ -35,6 +35,9 @@
 #include <QFont>
 #include <QDebug>
 #include <QFileDialog>
+#include <QColorDialog>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QDir>
@@ -63,6 +66,7 @@ static const QString KXMLWidgetLinkOutput  = QStringLiteral("OutputIndex");
 static const QString KXMLWidgetLinkParam   = QStringLiteral("Parameter");
 static const QString KXMLWidgetLiveInput   = QStringLiteral("WidgetLiveInput");
 static const QString KXMLWidgetBusPolicy   = QStringLiteral("WidgetBusPolicy");
+static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
 static const int kWidgetBusPublishSuppressMs = 250;
 
@@ -315,7 +319,7 @@ void MultiButtonWidget::setWidgetMode(MultiButtonMode mode)
     m_mode = mode;
     m_iconCache.clear();
     m_currentIndex = -1;
-    m_stagedIndex = -1;
+    clearLocalStagedSelection();
     m_monitorMatchIndex = -1;
     m_lastMonitorMatchIdx = -1;
     m_lastResolvedEntryCount = -1;
@@ -355,6 +359,15 @@ void MultiButtonWidget::setLevelConfig(const QList<LevelChannelBinding>& binding
     resizeSpreadSlotInputs();
     syncEntryInputSources();
     recalcLayoutSize();
+    update();
+}
+
+void MultiButtonWidget::setWidgetEntryAppearance(const QList<LevelPreset>& appearance)
+{
+    m_widgetEntryAppearance = appearance;
+    syncWidgetEntryAppearanceCount();
+    m_iconCache.clear();
+    syncEntryInputSources();
     update();
 }
 
@@ -634,6 +647,12 @@ QSharedPointer<QLCInputSource> MultiButtonWidget::entryInputSource(int idx) cons
             return QSharedPointer<QLCInputSource>();
         return m_levelPresets.at(idx).entryInput;
     }
+    if (m_mode == MultiButtonMode::Widget)
+    {
+        if (idx >= m_widgetEntryAppearance.size())
+            return QSharedPointer<QLCInputSource>();
+        return m_widgetEntryAppearance.at(idx).entryInput;
+    }
 
     if (idx >= m_functionEntryInputs.size())
         return QSharedPointer<QLCInputSource>();
@@ -650,6 +669,13 @@ void MultiButtonWidget::setEntryInputSource(int idx, QSharedPointer<QLCInputSour
         if (idx >= m_levelPresets.size())
             return;
         m_levelPresets[idx].entryInput = src;
+    }
+    else if (m_mode == MultiButtonMode::Widget)
+    {
+        syncWidgetEntryAppearanceCount();
+        if (idx >= m_widgetEntryAppearance.size())
+            return;
+        m_widgetEntryAppearance[idx].entryInput = src;
     }
     else
     {
@@ -698,6 +724,12 @@ QKeySequence MultiButtonWidget::entryKeySource(int idx) const
             return QKeySequence();
         return m_levelPresets.at(idx).entryKey;
     }
+    if (m_mode == MultiButtonMode::Widget)
+    {
+        if (idx >= m_widgetEntryAppearance.size())
+            return QKeySequence();
+        return m_widgetEntryAppearance.at(idx).entryKey;
+    }
 
     if (idx >= m_functionEntryKeys.size())
         return QKeySequence();
@@ -716,6 +748,12 @@ void MultiButtonWidget::setEntryKeySource(int idx, const QKeySequence& key)
         if (idx >= m_levelPresets.size())
             return;
         m_levelPresets[idx].entryKey = stripped;
+    }
+    else if (m_mode == MultiButtonMode::Widget)
+    {
+        syncWidgetEntryAppearanceCount();
+        if (idx < m_widgetEntryAppearance.size())
+            m_widgetEntryAppearance[idx].entryKey = stripped;
     }
     else
     {
@@ -789,7 +827,7 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
 
     if (m_addOffAtEnd && globalSlot == total - 1)
     {
-        if (stagingActive())
+        if (stagingActive() || widgetLinkUsesInternalStaging())
             stageEntry(-1);
         else
         {
@@ -802,7 +840,7 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
 
     if (globalSlot < entryCount())
     {
-        if (stagingActive())
+        if (stagingActive() || widgetLinkUsesInternalStaging())
             stageEntry(globalSlot);
         else
             activate(globalSlot);
@@ -916,11 +954,12 @@ void MultiButtonWidget::syncDynamicEntryCountLayout()
         return;
 
     m_lastResolvedEntryCount = count;
+    syncWidgetEntryAppearanceCount();
 
     if (m_currentIndex >= count)
         m_currentIndex = -1;
     if (m_stagedIndex >= count)
-        m_stagedIndex = -1;
+        clearLocalStagedSelection();
     if (m_monitorMatchIndex >= count)
         m_monitorMatchIndex = -1;
     if (m_lastMonitorMatchIdx >= count)
@@ -1036,8 +1075,8 @@ void MultiButtonWidget::setIconForEntry(int idx, const QString& path)
     }
     else
     {
-        if (idx < m_levelPresets.size())
-            m_levelPresets[idx].iconPath = path;
+        if (LevelPreset* appearance = mutableEntryAppearancePreset(idx))
+            appearance->iconPath = path;
     }
 
     m_iconCache.remove(idx);
@@ -1065,7 +1104,7 @@ void MultiButtonWidget::setStageBeforeCommit(bool enable)
         return;
     m_stageBeforeCommit = enable;
     if (!enable)
-        m_stagedIndex = -1;
+        clearLocalStagedSelection();
     updateChannelMonitorTimerInterval();
     update();
 }
@@ -1614,7 +1653,8 @@ static void drawVcButtonStyle3Border(QPainter& painter, const QRect& rect,
 /** Same paint sequence as VCButton::paintEvent — Fusion style + CE_PushButton + style #3. */
 static void paintVcButtonSurface(QPainter& p, const QWidget* paletteHost,
                                  const QRect& rect, const QColor& buttonColorOverride,
-                                 bool sunken, bool monitoring, bool drawStyle3Border)
+                                 bool sunken, bool borderActive, bool liveBorder,
+                                 bool drawStyle3Border)
 {
     QStyleOptionButton opt;
     opt.initFrom(paletteHost);
@@ -1635,24 +1675,22 @@ static void paintVcButtonSurface(QPainter& p, const QWidget* paletteHost,
                           const_cast<QWidget*>(paletteHost));
 
     if (drawStyle3Border)
-        drawVcButtonStyle3Border(p, rect, sunken, monitoring);
+        drawVcButtonStyle3Border(p, rect, borderActive, liveBorder);
 }
 
 void MultiButtonWidget::paintTileBackground(QPainter& p, const QRect& rect, int tileIndex,
-                                            bool isActive, bool isPressed, bool monitoring,
+                                            bool isLive, bool isStaged, bool isPressed,
                                             QColor& outBg) const
 {
     QColor buttonColor;
     bool hasColorOverride = false;
 
-    if (tileIndex >= 0
-        && m_mode == MultiButtonMode::Level
-        && tileIndex < m_levelPresets.size())
+    if (tileIndex >= 0)
     {
-        const QColor presetColor = m_levelPresets.at(tileIndex).color;
-        if (presetColor.isValid())
+        const LevelPreset* appearance = entryAppearancePreset(tileIndex);
+        if (appearance && appearance->color.isValid())
         {
-            buttonColor = presetColor;
+            buttonColor = appearance->color;
             hasColorOverride = true;
         }
     }
@@ -1667,10 +1705,11 @@ void MultiButtonWidget::paintTileBackground(QPainter& p, const QRect& rect, int 
     else
         outBg = buttonColor;
 
-    const bool sunken = isPressed || isActive;
+    const bool sunken = isPressed || isLive || isStaged;
+    const bool borderActive = isLive || isStaged;
     paintVcButtonSurface(p, this, rect,
                          hasColorOverride ? buttonColor : QColor(),
-                         sunken, monitoring, true);
+                         sunken, borderActive, isLive, true);
 }
 
 // ---- Helpers --------------------------------------------------------------
@@ -1698,9 +1737,12 @@ QString MultiButtonWidget::entryLabel(int idx) const
 
     if (m_mode == MultiButtonMode::Widget)
     {
-        if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
-            return target->multiButtonEntryName(m_widgetOutputIndex, m_widgetParameter, idx);
-        return QString();
+        const LevelPreset* appearance = entryAppearancePreset(idx);
+        if (appearance && appearance->hideName)
+            return QString();
+        if (appearance && !appearance->label.isEmpty())
+            return appearance->label;
+        return linkedWidgetEntryName(idx);
     }
 
     if (idx < m_levelPresets.size())
@@ -1730,8 +1772,8 @@ QString MultiButtonWidget::entryIconPath(int idx) const
     if (m_mode == MultiButtonMode::Function)
         return m_iconPaths.value(idx);
 
-    if (idx < m_levelPresets.size())
-        return m_levelPresets.at(idx).iconPath;
+    if (const LevelPreset* appearance = entryAppearancePreset(idx))
+        return appearance->iconPath;
 
     return QString();
 }
@@ -1976,16 +2018,16 @@ private:
         QColor bg = m_owner->palette().button().color();
         QColor fg = m_owner->palette().buttonText().color();
 
-        if (entryIdx >= 0
-            && m_owner->m_mode == MultiButtonMode::Level
-            && entryIdx < m_owner->m_levelPresets.size())
+        if (entryIdx >= 0)
         {
-            const QColor presetColor = m_owner->m_levelPresets.at(entryIdx).color;
-            if (presetColor.isValid())
+            const LevelPreset* appearance = m_owner->entryAppearancePreset(entryIdx);
+            if (appearance && appearance->color.isValid())
             {
-                bg = presetColor;
+                bg = appearance->color;
                 fg = contrastTextOn(bg);
             }
+            if (appearance && appearance->labelColor.isValid())
+                fg = appearance->labelColor;
         }
 
         p.fillRect(rowRect, bg);
@@ -2055,8 +2097,11 @@ QString MultiButtonWidget::popupMenuTextForEntry(int idx) const
 
     if (m_mode == MultiButtonMode::Widget)
     {
-        const QString lbl = entryLabel(idx);
-        return lbl.isEmpty() ? tr("Preset %1").arg(idx + 1) : lbl;
+        const LevelPreset* appearance = entryAppearancePreset(idx);
+        if (appearance && !appearance->label.isEmpty())
+            return appearance->label;
+        const QString linked = linkedWidgetEntryName(idx);
+        return linked.isEmpty() ? tr("Preset %1").arg(idx + 1) : linked;
     }
 
     if (idx < m_levelPresets.size() && m_levelPresets.at(idx).hideName)
@@ -2092,7 +2137,7 @@ void MultiButtonWidget::cycleNext()
     if (widgetLinkUsesInternalStaging())
         syncWidgetLinkLiveStagedState();
 
-    const int base = widgetLinkUsesInternalStaging() && m_stagedIndex >= 0
+    const int base = widgetLinkUsesInternalStaging() && hasLocalStagedSelection()
             ? m_stagedIndex : m_currentIndex;
     int next  = (base + 1) % total;
 
@@ -2224,26 +2269,7 @@ void MultiButtonWidget::advanceAutomation()
             break;
     }
 
-    const int idx = allowed.at(newPos);
-    if (idx < 0)
-    {
-        stopCurrent();
-        updateFeedback();
-        update();
-    }
-    else
-    {
-        if (m_mode == MultiButtonMode::Widget)
-        {
-            m_widgetLiveActivationOverride = true;
-            activate(idx);
-            m_widgetLiveActivationOverride = false;
-        }
-        else
-        {
-            activate(idx);
-        }
-    }
+    activateAutomationLive(allowed.at(newPos));
 }
 
 quint8 MultiButtonWidget::staticPresetChannelValue(const LevelPreset& preset, int channelIndex)
@@ -2346,6 +2372,7 @@ void MultiButtonWidget::activate(int idx)
         if (widgetInternalStage)
         {
             m_stagedIndex = idx;
+            m_stagedValid = true;
             if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
                 publishSelectorToBus(idx);
             else
@@ -2359,6 +2386,7 @@ void MultiButtonWidget::activate(int idx)
     m_currentIndex = idx;
     m_visualOnly   = false;
     m_stagedIndex         = m_currentIndex;
+    m_stagedValid         = false;
     m_monitorMatchIndex   = idx;
     m_lastMonitorMatchIdx = idx;
     m_lastActivationTime.restart();
@@ -2371,6 +2399,58 @@ void MultiButtonWidget::activate(int idx)
     }
     updateFeedback();
     update();
+}
+
+void MultiButtonWidget::activateAutomationLive(int idx)
+{
+    clearLocalStagedSelection();
+
+    if (m_mode == MultiButtonMode::Widget)
+    {
+        const bool previousOverride = m_widgetLiveActivationOverride;
+        m_widgetLiveActivationOverride = true;
+
+        if (idx < 0)
+        {
+            PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+            const bool ok = target && target->multiButtonActivate(m_widgetOutputIndex,
+                                                                  m_widgetParameter, -1);
+            if (ok)
+                syncWidgetLinkLiveStagedState();
+            else
+            {
+                m_currentIndex = -1;
+                m_visualOnly = false;
+                m_monitorMatchIndex = -1;
+                m_lastMonitorMatchIdx = -1;
+            }
+
+            if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
+                publishSelectorToBus(-1);
+            else
+                setWidgetSelectorLatchedIndex(-1);
+            updateFeedback();
+            update();
+        }
+        else
+        {
+            activate(idx);
+        }
+
+        m_widgetLiveActivationOverride = previousOverride;
+        return;
+    }
+
+    if (idx < 0)
+    {
+        stopCurrent();
+        clearLocalStagedSelection();
+        updateFeedback();
+        update();
+        return;
+    }
+
+    activate(idx);
 }
 
 void MultiButtonWidget::stopCurrent()
@@ -2389,13 +2469,24 @@ void MultiButtonWidget::stopCurrent()
 
     m_currentIndex = -1;
     m_visualOnly   = false;
-    m_stagedIndex  = -1;
+    clearLocalStagedSelection();
     m_lastActivationTime.restart();
 }
 
 bool MultiButtonWidget::stagingActive() const
 {
     return m_stageBeforeCommit && mode() == Doc::Operate;
+}
+
+bool MultiButtonWidget::hasLocalStagedSelection() const
+{
+    return m_stagedValid;
+}
+
+void MultiButtonWidget::clearLocalStagedSelection()
+{
+    m_stagedIndex = -1;
+    m_stagedValid = false;
 }
 
 void MultiButtonWidget::stageEntry(int idx)
@@ -2415,6 +2506,7 @@ void MultiButtonWidget::stageEntry(int idx)
             return;
     }
     m_stagedIndex = idx;
+    m_stagedValid = true;
     syncWidgetLinkLiveStagedState();
     if (m_mode == MultiButtonMode::Widget)
     {
@@ -2437,6 +2529,9 @@ void MultiButtonWidget::commitStaged()
         return;
     }
 
+    if (!hasLocalStagedSelection())
+        return;
+
     if (m_logPresetChanges)
     {
         qDebug().nospace() << "MultiButton id=" << id() << " commitStaged idx=" << m_stagedIndex;
@@ -2448,16 +2543,16 @@ void MultiButtonWidget::commitStaged()
     else
         activate(idx);
 
-    m_stagedIndex = -1;
+    clearLocalStagedSelection();
     update();
 }
 
 void MultiButtonWidget::clearStagedOnExternalMonitorChange(int matchIdx)
 {
     Q_UNUSED(matchIdx);
-    if ((!stagingActive() && !widgetLinkUsesInternalStaging()) || m_stagedIndex < 0)
+    if ((!stagingActive() && !widgetLinkUsesInternalStaging()) || !hasLocalStagedSelection())
         return;
-    m_stagedIndex = -1;
+    clearLocalStagedSelection();
 }
 
 // ---- Monitor channel values -----------------------------------------------
@@ -2576,7 +2671,7 @@ void MultiButtonWidget::slotCheckChannelValues()
 
     if (matchIdx >= 0)
     {
-        if (stagingActive() && m_stagedIndex >= 0 && matchIdx != m_lastMonitorMatchIdx)
+        if (stagingActive() && hasLocalStagedSelection() && matchIdx != m_lastMonitorMatchIdx)
         {
             clearStagedOnExternalMonitorChange(matchIdx);
             stagedCleared = true;
@@ -2620,7 +2715,7 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
             stopCurrent();
         }
 
-        m_stagedIndex         = -1;
+        clearLocalStagedSelection();
         m_monitorMatchIndex   = -1;
         m_lastMonitorMatchIdx = -2;
 
@@ -2720,7 +2815,7 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
                 const int hit = spreadHitTest(e->pos());
                 if (!m_longFired && hit == m_pressTileIndex && hit != -2)
                 {
-                    if (stagingActive())
+                    if (stagingActive() || widgetLinkUsesInternalStaging())
                     {
                         if (hit < 0)
                             stageEntry(-1);
@@ -2781,6 +2876,13 @@ void MultiButtonWidget::contextMenuEvent(QContextMenuEvent* e)
         e->accept();
         return;
     }
+    m_contextMenuEntryIndex = -2;
+    if (mode() == Doc::Design && m_layout == MultiButtonLayout::Spread)
+    {
+        const int hit = spreadHitTest(e->pos());
+        if (hit >= 0)
+            m_contextMenuEntryIndex = hit;
+    }
     VCWidget::contextMenuEvent(e);
 }
 
@@ -2828,6 +2930,64 @@ int MultiButtonWidget::slotToEntryIndex(int slot) const
     return qBound(0, slot, n - 1);
 }
 
+void MultiButtonWidget::syncWidgetEntryAppearanceCount()
+{
+    if (m_mode != MultiButtonMode::Widget)
+        return;
+
+    const int count = qMax(0, entryCount());
+    while (m_widgetEntryAppearance.size() < count)
+        m_widgetEntryAppearance.append(LevelPreset());
+    while (m_widgetEntryAppearance.size() > count)
+        m_widgetEntryAppearance.removeLast();
+}
+
+const LevelPreset* MultiButtonWidget::entryAppearancePreset(int idx) const
+{
+    if (idx < 0)
+        return nullptr;
+
+    if (m_mode == MultiButtonMode::Widget)
+    {
+        if (idx < m_widgetEntryAppearance.size())
+            return &m_widgetEntryAppearance.at(idx);
+        return nullptr;
+    }
+
+    if (m_mode == MultiButtonMode::Level && idx < m_levelPresets.size())
+        return &m_levelPresets.at(idx);
+
+    return nullptr;
+}
+
+LevelPreset* MultiButtonWidget::mutableEntryAppearancePreset(int idx)
+{
+    if (idx < 0)
+        return nullptr;
+
+    if (m_mode == MultiButtonMode::Widget)
+    {
+        syncWidgetEntryAppearanceCount();
+        if (idx < m_widgetEntryAppearance.size())
+            return &m_widgetEntryAppearance[idx];
+        return nullptr;
+    }
+
+    if (m_mode == MultiButtonMode::Level && idx < m_levelPresets.size())
+        return &m_levelPresets[idx];
+
+    return nullptr;
+}
+
+QString MultiButtonWidget::linkedWidgetEntryName(int idx) const
+{
+    if (idx < 0)
+        return QString();
+    if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
+        return target->multiButtonEntryName(m_widgetOutputIndex, m_widgetParameter, idx);
+    return QString();
+}
+
 uchar MultiButtonWidget::entrySelectOutputValueForSlot(int slot) const
 {
     const int slotCount = selectableSlotCount();
@@ -2871,7 +3031,7 @@ int MultiButtonWidget::displayedEntryIndex() const
         return m_flashHoldIndex;
     if (m_entrySelectPreviewActive)
         return m_entrySelectPreviewIndex;
-    if ((stagingActive() || widgetLinkUsesInternalStaging()) && m_stagedIndex >= 0)
+    if ((stagingActive() || widgetLinkUsesInternalStaging()) && hasLocalStagedSelection())
         return m_stagedIndex;
     return m_currentIndex;
 }
@@ -2884,23 +3044,28 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
     PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
     const int liveIdx = target
             ? target->multiButtonLiveIndex(m_widgetOutputIndex, m_widgetParameter) : -1;
-    const int stagedIdx = target && widgetLinkUsesInternalStaging()
+    const bool stagedValid = target && widgetLinkUsesInternalStaging()
+            && target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter);
+    const int stagedIdx = stagedValid
             ? target->multiButtonStagedIndex(m_widgetOutputIndex, m_widgetParameter) : -1;
 
     const int prevLive = m_currentIndex;
     const int prevMonitor = m_monitorMatchIndex;
     const int prevLastMonitor = m_lastMonitorMatchIdx;
     const int prevStaged = m_stagedIndex;
+    const bool prevStagedValid = m_stagedValid;
 
     m_currentIndex = liveIdx;
     m_monitorMatchIndex = liveIdx;
     m_lastMonitorMatchIdx = liveIdx;
     m_stagedIndex = stagedIdx;
+    m_stagedValid = stagedValid;
 
     const bool changed = m_currentIndex != prevLive
             || m_monitorMatchIndex != prevMonitor
             || m_lastMonitorMatchIdx != prevLastMonitor
-            || m_stagedIndex != prevStaged;
+            || m_stagedIndex != prevStaged
+            || m_stagedValid != prevStagedValid;
 
     if (changed && m_mode == MultiButtonMode::Widget)
     {
@@ -2927,7 +3092,7 @@ int MultiButtonWidget::monitorHighlightIndex() const
         return -1;
 
     // Staging: orange = bus match (external/internal), green = m_stagedIndex; DMX = m_currentIndex
-    if (stagingActive())
+    if (stagingActive() || widgetLinkUsesInternalStaging())
     {
         if (m_monitorMatchIndex >= 0)
             return m_monitorMatchIndex;
@@ -2942,19 +3107,28 @@ int MultiButtonWidget::monitorHighlightIndex() const
 
 int MultiButtonWidget::stagedHighlightIndex() const
 {
-    if (!stagingActive() && !widgetLinkUsesInternalStaging())
+    if (!stagedHighlightValid())
         return -1;
+
+    if (widgetLinkUsesInternalStaging())
+        return m_stagedIndex;
+
+    return m_stagedIndex;
+}
+
+bool MultiButtonWidget::stagedHighlightValid() const
+{
+    if (!stagingActive() && !widgetLinkUsesInternalStaging())
+        return false;
 
     if (widgetLinkUsesInternalStaging())
     {
         PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-        if (!target
-                || !target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter))
-            return -1;
-        return target->multiButtonStagedIndex(m_widgetOutputIndex, m_widgetParameter);
+        return target
+                && target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter);
     }
 
-    return m_stagedIndex;
+    return hasLocalStagedSelection();
 }
 
 bool MultiButtonWidget::widgetLinkUsesInternalStaging() const
@@ -2985,7 +3159,7 @@ void MultiButtonWidget::commitEntrySelectPreview()
     const int idx = m_entrySelectPreviewIndex;
     m_entrySelectPreviewIndex = -1;
 
-    if (stagingActive())
+    if (stagingActive() || widgetLinkUsesInternalStaging())
     {
         stageEntry(idx);
         return;
@@ -3010,7 +3184,7 @@ void MultiButtonWidget::destroyEntrySelectOverlay()
 
 void MultiButtonWidget::applyEntryPick(int idx)
 {
-    if (stagingActive())
+    if (stagingActive() || widgetLinkUsesInternalStaging())
     {
         stageEntry(idx);
         return;
@@ -3149,22 +3323,81 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
 {
     if (entryCount() == 0) return nullptr;
 
-    QMenu* iconMenu = new QMenu(tr("Entry icon"), parentMenu);
+    QMenu* appearanceMenu = new QMenu(tr("Entry appearance"), parentMenu);
 
-    QAction* scribbleAct = iconMenu->addAction(QIcon(":/edit.png"), tr("Scribble icon…"));
+    auto pickEntry = [this]() {
+        if (m_contextMenuEntryIndex >= 0 && m_contextMenuEntryIndex < entryCount())
+            return m_contextMenuEntryIndex;
+        return pickEntryIndexModal(QCursor::pos());
+    };
+
+    auto updateAppearance = [this](int idx, const std::function<void(LevelPreset&)>& fn) {
+        if (idx < 0 || idx >= entryCount())
+            return;
+        if (LevelPreset* appearance = mutableEntryAppearancePreset(idx))
+        {
+            fn(*appearance);
+            m_iconCache.remove(idx);
+            update();
+            if (m_doc)
+                m_doc->setModified();
+        }
+    };
+
+    QAction* editLabelAct = appearanceMenu->addAction(tr("Custom label…"));
+    connect(editLabelAct, &QAction::triggered, this, [this, pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        if (idx < 0)
+            return;
+        const QString current = entryAppearancePreset(idx)
+                ? entryAppearancePreset(idx)->label : QString();
+        bool ok = false;
+        const QString text = QInputDialog::getText(
+                this, tr("Custom label"),
+                tr("Local label for entry %1 (blank = linked/default name):").arg(idx + 1),
+                QLineEdit::Normal, current, &ok);
+        if (!ok)
+            return;
+        updateAppearance(idx, [&text](LevelPreset& preset) {
+            preset.label = text.trimmed();
+            if (!preset.label.isEmpty())
+                preset.hideName = false;
+        });
+    });
+
+    QAction* resetLabelAct = appearanceMenu->addAction(tr("Reset local label"));
+    connect(resetLabelAct, &QAction::triggered, this, [pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        updateAppearance(idx, [](LevelPreset& preset) {
+            preset.label.clear();
+        });
+    });
+
+    QAction* hideNameAct = appearanceMenu->addAction(tr("Hide/show name"));
+    connect(hideNameAct, &QAction::triggered, this, [pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        updateAppearance(idx, [](LevelPreset& preset) {
+            preset.hideName = !preset.hideName;
+        });
+    });
+
+    appearanceMenu->addSeparator();
+
+    QAction* scribbleAct = appearanceMenu->addAction(QIcon(":/edit.png"), tr("Scribble icon…"));
     connect(scribbleAct, &QAction::triggered, this, [this]() {
-        const int idx = pickEntryIndexModal(QCursor::pos());
-        if (idx < -1)
+        const int idx = (m_contextMenuEntryIndex >= 0 && m_contextMenuEntryIndex < entryCount())
+                ? m_contextMenuEntryIndex : pickEntryIndexModal(QCursor::pos());
+        if (idx < 0)
             return;
         ScribbleDialog dlg(m_doc, this);
         if (dlg.exec() == QDialog::Accepted)
             setIconForEntry(idx, dlg.savedIconPath());
     });
 
-    QAction* chooseAct = iconMenu->addAction(tr("Choose image…"));
-    connect(chooseAct, &QAction::triggered, this, [this]() {
-        const int idx = pickEntryIndexModal(QCursor::pos());
-        if (idx < -1)
+    QAction* chooseAct = appearanceMenu->addAction(tr("Choose image…"));
+    connect(chooseAct, &QAction::triggered, this, [this, pickEntry]() {
+        const int idx = pickEntry();
+        if (idx < 0)
             return;
 
         QString formats;
@@ -3179,17 +3412,67 @@ QMenu* MultiButtonWidget::customMenu(QMenu* parentMenu)
             setIconForEntry(idx, path);
     });
 
-    iconMenu->addSeparator();
-
-    QAction* resetAct = iconMenu->addAction(tr("Reset icon"));
-    connect(resetAct, &QAction::triggered, this, [this]() {
-        const int idx = pickEntryIndexModal(QCursor::pos());
-        if (idx < -1)
+    QAction* resetAct = appearanceMenu->addAction(tr("Reset icon"));
+    connect(resetAct, &QAction::triggered, this, [this, pickEntry]() {
+        const int idx = pickEntry();
+        if (idx < 0)
             return;
         setIconForEntry(idx, QString());
     });
 
-    return iconMenu;
+    appearanceMenu->addSeparator();
+
+    QAction* colorAct = appearanceMenu->addAction(tr("Button color…"));
+    connect(colorAct, &QAction::triggered, this, [this, pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        if (idx < 0)
+            return;
+        QColor initial = Qt::white;
+        if (const LevelPreset* appearance = entryAppearancePreset(idx))
+            if (appearance->color.isValid())
+                initial = appearance->color;
+        const QColor chosen = QColorDialog::getColor(initial, this, tr("Entry button color"));
+        if (!chosen.isValid())
+            return;
+        updateAppearance(idx, [&chosen](LevelPreset& preset) {
+            preset.color = chosen;
+        });
+    });
+
+    QAction* resetColorAct = appearanceMenu->addAction(tr("Reset button color"));
+    connect(resetColorAct, &QAction::triggered, this, [pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        updateAppearance(idx, [](LevelPreset& preset) {
+            preset.color = QColor();
+        });
+    });
+
+    QAction* labelColorAct = appearanceMenu->addAction(tr("Label color…"));
+    connect(labelColorAct, &QAction::triggered, this, [this, pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        if (idx < 0)
+            return;
+        QColor initial = Qt::black;
+        if (const LevelPreset* appearance = entryAppearancePreset(idx))
+            if (appearance->labelColor.isValid())
+                initial = appearance->labelColor;
+        const QColor chosen = QColorDialog::getColor(initial, this, tr("Entry label color"));
+        if (!chosen.isValid())
+            return;
+        updateAppearance(idx, [&chosen](LevelPreset& preset) {
+            preset.labelColor = chosen;
+        });
+    });
+
+    QAction* resetLabelColorAct = appearanceMenu->addAction(tr("Reset label color"));
+    connect(resetLabelColorAct, &QAction::triggered, this, [pickEntry, updateAppearance]() {
+        const int idx = pickEntry();
+        updateAppearance(idx, [](LevelPreset& preset) {
+            preset.labelColor = QColor();
+        });
+    });
+
+    return appearanceMenu;
 }
 
 // ---- External input -------------------------------------------------------
@@ -3351,10 +3634,7 @@ void MultiButtonWidget::handlePresetChooseInput(uchar value)
         if (!currentAllowed)
         {
             const int snap = allowed.first();
-            if (snap < 0)
-                stopCurrent();
-            else
-                activate(snap);
+            activateAutomationLive(snap);
         }
     }
 
@@ -3422,7 +3702,7 @@ void MultiButtonWidget::handleEntrySelectInput(uchar value)
     m_entrySelectDebounceSlot = slot;
     m_entrySelectDebounceTime.restart();
 
-    if (stagingActive())
+    if (stagingActive() || widgetLinkUsesInternalStaging())
     {
         if (value == 0)
             return;
@@ -3545,7 +3825,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             {
                 if (opInput && value > 0)
                 {
-                    if (stagingActive())
+                    if (stagingActive() || widgetLinkUsesInternalStaging())
                         stageEntry(m_spreadPageIndex * spp + slot);
                     else
                         activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
@@ -3568,7 +3848,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             }
             else if (opInput && value > 0)
             {
-                if (stagingActive())
+                if (stagingActive() || widgetLinkUsesInternalStaging())
                     stageEntry(i);
                 else
                     activate(i);
@@ -3670,6 +3950,7 @@ void MultiButtonWidget::editProperties()
         m_iconPaths,
         m_levelChannelBindings,
         m_levelPresets,
+        m_widgetEntryAppearance,
         m_longPressMs,
         m_addOffAtEnd,
         m_monitorChannelValues,
@@ -3730,6 +4011,7 @@ void MultiButtonWidget::editProperties()
     for (int i = 0; i < m_functionEntryKeys.size(); ++i)
         setEntryKeySource(i, m_functionEntryKeys.at(i));
     setLevelConfig(dlg.levelChannelBindings(), dlg.levelPresets());
+    setWidgetEntryAppearance(dlg.widgetEntryAppearance());
     setSpreadSlotInputs(dlg.spreadSlotInputs());
     setSpreadSlotKeys(dlg.spreadSlotKeys());
     setLongPressMs(dlg.longPressMs());
@@ -3814,6 +4096,9 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->m_widgetParameter = m_widgetParameter;
     copy->m_widgetLiveInputSource = cloneInputSource(m_widgetLiveInputSource);
     copy->m_widgetBusPolicy = m_widgetBusPolicy;
+    copy->m_widgetEntryAppearance = m_widgetEntryAppearance;
+    for (LevelPreset& preset : copy->m_widgetEntryAppearance)
+        preset.entryInput = cloneInputSource(preset.entryInput);
     copy->assignInputSource(cloneInputSource(inputSource(commitInputSourceId)),
                             commitInputSourceId);
     copy->setWidgetLayout(m_layout);
@@ -3868,6 +4153,36 @@ void MultiButtonWidget::applyEntryNamesFrom(const MultiButtonWidget* src)
             }
         }
     }
+    else if (m_mode == MultiButtonMode::Widget)
+    {
+        syncWidgetEntryAppearanceCount();
+        for (int i = 0; i < n && i < m_widgetEntryAppearance.size(); ++i)
+        {
+            LevelPreset& tgt = m_widgetEntryAppearance[i];
+            const LevelPreset* s = nullptr;
+            if (src->m_mode == MultiButtonMode::Widget && i < src->m_widgetEntryAppearance.size())
+                s = &src->m_widgetEntryAppearance.at(i);
+            else if (src->m_mode == MultiButtonMode::Level && i < src->m_levelPresets.size())
+                s = &src->m_levelPresets.at(i);
+
+            if (s)
+            {
+                tgt.label = s->label;
+                tgt.iconPath = s->iconPath;
+                tgt.color = s->color;
+                tgt.labelColor = s->labelColor;
+                tgt.hideName = s->hideName;
+            }
+            else
+            {
+                tgt.label = src->m_functionLabels.value(i);
+                tgt.iconPath = src->m_iconPaths.value(i);
+                tgt.color = QColor();
+                tgt.labelColor = QColor();
+                tgt.hideName = false;
+            }
+        }
+    }
     else
     {
         for (int i = 0; i < n; ++i)
@@ -3882,6 +4197,7 @@ void MultiButtonWidget::applyEntryNamesFrom(const MultiButtonWidget* src)
                 tgt.label    = s.label;
                 tgt.iconPath = s.iconPath;
                 tgt.color    = s.color;
+                tgt.labelColor = s.labelColor;
                 tgt.hideName = s.hideName;
             }
             else
@@ -4170,6 +4486,30 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     }
     obj["levelPresets"] = presetArr;
 
+    QJsonArray widgetAppearanceArr;
+    for (const LevelPreset& preset : m_widgetEntryAppearance)
+    {
+        QJsonObject po;
+        po["label"] = preset.label;
+        po["iconPath"] = preset.iconPath;
+        if (preset.color.isValid())
+            po["color"] = preset.color.name(QColor::HexRgb);
+        if (preset.hideName)
+            po["hideName"] = true;
+        if (preset.labelColor.isValid())
+            po["labelColor"] = preset.labelColor.name(QColor::HexRgb);
+        if (!preset.entryInput.isNull() && preset.entryInput->isValid())
+        {
+            po["inputUniverse"] = int(preset.entryInput->universe());
+            po["inputChannel"] = int(preset.entryInput->channel());
+        }
+        if (!preset.entryKey.isEmpty())
+            po["inputKey"] = preset.entryKey.toString();
+        widgetAppearanceArr.append(po);
+    }
+    if (!widgetAppearanceArr.isEmpty())
+        obj["widgetEntryAppearance"] = widgetAppearanceArr;
+
     QJsonArray funcInArr;
     for (int i = 0; i < m_functionEntryInputs.size(); ++i)
     {
@@ -4389,6 +4729,40 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
 
     setLevelConfig(bindings, presets);
 
+    QList<LevelPreset> widgetAppearance;
+    for (const QJsonValue& pv : obj["widgetEntryAppearance"].toArray())
+    {
+        QJsonObject po = pv.toObject();
+        LevelPreset preset;
+        preset.label = po["label"].toString();
+        preset.iconPath = po["iconPath"].toString();
+        const QString colorStr = po["color"].toString();
+        if (!colorStr.isEmpty())
+        {
+            const QColor c(colorStr);
+            if (c.isValid())
+                preset.color = c;
+        }
+        preset.hideName = po["hideName"].toBool(false);
+        const QString labelColorStr = po["labelColor"].toString();
+        if (!labelColorStr.isEmpty())
+        {
+            const QColor lc(labelColorStr);
+            if (lc.isValid())
+                preset.labelColor = lc;
+        }
+        if (po.contains("inputUniverse"))
+        {
+            preset.entryInput = QSharedPointer<QLCInputSource>(
+                    new QLCInputSource(quint32(po["inputUniverse"].toInt()),
+                                       quint32(po["inputChannel"].toInt())));
+        }
+        if (po.contains("inputKey"))
+            preset.entryKey = stripKeySequence(QKeySequence(po["inputKey"].toString()));
+        widgetAppearance.append(preset);
+    }
+    setWidgetEntryAppearance(widgetAppearance);
+
     if (obj.contains("functionEntryInputs"))
     {
         const QJsonArray arr = obj["functionEntryInputs"].toArray();
@@ -4495,6 +4869,7 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     QList<quint32>            legacyChannels;
     QList<LevelChannelBinding> levelBindings;
     QList<LevelPreset>        levelPresets;
+    QList<LevelPreset>        widgetEntryAppearance;
     quint32                   widgetTargetId = VCWidget::invalidId();
     int                       widgetOutputIndex = 0;
     int                       widgetParameter = 0;
@@ -4712,6 +5087,40 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 
             levelPresets.append(preset);
         }
+        else if (root.name() == KXMLWidgetEntryAppearance)
+        {
+            LevelPreset preset;
+            const auto attrs = root.attributes();
+            preset.label = attrs.value(KXMLLevelPresetLabel).toString();
+            preset.iconPath = resolveIconPath(attrs.value(KXMLLevelPresetIcon).toString(), m_doc);
+            const QString colorStr = attrs.value(KXMLLevelPresetColor).toString();
+            if (!colorStr.isEmpty())
+            {
+                const QColor c(colorStr);
+                if (c.isValid())
+                    preset.color = c;
+            }
+            preset.hideName = attrs.value(KXMLLevelPresetHideName).toInt() != 0;
+            const QString labelColorStr = attrs.value(KXMLLevelPresetLabelColor).toString();
+            if (!labelColorStr.isEmpty())
+            {
+                const QColor lc(labelColorStr);
+                if (lc.isValid())
+                    preset.labelColor = lc;
+            }
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLEntryTriggerInput)
+                {
+                    const EntryInputBinding binding = readInputBlock(root, this);
+                    preset.entryInput = binding.source;
+                    preset.entryKey = binding.key;
+                }
+                else
+                    root.skipCurrentElement();
+            }
+            widgetEntryAppearance.append(preset);
+        }
         else if (root.name() == KXMLFunctionEntryInput)
         {
             const int idx = root.attributes().value(KXMLFunctionEntryIndex).toInt();
@@ -4796,6 +5205,9 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         }
     }
     m_levelPresets = levelPresets;
+    m_widgetEntryAppearance = widgetEntryAppearance;
+    for (LevelPreset& preset : m_widgetEntryAppearance)
+        preset.entryInput = cloneInputSource(preset.entryInput);
     m_functionEntryFlash = functionFlashLoaded;
     m_functionEntryLabelColors = functionLabelColorsLoaded;
     while (m_functionEntryFlash.size() < m_functionIds.size())
@@ -5018,6 +5430,29 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         }
     }
 
+    for (const LevelPreset& preset : m_widgetEntryAppearance)
+    {
+        doc->writeStartElement(KXMLWidgetEntryAppearance);
+        doc->writeAttribute(KXMLLevelPresetLabel, preset.label);
+        doc->writeAttribute(KXMLLevelPresetIcon,
+                            normalizeIconPath(preset.iconPath, m_doc));
+        if (preset.color.isValid())
+            doc->writeAttribute(KXMLLevelPresetColor, preset.color.name(QColor::HexRgb));
+        if (preset.hideName)
+            doc->writeAttribute(KXMLLevelPresetHideName, QStringLiteral("1"));
+        if (preset.labelColor.isValid())
+            doc->writeAttribute(KXMLLevelPresetLabelColor,
+                                preset.labelColor.name(QColor::HexRgb));
+        if ((!preset.entryInput.isNull() && preset.entryInput->isValid())
+            || !preset.entryKey.isEmpty())
+        {
+            doc->writeStartElement(KXMLEntryTriggerInput);
+            saveInputBlock(doc, preset.entryInput, preset.entryKey);
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
+    }
+
     for (int i = 0; i < m_functionEntryInputs.size(); ++i)
     {
         const QSharedPointer<QLCInputSource>& src = m_functionEntryInputs.at(i);
@@ -5142,8 +5577,7 @@ QColor MultiButtonWidget::buttonTextColor(const QColor& tileBg) const
 }
 
 void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileIndex,
-                                 bool isSelected, bool isPressed,
-                                 bool showMonitorBorder) const
+                                 bool isLive, bool isStaged, bool isPressed) const
 {
     p.save();
     p.translate(tileRect.topLeft());
@@ -5151,21 +5585,18 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
 
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const bool highlighted = isSelected || showMonitorBorder;
-    const bool monitoring = showMonitorBorder
-                            || (isSelected && m_entrySelectPreviewActive);
     QColor bg;
-    paintTileBackground(p, r, tileIndex, highlighted, isPressed, monitoring, bg);
+    paintTileBackground(p, r, tileIndex, isLive, isStaged, isPressed, bg);
 
     QPixmap iconPx;
     if (tileIndex >= 0)
         iconPx = iconForEntry(tileIndex);
 
     const bool hasCustomLabel = (tileIndex >= 0) && !entryLabel(tileIndex).isEmpty();
+    const LevelPreset* appearance = entryAppearancePreset(tileIndex);
     const bool levelNoText = (tileIndex >= 0
-                              && m_mode == MultiButtonMode::Level
-                              && tileIndex < m_levelPresets.size()
-                              && m_levelPresets.at(tileIndex).hideName);
+                              && appearance
+                              && appearance->hideName);
     const bool showLabelText = tileIndex < 0
                                || (!levelNoText && (iconPx.isNull() || hasCustomLabel
                                                     || m_mode == MultiButtonMode::Level));
@@ -5173,11 +5604,9 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
     QColor fg = buttonTextColor(bg);
     if (tileIndex >= 0)
     {
-        if (m_mode == MultiButtonMode::Level
-            && tileIndex < m_levelPresets.size()
-            && m_levelPresets.at(tileIndex).labelColor.isValid())
+        if (appearance && appearance->labelColor.isValid())
         {
-            fg = m_levelPresets.at(tileIndex).labelColor;
+            fg = appearance->labelColor;
         }
         else if (m_mode == MultiButtonMode::Function
                  && tileIndex < m_functionEntryLabelColors.size()
@@ -5211,9 +5640,7 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
     if (showLabelText && !cap.isEmpty())
     {
         QFont mainFont = font();
-        if (isSelected && tileIndex >= 0
-            && (m_entrySelectPreviewActive || !m_visualOnly
-                || stagingActive() || widgetLinkUsesInternalStaging()))
+        if ((isLive || isStaged) && tileIndex >= 0)
             mainFont.setBold(true);
         p.setFont(mainFont);
         p.setPen(fg);
@@ -5257,18 +5684,23 @@ void MultiButtonWidget::paintSpread(QPainter& p)
     const int displayIdx = displayedEntryIndex();
     const int monitorIdx = monitorHighlightIndex();
     const int stagedIdx  = stagedHighlightIndex();
+    const bool hasStagedHighlight = stagedHighlightValid();
+    const bool hasLiveHighlight = m_mode == MultiButtonMode::Widget
+            ? (widgetLinkTarget() != nullptr)
+            : (m_monitorChannelValues || m_currentIndex >= 0);
 
     for (const SpreadTileInfo& tile : computeSpreadTiles())
     {
-        const bool showMonitor = (tile.index == monitorIdx);
-        const bool showStagedSelection = stagingActive() || widgetLinkUsesInternalStaging();
-        const bool isSelected = showStagedSelection
-                                    ? ((tile.index < 0) ? (stagedIdx < 0)
-                                                        : (tile.index == stagedIdx))
-                                    : ((tile.index < 0) ? (displayIdx < 0)
-                                                        : (tile.index == displayIdx));
-        const bool isPressed = m_pressActive && (tile.index == m_pressTileIndex);
-        drawTile(p, tile.rect, tile.index, isSelected, isPressed, showMonitor);
+        const bool tileIsOff = tile.index < 0;
+        const bool isLiveTile = hasLiveHighlight
+                && (tileIsOff ? (monitorIdx < 0) : (tile.index == monitorIdx));
+        const bool isStagedTile = hasStagedHighlight
+                && (tileIsOff ? (stagedIdx < 0) : (tile.index == stagedIdx));
+        const bool isPreviewTile = m_entrySelectPreviewActive
+                && (tileIsOff ? (displayIdx < 0) : (tile.index == displayIdx));
+        const bool isPressed = (m_pressActive && tile.index == m_pressTileIndex)
+                || isPreviewTile;
+        drawTile(p, tile.rect, tile.index, isLiveTile, isStagedTile, isPressed);
     }
 }
 
@@ -5282,13 +5714,10 @@ void MultiButtonWidget::paintSingle(QPainter& p)
     const bool isPressed = m_pressActive;
 
     QColor bg = defaultTileBackground();
-    if (m_mode == MultiButtonMode::Level
-        && displayIdx >= 0
-        && displayIdx < m_levelPresets.size())
+    const LevelPreset* displayAppearance = entryAppearancePreset(displayIdx);
+    if (displayIdx >= 0 && displayAppearance && displayAppearance->color.isValid())
     {
-        const QColor presetColor = m_levelPresets.at(displayIdx).color;
-        if (presetColor.isValid())
-            bg = presetColor;
+        bg = displayAppearance->color;
     }
 
     if (m_pressActive)
@@ -5302,11 +5731,9 @@ void MultiButtonWidget::paintSingle(QPainter& p)
     QColor fg = buttonTextColor(bg);
     if (displayIdx >= 0)
     {
-        if (m_mode == MultiButtonMode::Level
-            && displayIdx < m_levelPresets.size()
-            && m_levelPresets.at(displayIdx).labelColor.isValid())
+        if (displayAppearance && displayAppearance->labelColor.isValid())
         {
-            fg = m_levelPresets.at(displayIdx).labelColor;
+            fg = displayAppearance->labelColor;
         }
         else if (m_mode == MultiButtonMode::Function
                  && displayIdx < m_functionEntryLabelColors.size()
@@ -5337,9 +5764,9 @@ void MultiButtonWidget::paintSingle(QPainter& p)
 
     const bool hasCustomLabel = (displayIdx >= 0)
                                 && !entryLabel(displayIdx).isEmpty();
-    const bool levelNoText = (m_mode == MultiButtonMode::Level
-                              && displayIdx >= 0
-                              && m_levelPresets.at(displayIdx).hideName);
+    const bool levelNoText = displayIdx >= 0
+                              && displayAppearance
+                              && displayAppearance->hideName;
     const bool showLabelText = !levelNoText && (icon.isNull() || hasCustomLabel
                                                 || m_mode == MultiButtonMode::Level);
 

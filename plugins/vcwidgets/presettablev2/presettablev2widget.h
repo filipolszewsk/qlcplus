@@ -333,6 +333,7 @@ private:
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
     bool multiFxActiveForOutputLocked(int outputIdx) const;
+    bool hasStagedMultiFxPresetLocked(int outputIdx) const;
     int stagedMultiFxPresetIndexLocked(int outputIdx) const;
     bool hasStagedMultiFxAnyLocked() const;
     /** Sweep on primary row change only when Continuous is not driving the layer. */

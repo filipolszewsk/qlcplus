@@ -45,6 +45,7 @@ public:
         const QStringList&                 iconPaths,
         const QList<LevelChannelBinding>&  levelChannelBindings,
         const QList<LevelPreset>&          levelPresets,
+        const QList<LevelPreset>&          widgetEntryAppearance,
         int                                longPressMs,
         bool                               addOffAtEnd,
         bool                               monitorChannelValues,
@@ -90,6 +91,7 @@ public:
     QStringList                    iconPaths()             const;
     QList<LevelChannelBinding>     levelChannelBindings()  const;
     QList<LevelPreset>             levelPresets()          const;
+    QList<LevelPreset>             widgetEntryAppearance() const;
     int                            longPressMs()           const;
     bool                           addOffAtEnd()           const;
     bool                           monitorChannelValues()  const;
@@ -240,6 +242,7 @@ private:
 
     QList<LevelChannelBinding> m_levelChannelBindings;
     QList<LevelPreset>         m_levelPresets;
+    QList<LevelPreset>         m_widgetEntryAppearance;
     QList<QSharedPointer<QLCInputSource>> m_functionEntryInputs;
     QList<QKeySequence>                   m_functionEntryKeys;
     QList<QSharedPointer<QLCInputSource>> m_spreadSlotInputs;
@@ -265,6 +268,7 @@ private:
 
     QPushButton*  m_chooseChannelsBtn = nullptr;
     QTableWidget* m_presetTable      = nullptr;
+    QTableWidget* m_widgetAppearanceTable = nullptr;
     QPushButton*  m_lvlAddBtn        = nullptr;
     QPushButton*  m_lvlRemoveBtn     = nullptr;
     QPushButton*  m_lvlEditLblBtn    = nullptr;

@@ -1538,7 +1538,7 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
             && m_stagedSecondaryRow[outputIdx] < m_rows.size();
     const bool hasStagedContinuous = outputIdx < m_stagedContinuousValid.size()
             && m_stagedContinuousValid[outputIdx];
-    const bool hasStagedMultiFx = stagedMultiFxPresetIndexLocked(outputIdx) >= 0;
+    const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
 
     const int liveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
     state.primaryRow = activeRow;
@@ -1586,14 +1586,20 @@ bool PresetTableV2Widget::continuousEfxActiveForOutputLocked(int outputIdx) cons
 bool PresetTableV2Widget::multiFxActiveForOutputLocked(int outputIdx) const
 {
     return liveMultiFxPresetIndexLocked(outputIdx) >= 0
-            || stagedMultiFxPresetIndexLocked(outputIdx) >= 0;
+            || hasStagedMultiFxPresetLocked(outputIdx);
+}
+
+bool PresetTableV2Widget::hasStagedMultiFxPresetLocked(int outputIdx) const
+{
+    return outputIdx >= 0
+            && outputIdx < m_stagedMultiFxValid.size()
+            && outputIdx < m_stagedMultiFxPreset.size()
+            && m_stagedMultiFxValid[outputIdx];
 }
 
 int PresetTableV2Widget::stagedMultiFxPresetIndexLocked(int outputIdx) const
 {
-    if (outputIdx < 0 || outputIdx >= m_stagedMultiFxValid.size()
-            || outputIdx >= m_stagedMultiFxPreset.size()
-            || !m_stagedMultiFxValid[outputIdx])
+    if (!hasStagedMultiFxPresetLocked(outputIdx))
         return -1;
     return m_stagedMultiFxPreset[outputIdx];
 }
@@ -1602,7 +1608,7 @@ bool PresetTableV2Widget::hasStagedMultiFxAnyLocked() const
 {
     for (int o = 0; o < m_outputs.size(); ++o)
     {
-        if (stagedMultiFxPresetIndexLocked(o) >= 0)
+        if (hasStagedMultiFxPresetLocked(o))
             return true;
     }
     return false;
@@ -1671,10 +1677,14 @@ bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
 {
     if (!m_crossfadeEnabled || !continuousEfxActiveForOutputLocked(outputIdx))
         return false;
+    const bool hasStagedContinuous = outputIdx >= 0
+            && outputIdx < m_stagedContinuousValid.size()
+            && m_stagedContinuousValid[outputIdx];
     const bool hasStagedSecondary = outputIdx >= 0
             && outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx];
-    return hasStagedSecondary || effectiveSecondaryRowLocked(outputIdx, m_activeRow[outputIdx]) >= 0;
+    return hasStagedContinuous || hasStagedSecondary
+            || effectiveSecondaryRowLocked(outputIdx, m_activeRow[outputIdx]) >= 0;
 }
 
 bool PresetTableV2Widget::multiFxCrossfadeModeLocked(int outputIdx) const
@@ -1692,7 +1702,7 @@ bool PresetTableV2Widget::multiFxCrossfadeModeLocked(int outputIdx) const
             && m_stagedRow[outputIdx] != activeRow
             && m_stagedRow[outputIdx] < m_rows.size();
     return hasStagedSecondary || hasStagedPrimary
-            || stagedMultiFxPresetIndexLocked(outputIdx) >= 0
+            || hasStagedMultiFxPresetLocked(outputIdx)
             || effectiveSecondaryRowLocked(outputIdx, activeRow) >= 0;
 }
 
@@ -2295,12 +2305,19 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
         return false;
 
+    const auto clearCrossfadeSessionIfNoStaged = [this]()
+    {
+        if (!crossfadeHasStagedChangesLocked())
+            m_crossfadeSessionActive = false;
+    };
+
     if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow)
     {
         if (index < -1 || index >= m_rows.size())
             return false;
         if (outputIdx < m_stagedRow.size())
             m_stagedRow[outputIdx] = -1;
+        clearCrossfadeSessionIfNoStaged();
         lk.unlock();
         setActiveRow(outputIdx, index);
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::rowSelector(outputIdx));
@@ -2314,24 +2331,16 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     {
         if (index < -1 || index >= m_rows.size())
             return false;
-        if (continuousFxSelectorToStagedLocked())
-        {
-            armCrossfadeStagingLocked();
-            stageSecondaryRowLocked(outputIdx, index);
-            resetCrossfadeClockLocked();
-        }
-        else
-        {
-            while (m_liveSecondaryRow.size() <= outputIdx)
-                m_liveSecondaryRow.append(-1);
-            m_liveSecondaryRow[outputIdx] = index;
-            if (outputIdx < m_stagedSecondaryValid.size())
-                m_stagedSecondaryValid[outputIdx] = false;
-            if (outputIdx < m_stagedSecondaryRow.size())
-                m_stagedSecondaryRow[outputIdx] = -1;
-            materializeContinuousRowsLocked(outputIdx, false);
-            sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSecondaryRow(outputIdx));
-        }
+        while (m_liveSecondaryRow.size() <= outputIdx)
+            m_liveSecondaryRow.append(-1);
+        m_liveSecondaryRow[outputIdx] = index;
+        if (outputIdx < m_stagedSecondaryValid.size())
+            m_stagedSecondaryValid[outputIdx] = false;
+        if (outputIdx < m_stagedSecondaryRow.size())
+            m_stagedSecondaryRow[outputIdx] = -1;
+        materializeContinuousRowsLocked(outputIdx, false);
+        clearCrossfadeSessionIfNoStaged();
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSecondaryRow(outputIdx));
         lk.unlock();
         refreshTransitionPresetCache();
         update();
@@ -2362,46 +2371,28 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     }
     else if (parameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset)
     {
-        if (continuousFxSelectorToStagedLocked())
-        {
-            armCrossfadeStagingLocked();
-            materializeContinuousRowsLocked(outputIdx, true);
-            stageContinuousPresetLocked(outputIdx, index);
-            resetCrossfadeClockLocked();
-        }
-        else
-        {
-            while (m_liveContinuousPreset.size() <= outputIdx)
-                m_liveContinuousPreset.append(-1);
-            m_liveContinuousPreset[outputIdx] = index;
-            if (outputIdx < m_stagedContinuousValid.size())
-                m_stagedContinuousValid[outputIdx] = false;
-            if (outputIdx < m_stagedContinuousPreset.size())
-                m_stagedContinuousPreset[outputIdx] = -1;
-            materializeContinuousRowsLocked(outputIdx, false);
-            sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transContinuousBank(outputIdx));
-        }
+        while (m_liveContinuousPreset.size() <= outputIdx)
+            m_liveContinuousPreset.append(-1);
+        m_liveContinuousPreset[outputIdx] = index;
+        if (outputIdx < m_stagedContinuousValid.size())
+            m_stagedContinuousValid[outputIdx] = false;
+        if (outputIdx < m_stagedContinuousPreset.size())
+            m_stagedContinuousPreset[outputIdx] = -1;
+        materializeContinuousRowsLocked(outputIdx, false);
+        clearCrossfadeSessionIfNoStaged();
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transContinuousBank(outputIdx));
     }
     else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
     {
-        if (continuousFxSelectorToStagedLocked())
-        {
-            armCrossfadeStagingLocked();
-            materializeContinuousRowsLocked(outputIdx, true);
-            stageMultiFxPresetLocked(outputIdx, index);
-            resetCrossfadeClockLocked();
-        }
-        else
-        {
-            while (m_liveMultiFxPreset.size() <= outputIdx)
-                m_liveMultiFxPreset.append(-1);
-            m_liveMultiFxPreset[outputIdx] = index;
-            if (outputIdx < m_stagedMultiFxValid.size())
-                m_stagedMultiFxValid[outputIdx] = false;
-            if (outputIdx < m_stagedMultiFxPreset.size())
-                m_stagedMultiFxPreset[outputIdx] = -1;
-            sendFeedback(index < 0 ? 0 : index + 1, PTInputId::multiFxBank(outputIdx));
-        }
+        while (m_liveMultiFxPreset.size() <= outputIdx)
+            m_liveMultiFxPreset.append(-1);
+        m_liveMultiFxPreset[outputIdx] = index;
+        if (outputIdx < m_stagedMultiFxValid.size())
+            m_stagedMultiFxValid[outputIdx] = false;
+        if (outputIdx < m_stagedMultiFxPreset.size())
+            m_stagedMultiFxPreset[outputIdx] = -1;
+        clearCrossfadeSessionIfNoStaged();
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::multiFxBank(outputIdx));
     }
     else
         return false;
@@ -2487,6 +2478,14 @@ void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetI
         m_stagedContinuousPreset.append(-1);
     while (m_stagedContinuousValid.size() <= outputIdx)
         m_stagedContinuousValid.append(false);
+    if (presetIdx == liveContinuousPresetIndexLocked(outputIdx))
+    {
+        m_stagedContinuousPreset[outputIdx] = -1;
+        m_stagedContinuousValid[outputIdx] = false;
+        if (!crossfadeHasStagedChangesLocked())
+            m_crossfadeSessionActive = false;
+        return;
+    }
     m_stagedContinuousPreset[outputIdx] = presetIdx;
     m_stagedContinuousValid[outputIdx] = true;
 }
@@ -2499,6 +2498,14 @@ void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
         m_stagedMultiFxPreset.append(-1);
     while (m_stagedMultiFxValid.size() <= outputIdx)
         m_stagedMultiFxValid.append(false);
+    if (presetIdx == liveMultiFxPresetIndexLocked(outputIdx))
+    {
+        m_stagedMultiFxPreset[outputIdx] = -1;
+        m_stagedMultiFxValid[outputIdx] = false;
+        if (!crossfadeHasStagedChangesLocked())
+            m_crossfadeSessionActive = false;
+        return;
+    }
     m_stagedMultiFxPreset[outputIdx] = presetIdx;
     m_stagedMultiFxValid[outputIdx] = true;
 }
@@ -3248,7 +3255,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                                                             : continuousPresetForOutputLocked(outputIdx);
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
-    const bool hasStagedMultiFx = stagedMultiFxIdx >= 0;
+    const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
             ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
             : multiFxPreset;
@@ -3717,7 +3724,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const PTTransitionPreset stagedPreset = morphOutput ? *stagedPresetOverride : preset;
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
-    const bool hasStagedMultiFx = stagedMultiFxIdx >= 0;
+    const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
             ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
             : multiFxPreset;
@@ -4364,7 +4371,7 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
                     m_multiFxElapsedMs[o] = 0;
             }
             const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(o);
-            if (stagedMultiFxIdx >= 0)
+            if (hasStagedMultiFxPresetLocked(o))
             {
                 const PTTransitionPreset stagedPreset =
                         transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx);
