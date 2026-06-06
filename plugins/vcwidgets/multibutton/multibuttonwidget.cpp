@@ -2804,6 +2804,19 @@ void MultiButtonWidget::slotCheckChannelValues()
     m_monitorMatchIndex = matchIdx;
     m_lastMonitorMatchIdx = matchIdx;
 
+    // Restore visual tracking for non-staging Level/Function mode.
+    // When the monitor detects a stable match, update m_currentIndex so
+    // paintSingle shows the externally-active preset (label, icon, color).
+    // Guarded by !stagingActive() so the committed/staged indices are never
+    // disturbed while the user is mid-commit; Widget mode returns early above.
+    if (!stagingActive() && !widgetLinkUsesInternalStaging()
+            && matchIdx >= 0 && matchIdx != m_currentIndex)
+    {
+        m_currentIndex = matchIdx;
+        m_visualOnly   = true;
+        updateFeedback();
+    }
+
     if (m_monitorMatchIndex != prevMonitorMatch || stagedCleared)
         update();
 }
@@ -6145,7 +6158,7 @@ void MultiButtonWidget::paintSingle(QPainter& p)
                 bool isOffDot = (m_addOffAtEnd && i == n);
                 bool active   = isOffDot ? (displayIdx < 0)
                                          : (i == displayIdx);
-                const bool live = (m_mode == MultiButtonMode::Widget)
+                const bool live = (m_mode == MultiButtonMode::Widget || m_monitorChannelValues)
                         && (isOffDot ? (monitorIdx < 0)
                                      : (i == monitorIdx));
                 const QColor dotColor = live ? QColor(255, 150, 0) : fg;
@@ -6176,7 +6189,8 @@ void MultiButtonWidget::paintSingle(QPainter& p)
                 : QString("%1/%2").arg(displayIdx + 1).arg(n);
             p.drawText(QRect(0, height() - 14, width(), 12),
                        Qt::AlignCenter, idxStr);
-            if (m_mode == MultiButtonMode::Widget)
+            if (m_mode == MultiButtonMode::Widget
+                    || (m_monitorChannelValues && monitorIdx != displayIdx))
             {
                 p.setPen(QPen(QColor(255, 150, 0), 2));
                 p.setBrush(QColor(255, 150, 0));
