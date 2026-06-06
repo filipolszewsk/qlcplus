@@ -32,6 +32,7 @@
 #include <QSizePolicy>
 #include <QVector>
 #include <QSet>
+#include <QMessageBox>
 #include <algorithm>
 
 static void syncExcludeMaskFromColumn(QTableWidget* table, int col, quint32& mask);
@@ -43,6 +44,14 @@ static QTableWidgetItem* widgetColumnPlaceholder()
     QTableWidgetItem* item = new QTableWidgetItem;
     item->setFlags(Qt::ItemIsEnabled);
     return item;
+}
+
+static void tuneActionButton(QPushButton* button)
+{
+    if (!button)
+        return;
+    button->setMinimumHeight(28);
+    button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
 }
 
 static void tuneAutomationProfileColumnWidths(QTableWidget* table)
@@ -102,9 +111,12 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     bool                               logPresetChanges,
     const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
     const QList<QKeySequence>&                   functionEntryKeys,
+    const QList<int>&                            functionEntryInputValues,
     const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
     const QList<QKeySequence>&                   spreadSlotKeys,
     const QList<bool>&                           functionEntryFlash,
+    const QList<bool>&                           functionEntryFlashOverride,
+    const QList<bool>&                           functionEntryFlashForceLtp,
     const QList<QColor>&                         functionEntryLabelColors,
     quint32                            widgetTargetId,
     int                                widgetOutputIndex,
@@ -123,9 +135,12 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     , m_widgetEntryAppearance(widgetEntryAppearance)
     , m_functionEntryInputs(functionEntryInputs)
     , m_functionEntryKeys(functionEntryKeys)
+    , m_functionEntryInputValues(functionEntryInputValues)
     , m_spreadSlotInputs(spreadSlotInputs)
     , m_spreadSlotKeys(spreadSlotKeys)
     , m_functionEntryFlash(functionEntryFlash)
+    , m_functionEntryFlashOverride(functionEntryFlashOverride)
+    , m_functionEntryFlashForceLtp(functionEntryFlashForceLtp)
     , m_functionEntryLabelColors(functionEntryLabelColors)
     , m_widgetTargetId(widgetTargetId)
     , m_widgetOutputIndex(qMax(0, widgetOutputIndex))
@@ -146,10 +161,22 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
 
     while (m_labels.size() < m_ids.size()) m_labels.append(QString());
     while (m_icons.size() < m_ids.size())  m_icons.append(QString());
+    while (m_functionEntryInputValues.size() < m_ids.size())
+        m_functionEntryInputValues.append(-1);
+    while (m_functionEntryInputValues.size() > m_ids.size())
+        m_functionEntryInputValues.removeLast();
     while (m_functionEntryFlash.size() < m_ids.size())
         m_functionEntryFlash.append(false);
     while (m_functionEntryFlash.size() > m_ids.size())
         m_functionEntryFlash.removeLast();
+    while (m_functionEntryFlashOverride.size() < m_ids.size())
+        m_functionEntryFlashOverride.append(false);
+    while (m_functionEntryFlashOverride.size() > m_ids.size())
+        m_functionEntryFlashOverride.removeLast();
+    while (m_functionEntryFlashForceLtp.size() < m_ids.size())
+        m_functionEntryFlashForceLtp.append(false);
+    while (m_functionEntryFlashForceLtp.size() > m_ids.size())
+        m_functionEntryFlashForceLtp.removeLast();
     while (m_functionEntryLabelColors.size() < m_ids.size())
         m_functionEntryLabelColors.append(QColor());
     while (m_functionEntryLabelColors.size() > m_ids.size())
@@ -192,50 +219,93 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     funcLay->setContentsMargins(0, 0, 0, 0);
 
     QGroupBox* listGrp = new QGroupBox(tr("Functions (cycle order)"), m_functionPage);
-    QHBoxLayout* listLayout = new QHBoxLayout(listGrp);
+    QVBoxLayout* listLayout = new QVBoxLayout(listGrp);
 
     m_listWidget = new QListWidget(listGrp);
     m_listWidget->setDragDropMode(QAbstractItemView::InternalMove);
     m_listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     m_listWidget->setIconSize(QSize(24, 24));
     m_listWidget->setMinimumHeight(160);
-    listLayout->addWidget(m_listWidget, 1);
 
-    QVBoxLayout* btnCol = new QVBoxLayout;
-    m_addBtn        = new QPushButton(tr("Add…"),           listGrp);
-    m_removeBtn     = new QPushButton(tr("Remove"),         listGrp);
-    m_editLblBtn    = new QPushButton(tr("Custom label"),   listGrp);
-    m_scribbleBtn   = new QPushButton(tr("Scribble icon…"), listGrp);
-    m_chooseIconBtn = new QPushButton(tr("Choose icon…"),   listGrp);
-    m_clearIconBtn  = new QPushButton(tr("Clear icon"),     listGrp);
+    m_addBtn        = new QPushButton(tr("Add..."),          listGrp);
+    m_removeBtn     = new QPushButton(tr("Remove"),          listGrp);
+    m_editLblBtn    = new QPushButton(tr("Label..."),        listGrp);
+    m_scribbleBtn   = new QPushButton(tr("Scribble..."),     listGrp);
+    m_chooseIconBtn = new QPushButton(tr("Icon..."),         listGrp);
+    m_clearIconBtn  = new QPushButton(tr("Clear icon"),      listGrp);
     m_functionFlashCheck = new QCheckBox(tr("Flash (hold)"), listGrp);
     m_functionFlashCheck->setToolTip(
         tr("While held: flash this function. Release restores the previous latched entry."));
-    QPushButton* funcLabelColorBtn = new QPushButton(tr("Label color…"), listGrp);
-    QPushButton* funcClearLabelColorBtn = new QPushButton(tr("Clear label color"), listGrp);
-    m_upBtn         = new QPushButton(tr("Move up"),        listGrp);
-    m_downBtn       = new QPushButton(tr("Move down"),      listGrp);
+    m_functionFlashOverrideCheck = new QCheckBox(tr("Override priority"), listGrp);
+    m_functionFlashOverrideCheck->setToolTip(
+        tr("Flash this function with Override priority, like a QLC+ Button flash."));
+    m_functionFlashForceLtpCheck = new QCheckBox(tr("Force LTP"), listGrp);
+    m_functionFlashForceLtpCheck->setToolTip(
+        tr("Force LTP while flashing this function, like a QLC+ Button flash."));
+    QPushButton* funcLabelColorBtn = new QPushButton(tr("Text color..."), listGrp);
+    QPushButton* funcClearLabelColorBtn = new QPushButton(tr("Clear text"), listGrp);
+    m_upBtn         = new QPushButton(tr("Up"),              listGrp);
+    m_downBtn       = new QPushButton(tr("Down"),            listGrp);
 
-    btnCol->addWidget(m_addBtn);
-    btnCol->addWidget(m_removeBtn);
-    btnCol->addSpacing(6);
-    btnCol->addWidget(m_editLblBtn);
-    btnCol->addSpacing(6);
-    btnCol->addWidget(m_scribbleBtn);
-    btnCol->addWidget(m_chooseIconBtn);
-    btnCol->addWidget(m_clearIconBtn);
-    btnCol->addSpacing(6);
-    btnCol->addWidget(m_functionFlashCheck);
-    btnCol->addWidget(funcLabelColorBtn);
-    btnCol->addWidget(funcClearLabelColorBtn);
-    btnCol->addStretch();
-    btnCol->addWidget(m_upBtn);
-    btnCol->addWidget(m_downBtn);
-    listLayout->addLayout(btnCol);
+    QList<QPushButton*> functionActionButtons = {
+        m_addBtn, m_removeBtn, m_editLblBtn, m_scribbleBtn, m_chooseIconBtn,
+        m_clearIconBtn, funcLabelColorBtn, funcClearLabelColorBtn,
+        m_upBtn, m_downBtn
+    };
+    for (QPushButton* button : functionActionButtons)
+        tuneActionButton(button);
+
+    m_addBtn->setToolTip(tr("Add functions to the cycle."));
+    m_removeBtn->setToolTip(tr("Remove the selected function entry."));
+    m_upBtn->setToolTip(tr("Move the selected function entry up."));
+    m_downBtn->setToolTip(tr("Move the selected function entry down."));
+    m_editLblBtn->setToolTip(tr("Edit the selected entry label."));
+    m_scribbleBtn->setToolTip(tr("Draw a scribble icon for the selected entry."));
+    m_chooseIconBtn->setToolTip(tr("Choose an icon for the selected entry."));
+    m_clearIconBtn->setToolTip(tr("Clear the selected entry icon."));
+    funcLabelColorBtn->setToolTip(tr("Choose text color for the selected entry."));
+    funcClearLabelColorBtn->setToolTip(tr("Clear text color from the selected entry."));
+
+    QHBoxLayout* functionTopActions = new QHBoxLayout;
+    functionTopActions->setSpacing(6);
+    functionTopActions->addStretch();
+    functionTopActions->addWidget(m_addBtn);
+    functionTopActions->addWidget(m_removeBtn);
+    functionTopActions->addSpacing(8);
+    functionTopActions->addWidget(m_upBtn);
+    functionTopActions->addWidget(m_downBtn);
+    listLayout->addLayout(functionTopActions);
+
+    listLayout->addWidget(m_listWidget, 1);
+
+    QHBoxLayout* functionEntryActions = new QHBoxLayout;
+    functionEntryActions->setSpacing(6);
+    functionEntryActions->addWidget(new QLabel(tr("Entry:"), listGrp));
+    functionEntryActions->addWidget(m_editLblBtn);
+    functionEntryActions->addWidget(m_scribbleBtn);
+    functionEntryActions->addWidget(m_chooseIconBtn);
+    functionEntryActions->addWidget(m_clearIconBtn);
+    functionEntryActions->addWidget(m_functionFlashCheck);
+    functionEntryActions->addWidget(m_functionFlashOverrideCheck);
+    functionEntryActions->addWidget(m_functionFlashForceLtpCheck);
+    functionEntryActions->addStretch();
+    listLayout->addLayout(functionEntryActions);
+
+    QHBoxLayout* functionColorActions = new QHBoxLayout;
+    functionColorActions->setSpacing(6);
+    functionColorActions->addWidget(new QLabel(tr("Colors:"), listGrp));
+    functionColorActions->addWidget(funcLabelColorBtn);
+    functionColorActions->addWidget(funcClearLabelColorBtn);
+    functionColorActions->addStretch();
+    listLayout->addLayout(functionColorActions);
     funcLay->addWidget(listGrp);
 
     connect(m_functionFlashCheck, &QCheckBox::stateChanged,
             this, &MultiButtonConfigDialog::slotFunctionFlashToggled);
+    connect(m_functionFlashOverrideCheck, &QCheckBox::stateChanged,
+            this, &MultiButtonConfigDialog::slotFunctionFlashOverrideToggled);
+    connect(m_functionFlashForceLtpCheck, &QCheckBox::stateChanged,
+            this, &MultiButtonConfigDialog::slotFunctionFlashForceLtpToggled);
     connect(funcLabelColorBtn, &QPushButton::clicked,
             this, &MultiButtonConfigDialog::slotFunctionChooseLabelColor);
     connect(funcClearLabelColorBtn, &QPushButton::clicked,
@@ -260,7 +330,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     levelLay->setContentsMargins(0, 0, 0, 0);
 
     QGroupBox* presetGrp = new QGroupBox(tr("Presets (cycle order)"), m_levelPage);
-    QHBoxLayout* presetLayout = new QHBoxLayout(presetGrp);
+    QVBoxLayout* presetLayout = new QVBoxLayout(presetGrp);
 
     m_presetTable = new QTableWidget(presetGrp);
     m_presetTable->setMinimumHeight(160);
@@ -273,56 +343,103 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
                                   | QAbstractItemView::EditKeyPressed);
     m_presetTable->setAlternatingRowColors(true);
     m_presetTable->verticalHeader()->setDefaultSectionSize(22);
-    presetLayout->addWidget(m_presetTable, 1);
 
-    auto* formulaHint = new QLabel(
-        tr("DMX cells: enter 0–255 or a formula, e.g. IF(u1.ch2 >= 128, 255, 0) "
-           "(uN = universe 1…, chM = DMX channel 1…512, same as patch N.M)."),
-        presetGrp);
-    formulaHint->setWordWrap(true);
-    formulaHint->setStyleSheet(QStringLiteral("color: palette(mid); font-size: 11px;"));
-    presetLayout->addWidget(formulaHint);
-
-    QVBoxLayout* lvlBtnCol = new QVBoxLayout;
     m_chooseChannelsBtn = new QPushButton(tr("Choose channels…"), presetGrp);
-    m_lvlAddBtn        = new QPushButton(tr("Add"),           presetGrp);
-    m_lvlRemoveBtn     = new QPushButton(tr("Remove"),        presetGrp);
-    m_lvlEditLblBtn    = new QPushButton(tr("Custom label"),  presetGrp);
-    m_lvlScribbleBtn   = new QPushButton(tr("Scribble icon…"), presetGrp);
-    m_lvlChooseIconBtn = new QPushButton(tr("Choose icon…"),  presetGrp);
-    m_lvlClearIconBtn  = new QPushButton(tr("Clear icon"),    presetGrp);
-    m_lvlChooseColorBtn = new QPushButton(tr("Choose color…"), presetGrp);
-    m_lvlClearColorBtn  = new QPushButton(tr("Clear color"),   presetGrp);
-    m_lvlChooseLabelColorBtn = new QPushButton(tr("Label color…"), presetGrp);
-    m_lvlClearLabelColorBtn  = new QPushButton(tr("Clear label color"), presetGrp);
+    m_lvlAddBtn        = new QPushButton(tr("Add"),             presetGrp);
+    m_lvlRemoveBtn     = new QPushButton(tr("Remove"),          presetGrp);
+    m_lvlEditLblBtn    = new QPushButton(tr("Label..."),        presetGrp);
+    m_lvlScribbleBtn   = new QPushButton(tr("Scribble..."),     presetGrp);
+    m_lvlChooseIconBtn = new QPushButton(tr("Icon..."),         presetGrp);
+    m_lvlClearIconBtn  = new QPushButton(tr("Clear icon"),      presetGrp);
+    m_lvlChooseColorBtn = new QPushButton(tr("Button color..."), presetGrp);
+    m_lvlClearColorBtn  = new QPushButton(tr("Clear button"),    presetGrp);
+    m_lvlChooseLabelColorBtn = new QPushButton(tr("Text color..."), presetGrp);
+    m_lvlClearLabelColorBtn  = new QPushButton(tr("Clear text"),    presetGrp);
+    m_lvlAddFormulaBtn = new QPushButton(tr("Formula..."), presetGrp);
+    m_lvlClearFormulaBtn = new QPushButton(tr("Clear formula"), presetGrp);
     m_lvlFlashCheck = new QCheckBox(tr("Flash (hold)"), presetGrp);
     m_lvlFlashCheck->setTristate(true);
     m_lvlFlashCheck->setToolTip(
         tr("While held: output this preset's DMX. Release restores the previous latched preset."));
-    m_lvlUpBtn         = new QPushButton(tr("Move up"),       presetGrp);
-    m_lvlDownBtn       = new QPushButton(tr("Move down"),     presetGrp);
+    m_lvlFlashOverrideCheck = new QCheckBox(tr("Override priority"), presetGrp);
+    m_lvlFlashOverrideCheck->setTristate(true);
+    m_lvlFlashOverrideCheck->setToolTip(
+        tr("Flash this preset with Override priority, like a QLC+ Button flash."));
+    m_lvlFlashForceLtpCheck = new QCheckBox(tr("Force LTP"), presetGrp);
+    m_lvlFlashForceLtpCheck->setTristate(true);
+    m_lvlFlashForceLtpCheck->setToolTip(
+        tr("Force LTP while flashing this preset, like a QLC+ Button flash."));
+    m_lvlUpBtn         = new QPushButton(tr("Up"),             presetGrp);
+    m_lvlDownBtn       = new QPushButton(tr("Down"),           presetGrp);
 
-    lvlBtnCol->addWidget(m_chooseChannelsBtn);
-    lvlBtnCol->addSpacing(6);
-    lvlBtnCol->addWidget(m_lvlAddBtn);
-    lvlBtnCol->addWidget(m_lvlRemoveBtn);
-    lvlBtnCol->addSpacing(6);
-    lvlBtnCol->addWidget(m_lvlEditLblBtn);
-    lvlBtnCol->addSpacing(6);
-    lvlBtnCol->addWidget(m_lvlScribbleBtn);
-    lvlBtnCol->addWidget(m_lvlChooseIconBtn);
-    lvlBtnCol->addWidget(m_lvlClearIconBtn);
-    lvlBtnCol->addSpacing(6);
-    lvlBtnCol->addWidget(m_lvlChooseColorBtn);
-    lvlBtnCol->addWidget(m_lvlClearColorBtn);
-    lvlBtnCol->addSpacing(6);
-    lvlBtnCol->addWidget(m_lvlChooseLabelColorBtn);
-    lvlBtnCol->addWidget(m_lvlClearLabelColorBtn);
-    lvlBtnCol->addWidget(m_lvlFlashCheck);
-    lvlBtnCol->addStretch();
-    lvlBtnCol->addWidget(m_lvlUpBtn);
-    lvlBtnCol->addWidget(m_lvlDownBtn);
-    presetLayout->addLayout(lvlBtnCol);
+    QList<QPushButton*> levelActionButtons = {
+        m_chooseChannelsBtn, m_lvlAddBtn, m_lvlRemoveBtn, m_lvlEditLblBtn,
+        m_lvlScribbleBtn, m_lvlChooseIconBtn, m_lvlClearIconBtn,
+        m_lvlChooseColorBtn, m_lvlClearColorBtn, m_lvlChooseLabelColorBtn,
+        m_lvlClearLabelColorBtn, m_lvlAddFormulaBtn, m_lvlClearFormulaBtn,
+        m_lvlUpBtn, m_lvlDownBtn
+    };
+    for (QPushButton* button : levelActionButtons)
+        tuneActionButton(button);
+
+    m_lvlAddBtn->setToolTip(tr("Add a new preset entry."));
+    m_lvlRemoveBtn->setToolTip(tr("Remove selected preset entries."));
+    m_lvlUpBtn->setToolTip(tr("Move selected preset entries up."));
+    m_lvlDownBtn->setToolTip(tr("Move selected preset entries down."));
+    m_lvlEditLblBtn->setToolTip(tr("Edit the selected preset label."));
+    m_lvlScribbleBtn->setToolTip(tr("Draw a scribble icon for selected presets."));
+    m_lvlChooseIconBtn->setToolTip(tr("Choose an icon for selected presets."));
+    m_lvlClearIconBtn->setToolTip(tr("Clear icon from selected presets."));
+    m_lvlChooseColorBtn->setToolTip(tr("Choose button color for selected presets."));
+    m_lvlClearColorBtn->setToolTip(tr("Clear button color from selected presets."));
+    m_lvlChooseLabelColorBtn->setToolTip(tr("Choose text color for selected presets."));
+    m_lvlClearLabelColorBtn->setToolTip(tr("Clear text color from selected presets."));
+    m_lvlAddFormulaBtn->setToolTip(tr("Add an IF(...) formula to the selected DMX value cell."));
+    m_lvlClearFormulaBtn->setToolTip(tr("Clear formula from the selected DMX value cell."));
+
+    QHBoxLayout* presetTopActions = new QHBoxLayout;
+    presetTopActions->setSpacing(6);
+    presetTopActions->addWidget(m_chooseChannelsBtn);
+    presetTopActions->addStretch();
+    presetTopActions->addWidget(m_lvlAddBtn);
+    presetTopActions->addWidget(m_lvlRemoveBtn);
+    presetTopActions->addSpacing(8);
+    presetTopActions->addWidget(m_lvlUpBtn);
+    presetTopActions->addWidget(m_lvlDownBtn);
+    presetLayout->addLayout(presetTopActions);
+
+    presetLayout->addWidget(m_presetTable, 1);
+
+    QHBoxLayout* presetEntryActions = new QHBoxLayout;
+    presetEntryActions->setSpacing(6);
+    presetEntryActions->addWidget(new QLabel(tr("Entry:"), presetGrp));
+    presetEntryActions->addWidget(m_lvlEditLblBtn);
+    presetEntryActions->addWidget(m_lvlScribbleBtn);
+    presetEntryActions->addWidget(m_lvlChooseIconBtn);
+    presetEntryActions->addWidget(m_lvlClearIconBtn);
+    presetEntryActions->addWidget(m_lvlFlashCheck);
+    presetEntryActions->addWidget(m_lvlFlashOverrideCheck);
+    presetEntryActions->addWidget(m_lvlFlashForceLtpCheck);
+    presetEntryActions->addStretch();
+    presetLayout->addLayout(presetEntryActions);
+
+    QHBoxLayout* presetColorActions = new QHBoxLayout;
+    presetColorActions->setSpacing(6);
+    presetColorActions->addWidget(new QLabel(tr("Colors:"), presetGrp));
+    presetColorActions->addWidget(m_lvlChooseColorBtn);
+    presetColorActions->addWidget(m_lvlClearColorBtn);
+    presetColorActions->addWidget(m_lvlChooseLabelColorBtn);
+    presetColorActions->addWidget(m_lvlClearLabelColorBtn);
+    presetColorActions->addStretch();
+    presetLayout->addLayout(presetColorActions);
+
+    QHBoxLayout* presetFormulaActions = new QHBoxLayout;
+    presetFormulaActions->setSpacing(6);
+    presetFormulaActions->addWidget(new QLabel(tr("Formula:"), presetGrp));
+    presetFormulaActions->addWidget(m_lvlAddFormulaBtn);
+    presetFormulaActions->addWidget(m_lvlClearFormulaBtn);
+    presetFormulaActions->addStretch();
+    presetLayout->addLayout(presetFormulaActions);
     levelLay->addWidget(presetGrp);
 
     connect(m_chooseChannelsBtn, &QPushButton::clicked,
@@ -339,12 +456,22 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
             this, &MultiButtonConfigDialog::slotLevelChooseLabelColor);
     connect(m_lvlClearLabelColorBtn, &QPushButton::clicked,
             this, &MultiButtonConfigDialog::slotLevelClearLabelColor);
+    connect(m_lvlAddFormulaBtn, &QPushButton::clicked,
+            this, &MultiButtonConfigDialog::slotLevelAddFormula);
+    connect(m_lvlClearFormulaBtn, &QPushButton::clicked,
+            this, &MultiButtonConfigDialog::slotLevelClearFormula);
     connect(m_lvlFlashCheck, &QCheckBox::stateChanged,
             this, &MultiButtonConfigDialog::slotLevelFlashToggled);
+    connect(m_lvlFlashOverrideCheck, &QCheckBox::stateChanged,
+            this, &MultiButtonConfigDialog::slotLevelFlashOverrideToggled);
+    connect(m_lvlFlashForceLtpCheck, &QCheckBox::stateChanged,
+            this, &MultiButtonConfigDialog::slotLevelFlashForceLtpToggled);
     connect(m_lvlUpBtn,         &QPushButton::clicked, this, &MultiButtonConfigDialog::slotLevelMoveUp);
     connect(m_lvlDownBtn,       &QPushButton::clicked, this, &MultiButtonConfigDialog::slotLevelMoveDown);
     connect(m_presetTable, &QTableWidget::itemSelectionChanged,
             this, &MultiButtonConfigDialog::slotLevelSelectionChanged);
+    connect(m_presetTable, &QTableWidget::currentCellChanged,
+            this, [this](int, int, int, int) { slotLevelSelectionChanged(); });
     connect(m_presetTable, &QTableWidget::itemChanged,
             this, &MultiButtonConfigDialog::slotPresetTableItemChanged);
 
@@ -352,23 +479,35 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
 
     // ---- Widget link page ----------------------------------------------
     m_widgetPage = new QWidget(this);
-    QVBoxLayout* widgetLay = new QVBoxLayout(m_widgetPage);
+    QVBoxLayout* widgetPageLay = new QVBoxLayout(m_widgetPage);
+    widgetPageLay->setContentsMargins(0, 0, 0, 0);
+    QScrollArea* widgetScroll = new QScrollArea(m_widgetPage);
+    widgetScroll->setWidgetResizable(true);
+    widgetScroll->setFrameShape(QFrame::NoFrame);
+    widgetScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    QWidget* widgetScrollContent = new QWidget(widgetScroll);
+    QVBoxLayout* widgetLay = new QVBoxLayout(widgetScrollContent);
     widgetLay->setContentsMargins(0, 0, 0, 0);
+    widgetLay->setSpacing(8);
 
-    QGroupBox* widgetGrp = new QGroupBox(tr("Linked Preset Table"), m_widgetPage);
+    QHBoxLayout* widgetTopRow = new QHBoxLayout;
+    widgetTopRow->setSpacing(8);
+
+    QGroupBox* widgetGrp = new QGroupBox(tr("Linked Preset Table"), widgetScrollContent);
     QFormLayout* widgetForm = new QFormLayout(widgetGrp);
+    widgetForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     m_widgetTargetCombo = new QComboBox(widgetGrp);
     m_widgetOutputCombo = new QComboBox(widgetGrp);
     m_widgetParameterCombo = new QComboBox(widgetGrp);
     widgetForm->addRow(tr("Widget:"), m_widgetTargetCombo);
     widgetForm->addRow(tr("Output:"), m_widgetOutputCombo);
     widgetForm->addRow(tr("Parameter:"), m_widgetParameterCombo);
-    widgetLay->addWidget(widgetGrp);
+    widgetTopRow->addWidget(widgetGrp, 1);
 
-    QGroupBox* widgetLiveGrp = new QGroupBox(tr("Selector / recall channel"), m_widgetPage);
+    QGroupBox* widgetLiveGrp = new QGroupBox(tr("Selector / recall channel"), widgetScrollContent);
     QVBoxLayout* widgetLiveLay = new QVBoxLayout(widgetLiveGrp);
     m_widgetLiveInputStatus = new QLabel(widgetLiveGrp);
-    m_widgetLiveInputStatus->setWordWrap(true);
+    m_widgetLiveInputStatus->setWordWrap(false);
     widgetLiveLay->addWidget(m_widgetLiveInputStatus);
     m_widgetBusPolicyCombo = new QComboBox(widgetLiveGrp);
     m_widgetBusPolicyCombo->addItem(tr("Shared bus (cue + snapshot)"),
@@ -388,26 +527,18 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_widgetLiveInputSel->setWidgetPage(widgetPage);
     m_widgetLiveInputSel->setInputSource(m_widgetLiveInputSource);
     widgetLiveLay->addWidget(m_widgetLiveInputSel);
-    widgetLay->addWidget(widgetLiveGrp);
+    widgetTopRow->addWidget(widgetLiveGrp, 1);
+    widgetLay->addLayout(widgetTopRow);
 
-    QGroupBox* widgetPreviewGrp = new QGroupBox(tr("Linked entries"), m_widgetPage);
-    QVBoxLayout* widgetPreviewLay = new QVBoxLayout(widgetPreviewGrp);
-    QLabel* widgetHint = new QLabel(
-        tr("Entries are read live from the selected Preset Table bank. Adding or renaming "
-           "presets in that table updates this Multi Button automatically."),
-        widgetPreviewGrp);
-    widgetHint->setWordWrap(true);
-    widgetPreviewLay->addWidget(widgetHint);
-    m_widgetPreviewList = new QListWidget(widgetPreviewGrp);
-    m_widgetPreviewList->setMinimumHeight(150);
+    m_widgetPreviewList = new QListWidget(widgetScrollContent);
     m_widgetPreviewList->setSelectionMode(QAbstractItemView::SingleSelection);
-    widgetPreviewLay->addWidget(m_widgetPreviewList);
-    widgetLay->addWidget(widgetPreviewGrp, 1);
+    m_widgetPreviewList->hide();
 
-    QGroupBox* widgetAppearanceGrp = new QGroupBox(tr("Linked entries appearance"), m_widgetPage);
-    QHBoxLayout* widgetAppearanceLayout = new QHBoxLayout(widgetAppearanceGrp);
+    QGroupBox* widgetAppearanceGrp = new QGroupBox(tr("Linked entries appearance"), widgetScrollContent);
+    QVBoxLayout* widgetAppearanceLayout = new QVBoxLayout(widgetAppearanceGrp);
     m_widgetAppearanceTable = new QTableWidget(widgetAppearanceGrp);
-    m_widgetAppearanceTable->setMinimumHeight(150);
+    m_widgetAppearanceTable->setMinimumHeight(220);
+    m_widgetAppearanceTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_widgetAppearanceTable->horizontalHeader()->setVisible(true);
     m_widgetAppearanceTable->verticalHeader()->hide();
     m_widgetAppearanceTable->setIconSize(QSize(24, 24));
@@ -419,29 +550,54 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_widgetAppearanceTable->verticalHeader()->setDefaultSectionSize(22);
     widgetAppearanceLayout->addWidget(m_widgetAppearanceTable, 1);
 
-    QVBoxLayout* widgetAppearanceBtns = new QVBoxLayout;
-    QPushButton* widgetEditLblBtn = new QPushButton(tr("Custom label"), widgetAppearanceGrp);
-    QPushButton* widgetScribbleBtn = new QPushButton(tr("Scribble icon…"), widgetAppearanceGrp);
-    QPushButton* widgetChooseIconBtn = new QPushButton(tr("Choose icon…"), widgetAppearanceGrp);
+    QPushButton* widgetEditLblBtn = new QPushButton(tr("Label..."), widgetAppearanceGrp);
+    QPushButton* widgetScribbleBtn = new QPushButton(tr("Scribble..."), widgetAppearanceGrp);
+    QPushButton* widgetChooseIconBtn = new QPushButton(tr("Icon..."), widgetAppearanceGrp);
     QPushButton* widgetClearIconBtn = new QPushButton(tr("Clear icon"), widgetAppearanceGrp);
-    QPushButton* widgetChooseColorBtn = new QPushButton(tr("Choose color…"), widgetAppearanceGrp);
-    QPushButton* widgetClearColorBtn = new QPushButton(tr("Clear color"), widgetAppearanceGrp);
-    QPushButton* widgetChooseLabelColorBtn = new QPushButton(tr("Label color…"), widgetAppearanceGrp);
-    QPushButton* widgetClearLabelColorBtn = new QPushButton(tr("Clear label color"), widgetAppearanceGrp);
-    widgetAppearanceBtns->addWidget(widgetEditLblBtn);
-    widgetAppearanceBtns->addSpacing(6);
-    widgetAppearanceBtns->addWidget(widgetScribbleBtn);
-    widgetAppearanceBtns->addWidget(widgetChooseIconBtn);
-    widgetAppearanceBtns->addWidget(widgetClearIconBtn);
-    widgetAppearanceBtns->addSpacing(6);
-    widgetAppearanceBtns->addWidget(widgetChooseColorBtn);
-    widgetAppearanceBtns->addWidget(widgetClearColorBtn);
-    widgetAppearanceBtns->addSpacing(6);
-    widgetAppearanceBtns->addWidget(widgetChooseLabelColorBtn);
-    widgetAppearanceBtns->addWidget(widgetClearLabelColorBtn);
-    widgetAppearanceBtns->addStretch();
-    widgetAppearanceLayout->addLayout(widgetAppearanceBtns);
+    QPushButton* widgetChooseColorBtn = new QPushButton(tr("Button color..."), widgetAppearanceGrp);
+    QPushButton* widgetClearColorBtn = new QPushButton(tr("Clear button"), widgetAppearanceGrp);
+    QPushButton* widgetChooseLabelColorBtn = new QPushButton(tr("Text color..."), widgetAppearanceGrp);
+    QPushButton* widgetClearLabelColorBtn = new QPushButton(tr("Clear text"), widgetAppearanceGrp);
+
+    QList<QPushButton*> widgetAppearanceButtons = {
+        widgetEditLblBtn, widgetScribbleBtn, widgetChooseIconBtn, widgetClearIconBtn,
+        widgetChooseColorBtn, widgetClearColorBtn, widgetChooseLabelColorBtn,
+        widgetClearLabelColorBtn
+    };
+    for (QPushButton* button : widgetAppearanceButtons)
+        tuneActionButton(button);
+
+    widgetEditLblBtn->setToolTip(tr("Edit the local label override for selected linked entries."));
+    widgetScribbleBtn->setToolTip(tr("Draw a scribble icon for selected linked entries."));
+    widgetChooseIconBtn->setToolTip(tr("Choose an icon for selected linked entries."));
+    widgetClearIconBtn->setToolTip(tr("Clear icon from selected linked entries."));
+    widgetChooseColorBtn->setToolTip(tr("Choose button color for selected linked entries."));
+    widgetClearColorBtn->setToolTip(tr("Clear button color from selected linked entries."));
+    widgetChooseLabelColorBtn->setToolTip(tr("Choose text color for selected linked entries."));
+    widgetClearLabelColorBtn->setToolTip(tr("Clear text color from selected linked entries."));
+
+    QHBoxLayout* widgetEntryActions = new QHBoxLayout;
+    widgetEntryActions->setSpacing(6);
+    widgetEntryActions->addWidget(new QLabel(tr("Entry:"), widgetAppearanceGrp));
+    widgetEntryActions->addWidget(widgetEditLblBtn);
+    widgetEntryActions->addWidget(widgetScribbleBtn);
+    widgetEntryActions->addWidget(widgetChooseIconBtn);
+    widgetEntryActions->addWidget(widgetClearIconBtn);
+    widgetEntryActions->addStretch();
+    widgetAppearanceLayout->addLayout(widgetEntryActions);
+
+    QHBoxLayout* widgetColorActions = new QHBoxLayout;
+    widgetColorActions->setSpacing(6);
+    widgetColorActions->addWidget(new QLabel(tr("Colors:"), widgetAppearanceGrp));
+    widgetColorActions->addWidget(widgetChooseColorBtn);
+    widgetColorActions->addWidget(widgetClearColorBtn);
+    widgetColorActions->addWidget(widgetChooseLabelColorBtn);
+    widgetColorActions->addWidget(widgetClearLabelColorBtn);
+    widgetColorActions->addStretch();
+    widgetAppearanceLayout->addLayout(widgetColorActions);
     widgetLay->addWidget(widgetAppearanceGrp, 1);
+    widgetScroll->setWidget(widgetScrollContent);
+    widgetPageLay->addWidget(widgetScroll, 1);
 
     connect(m_widgetTargetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MultiButtonConfigDialog::slotWidgetTargetChanged);
@@ -475,7 +631,21 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     m_presetEntryInputSel->setKeyInputVisibility(true);
     m_presetEntryInputSel->setWidgetPage(widgetPage);
     entryInputLay->addWidget(m_presetEntryInputSel);
+    QHBoxLayout* entryValueLay = new QHBoxLayout;
+    m_entryInputValueCheck = new QCheckBox(tr("Value equals"), m_entryInputGrp);
+    m_entryInputValueSpin = new QSpinBox(m_entryInputGrp);
+    m_entryInputValueSpin->setRange(0, 255);
+    m_entryInputValueSpin->setEnabled(false);
+    entryValueLay->addWidget(m_entryInputValueCheck);
+    entryValueLay->addWidget(m_entryInputValueSpin);
+    entryValueLay->addStretch(1);
+    entryInputLay->addLayout(entryValueLay);
     entriesLay->addWidget(m_entryInputGrp);
+
+    connect(m_entryInputValueCheck, &QCheckBox::toggled,
+            this, &MultiButtonConfigDialog::slotEntryInputValueCheckToggled);
+    connect(m_entryInputValueSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MultiButtonConfigDialog::slotEntryInputValueChanged);
 
     connect(m_modeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MultiButtonConfigDialog::slotModeChanged);
@@ -946,6 +1116,8 @@ QList<LevelPreset> MultiButtonConfigDialog::levelPresets() const
         preset.color    = m_levelPresets.value(row).color;
         preset.labelColor = m_levelPresets.value(row).labelColor;
         preset.flashOnActivate = m_levelPresets.value(row).flashOnActivate;
+        preset.flashOverride = m_levelPresets.value(row).flashOverride;
+        preset.flashForceLtp = m_levelPresets.value(row).flashForceLtp;
         QTableWidgetItem* nameItem = m_presetTable
             ? m_presetTable->item(row, kPresetNameColumn) : nullptr;
         if (nameItem)
@@ -980,7 +1152,11 @@ QList<LevelPreset> MultiButtonConfigDialog::levelPresets() const
             preset.values.append(presetTableValue(row, kPresetFirstDmxColumn + col));
         }
         if (row < m_levelPresets.size())
+        {
             preset.entryInput = m_levelPresets.at(row).entryInput;
+            preset.entryKey = m_levelPresets.at(row).entryKey;
+            preset.entryInputValue = m_levelPresets.at(row).entryInputValue;
+        }
         presets.append(preset);
     }
     return presets;
@@ -1200,6 +1376,11 @@ QList<QKeySequence> MultiButtonConfigDialog::functionEntryKeys() const
     return m_functionEntryKeys;
 }
 
+QList<int> MultiButtonConfigDialog::functionEntryInputValues() const
+{
+    return m_functionEntryInputValues;
+}
+
 QList<QSharedPointer<QLCInputSource>> MultiButtonConfigDialog::spreadSlotInputs() const
 {
     return m_spreadSlotInputs;
@@ -1213,6 +1394,16 @@ QList<QKeySequence> MultiButtonConfigDialog::spreadSlotKeys() const
 QList<bool> MultiButtonConfigDialog::functionEntryFlash() const
 {
     return m_functionEntryFlash;
+}
+
+QList<bool> MultiButtonConfigDialog::functionEntryFlashOverride() const
+{
+    return m_functionEntryFlashOverride;
+}
+
+QList<bool> MultiButtonConfigDialog::functionEntryFlashForceLtp() const
+{
+    return m_functionEntryFlashForceLtp;
 }
 
 QList<QColor> MultiButtonConfigDialog::functionEntryLabelColors() const
@@ -1481,6 +1672,56 @@ void MultiButtonConfigDialog::setEntryKeyForRow(int row, const QKeySequence& key
     }
 }
 
+int MultiButtonConfigDialog::entryInputValueForRow(int row) const
+{
+    if (row < 0 || dialogSpreadPagingActive())
+        return -1;
+
+    if (widgetMode() == MultiButtonMode::Level)
+    {
+        if (row >= m_levelPresets.size())
+            return -1;
+        return m_levelPresets.at(row).entryInputValue;
+    }
+    if (widgetMode() == MultiButtonMode::Widget)
+    {
+        if (row >= m_widgetEntryAppearance.size())
+            return -1;
+        return m_widgetEntryAppearance.at(row).entryInputValue;
+    }
+
+    if (row >= m_functionEntryInputValues.size())
+        return -1;
+    return m_functionEntryInputValues.at(row);
+}
+
+void MultiButtonConfigDialog::setEntryInputValueForRow(int row, int value)
+{
+    if (row < 0 || dialogSpreadPagingActive())
+        return;
+
+    const int normalized = value < 0 ? -1 : qBound(0, value, 255);
+
+    if (widgetMode() == MultiButtonMode::Level)
+    {
+        if (row >= m_levelPresets.size())
+            return;
+        m_levelPresets[row].entryInputValue = normalized;
+    }
+    else if (widgetMode() == MultiButtonMode::Widget)
+    {
+        while (m_widgetEntryAppearance.size() <= row)
+            m_widgetEntryAppearance.append(LevelPreset());
+        m_widgetEntryAppearance[row].entryInputValue = normalized;
+    }
+    else
+    {
+        while (m_functionEntryInputValues.size() <= row)
+            m_functionEntryInputValues.append(-1);
+        m_functionEntryInputValues[row] = normalized;
+    }
+}
+
 void MultiButtonConfigDialog::commitEntryInputEditor()
 {
     if (!m_presetEntryInputSel || m_syncingEntryInputEditor)
@@ -1503,6 +1744,10 @@ void MultiButtonConfigDialog::commitEntryInputEditor()
 
     setEntryInputForRow(m_entryInputEditRow, src);
     setEntryKeyForRow(m_entryInputEditRow, key);
+    setEntryInputValueForRow(m_entryInputEditRow,
+                             m_entryInputValueCheck && m_entryInputValueCheck->isChecked()
+                                     ? m_entryInputValueSpin->value()
+                                     : -1);
     updatePresetInputCell(m_entryInputEditRow);
     if (dialogSpreadPagingActive())
         updateAllPresetInputCells();
@@ -1518,6 +1763,15 @@ void MultiButtonConfigDialog::loadEntryInputEditor(int row)
     m_spreadSlotEditRow = -1;
     m_presetEntryInputSel->setInputSource(entryInputForRow(row));
     m_presetEntryInputSel->setKeySequence(entryKeyForRow(row));
+    const int inputValue = entryInputValueForRow(row);
+    if (m_entryInputValueCheck && m_entryInputValueSpin)
+    {
+        QSignalBlocker checkBlocker(m_entryInputValueCheck);
+        QSignalBlocker spinBlocker(m_entryInputValueSpin);
+        m_entryInputValueCheck->setChecked(inputValue >= 0);
+        m_entryInputValueSpin->setEnabled(inputValue >= 0);
+        m_entryInputValueSpin->setValue(inputValue >= 0 ? inputValue : 0);
+    }
     m_syncingEntryInputEditor = false;
 }
 
@@ -1537,7 +1791,14 @@ void MultiButtonConfigDialog::updatePresetInputCell(int row)
         item->setFlags(item->flags() | Qt::ItemIsEditable);
         table->setItem(row, kPresetInputColumn, item);
     }
-    item->setText(formatInputPatch(entryInputForRow(row), entryKeyForRow(row)));
+    QString text = formatInputPatch(entryInputForRow(row), entryKeyForRow(row));
+    const int inputValue = entryInputValueForRow(row);
+    if (inputValue >= 0 && !entryInputForRow(row).isNull()
+            && entryInputForRow(row)->isValid())
+    {
+        text += tr(" = %1").arg(inputValue);
+    }
+    item->setText(text);
     if (dialogSpreadPagingActive())
     {
         item->setToolTip(tr("Shared grid slot %1 on all pages")
@@ -1642,6 +1903,11 @@ void MultiButtonConfigDialog::slotModeChanged(int index)
     updateSpreadPagesPreview();
     rebuildSpreadSlotTable();
     updateSpreadColumnInputVisibility();
+
+    if (widgetMode() == MultiButtonMode::Function)
+        slotSelectionChanged();
+    else
+        slotLevelSelectionChanged();
 }
 
 PresetTableV2MultiButtonTargetIface* MultiButtonConfigDialog::selectedWidgetTarget() const
@@ -1790,13 +2056,18 @@ void MultiButtonConfigDialog::updateWidgetLiveInputUi()
         return;
 
     const bool sharedBus = widgetBusPolicy() == MultiButtonWidgetBusPolicy::SharedBus;
-    m_widgetLiveInputStatus->setText(
-            sharedBus
+    const QString status = sharedBus
+            ? tr("Raw selector channel shared with cue/snapshot.")
+            : tr("Legacy hold override selector channel.");
+    const QString details = sharedBus
             ? tr("One raw DMX channel (not a patched fixture intensity channel) shared with cuelist/snapshots. "
                  "Multi Button and cues take turns via LTP: last action wins. Button click holds staged over a held cue; "
                  "starting a cue adopts into Preset Table. Not wired into Preset Table inputs.")
             : tr("Selector/recall channel: Multi Button holds Override on this channel every frame (legacy). "
-                 "Cuelists may not be able to override the value."));
+                 "Cuelists may not be able to override the value.");
+    m_widgetLiveInputStatus->setText(status);
+    m_widgetLiveInputStatus->setToolTip(details);
+    m_widgetBusPolicyCombo->setToolTip(details);
     m_widgetLiveInputSel->setEnabled(true);
     m_widgetLiveInputSel->setInputSource(m_widgetLiveInputSource);
 }
@@ -2456,11 +2727,19 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
                 inputItem->setFlags(inputItem->flags() | Qt::ItemIsEditable);
                 table->setItem(r, kPresetInputColumn, inputItem);
             }
-            inputItem->setText(formatInputPatch(
+            const QSharedPointer<QLCInputSource> entryInput =
                     widgetTable ? m_widgetEntryAppearance.value(r).entryInput
-                                : entryInputForRow(r),
+                                : entryInputForRow(r);
+            QString inputText = formatInputPatch(
+                    entryInput,
                     widgetTable ? m_widgetEntryAppearance.value(r).entryKey
-                                : entryKeyForRow(r)));
+                                : entryKeyForRow(r));
+            const int inputValue = widgetTable
+                    ? m_widgetEntryAppearance.value(r).entryInputValue
+                    : entryInputValueForRow(r);
+            if (inputValue >= 0 && !entryInput.isNull() && entryInput->isValid())
+                inputText += tr(" = %1").arg(inputValue);
+            inputItem->setText(inputText);
             if (dialogSpreadPagingActive())
                 inputItem->setToolTip(tr("Shared grid slot %1 on all pages")
                                       .arg(spreadLocalSlotForRow(r)));
@@ -2497,13 +2776,31 @@ void MultiButtonConfigDialog::slotPresetTableItemChanged(QTableWidgetItem* item)
 
     if (col == kPresetInputColumn)
     {
-        setEntryInputForRow(row, inputFromPatchString(item->text()));
-        item->setText(formatInputPatch(entryInputForRow(row), entryKeyForRow(row)));
+        QString patchText = item->text().trimmed();
+        int inputValue = entryInputValueForRow(row);
+        const int equalsPos = patchText.indexOf(QLatin1Char('='));
+        if (equalsPos >= 0)
+        {
+            bool ok = false;
+            const int parsed = patchText.mid(equalsPos + 1).trimmed().toInt(&ok);
+            inputValue = ok ? qBound(0, parsed, 255) : -1;
+            patchText = patchText.left(equalsPos).trimmed();
+        }
+        setEntryInputForRow(row, inputFromPatchString(patchText));
+        setEntryInputValueForRow(row, inputValue);
+        updatePresetInputCell(row);
         if (m_entryInputEditRow == row && m_presetEntryInputSel)
         {
             m_syncingEntryInputEditor = true;
             m_presetEntryInputSel->setInputSource(entryInputForRow(row));
             m_presetEntryInputSel->setKeySequence(entryKeyForRow(row));
+            const int editorInputValue = entryInputValueForRow(row);
+            if (m_entryInputValueCheck && m_entryInputValueSpin)
+            {
+                m_entryInputValueCheck->setChecked(editorInputValue >= 0);
+                m_entryInputValueSpin->setEnabled(editorInputValue >= 0);
+                m_entryInputValueSpin->setValue(editorInputValue >= 0 ? editorInputValue : 0);
+            }
             m_syncingEntryInputEditor = false;
         }
         if (dialogSpreadPagingActive())
@@ -2593,6 +2890,12 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
         m_syncingEntryInputEditor = true;
         m_presetEntryInputSel->setInputSource(QSharedPointer<QLCInputSource>());
         m_presetEntryInputSel->setKeySequence(QKeySequence());
+        if (m_entryInputValueCheck && m_entryInputValueSpin)
+        {
+            m_entryInputValueCheck->setChecked(false);
+            m_entryInputValueSpin->setEnabled(false);
+            m_entryInputValueSpin->setValue(0);
+        }
         m_syncingEntryInputEditor = false;
     }
 
@@ -2609,6 +2912,17 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
     m_lvlClearColorBtn->setEnabled(levelMode && has);
     m_lvlChooseLabelColorBtn->setEnabled(levelMode && has);
     m_lvlClearLabelColorBtn->setEnabled(levelMode && has);
+    const QTableWidgetItem* currentItem = m_presetTable ? m_presetTable->currentItem() : nullptr;
+    const bool hasCurrentDmxCell = levelMode && currentItem
+        && currentItem->row() >= 0
+        && currentItem->row() < m_levelPresets.size()
+        && currentItem->column() >= kPresetFirstDmxColumn;
+    const bool currentDmxCellHasFormula = hasCurrentDmxCell
+        && !currentItem->data(kDmxFormulaUserRole).toString().trimmed().isEmpty();
+    if (m_lvlAddFormulaBtn)
+        m_lvlAddFormulaBtn->setEnabled(hasCurrentDmxCell);
+    if (m_lvlClearFormulaBtn)
+        m_lvlClearFormulaBtn->setEnabled(currentDmxCellHasFormula);
 
     if (m_lvlFlashCheck)
     {
@@ -2638,6 +2952,38 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
                 m_lvlFlashCheck->setCheckState(Qt::PartiallyChecked);
         }
     }
+
+    auto updateLevelFlashOption = [&](QCheckBox* check, bool LevelPreset::*member) {
+        if (!check)
+            return;
+        QSignalBlocker blocker(check);
+        if (!levelMode || !has)
+        {
+            check->setEnabled(false);
+            check->setCheckState(Qt::Unchecked);
+            return;
+        }
+        int flashRows = 0;
+        int enabledRows = 0;
+        for (int r : rows)
+        {
+            if (r < 0 || r >= m_levelPresets.size()
+                || !m_levelPresets.at(r).flashOnActivate)
+                continue;
+            ++flashRows;
+            if (m_levelPresets.at(r).*member)
+                ++enabledRows;
+        }
+        check->setEnabled(flashRows > 0);
+        if (flashRows == 0 || enabledRows == 0)
+            check->setCheckState(Qt::Unchecked);
+        else if (enabledRows == flashRows)
+            check->setCheckState(Qt::Checked);
+        else
+            check->setCheckState(Qt::PartiallyChecked);
+    };
+    updateLevelFlashOption(m_lvlFlashOverrideCheck, &LevelPreset::flashOverride);
+    updateLevelFlashOption(m_lvlFlashForceLtpCheck, &LevelPreset::flashForceLtp);
 
     bool canMoveUp = false;
     bool canMoveDown = false;
@@ -2835,6 +3181,121 @@ void MultiButtonConfigDialog::slotLevelClearLabelColor()
     });
 }
 
+void MultiButtonConfigDialog::slotLevelAddFormula()
+{
+    if (!m_presetTable || widgetMode() == MultiButtonMode::Widget)
+        return;
+
+    const QModelIndex idx = m_presetTable->currentIndex();
+    if (!idx.isValid() || idx.column() < kPresetFirstDmxColumn)
+    {
+        QMessageBox::information(this, tr("Formula"),
+                                 tr("Select a DMX value cell first."));
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Add formula"));
+    QVBoxLayout* lay = new QVBoxLayout(&dlg);
+    QFormLayout* form = new QFormLayout;
+    QSpinBox* universeSpin = new QSpinBox(&dlg);
+    universeSpin->setRange(1, 512);
+    universeSpin->setValue(1);
+    QSpinBox* channelSpin = new QSpinBox(&dlg);
+    channelSpin->setRange(1, 512);
+    channelSpin->setValue(1);
+    QComboBox* opCombo = new QComboBox(&dlg);
+    opCombo->addItems({ QStringLiteral(">="), QStringLiteral(">"),
+                        QStringLiteral("<="), QStringLiteral("<"),
+                        QStringLiteral("=="), QStringLiteral("!=") });
+    QSpinBox* compareSpin = new QSpinBox(&dlg);
+    compareSpin->setRange(0, 255);
+    compareSpin->setValue(128);
+    QSpinBox* trueSpin = new QSpinBox(&dlg);
+    trueSpin->setRange(0, 255);
+    trueSpin->setValue(255);
+    QSpinBox* falseSpin = new QSpinBox(&dlg);
+    falseSpin->setRange(0, 255);
+    falseSpin->setValue(0);
+
+    form->addRow(tr("Universe"), universeSpin);
+    form->addRow(tr("Channel"), channelSpin);
+    form->addRow(tr("Operator"), opCombo);
+    form->addRow(tr("Compare value"), compareSpin);
+    form->addRow(tr("True value"), trueSpin);
+    form->addRow(tr("False value"), falseSpin);
+    lay->addLayout(form);
+
+    QLabel* preview = new QLabel(&dlg);
+    preview->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    lay->addWidget(preview);
+
+    auto updatePreview = [&]() {
+        preview->setText(QStringLiteral("IF(u%1.ch%2 %3 %4, %5, %6)")
+                         .arg(universeSpin->value())
+                         .arg(channelSpin->value())
+                         .arg(opCombo->currentText())
+                         .arg(compareSpin->value())
+                         .arg(trueSpin->value())
+                         .arg(falseSpin->value()));
+    };
+    updatePreview();
+    connect(universeSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, updatePreview);
+    connect(channelSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, updatePreview);
+    connect(opCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, updatePreview);
+    connect(compareSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, updatePreview);
+    connect(trueSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, updatePreview);
+    connect(falseSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, updatePreview);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok
+                                                     | QDialogButtonBox::Cancel, &dlg);
+    lay->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    const QString formula = preview->text();
+    MbValueExpr expr;
+    QString err;
+    if (!mbParseValueExpr(formula, expr, &err))
+    {
+        QMessageBox::warning(this, tr("Formula"), err);
+        return;
+    }
+
+    QTableWidgetItem* item = m_presetTable->item(idx.row(), idx.column());
+    if (!item)
+    {
+        item = makeValueTableItem(0);
+        m_presetTable->setItem(idx.row(), idx.column(), item);
+    }
+    item->setText(formula);
+    slotPresetTableItemChanged(item);
+    slotLevelSelectionChanged();
+}
+
+void MultiButtonConfigDialog::slotLevelClearFormula()
+{
+    if (!m_presetTable || widgetMode() == MultiButtonMode::Widget)
+        return;
+    const QModelIndex idx = m_presetTable->currentIndex();
+    if (!idx.isValid() || idx.column() < kPresetFirstDmxColumn)
+    {
+        QMessageBox::information(this, tr("Formula"),
+                                 tr("Select a DMX value cell first."));
+        return;
+    }
+    QTableWidgetItem* item = m_presetTable->item(idx.row(), idx.column());
+    if (!item)
+        return;
+    const int value = item->data(Qt::UserRole).isValid()
+            ? item->data(Qt::UserRole).toInt() : 0;
+    item->setText(QString::number(qBound(0, value, 255)));
+    slotPresetTableItemChanged(item);
+    slotLevelSelectionChanged();
+}
+
 void MultiButtonConfigDialog::slotLevelFlashToggled(int state)
 {
     const QList<int> rows = selectedPresetRows();
@@ -2844,6 +3305,11 @@ void MultiButtonConfigDialog::slotLevelFlashToggled(int state)
     const bool enable = (state != Qt::Unchecked);
     applyAppearanceToSelectedRows([enable](LevelPreset& preset) {
         preset.flashOnActivate = enable;
+        if (!enable)
+        {
+            preset.flashOverride = false;
+            preset.flashForceLtp = false;
+        }
     });
 
     if (m_lvlFlashCheck)
@@ -2851,6 +3317,47 @@ void MultiButtonConfigDialog::slotLevelFlashToggled(int state)
         QSignalBlocker blocker(m_lvlFlashCheck);
         m_lvlFlashCheck->setCheckState(enable ? Qt::Checked : Qt::Unchecked);
     }
+    slotLevelSelectionChanged();
+}
+
+void MultiButtonConfigDialog::slotLevelFlashOverrideToggled(int state)
+{
+    const QList<int> rows = selectedPresetRows();
+    if (rows.isEmpty())
+        return;
+
+    const bool enable = (state != Qt::Unchecked);
+    applyAppearanceToSelectedRows([enable](LevelPreset& preset) {
+        if (preset.flashOnActivate)
+            preset.flashOverride = enable;
+    });
+
+    if (m_lvlFlashOverrideCheck)
+    {
+        QSignalBlocker blocker(m_lvlFlashOverrideCheck);
+        m_lvlFlashOverrideCheck->setCheckState(enable ? Qt::Checked : Qt::Unchecked);
+    }
+    slotLevelSelectionChanged();
+}
+
+void MultiButtonConfigDialog::slotLevelFlashForceLtpToggled(int state)
+{
+    const QList<int> rows = selectedPresetRows();
+    if (rows.isEmpty())
+        return;
+
+    const bool enable = (state != Qt::Unchecked);
+    applyAppearanceToSelectedRows([enable](LevelPreset& preset) {
+        if (preset.flashOnActivate)
+            preset.flashForceLtp = enable;
+    });
+
+    if (m_lvlFlashForceLtpCheck)
+    {
+        QSignalBlocker blocker(m_lvlFlashForceLtpCheck);
+        m_lvlFlashForceLtpCheck->setCheckState(enable ? Qt::Checked : Qt::Unchecked);
+    }
+    slotLevelSelectionChanged();
 }
 
 void MultiButtonConfigDialog::slotFunctionFlashToggled(int state)
@@ -2860,6 +3367,53 @@ void MultiButtonConfigDialog::slotFunctionFlashToggled(int state)
         return;
 
     m_functionEntryFlash[row] = (state == Qt::Checked);
+    if (!m_functionEntryFlash[row])
+    {
+        if (row < m_functionEntryFlashOverride.size())
+            m_functionEntryFlashOverride[row] = false;
+        if (row < m_functionEntryFlashForceLtp.size())
+            m_functionEntryFlashForceLtp[row] = false;
+    }
+    slotSelectionChanged();
+}
+
+void MultiButtonConfigDialog::slotFunctionFlashOverrideToggled(int state)
+{
+    int row = m_listWidget ? m_listWidget->currentRow() : -1;
+    if (row < 0 || row >= m_functionEntryFlash.size()
+        || !m_functionEntryFlash.at(row))
+        return;
+    while (m_functionEntryFlashOverride.size() <= row)
+        m_functionEntryFlashOverride.append(false);
+    m_functionEntryFlashOverride[row] = (state == Qt::Checked);
+}
+
+void MultiButtonConfigDialog::slotFunctionFlashForceLtpToggled(int state)
+{
+    int row = m_listWidget ? m_listWidget->currentRow() : -1;
+    if (row < 0 || row >= m_functionEntryFlash.size()
+        || !m_functionEntryFlash.at(row))
+        return;
+    while (m_functionEntryFlashForceLtp.size() <= row)
+        m_functionEntryFlashForceLtp.append(false);
+    m_functionEntryFlashForceLtp[row] = (state == Qt::Checked);
+}
+
+void MultiButtonConfigDialog::slotEntryInputValueCheckToggled(bool checked)
+{
+    if (m_syncingEntryInputEditor)
+        return;
+    if (m_entryInputValueSpin)
+        m_entryInputValueSpin->setEnabled(checked);
+    commitEntryInputEditor();
+}
+
+void MultiButtonConfigDialog::slotEntryInputValueChanged(int)
+{
+    if (m_syncingEntryInputEditor)
+        return;
+    if (m_entryInputValueCheck && m_entryInputValueCheck->isChecked())
+        commitEntryInputEditor();
 }
 
 void MultiButtonConfigDialog::slotFunctionChooseLabelColor()
@@ -2918,7 +3472,11 @@ void MultiButtonConfigDialog::rebuildList()
             ? (f ? f->name() : tr("ID %1 (missing)").arg(id))
             : QString("%1 (%2)").arg(label, f ? f->name() : tr("?"));
 
-        const QString patch = formatInputPatch(entryInputForRow(i), entryKeyForRow(i));
+        QString patch = formatInputPatch(entryInputForRow(i), entryKeyForRow(i));
+        const int inputValue = entryInputValueForRow(i);
+        const QSharedPointer<QLCInputSource> src = entryInputForRow(i);
+        if (inputValue >= 0 && !src.isNull() && src->isValid())
+            patch += tr(" = %1").arg(inputValue);
         if (!patch.isEmpty())
             display += QStringLiteral(" — ") + patch;
 
@@ -2942,7 +3500,26 @@ void MultiButtonConfigDialog::slotSelectionChanged()
     int  cnt = m_listWidget->count();
 
     if (has)
+    {
         loadEntryInputEditor(row);
+    }
+    else if (m_presetEntryInputSel)
+    {
+        m_entryInputEditRow = -1;
+        m_syncingEntryInputEditor = true;
+        m_presetEntryInputSel->setInputSource(QSharedPointer<QLCInputSource>());
+        m_presetEntryInputSel->setKeySequence(QKeySequence());
+        if (m_entryInputValueCheck && m_entryInputValueSpin)
+        {
+            m_entryInputValueCheck->setChecked(false);
+            m_entryInputValueSpin->setEnabled(false);
+            m_entryInputValueSpin->setValue(0);
+        }
+        m_syncingEntryInputEditor = false;
+    }
+
+    if (m_entryInputGrp)
+        m_entryInputGrp->setEnabled(has);
 
     m_removeBtn->setEnabled(has);
     m_editLblBtn->setEnabled(has);
@@ -2958,6 +3535,24 @@ void MultiButtonConfigDialog::slotSelectionChanged()
         m_functionFlashCheck->setEnabled(has);
         m_functionFlashCheck->setChecked(has && row < m_functionEntryFlash.size()
                                         && m_functionEntryFlash.at(row));
+    }
+    const bool functionFlash = has && row < m_functionEntryFlash.size()
+            && m_functionEntryFlash.at(row);
+    if (m_functionFlashOverrideCheck)
+    {
+        QSignalBlocker blocker(m_functionFlashOverrideCheck);
+        m_functionFlashOverrideCheck->setEnabled(functionFlash);
+        m_functionFlashOverrideCheck->setChecked(functionFlash
+                && row < m_functionEntryFlashOverride.size()
+                && m_functionEntryFlashOverride.at(row));
+    }
+    if (m_functionFlashForceLtpCheck)
+    {
+        QSignalBlocker blocker(m_functionFlashForceLtpCheck);
+        m_functionFlashForceLtpCheck->setEnabled(functionFlash);
+        m_functionFlashForceLtpCheck->setChecked(functionFlash
+                && row < m_functionEntryFlashForceLtp.size()
+                && m_functionEntryFlashForceLtp.at(row));
     }
 }
 
@@ -2977,7 +3572,10 @@ void MultiButtonConfigDialog::slotAdd()
         m_icons.append(QString());
         m_functionEntryInputs.append(QSharedPointer<QLCInputSource>());
         m_functionEntryKeys.append(QKeySequence());
+        m_functionEntryInputValues.append(-1);
         m_functionEntryFlash.append(false);
+        m_functionEntryFlashOverride.append(false);
+        m_functionEntryFlashForceLtp.append(false);
         m_functionEntryLabelColors.append(QColor());
 
         QListWidgetItem* item = new QListWidgetItem(f ? f->name() : tr("ID %1").arg(fid));
@@ -3005,8 +3603,14 @@ void MultiButtonConfigDialog::slotRemove()
         m_functionEntryInputs.removeAt(row);
     if (row < m_functionEntryKeys.size())
         m_functionEntryKeys.removeAt(row);
+    if (row < m_functionEntryInputValues.size())
+        m_functionEntryInputValues.removeAt(row);
     if (row < m_functionEntryFlash.size())
         m_functionEntryFlash.removeAt(row);
+    if (row < m_functionEntryFlashOverride.size())
+        m_functionEntryFlashOverride.removeAt(row);
+    if (row < m_functionEntryFlashForceLtp.size())
+        m_functionEntryFlashForceLtp.removeAt(row);
     if (row < m_functionEntryLabelColors.size())
         m_functionEntryLabelColors.removeAt(row);
     rebuildList();
@@ -3117,8 +3721,14 @@ void MultiButtonConfigDialog::slotMoveUp()
         m_functionEntryInputs.swapItemsAt(row, row - 1);
     if (row < m_functionEntryKeys.size() && row - 1 >= 0)
         m_functionEntryKeys.swapItemsAt(row, row - 1);
+    if (row < m_functionEntryInputValues.size() && row - 1 >= 0)
+        m_functionEntryInputValues.swapItemsAt(row, row - 1);
     if (row < m_functionEntryFlash.size() && row - 1 >= 0)
         m_functionEntryFlash.swapItemsAt(row, row - 1);
+    if (row < m_functionEntryFlashOverride.size() && row - 1 >= 0)
+        m_functionEntryFlashOverride.swapItemsAt(row, row - 1);
+    if (row < m_functionEntryFlashForceLtp.size() && row - 1 >= 0)
+        m_functionEntryFlashForceLtp.swapItemsAt(row, row - 1);
     if (row < m_functionEntryLabelColors.size() && row - 1 >= 0)
         m_functionEntryLabelColors.swapItemsAt(row, row - 1);
     rebuildList();
@@ -3141,8 +3751,14 @@ void MultiButtonConfigDialog::slotMoveDown()
         m_functionEntryInputs.swapItemsAt(row, row + 1);
     if (row + 1 < m_functionEntryKeys.size())
         m_functionEntryKeys.swapItemsAt(row, row + 1);
+    if (row + 1 < m_functionEntryInputValues.size())
+        m_functionEntryInputValues.swapItemsAt(row, row + 1);
     if (row + 1 < m_functionEntryFlash.size())
         m_functionEntryFlash.swapItemsAt(row, row + 1);
+    if (row + 1 < m_functionEntryFlashOverride.size())
+        m_functionEntryFlashOverride.swapItemsAt(row, row + 1);
+    if (row + 1 < m_functionEntryFlashForceLtp.size())
+        m_functionEntryFlashForceLtp.swapItemsAt(row, row + 1);
     if (row + 1 < m_functionEntryLabelColors.size())
         m_functionEntryLabelColors.swapItemsAt(row, row + 1);
     rebuildList();

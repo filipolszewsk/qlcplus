@@ -10,6 +10,7 @@
 #include <QVector>
 #include <QList>
 #include <QTableWidget>
+#include <QTableView>
 #include <QHeaderView>
 #include <QToolBar>
 #include <QLabel>
@@ -194,6 +195,8 @@ public:
     void refreshTransitionPresetCache() override;
     void requestTableFlash(int tableRowIndex, int transitionPresetIndex) override;
     bool continuousCrossfadeStagedEditing() const override;
+    int outputCountForPresetOverrides() const override;
+    QString outputNameForPresetOverride(int outputIdx) const override;
     int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
                                   const PTGlobalEffectSettings& global) const override;
     bool spatialGridPreview(const PTTransitionPreset& preset,
@@ -304,7 +307,8 @@ private:
     PTTransitionPreset transitionPresetForOutput(int outputIdx) const;
     /** Caller must hold m_stateMutex (writeDMX path). */
     PTTransitionPreset transitionPresetForOutputLocked(int outputIdx) const;
-    PTTransitionPreset transitionPresetAtIndexLocked(PTTransitionMode mode, int presetIndex) const;
+    PTTransitionPreset transitionPresetAtIndexLocked(PTTransitionMode mode, int presetIndex,
+                                                     int outputIdx = -1) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
@@ -502,6 +506,7 @@ public:
     QVBoxLayout*          m_layout     = nullptr;
     QToolBar*             m_toolbar    = nullptr;
     QTableWidget*         m_table      = nullptr;
+    QTableView*           m_nameFrozenTable = nullptr;
     QLabel*               m_statusBar  = nullptr;
     PresetTableV2Delegate*  m_delegate   = nullptr;
 

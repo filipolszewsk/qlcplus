@@ -29,6 +29,13 @@ public:
     /** True when Continuous FX selection edits go to staged buffers (fader ≤127). */
     virtual bool continuousCrossfadeStagedEditing() const = 0;
 
+    virtual int outputCountForPresetOverrides() const { return 0; }
+    virtual QString outputNameForPresetOverride(int outputIdx) const
+    {
+        Q_UNUSED(outputIdx);
+        return QString();
+    }
+
     /** Span along preset axis from linked fixture group; 0 if unavailable. */
     virtual int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
                                           const PTGlobalEffectSettings& global) const = 0;

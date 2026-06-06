@@ -92,10 +92,13 @@ struct LevelPreset
     QColor        labelColor;      // invalid = auto contrast on background
     bool          hideName = false;  // true = no text on button (user cleared name)
     bool          flashOnActivate = false;
+    bool          flashOverride = false;
+    bool          flashForceLtp = false;
     QList<quint8> values;   // parallel to m_levelChannelBindings
     QStringList   valueFormulas;
     QSharedPointer<QLCInputSource> entryInput;
     QKeySequence                 entryKey;
+    int                          entryInputValue = -1; // -1 = any active value
 };
 
 enum class MultiButtonAutomationMode
@@ -212,6 +215,8 @@ public:
     void setEntryInputSource(int idx, QSharedPointer<QLCInputSource> src);
     QKeySequence entryKeySource(int idx) const;
     void setEntryKeySource(int idx, const QKeySequence& key);
+    int entryInputValueSource(int idx) const;
+    void setEntryInputValueSource(int idx, int value);
 
     QList<QSharedPointer<QLCInputSource>> spreadSlotInputs() const { return m_spreadSlotInputs; }
     QList<QKeySequence>                   spreadSlotKeys()  const { return m_spreadSlotKeys; }
@@ -223,6 +228,7 @@ public:
     void setSpreadSlotKey(int localSlot, const QKeySequence& key);
 
     QList<QKeySequence> functionEntryKeys() const { return m_functionEntryKeys; }
+    QList<int> functionEntryInputValues() const { return m_functionEntryInputValues; }
     void setFunctionEntryKeys(const QList<QKeySequence>& keys);
 
     // ---- FunctionParent (required for Function::start/stop) --------------
@@ -251,6 +257,7 @@ protected slots:
     void slotModeChanged(Doc::Mode mode) override;
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
     void slotKeyPressed(const QKeySequence& keySequence) override;
+    void slotKeyReleased(const QKeySequence& keySequence) override;
 
 private slots:
     void slotLongPressFired();
@@ -291,12 +298,12 @@ private:
     void resizeSpreadSlotInputs();
     int  entryInputLocalSlot(int globalRow) const;
     void activateAutomationLive(int idx);
-    void activate(int idx);
+    void activate(int idx, bool allowFlashEntry = false);
     void stopCurrent();
     bool stagingActive() const;
     bool hasLocalStagedSelection() const;
     void clearLocalStagedSelection();
-    void stageEntry(int idx);
+    void stageEntry(int idx, bool allowFlashEntry = false);
     void commitStaged();
     void clearStagedOnExternalMonitorChange(int matchIdx);
     void updateChannelMonitorTimerInterval();
@@ -371,6 +378,7 @@ private:
     void paintSingle(QPainter& p);
     QColor buttonTextColor(const QColor& tileBg) const;
     QColor defaultTileBackground() const;
+    bool automationVisualActive() const;
 
     void rebuildSceneCache();
     void updateDmxRegistration();
@@ -411,7 +419,10 @@ private:
     QStringList    m_iconPaths;
     QList<QSharedPointer<QLCInputSource>> m_functionEntryInputs;
     QList<QKeySequence>                   m_functionEntryKeys;
+    QList<int>                            m_functionEntryInputValues;
     QList<bool>                           m_functionEntryFlash;
+    QList<bool>                           m_functionEntryFlashOverride;
+    QList<bool>                           m_functionEntryFlashForceLtp;
     QList<QColor>                         m_functionEntryLabelColors;
 
     // ---- Level mode state -----------------------------------------------
@@ -449,6 +460,7 @@ private:
     int            m_stagedIndex          = -1;
     bool           m_stagedValid          = false;
     uchar          m_commitInputLastValue = 0;
+    QList<bool>    m_entryInputValueMatched;
 
     // ---- Icon cache (keyed by entry index) ------------------------------
     mutable QHash<int, QPixmap> m_iconCache;
@@ -465,6 +477,8 @@ private:
     QElapsedTimer                m_lastActivationTime;
     int                          m_monitorMatchIndex   = -1;  // bus match (paint only)
     int                          m_lastMonitorMatchIdx = -2;  // previous tick (staged clear)
+    int                          m_pendingMonitorMatchIdx = -2;
+    int                          m_pendingMonitorMatchCount = 0;
 
     // ---- Settings --------------------------------------------------------
     int  m_longPressMs  = 500;
@@ -487,6 +501,7 @@ private:
     QList<MultiButtonAutomationProfile> m_automationProfiles;
     int                               m_activeAutomationProfile = 0;
     int                               m_automationPulseCounter  = 0;
+    uchar                             m_automationProfileSelectorValue = 0;
     uchar                             m_triggerLastValue        = 0;
     uchar                             m_automationLastValue     = 0;
 

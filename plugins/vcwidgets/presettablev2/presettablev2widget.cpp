@@ -48,6 +48,8 @@
 #include <QMenu>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QScrollBar>
+#include <QTableView>
 #include <QDebug>
 #include <algorithm>
 #include <climits>
@@ -607,6 +609,27 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_table->setAlternatingRowColors(true);
     m_table->setItemDelegate(m_delegate);
     m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+
+    m_nameFrozenTable = new QTableView(this);
+    m_nameFrozenTable->setModel(m_table->model());
+    m_nameFrozenTable->setSelectionModel(m_table->selectionModel());
+    m_nameFrozenTable->setItemDelegate(m_delegate);
+    m_nameFrozenTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_nameFrozenTable->setSelectionBehavior(QAbstractItemView::SelectItems);
+    m_nameFrozenTable->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+    m_nameFrozenTable->setAlternatingRowColors(true);
+    m_nameFrozenTable->verticalHeader()->hide();
+    m_nameFrozenTable->verticalHeader()->setDefaultSectionSize(22);
+    m_nameFrozenTable->horizontalHeader()->setStretchLastSection(true);
+    m_nameFrozenTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nameFrozenTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nameFrozenTable->setFixedWidth((m_nameColWidth > 0 ? m_nameColWidth : 140) + 2);
+    m_nameFrozenTable->installEventFilter(this);
+    m_nameFrozenTable->viewport()->installEventFilter(this);
+    for (int col = 1; col < m_table->columnCount(); ++col)
+        m_nameFrozenTable->setColumnHidden(col, true);
 
     // Intercept ShortcutOverride so Ctrl+C/V reach us instead of VC's widget-copy actions
     m_table->installEventFilter(this);
@@ -620,10 +643,27 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
             this, &PresetTableV2Widget::slotColumnHeaderDoubleClicked);
     connect(m_table->horizontalHeader(), &QHeaderView::sectionResized,
             this, &PresetTableV2Widget::slotHeaderSectionResized);
+    connect(m_nameFrozenTable->horizontalHeader(), &QHeaderView::sectionResized,
+            this, [this](int logicalIndex, int, int newSize) {
+        if (logicalIndex != 0 || m_resizingColumns)
+            return;
+        m_nameColWidth = newSize;
+        m_nameFrozenTable->setFixedWidth(newSize + 2);
+    });
     connect(m_table, &QTableWidget::customContextMenuRequested,
             this, &PresetTableV2Widget::slotTableContextMenu);
+    connect(m_table->verticalScrollBar(), &QScrollBar::valueChanged,
+            m_nameFrozenTable->verticalScrollBar(), &QScrollBar::setValue);
+    connect(m_nameFrozenTable->verticalScrollBar(), &QScrollBar::valueChanged,
+            m_table->verticalScrollBar(), &QScrollBar::setValue);
 
-    m_layout->addWidget(m_table, 1);
+    QWidget* tableWrap = new QWidget(this);
+    QHBoxLayout* tableLayout = new QHBoxLayout(tableWrap);
+    tableLayout->setContentsMargins(0, 0, 0, 0);
+    tableLayout->setSpacing(0);
+    tableLayout->addWidget(m_nameFrozenTable);
+    tableLayout->addWidget(m_table, 1);
+    m_layout->addWidget(tableWrap, 1);
 
     // ---- Status bar (Operate mode only) ----------------------------------
     m_statusBar = new QLabel(this);
@@ -931,7 +971,9 @@ void PresetTableV2Widget::slotColumnHeaderDoubleClicked(int logicalIndex)
 
 bool PresetTableV2Widget::eventFilter(QObject* obj, QEvent* ev)
 {
-    if (m_table && (obj == m_table || obj == m_table->viewport()))
+    if (m_table && (obj == m_table || obj == m_table->viewport()
+            || obj == m_nameFrozenTable
+            || (m_nameFrozenTable && obj == m_nameFrozenTable->viewport())))
     {
         // Accept ShortcutOverride to prevent VirtualConsole's Ctrl+C/V QActions
         // from firing the widget-copy menu instead of our cell copy/paste.
@@ -961,6 +1003,16 @@ bool PresetTableV2Widget::eventFilter(QObject* obj, QEvent* ev)
 void PresetTableV2Widget::slotHeaderSectionResized(int logicalIndex, int /*oldSize*/, int newSize)
 {
     if (m_resizingColumns) return;
+    if (logicalIndex == 0)
+    {
+        m_nameColWidth = newSize;
+        if (m_nameFrozenTable)
+        {
+            m_nameFrozenTable->setColumnWidth(0, newSize);
+            m_nameFrozenTable->setFixedWidth(newSize + 2);
+        }
+        return;
+    }
     QList<int> selected;
     for (const QModelIndex& idx : m_table->selectionModel()->selectedColumns())
         selected.append(idx.column());
@@ -1238,6 +1290,20 @@ void PresetTableV2Widget::rebuildTable()
     // Apply persisted column widths
     if (m_nameColWidth > 0)
         m_table->setColumnWidth(0, m_nameColWidth);
+    if (m_nameFrozenTable)
+    {
+        m_nameFrozenTable->setModel(m_table->model());
+        m_nameFrozenTable->setSelectionModel(m_table->selectionModel());
+        m_nameFrozenTable->setColumnHidden(0, false);
+        for (int c = 1; c < numCols; ++c)
+            m_nameFrozenTable->setColumnHidden(c, true);
+        const int frozenWidth = m_nameColWidth > 0 ? m_nameColWidth : 140;
+        m_nameFrozenTable->setColumnWidth(0, frozenWidth);
+        m_nameFrozenTable->setFixedWidth(frozenWidth + 2);
+        for (int r = 0; r < numRows; ++r)
+            m_nameFrozenTable->setRowHeight(r, m_table->rowHeight(r));
+    }
+    m_table->setColumnHidden(0, true);
     for (int c = 0; c < m_columns.size(); ++c)
         if (m_columns[c].width > 0)
             m_table->setColumnWidth(c + 1, m_columns[c].width);
@@ -1456,7 +1522,8 @@ int PresetTableV2Widget::liveMultiFxPresetIndexLocked(int outputIdx) const
 }
 
 PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransitionMode mode,
-                                                                      int presetIndex) const
+                                                                      int presetIndex,
+                                                                      int outputIdx) const
 {
     if (presetIndex < 0)
     {
@@ -1469,7 +1536,7 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransiti
     if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
     {
         if (presetIndex < provider->transitionPresetCount(mode))
-            return provider->effectiveTransitionPreset(mode, presetIndex);
+            return provider->effectiveTransitionPresetForOutput(mode, presetIndex, outputIdx);
     }
 
     return PresetTableV2SpatialEngine::presetFromLegacySpatial(m_spatialEffects);
@@ -1478,19 +1545,19 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransiti
 PTTransitionPreset PresetTableV2Widget::sweepPresetForOutputLocked(int outputIdx) const
 {
     return transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly,
-                                         liveSweepPresetIndexLocked(outputIdx));
+                                         liveSweepPresetIndexLocked(outputIdx), outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outputIdx) const
 {
     return transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
-                                         liveContinuousPresetIndexLocked(outputIdx));
+                                         liveContinuousPresetIndexLocked(outputIdx), outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::multiFxPresetForOutputLocked(int outputIdx) const
 {
     return transitionPresetAtIndexLocked(PTTransitionMode::MultiFx,
-                                         liveMultiFxPresetIndexLocked(outputIdx));
+                                         liveMultiFxPresetIndexLocked(outputIdx), outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outputIdx,
@@ -1504,7 +1571,7 @@ PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outp
         return live;
 
     return transitionPresetAtIndexLocked(
-            PTTransitionMode::Continuous, m_stagedContinuousPreset[outputIdx]);
+            PTTransitionMode::Continuous, m_stagedContinuousPreset[outputIdx], outputIdx);
 }
 
 static QVector<uchar> blendRowValues(const QVector<uchar>& live,
@@ -1959,6 +2026,21 @@ bool PresetTableV2Widget::continuousCrossfadeStagedEditing() const
     QMutexLocker lk(&m_stateMutex);
     return crossfadeRoutesToStagedLocked()
             && continuousCrossfadeActiveAnyLocked();
+}
+
+int PresetTableV2Widget::outputCountForPresetOverrides() const
+{
+    QMutexLocker lk(&m_stateMutex);
+    return m_outputs.size();
+}
+
+QString PresetTableV2Widget::outputNameForPresetOverride(int outputIdx) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return QString();
+    const QString name = m_outputs.at(outputIdx).name;
+    return name.isEmpty() ? tr("Output %1").arg(outputIdx + 1) : name;
 }
 
 int PresetTableV2Widget::fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
@@ -2710,7 +2792,7 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetForOutputLocked(int outp
         return continuousPresetForOutputLocked(outputIdx);
     if (sweepEfxActiveForOutputLocked(outputIdx))
         return sweepPresetForOutputLocked(outputIdx);
-    return transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly, -1);
+    return transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly, -1, outputIdx);
 }
 
 PresetTableV2TransitionProviderIface* PresetTableV2Widget::linkedTransitionProvider() const
@@ -3290,7 +3372,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
     const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
-            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
+            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, outputIdx)
             : multiFxPreset;
     const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
             && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
@@ -3764,7 +3846,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
     const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
-            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx)
+            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, outputIdx)
             : multiFxPreset;
     const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
             && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
@@ -4426,7 +4508,7 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
             if (hasStagedMultiFxPresetLocked(o))
             {
                 const PTTransitionPreset stagedPreset =
-                        transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx);
+                        transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, o);
                 const quint32 stagedCycleMs = qMax(quint32(1),
                         cycleDurationMsLocked(global, stagedPreset));
                 ensurePhaseStableCycleLocked(m_multiFxStagedElapsedMs, m_multiFxStagedLastCycleMs,

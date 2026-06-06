@@ -16,6 +16,13 @@ public:
     virtual int transitionPresetCount(PTTransitionMode mode) const = 0;
     virtual PTTransitionPreset transitionPreset(PTTransitionMode mode, int index) const = 0;
     virtual PTTransitionPreset effectiveTransitionPreset(PTTransitionMode mode, int index) const = 0;
+    virtual PTTransitionPreset effectiveTransitionPresetForOutput(PTTransitionMode mode,
+                                                                  int index,
+                                                                  int outputIdx) const
+    {
+        Q_UNUSED(outputIdx);
+        return effectiveTransitionPreset(mode, index);
+    }
     virtual QString transitionPresetName(PTTransitionMode mode, int index) const = 0;
 
     virtual PTTransitionMode transitionMode() const = 0;

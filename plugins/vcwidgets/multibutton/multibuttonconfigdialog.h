@@ -73,10 +73,13 @@ public:
         bool                               logPresetChanges,
         const QList<QSharedPointer<QLCInputSource>>& functionEntryInputs,
         const QList<QKeySequence>&                   functionEntryKeys,
+        const QList<int>&                            functionEntryInputValues,
         const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
-        const QList<QKeySequence>&                   spreadSlotKeys,
-        const QList<bool>&                           functionEntryFlash,
-        const QList<QColor>&                         functionEntryLabelColors,
+    const QList<QKeySequence>&                   spreadSlotKeys,
+    const QList<bool>&                           functionEntryFlash,
+    const QList<bool>&                           functionEntryFlashOverride,
+    const QList<bool>&                           functionEntryFlashForceLtp,
+    const QList<QColor>&                         functionEntryLabelColors,
         quint32                            widgetTargetId,
         int                                widgetOutputIndex,
         int                                widgetParameter,
@@ -119,9 +122,12 @@ public:
     bool                           logPresetChanges()      const;
     QList<QSharedPointer<QLCInputSource>> functionEntryInputs() const;
     QList<QKeySequence>                   functionEntryKeys()  const;
+    QList<int>                            functionEntryInputValues() const;
     QList<QSharedPointer<QLCInputSource>> spreadSlotInputs()  const;
     QList<QKeySequence>                   spreadSlotKeys()   const;
     QList<bool>                           functionEntryFlash() const;
+    QList<bool>                           functionEntryFlashOverride() const;
+    QList<bool>                           functionEntryFlashForceLtp() const;
     QList<QColor>                         functionEntryLabelColors() const;
     quint32                               widgetTargetId() const;
     int                                   widgetOutputIndex() const;
@@ -152,6 +158,8 @@ private slots:
     void setEntryInputForRow(int row, QSharedPointer<QLCInputSource> src);
     QKeySequence entryKeyForRow(int row) const;
     void setEntryKeyForRow(int row, const QKeySequence& key);
+    int entryInputValueForRow(int row) const;
+    void setEntryInputValueForRow(int row, int value);
     static QString formatInputPatch(const QSharedPointer<QLCInputSource>& src,
                                     const QKeySequence& key = QKeySequence());
     static QSharedPointer<QLCInputSource> inputFromPatchString(const QString& patch);
@@ -183,7 +191,15 @@ private slots:
     void slotLevelChooseLabelColor();
     void slotLevelClearLabelColor();
     void slotLevelFlashToggled(int state);
+    void slotLevelFlashOverrideToggled(int state);
+    void slotLevelFlashForceLtpToggled(int state);
+    void slotLevelAddFormula();
+    void slotLevelClearFormula();
     void slotFunctionFlashToggled(int state);
+    void slotFunctionFlashOverrideToggled(int state);
+    void slotFunctionFlashForceLtpToggled(int state);
+    void slotEntryInputValueCheckToggled(bool checked);
+    void slotEntryInputValueChanged(int value);
     void slotFunctionChooseLabelColor();
     void slotFunctionClearLabelColor();
     void slotLevelMoveUp();
@@ -245,9 +261,12 @@ private:
     QList<LevelPreset>         m_widgetEntryAppearance;
     QList<QSharedPointer<QLCInputSource>> m_functionEntryInputs;
     QList<QKeySequence>                   m_functionEntryKeys;
+    QList<int>                            m_functionEntryInputValues;
     QList<QSharedPointer<QLCInputSource>> m_spreadSlotInputs;
     QList<QKeySequence>                   m_spreadSlotKeys;
     QList<bool>                           m_functionEntryFlash;
+    QList<bool>                           m_functionEntryFlashOverride;
+    QList<bool>                           m_functionEntryFlashForceLtp;
     QList<QColor>                         m_functionEntryLabelColors;
 
     QComboBox*       m_modeCombo    = nullptr;
@@ -279,8 +298,14 @@ private:
     QPushButton*  m_lvlClearColorBtn  = nullptr;
     QPushButton*  m_lvlChooseLabelColorBtn = nullptr;
     QPushButton*  m_lvlClearLabelColorBtn  = nullptr;
+    QPushButton*  m_lvlAddFormulaBtn       = nullptr;
+    QPushButton*  m_lvlClearFormulaBtn     = nullptr;
     QCheckBox*    m_lvlFlashCheck         = nullptr;
+    QCheckBox*    m_lvlFlashOverrideCheck = nullptr;
+    QCheckBox*    m_lvlFlashForceLtpCheck = nullptr;
     QCheckBox*    m_functionFlashCheck     = nullptr;
+    QCheckBox*    m_functionFlashOverrideCheck = nullptr;
+    QCheckBox*    m_functionFlashForceLtpCheck = nullptr;
     QPushButton*  m_lvlUpBtn         = nullptr;
     QPushButton*  m_lvlDownBtn       = nullptr;
 
@@ -317,6 +342,8 @@ private:
     QTableWidget* m_spreadSlotTable     = nullptr;
     QGroupBox*    m_entryInputGrp       = nullptr;
     InputSelectionWidget* m_presetEntryInputSel = nullptr;
+    QCheckBox*    m_entryInputValueCheck = nullptr;
+    QSpinBox*     m_entryInputValueSpin = nullptr;
 
     QCheckBox*    m_autoEnableCheck    = nullptr;
     QTableWidget* m_autoProfileTable   = nullptr;
