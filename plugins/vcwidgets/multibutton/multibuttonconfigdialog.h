@@ -8,11 +8,13 @@
 #include <QDialog>
 #include <QListWidget>
 #include <QTableWidget>
+#include <QTreeWidget>
 #include <QComboBox>
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QTabWidget>
@@ -40,6 +42,7 @@ public:
     explicit MultiButtonConfigDialog(
         Doc*                               doc,
         MultiButtonMode                    widgetMode,
+        const QString&                     targetListName,
         const QList<quint32>&              funcIds,
         const QStringList&                 funcLabels,
         const QStringList&                 iconPaths,
@@ -80,6 +83,7 @@ public:
     const QList<bool>&                           functionEntryFlashOverride,
     const QList<bool>&                           functionEntryFlashForceLtp,
     const QList<QColor>&                         functionEntryLabelColors,
+        quint32                            ownerWidgetId,
         quint32                            widgetTargetId,
         int                                widgetOutputIndex,
         int                                widgetParameter,
@@ -89,6 +93,7 @@ public:
         QWidget*                           parent = nullptr);
 
     MultiButtonMode                widgetMode()            const;
+    QString                        targetListName()        const;
     QList<quint32>                 functionIds()           const;
     QStringList                    functionLabels()        const;
     QStringList                    iconPaths()             const;
@@ -206,9 +211,10 @@ private slots:
     void slotLevelMoveDown();
     void slotLevelSelectionChanged();
     void slotPresetTableItemChanged(QTableWidgetItem* item);
-    void slotWidgetTargetChanged(int index);
+    void slotWidgetTargetChanged();
     void slotWidgetOutputChanged(int index);
     void slotWidgetParameterChanged(int index);
+    void slotWidgetTargetSearchChanged(const QString& text);
 
 private:
     void rebuildList();
@@ -242,6 +248,9 @@ private:
     int  entryCountForAutomation() const;
     QString entryLabelForAutomation(int index) const;
     void rebuildWidgetTargetCombo(quint32 preferredId);
+    void filterWidgetTargetTree();
+    void selectWidgetTargetTreeItem(quint32 widgetId);
+    QString widgetTargetTypeLabel(const VCWidget* widget) const;
     void rebuildWidgetOutputCombo();
     void rebuildWidgetParameterCombo();
     void rebuildWidgetPreview();
@@ -251,6 +260,7 @@ private:
     static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
 
     Doc* m_doc;
+    QString m_targetListName;
 
     QList<quint32>             m_ids;
     QStringList                m_labels;
@@ -268,6 +278,7 @@ private:
     QList<bool>                           m_functionEntryFlashOverride;
     QList<bool>                           m_functionEntryFlashForceLtp;
     QList<QColor>                         m_functionEntryLabelColors;
+    quint32                               m_ownerWidgetId = VCWidget::invalidId();
 
     QComboBox*       m_modeCombo    = nullptr;
     QStackedWidget*  m_modeStack    = nullptr;
@@ -309,7 +320,9 @@ private:
     QPushButton*  m_lvlUpBtn         = nullptr;
     QPushButton*  m_lvlDownBtn       = nullptr;
 
-    QComboBox*    m_widgetTargetCombo = nullptr;
+    QLineEdit*    m_targetListNameEdit = nullptr;
+    QLineEdit*    m_widgetTargetSearch = nullptr;
+    QTreeWidget*  m_widgetTargetTree = nullptr;
     QComboBox*    m_widgetOutputCombo = nullptr;
     QComboBox*    m_widgetParameterCombo = nullptr;
     QListWidget*  m_widgetPreviewList = nullptr;

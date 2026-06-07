@@ -27,6 +27,8 @@ public:
     virtual QString multiButtonEntryName(int outputIdx, int parameter, int index) const = 0;
     virtual int multiButtonCurrentIndex(int outputIdx, int parameter) const = 0;
     virtual int multiButtonLiveIndex(int outputIdx, int parameter) const = 0;
+    virtual bool multiButtonStagingAvailable(int outputIdx, int parameter) const = 0;
+    virtual quint64 multiButtonStateRevision(int outputIdx, int parameter) const = 0;
     virtual bool multiButtonHasStagedIndex(int outputIdx, int parameter) const = 0;
     virtual int multiButtonStagedIndex(int outputIdx, int parameter) const = 0;
     virtual bool multiButtonActivate(int outputIdx, int parameter, int index) = 0;

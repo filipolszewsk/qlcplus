@@ -762,6 +762,7 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_spatialChase.resize(m_outputs.size());
         m_spatialChase.fill(PTSpatialChaseOutput(), m_spatialChase.size());
         syncLiveTransitionFromOutputs();
+        ensureMultiButtonRevisionSizeLocked();
     }
     refreshRowHighlights();
 }
@@ -1352,6 +1353,9 @@ void PresetTableV2Widget::setActiveRow(int outputIdx, int rowIdx)
         if (outputIdx < 0 || outputIdx >= m_activeRow.size()) return;
         const int prevRow = m_activeRow[outputIdx];
         m_activeRow[outputIdx] = rowIdx;
+        if (rowIdx != prevRow)
+            bumpMultiButtonStateRevisionLocked(
+                    outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
         if (outputIdx < m_spatialAppliedRow.size() && rowIdx < 0)
             m_spatialAppliedRow[outputIdx] = -1;
         if (outputIdx >= 0 && outputIdx < m_spatialChase.size())
@@ -1469,6 +1473,7 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedSweepValid.fill(false);
     m_stagedContinuousValid.fill(false);
     m_stagedMultiFxValid.fill(false);
+    ensureMultiButtonRevisionSizeLocked();
     m_continuousElapsedMs.resize(m_outputs.size());
     m_multiFxElapsedMs.resize(m_outputs.size());
     m_multiFxStagedElapsedMs.resize(m_outputs.size());
@@ -2246,6 +2251,35 @@ int PresetTableV2Widget::multiButtonLiveIndex(int outputIdx, int parameter) cons
     }
 }
 
+bool PresetTableV2Widget::multiButtonStagingAvailable(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size() || !m_crossfadeEnabled)
+        return false;
+
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return true;
+        default:
+            return false;
+    }
+}
+
+quint64 PresetTableV2Widget::multiButtonStateRevision(int outputIdx, int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    const int slot = multiButtonRevisionSlotLocked(parameter);
+    if (outputIdx < 0 || slot < 0
+            || outputIdx >= m_multiButtonStateRevision.size()
+            || slot >= m_multiButtonStateRevision.at(outputIdx).size())
+        return 0;
+    return m_multiButtonStateRevision.at(outputIdx).at(slot);
+}
+
 bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter) const
 {
     QMutexLocker lk(&m_stateMutex);
@@ -2375,6 +2409,8 @@ bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter
             m_stagedSweepValid[outputIdx] = false;
         if (outputIdx < m_stagedSweepPreset.size())
             m_stagedSweepPreset[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
         if (prevSweep != index)
             syncCommittedPlaybackStateLocked(outputIdx, false);
         sendFeedback(index + 1, PTInputId::transSweep(outputIdx));
@@ -2429,6 +2465,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             m_stagedRow[outputIdx] = -1;
         if (outputIdx < m_stagedRowValid.size())
             m_stagedRowValid[outputIdx] = false;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
         clearCrossfadeSessionIfNoStaged();
         lk.unlock();
         setActiveRow(outputIdx, index);
@@ -2450,6 +2488,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             m_stagedSecondaryValid[outputIdx] = false;
         if (outputIdx < m_stagedSecondaryRow.size())
             m_stagedSecondaryRow[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
         materializeContinuousRowsLocked(outputIdx, false);
         clearCrossfadeSessionIfNoStaged();
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSecondaryRow(outputIdx));
@@ -2477,6 +2517,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             m_stagedSweepValid[outputIdx] = false;
         if (outputIdx < m_stagedSweepPreset.size())
             m_stagedSweepPreset[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
         if (prevSweep != index)
             syncCommittedPlaybackStateLocked(outputIdx, false);
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transSweep(outputIdx));
@@ -2490,6 +2532,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             m_stagedContinuousValid[outputIdx] = false;
         if (outputIdx < m_stagedContinuousPreset.size())
             m_stagedContinuousPreset[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
         materializeContinuousRowsLocked(outputIdx, false);
         clearCrossfadeSessionIfNoStaged();
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transContinuousBank(outputIdx));
@@ -2503,6 +2547,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
             m_stagedMultiFxValid[outputIdx] = false;
         if (outputIdx < m_stagedMultiFxPreset.size())
             m_stagedMultiFxPreset[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
         clearCrossfadeSessionIfNoStaged();
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::multiFxBank(outputIdx));
     }
@@ -2543,6 +2589,16 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
         m_stagedContinuousValid[outputIdx] = false;
     if (outputIdx < m_stagedMultiFxValid.size())
         m_stagedMultiFxValid[outputIdx] = false;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
     if (!crossfadeHasStagedChangesLocked())
     {
         m_crossfadeSessionActive = false;
@@ -2563,6 +2619,8 @@ void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
     {
         m_stagedSecondaryRow[outputIdx] = -1;
         m_stagedSecondaryValid[outputIdx] = false;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
         if (!crossfadeHasStagedChangesLocked())
             m_crossfadeSessionActive = false;
         return;
@@ -2570,6 +2628,8 @@ void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
 
     m_stagedSecondaryRow[outputIdx] = rowIdx;
     m_stagedSecondaryValid[outputIdx] = true;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
 }
 
 void PresetTableV2Widget::stageSweepPresetLocked(int outputIdx, int presetIdx)
@@ -2582,6 +2642,8 @@ void PresetTableV2Widget::stageSweepPresetLocked(int outputIdx, int presetIdx)
         m_stagedSweepValid.append(false);
     m_stagedSweepPreset[outputIdx] = presetIdx;
     m_stagedSweepValid[outputIdx] = true;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
 }
 
 void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetIdx)
@@ -2596,12 +2658,16 @@ void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetI
     {
         m_stagedContinuousPreset[outputIdx] = -1;
         m_stagedContinuousValid[outputIdx] = false;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
         if (!crossfadeHasStagedChangesLocked())
             m_crossfadeSessionActive = false;
         return;
     }
     m_stagedContinuousPreset[outputIdx] = presetIdx;
     m_stagedContinuousValid[outputIdx] = true;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
 }
 
 void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
@@ -2616,12 +2682,56 @@ void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
     {
         m_stagedMultiFxPreset[outputIdx] = -1;
         m_stagedMultiFxValid[outputIdx] = false;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
         if (!crossfadeHasStagedChangesLocked())
             m_crossfadeSessionActive = false;
         return;
     }
     m_stagedMultiFxPreset[outputIdx] = presetIdx;
     m_stagedMultiFxValid[outputIdx] = true;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
+}
+
+void PresetTableV2Widget::ensureMultiButtonRevisionSizeLocked()
+{
+    while (m_multiButtonStateRevision.size() < m_outputs.size())
+        m_multiButtonStateRevision.append(QVector<quint64>(5, 0));
+    while (m_multiButtonStateRevision.size() > m_outputs.size())
+        m_multiButtonStateRevision.removeLast();
+    for (QVector<quint64>& revisions : m_multiButtonStateRevision)
+        revisions.resize(5);
+}
+
+int PresetTableV2Widget::multiButtonRevisionSlotLocked(int parameter) const
+{
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::TransitionPreset:
+            return 0;
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            return 1;
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            return 2;
+        case PresetTableV2MultiButtonTargetIface::PrimaryRow:
+            return 3;
+        case PresetTableV2MultiButtonTargetIface::SecondaryRow:
+            return 4;
+        default:
+            return -1;
+    }
+}
+
+void PresetTableV2Widget::bumpMultiButtonStateRevisionLocked(int outputIdx, int parameter)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return;
+    const int slot = multiButtonRevisionSlotLocked(parameter);
+    if (slot < 0)
+        return;
+    ensureMultiButtonRevisionSizeLocked();
+    ++m_multiButtonStateRevision[outputIdx][slot];
 }
 
 void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
@@ -2639,6 +2749,8 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
         m_stagedRow[outputIdx] = -1;
         m_stagedRowValid[outputIdx] = false;
         syncCommittedPlaybackStateLocked(outputIdx, false);
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
         if (!crossfadeHasStagedChangesLocked())
             m_crossfadeSessionActive = false;
         return;
@@ -2646,6 +2758,8 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
 
     m_stagedRow[outputIdx] = rowIdx;
     m_stagedRowValid[outputIdx] = true;
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
 }
 
 void PresetTableV2Widget::materializeContinuousRowsLocked(int outputIdx, bool toStaged)
@@ -2720,6 +2834,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
             m_activeRow[o] = m_stagedRow[o];
             m_stagedRow[o] = -1;
             m_stagedRowValid[o] = false;
+            bumpMultiButtonStateRevisionLocked(
+                    o, PresetTableV2MultiButtonTargetIface::PrimaryRow);
             promoted = true;
         }
 
@@ -2735,6 +2851,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
             if (o < m_outputs.size() && o < m_liveSecondaryRow.size()
                     && m_liveSecondaryRow[o] >= 0)
                 m_outputs[o].secondaryRowIndex = m_liveSecondaryRow[o];
+            bumpMultiButtonStateRevisionLocked(
+                    o, PresetTableV2MultiButtonTargetIface::SecondaryRow);
             promoted = true;
         }
 
@@ -2752,6 +2870,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_stagedContinuousPreset[o] = -1;
             if (o < m_outputs.size() && o < m_liveContinuousPreset.size())
                 m_outputs[o].continuousPresetIndex = m_liveContinuousPreset[o];
+            bumpMultiButtonStateRevisionLocked(
+                    o, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
             promoted = true;
             promotedFxPreset = true;
         }
@@ -2767,6 +2887,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_stagedMultiFxPreset[o] = -1;
             if (o < m_outputs.size() && o < m_liveMultiFxPreset.size())
                 m_outputs[o].multiFxPresetIndex = m_liveMultiFxPreset[o];
+            bumpMultiButtonStateRevisionLocked(
+                    o, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
             promoted = true;
             promotedFxPreset = true;
         }
@@ -4674,6 +4796,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                         m_stagedRow[o] = -1;
                     if (o < m_stagedRowValid.size())
                         m_stagedRowValid[o] = false;
+                    bumpMultiButtonStateRevisionLocked(
+                            o, PresetTableV2MultiButtonTargetIface::PrimaryRow);
                     syncCommittedPlaybackStateLocked(o, false);
                 }
                 lk2.unlock();
@@ -4754,6 +4878,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     m_stagedSweepValid[o] = false;
                 if (o < m_stagedSweepPreset.size())
                     m_stagedSweepPreset[o] = -1;
+                bumpMultiButtonStateRevisionLocked(
+                        o, PresetTableV2MultiButtonTargetIface::TransitionPreset);
 
                 if (!initialSync && nextSweep != prevSweep)
                     syncCommittedPlaybackStateLocked(o, false);
@@ -4786,6 +4912,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     m_stagedContinuousValid[o] = false;
                 if (o < m_stagedContinuousPreset.size())
                     m_stagedContinuousPreset[o] = -1;
+                bumpMultiButtonStateRevisionLocked(
+                        o, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
                 materializeContinuousRowsLocked(o, false);
                 if (!initialSync && o < m_continuousElapsedMs.size())
                 {
@@ -4820,6 +4948,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     m_stagedSecondaryValid[o] = false;
                 if (o < m_stagedSecondaryRow.size())
                     m_stagedSecondaryRow[o] = -1;
+                bumpMultiButtonStateRevisionLocked(
+                        o, PresetTableV2MultiButtonTargetIface::SecondaryRow);
             }
             lk2.unlock();
             refreshTransitionPresetCache();
@@ -4850,6 +4980,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                     m_stagedMultiFxValid[o] = false;
                 if (o < m_stagedMultiFxPreset.size())
                     m_stagedMultiFxPreset[o] = -1;
+                bumpMultiButtonStateRevisionLocked(
+                        o, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
             }
             lk2.unlock();
             if (!toStaged)

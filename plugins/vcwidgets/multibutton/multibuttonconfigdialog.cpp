@@ -78,6 +78,7 @@ static void tuneAutomationProfileColumnWidths(QTableWidget* table)
 MultiButtonConfigDialog::MultiButtonConfigDialog(
     Doc*                               doc,
     MultiButtonMode                    widgetMode,
+    const QString&                     targetListName,
     const QList<quint32>&              funcIds,
     const QStringList&                 funcLabels,
     const QStringList&                 iconPaths,
@@ -118,6 +119,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     const QList<bool>&                           functionEntryFlashOverride,
     const QList<bool>&                           functionEntryFlashForceLtp,
     const QList<QColor>&                         functionEntryLabelColors,
+    quint32                            ownerWidgetId,
     quint32                            widgetTargetId,
     int                                widgetOutputIndex,
     int                                widgetParameter,
@@ -127,6 +129,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QWidget*                           parent)
     : QDialog(parent)
     , m_doc(doc)
+    , m_targetListName(targetListName)
     , m_ids(funcIds)
     , m_labels(funcLabels)
     , m_icons(iconPaths)
@@ -142,6 +145,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     , m_functionEntryFlashOverride(functionEntryFlashOverride)
     , m_functionEntryFlashForceLtp(functionEntryFlashForceLtp)
     , m_functionEntryLabelColors(functionEntryLabelColors)
+    , m_ownerWidgetId(ownerWidgetId)
     , m_widgetTargetId(widgetTargetId)
     , m_widgetOutputIndex(qMax(0, widgetOutputIndex))
     , m_widgetParameter(qMax(0, widgetParameter))
@@ -193,6 +197,14 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     // ---- Tab: Entries ---------------------------------------------------
     QWidget* entriesTab = new QWidget(tabs);
     QVBoxLayout* entriesLay = new QVBoxLayout(entriesTab);
+
+    QHBoxLayout* targetNameRow = new QHBoxLayout;
+    targetNameRow->addWidget(new QLabel(tr("List name:"), entriesTab));
+    m_targetListNameEdit = new QLineEdit(entriesTab);
+    m_targetListNameEdit->setText(m_targetListName);
+    m_targetListNameEdit->setPlaceholderText(tr("Name used in linked-widget lists"));
+    targetNameRow->addWidget(m_targetListNameEdit, 1);
+    root->addLayout(targetNameRow);
 
     QHBoxLayout* modeRow = new QHBoxLayout;
     modeRow->addWidget(new QLabel(tr("Mode:"), entriesTab));
@@ -493,15 +505,24 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QHBoxLayout* widgetTopRow = new QHBoxLayout;
     widgetTopRow->setSpacing(8);
 
-    QGroupBox* widgetGrp = new QGroupBox(tr("Linked Preset Table"), widgetScrollContent);
-    QFormLayout* widgetForm = new QFormLayout(widgetGrp);
+    QGroupBox* widgetGrp = new QGroupBox(tr("Linked Widget"), widgetScrollContent);
+    QVBoxLayout* widgetLinkLay = new QVBoxLayout(widgetGrp);
+    m_widgetTargetSearch = new QLineEdit(widgetGrp);
+    m_widgetTargetSearch->setPlaceholderText(tr("Search linked widgets..."));
+    widgetLinkLay->addWidget(m_widgetTargetSearch);
+    m_widgetTargetTree = new QTreeWidget(widgetGrp);
+    m_widgetTargetTree->setHeaderHidden(true);
+    m_widgetTargetTree->setRootIsDecorated(true);
+    m_widgetTargetTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_widgetTargetTree->setMinimumHeight(150);
+    widgetLinkLay->addWidget(m_widgetTargetTree, 1);
+    QFormLayout* widgetForm = new QFormLayout;
     widgetForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    m_widgetTargetCombo = new QComboBox(widgetGrp);
     m_widgetOutputCombo = new QComboBox(widgetGrp);
     m_widgetParameterCombo = new QComboBox(widgetGrp);
-    widgetForm->addRow(tr("Widget:"), m_widgetTargetCombo);
     widgetForm->addRow(tr("Output:"), m_widgetOutputCombo);
     widgetForm->addRow(tr("Parameter:"), m_widgetParameterCombo);
+    widgetLinkLay->addLayout(widgetForm);
     widgetTopRow->addWidget(widgetGrp, 1);
 
     QGroupBox* widgetLiveGrp = new QGroupBox(tr("Selector / recall channel"), widgetScrollContent);
@@ -599,8 +620,10 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     widgetScroll->setWidget(widgetScrollContent);
     widgetPageLay->addWidget(widgetScroll, 1);
 
-    connect(m_widgetTargetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    connect(m_widgetTargetTree, &QTreeWidget::itemSelectionChanged,
             this, &MultiButtonConfigDialog::slotWidgetTargetChanged);
+    connect(m_widgetTargetSearch, &QLineEdit::textChanged,
+            this, &MultiButtonConfigDialog::slotWidgetTargetSearchChanged);
     connect(m_widgetOutputCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MultiButtonConfigDialog::slotWidgetOutputChanged);
     connect(m_widgetParameterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -1411,10 +1434,22 @@ QList<QColor> MultiButtonConfigDialog::functionEntryLabelColors() const
     return m_functionEntryLabelColors;
 }
 
+QString MultiButtonConfigDialog::targetListName() const
+{
+    return m_targetListNameEdit
+            ? m_targetListNameEdit->text().trimmed()
+            : m_targetListName.trimmed();
+}
+
 quint32 MultiButtonConfigDialog::widgetTargetId() const
 {
-    return m_widgetTargetCombo ? m_widgetTargetCombo->currentData().toUInt()
-                               : m_widgetTargetId;
+    if (m_widgetTargetTree)
+    {
+        QTreeWidgetItem* item = m_widgetTargetTree->currentItem();
+        if (item && item->data(0, Qt::UserRole + 1).toBool())
+            return item->data(0, Qt::UserRole).toUInt();
+    }
+    return m_widgetTargetId;
 }
 
 int MultiButtonConfigDialog::widgetOutputIndex() const
@@ -1920,12 +1955,32 @@ PresetTableV2MultiButtonTargetIface* MultiButtonConfigDialog::selectedWidgetTarg
 
 void MultiButtonConfigDialog::rebuildWidgetTargetCombo(quint32 preferredId)
 {
-    if (!m_widgetTargetCombo)
+    if (!m_widgetTargetTree)
         return;
 
-    const QSignalBlocker blocker(m_widgetTargetCombo);
-    m_widgetTargetCombo->clear();
-    m_widgetTargetCombo->addItem(tr("None"), VCWidget::invalidId());
+    const QSignalBlocker blocker(m_widgetTargetTree);
+    m_widgetTargetTree->clear();
+
+    QTreeWidgetItem* noneItem = new QTreeWidgetItem(m_widgetTargetTree);
+    noneItem->setText(0, tr("None"));
+    noneItem->setData(0, Qt::UserRole, VCWidget::invalidId());
+    noneItem->setData(0, Qt::UserRole + 1, true);
+    noneItem->setData(0, Qt::UserRole + 2, tr("none"));
+
+    QMap<QString, QTreeWidgetItem*> groups;
+    auto groupForType = [this, &groups](const QString& typeLabel) {
+        QTreeWidgetItem* group = groups.value(typeLabel, nullptr);
+        if (!group)
+        {
+            group = new QTreeWidgetItem(m_widgetTargetTree);
+            group->setText(0, typeLabel);
+            group->setData(0, Qt::UserRole + 1, false);
+            group->setData(0, Qt::UserRole + 2, typeLabel);
+            group->setFlags(Qt::ItemIsEnabled);
+            groups.insert(typeLabel, group);
+        }
+        return group;
+    };
 
     VirtualConsole* vc = VirtualConsole::instance();
     VCFrame* root = vc ? vc->contents() : nullptr;
@@ -1935,24 +1990,118 @@ void MultiButtonConfigDialog::rebuildWidgetTargetCombo(quint32 preferredId)
             root->findChildren<VCWidget*>(QString(), Qt::FindChildrenRecursively);
         for (VCWidget* widget : widgets)
         {
+            if (!widget || widget->id() == m_ownerWidgetId)
+                continue;
             if (!qobject_cast<PresetTableV2MultiButtonTargetIface*>(widget))
                 continue;
-            const QString caption = widget->caption().isEmpty()
-                                    ? QString::fromLatin1(widget->metaObject()->className())
-                                    : widget->caption();
-            m_widgetTargetCombo->addItem(tr("%1 (#%2)").arg(caption).arg(widget->id()),
-                                         widget->id());
+            const QString typeLabel = widgetTargetTypeLabel(widget);
+            QString caption;
+            if (const MultiButtonWidget* mb = qobject_cast<const MultiButtonWidget*>(widget))
+                caption = mb->targetDisplayName();
+            if (caption.isEmpty())
+            {
+                caption = widget->caption().isEmpty()
+                        ? QString::fromLatin1(widget->metaObject()->className())
+                        : widget->caption();
+            }
+            QTreeWidgetItem* item = new QTreeWidgetItem(groupForType(typeLabel));
+            item->setText(0, tr("%1 (#%2)").arg(caption).arg(widget->id()));
+            item->setData(0, Qt::UserRole, widget->id());
+            item->setData(0, Qt::UserRole + 1, true);
+            item->setData(0, Qt::UserRole + 2,
+                          QStringList{typeLabel, caption, QString::number(widget->id())}
+                                  .join(QLatin1Char(' ')));
         }
     }
 
-    int index = m_widgetTargetCombo->findData(preferredId);
-    if (index < 0)
-        index = 0;
-    m_widgetTargetCombo->setCurrentIndex(index);
+    m_widgetTargetTree->expandAll();
+    filterWidgetTargetTree();
+    selectWidgetTargetTreeItem(preferredId);
+    if (!m_widgetTargetTree->currentItem())
+        selectWidgetTargetTreeItem(VCWidget::invalidId());
 
     rebuildWidgetOutputCombo();
     rebuildWidgetParameterCombo();
     rebuildWidgetPreview();
+}
+
+QString MultiButtonConfigDialog::widgetTargetTypeLabel(const VCWidget* widget) const
+{
+    if (!widget)
+        return tr("Other");
+    if (qobject_cast<const MultiButtonWidget*>(widget))
+        return tr("Multi Button");
+
+    const QString className = QString::fromLatin1(widget->metaObject()->className());
+    if (className.contains(QStringLiteral("PresetTableV2"), Qt::CaseInsensitive))
+        return tr("Preset Table v2");
+
+    const QString typeName = VCWidget::typeToString(const_cast<VCWidget*>(widget)->type());
+    return typeName.isEmpty() ? className : typeName;
+}
+
+void MultiButtonConfigDialog::selectWidgetTargetTreeItem(quint32 widgetId)
+{
+    if (!m_widgetTargetTree)
+        return;
+
+    QList<QTreeWidgetItem*> stack;
+    for (int i = 0; i < m_widgetTargetTree->topLevelItemCount(); ++i)
+        stack.append(m_widgetTargetTree->topLevelItem(i));
+
+    while (!stack.isEmpty())
+    {
+        QTreeWidgetItem* item = stack.takeFirst();
+        if (!item)
+            continue;
+        if (item->data(0, Qt::UserRole + 1).toBool()
+                && item->data(0, Qt::UserRole).toUInt() == widgetId)
+        {
+            m_widgetTargetTree->setCurrentItem(item);
+            item->setSelected(true);
+            return;
+        }
+        for (int c = 0; c < item->childCount(); ++c)
+            stack.append(item->child(c));
+    }
+}
+
+void MultiButtonConfigDialog::filterWidgetTargetTree()
+{
+    if (!m_widgetTargetTree)
+        return;
+
+    const QString needle = m_widgetTargetSearch
+            ? m_widgetTargetSearch->text().trimmed().toLower() : QString();
+
+    for (int i = 0; i < m_widgetTargetTree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem* top = m_widgetTargetTree->topLevelItem(i);
+        if (!top)
+            continue;
+
+        if (top->data(0, Qt::UserRole + 1).toBool())
+        {
+            const QString hay = top->data(0, Qt::UserRole + 2).toString().toLower();
+            top->setHidden(!needle.isEmpty() && !hay.contains(needle));
+            continue;
+        }
+
+        bool anyChildVisible = false;
+        const QString groupHay = top->data(0, Qt::UserRole + 2).toString().toLower();
+        const bool groupMatches = needle.isEmpty() || groupHay.contains(needle);
+        for (int c = 0; c < top->childCount(); ++c)
+        {
+            QTreeWidgetItem* child = top->child(c);
+            const QString hay = child->data(0, Qt::UserRole + 2).toString().toLower();
+            const bool visible = needle.isEmpty() || groupMatches || hay.contains(needle);
+            child->setHidden(!visible);
+            anyChildVisible = anyChildVisible || visible;
+        }
+        top->setHidden(!anyChildVisible);
+        if (anyChildVisible)
+            top->setExpanded(true);
+    }
 }
 
 void MultiButtonConfigDialog::rebuildWidgetOutputCombo()
@@ -2018,7 +2167,7 @@ void MultiButtonConfigDialog::rebuildWidgetPreview()
     PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget();
     if (!target)
     {
-        QListWidgetItem* item = new QListWidgetItem(tr("Choose a Preset Table v2 widget."),
+        QListWidgetItem* item = new QListWidgetItem(tr("Choose a linked widget."),
                                                     m_widgetPreviewList);
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
         return;
@@ -2042,7 +2191,7 @@ void MultiButtonConfigDialog::rebuildWidgetPreview()
     }
     if (count == 0)
     {
-        QListWidgetItem* item = new QListWidgetItem(tr("No linked presets available."),
+        QListWidgetItem* item = new QListWidgetItem(tr("No linked entries available."),
                                                     m_widgetPreviewList);
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
     }
@@ -2072,8 +2221,14 @@ void MultiButtonConfigDialog::updateWidgetLiveInputUi()
     m_widgetLiveInputSel->setInputSource(m_widgetLiveInputSource);
 }
 
-void MultiButtonConfigDialog::slotWidgetTargetChanged(int)
+void MultiButtonConfigDialog::slotWidgetTargetChanged()
 {
+    if (m_widgetTargetTree)
+    {
+        QTreeWidgetItem* item = m_widgetTargetTree->currentItem();
+        if (!item || !item->data(0, Qt::UserRole + 1).toBool())
+            return;
+    }
     m_widgetTargetId = widgetTargetId();
     rebuildWidgetOutputCombo();
     rebuildWidgetParameterCombo();
@@ -2083,6 +2238,11 @@ void MultiButtonConfigDialog::slotWidgetTargetChanged(int)
     updateSpreadPagesPreview();
     rebuildSpreadSlotTable();
     updateSpreadColumnInputVisibility();
+}
+
+void MultiButtonConfigDialog::slotWidgetTargetSearchChanged(const QString&)
+{
+    filterWidgetTargetTree();
 }
 
 void MultiButtonConfigDialog::slotWidgetOutputChanged(int)

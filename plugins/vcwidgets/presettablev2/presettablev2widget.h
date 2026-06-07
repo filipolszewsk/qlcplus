@@ -211,6 +211,8 @@ public:
     QString multiButtonEntryName(int outputIdx, int parameter, int index) const override;
     int multiButtonCurrentIndex(int outputIdx, int parameter) const override;
     int multiButtonLiveIndex(int outputIdx, int parameter) const override;
+    bool multiButtonStagingAvailable(int outputIdx, int parameter) const override;
+    quint64 multiButtonStateRevision(int outputIdx, int parameter) const override;
     bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
     int multiButtonStagedIndex(int outputIdx, int parameter) const override;
     bool multiButtonActivate(int outputIdx, int parameter, int index) override;
@@ -365,6 +367,9 @@ private:
     void stageSweepPresetLocked(int outputIdx, int presetIdx);
     void stageContinuousPresetLocked(int outputIdx, int presetIdx);
     void stageMultiFxPresetLocked(int outputIdx, int presetIdx);
+    void ensureMultiButtonRevisionSizeLocked();
+    int multiButtonRevisionSlotLocked(int parameter) const;
+    void bumpMultiButtonStateRevisionLocked(int outputIdx, int parameter);
     void tickCrossfadeClockLocked(MasterTimer* timer);
     void resetCrossfadeClockLocked();
     /** Reset MultiFX phase when crossfade fader leaves the start edge (mirror cue-list EFX lazy-start). */
@@ -472,6 +477,7 @@ public:
     QVector<bool>     m_stagedSweepValid;
     QVector<bool>     m_stagedContinuousValid;
     QVector<bool>     m_stagedMultiFxValid;
+    QVector<QVector<quint64>> m_multiButtonStateRevision;
 
     PTMode            m_mode            = PTMode::Legacy;
     quint32           m_fixtureGroupId  = UINT_MAX;  // valid only when m_mode == FixtureGroup

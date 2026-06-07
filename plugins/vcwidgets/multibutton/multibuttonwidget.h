@@ -30,11 +30,11 @@
 #include "functionparent.h"
 #include "scenevalue.h"
 #include "dmxsource.h"
+#include "presettablev2multibuttoniface.h"
 
 class Doc;
 class Function;
 class EntrySelectOverlay;
-class PresetTableV2MultiButtonTargetIface;
 
 enum class MultiButtonMode
 {
@@ -119,9 +119,10 @@ struct MultiButtonAutomationProfile
     quint32                   excludeMask = 0;  // bit i excludes entry index i
 };
 
-class MultiButtonWidget : public VCWidget, public DMXSource
+class MultiButtonWidget : public VCWidget, public DMXSource, public PresetTableV2MultiButtonTargetIface
 {
     Q_OBJECT
+    Q_INTERFACES(PresetTableV2MultiButtonTargetIface)
 
 public:
     static const quint8 triggerInputSourceId      = 0;   // cycle-next
@@ -210,6 +211,8 @@ public:
     void setAutomationProfiles(const QList<MultiButtonAutomationProfile>& profiles,
                                int activeIndex);
     int  activeAutomationProfile() const { return m_activeAutomationProfile; }
+    QString targetListName() const { return m_targetListName; }
+    QString targetDisplayName() const;
 
     QSharedPointer<QLCInputSource> entryInputSource(int idx) const;
     void setEntryInputSource(int idx, QSharedPointer<QLCInputSource> src);
@@ -236,6 +239,25 @@ public:
 
     // ---- DMXSource -------------------------------------------------------
     void writeDMX(MasterTimer* timer, QList<Universe*> universes) override;
+
+    // ---- Widget-mode target: expose automation profiles to another MB ----
+    int multiButtonOutputCount() const override;
+    QString multiButtonOutputName(int outputIdx) const override;
+    int multiButtonParameterCount() const override;
+    QString multiButtonParameterName(int parameter) const override;
+    int multiButtonEntryCount(int outputIdx, int parameter) const override;
+    QString multiButtonEntryName(int outputIdx, int parameter, int index) const override;
+    int multiButtonCurrentIndex(int outputIdx, int parameter) const override;
+    int multiButtonLiveIndex(int outputIdx, int parameter) const override;
+    bool multiButtonStagingAvailable(int outputIdx, int parameter) const override;
+    quint64 multiButtonStateRevision(int outputIdx, int parameter) const override;
+    bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
+    int multiButtonStagedIndex(int outputIdx, int parameter) const override;
+    bool multiButtonActivate(int outputIdx, int parameter, int index) override;
+    bool multiButtonActivateStaged(int outputIdx, int parameter, int index) override;
+    QSharedPointer<QLCInputSource> multiButtonLiveInputSource(int outputIdx, int parameter) const override;
+    bool multiButtonSetLiveInputSource(int outputIdx, int parameter,
+                                       QSharedPointer<QLCInputSource> src) override;
 
     // ---- VCWidget overrides ----------------------------------------------
     QList<QPair<PastePropertyGroup, QString>> pasteablePropertyGroups() const override;
@@ -306,7 +328,10 @@ private:
     void stageEntry(int idx, bool allowFlashEntry = false);
     void commitStaged();
     void clearStagedOnExternalMonitorChange(int matchIdx);
+    bool widgetLinkStateSyncNeeded() const;
+    void ensureChannelMonitorTimer();
     void updateChannelMonitorTimerInterval();
+    void updateChannelMonitorTimerState();
     bool entryIsFlash(int idx) const;
     void beginFlashHold(int idx);
     void endFlashHold();
@@ -343,6 +368,8 @@ private:
     void syncEntrySelectInputOutput(uchar rawValue);
     uchar entrySelectOutputValueForSlot(int slot) const;
 
+    bool offSlotAvailable() const;
+    bool widgetLinkHasImplicitOff() const;
     int selectableSlotCount() const;
     int slotFromInputValue(uchar value, const QLCInputSource* src) const;
     int slotToEntryIndex(int slot) const;
@@ -397,6 +424,8 @@ private:
 
     const MultiButtonAutomationProfile* activeAutomationProfilePtr() const;
     QVector<int> buildAllowedAutomationSlots(const MultiButtonAutomationProfile& profile) const;
+    bool automationProfileTargetValid(int outputIdx, int parameter) const;
+    void bumpAutomationProfileTargetRevision();
 
     void applyEntryNamesFrom(const MultiButtonWidget* src);
     void applyChannelBindingsFrom(const MultiButtonWidget* src);
@@ -436,6 +465,7 @@ private:
     int                        m_lastResolvedEntryCount = -1;
     QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
     MultiButtonWidgetBusPolicy m_widgetBusPolicy = MultiButtonWidgetBusPolicy::SharedBus;
+    quint64        m_widgetTargetStateRevision = 0;
     mutable QMutex     m_dmxMutex;
     QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
     QMap<quint32, QSharedPointer<GenericFader>> m_widgetLiveFaders;
@@ -476,9 +506,11 @@ private:
     QList<QList<SceneValue>>     m_cachedSceneValues;
     QElapsedTimer                m_lastActivationTime;
     int                          m_monitorMatchIndex   = -1;  // bus match (paint only)
+    int                          m_monitorDisplayIndex = -1;  // observed entry for single-button display
     int                          m_lastMonitorMatchIdx = -2;  // previous tick (staged clear)
     int                          m_pendingMonitorMatchIdx = -2;
     int                          m_pendingMonitorMatchCount = 0;
+    int                          m_monitorNoMatchCount = 0;
 
     // ---- Settings --------------------------------------------------------
     int  m_longPressMs  = 500;
@@ -502,6 +534,8 @@ private:
     int                               m_activeAutomationProfile = 0;
     int                               m_automationPulseCounter  = 0;
     uchar                             m_automationProfileSelectorValue = 0;
+    quint64                           m_automationProfileTargetRevision = 1;
+    QString                           m_targetListName;
     uchar                             m_triggerLastValue        = 0;
     uchar                             m_automationLastValue     = 0;
 

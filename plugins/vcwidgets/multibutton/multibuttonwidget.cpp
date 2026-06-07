@@ -66,6 +66,7 @@ static const QString KXMLWidgetLinkOutput  = QStringLiteral("OutputIndex");
 static const QString KXMLWidgetLinkParam   = QStringLiteral("Parameter");
 static const QString KXMLWidgetLiveInput   = QStringLiteral("WidgetLiveInput");
 static const QString KXMLWidgetBusPolicy   = QStringLiteral("WidgetBusPolicy");
+static const QString KXMLTargetListName    = QStringLiteral("TargetListName");
 static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
 static const int kWidgetBusPublishSuppressMs = 250;
@@ -332,12 +333,16 @@ void MultiButtonWidget::setWidgetMode(MultiButtonMode mode)
     m_currentIndex = -1;
     clearLocalStagedSelection();
     m_monitorMatchIndex = -1;
+    m_monitorDisplayIndex = -1;
     m_lastMonitorMatchIdx = -1;
     m_pendingMonitorMatchIdx = -2;
     m_pendingMonitorMatchCount = 0;
+    m_monitorNoMatchCount = 0;
+    m_widgetTargetStateRevision = 0;
     m_lastResolvedEntryCount = -1;
     m_visualOnly   = false;
     updateDmxRegistration();
+    updateChannelMonitorTimerState();
     update();
 }
 
@@ -580,7 +585,7 @@ int MultiButtonWidget::totalSpreadSlots() const
     const int n = entryCount();
     if (n <= 0)
         return 0;
-    return n + (m_addOffAtEnd ? 1 : 0);
+    return n + (offSlotAvailable() ? 1 : 0);
 }
 
 int MultiButtonWidget::spreadSlotsPerPage(bool forPaging) const
@@ -901,16 +906,12 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
     if (globalSlot < 0 || globalSlot >= total)
         return;
 
-    if (m_addOffAtEnd && globalSlot == total - 1)
+    if (offSlotAvailable() && globalSlot == total - 1)
     {
         if (stagingActive() || widgetLinkUsesInternalStaging())
             stageEntry(-1);
         else
-        {
-            stopCurrent();
-            updateFeedback();
-            update();
-        }
+            activate(-1);
         return;
     }
 
@@ -1038,12 +1039,15 @@ void MultiButtonWidget::syncDynamicEntryCountLayout()
         clearLocalStagedSelection();
     if (m_monitorMatchIndex >= count)
         m_monitorMatchIndex = -1;
+    if (m_monitorDisplayIndex >= count)
+        m_monitorDisplayIndex = -1;
     if (m_lastMonitorMatchIdx >= count)
         m_lastMonitorMatchIdx = -1;
     if (m_pendingMonitorMatchIdx >= count)
     {
         m_pendingMonitorMatchIdx = -2;
         m_pendingMonitorMatchCount = 0;
+        m_monitorNoMatchCount = 0;
     }
     if (m_entrySelectPreviewIndex >= count)
     {
@@ -1085,7 +1089,7 @@ QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
             const int row = local / cols;
 
             SpreadTileInfo info;
-            const bool isOff = m_addOffAtEnd && (globalSlot == totalAll - 1);
+            const bool isOff = offSlotAvailable() && (globalSlot == totalAll - 1);
             info.index = isOff ? -1 : globalSlot;
             info.rect = QRect(col * (m_spreadTileWidth + m_spreadHMargin),
                               y0 + row * (m_spreadTileHeight + m_spreadVMargin),
@@ -1102,7 +1106,7 @@ QVector<SpreadTileInfo> MultiButtonWidget::computeSpreadTiles() const
         const int row = slot / cols;
 
         SpreadTileInfo info;
-        const bool isOff = m_addOffAtEnd && (slot == totalAll - 1);
+        const bool isOff = offSlotAvailable() && (slot == totalAll - 1);
         info.index = isOff ? -1 : slot;
         info.rect = QRect(col * (m_spreadTileWidth + m_spreadHMargin),
                           y0 + row * (m_spreadTileHeight + m_spreadVMargin),
@@ -1186,16 +1190,63 @@ void MultiButtonWidget::setStageBeforeCommit(bool enable)
     m_stageBeforeCommit = enable;
     if (!enable)
         clearLocalStagedSelection();
-    updateChannelMonitorTimerInterval();
+    updateChannelMonitorTimerState();
     update();
+}
+
+bool MultiButtonWidget::widgetLinkStateSyncNeeded() const
+{
+    return m_mode == MultiButtonMode::Widget
+            && m_widgetTargetId != VCWidget::invalidId()
+            && widgetLinkTarget() != nullptr;
+}
+
+void MultiButtonWidget::ensureChannelMonitorTimer()
+{
+    if (m_channelMonitorTimer)
+        return;
+
+    m_channelMonitorTimer = new QTimer(this);
+    connect(m_channelMonitorTimer, &QTimer::timeout,
+            this, &MultiButtonWidget::slotCheckChannelValues);
 }
 
 void MultiButtonWidget::updateChannelMonitorTimerInterval()
 {
     if (!m_channelMonitorTimer)
         return;
-    const int intervalMs = stagingActive() ? 100 : 200;
+    const bool widgetStateSync = widgetLinkStateSyncNeeded();
+    const bool fastSingleLevelDisplay = m_layout == MultiButtonLayout::Single
+            && m_mode == MultiButtonMode::Level
+            && m_monitorChannelValues
+            && !stagingActive()
+            && !widgetLinkUsesInternalStaging();
+    const int intervalMs = widgetStateSync ? 40
+            : (fastSingleLevelDisplay ? 40 : (stagingActive() ? 75 : 100));
     m_channelMonitorTimer->setInterval(intervalMs);
+}
+
+void MultiButtonWidget::updateChannelMonitorTimerState()
+{
+    const bool needed = m_monitorChannelValues || widgetLinkStateSyncNeeded();
+
+    if (!needed)
+    {
+        if (m_channelMonitorTimer)
+        {
+            m_channelMonitorTimer->stop();
+            delete m_channelMonitorTimer;
+            m_channelMonitorTimer = nullptr;
+        }
+        return;
+    }
+
+    ensureChannelMonitorTimer();
+    updateChannelMonitorTimerInterval();
+    if (mode() == Doc::Operate)
+        m_channelMonitorTimer->start();
+    else
+        m_channelMonitorTimer->stop();
 }
 
 void MultiButtonWidget::setMonitorChannelValues(bool enable)
@@ -1204,27 +1255,11 @@ void MultiButtonWidget::setMonitorChannelValues(bool enable)
     m_monitorChannelValues = enable;
 
     if (enable)
-    {
         rebuildSceneCache();
-        if (!m_channelMonitorTimer)
-        {
-            m_channelMonitorTimer = new QTimer(this);
-            connect(m_channelMonitorTimer, &QTimer::timeout,
-                    this, &MultiButtonWidget::slotCheckChannelValues);
-        }
-        updateChannelMonitorTimerInterval();
-        if (mode() == Doc::Operate)
-            m_channelMonitorTimer->start();
-    }
     else
-    {
-        if (m_channelMonitorTimer)
-        {
-            m_channelMonitorTimer->stop();
-            delete m_channelMonitorTimer;
-            m_channelMonitorTimer = nullptr;
-        }
-    }
+        m_monitorDisplayIndex = -1;
+
+    updateChannelMonitorTimerState();
 }
 
 // ---- DMXSource ------------------------------------------------------------
@@ -1292,12 +1327,33 @@ QList<uchar> MultiButtonWidget::resolvedPresetValues(const LevelPreset& preset,
 
 PresetTableV2MultiButtonTargetIface* MultiButtonWidget::widgetLinkTarget() const
 {
-    if (m_widgetTargetId == VCWidget::invalidId())
+    if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
         return nullptr;
     VirtualConsole* vc = VirtualConsole::instance();
     if (!vc)
         return nullptr;
     return qobject_cast<PresetTableV2MultiButtonTargetIface*>(vc->widget(m_widgetTargetId));
+}
+
+bool MultiButtonWidget::widgetLinkHasImplicitOff() const
+{
+    if (m_mode != MultiButtonMode::Widget
+            || m_widgetTargetId == VCWidget::invalidId()
+            || m_widgetTargetId == id()
+            || m_widgetOutputIndex != 0
+            || m_widgetParameter != 0)
+        return false;
+
+    VirtualConsole* vc = VirtualConsole::instance();
+    if (!vc)
+        return false;
+
+    return qobject_cast<MultiButtonWidget*>(vc->widget(m_widgetTargetId)) != nullptr;
+}
+
+bool MultiButtonWidget::offSlotAvailable() const
+{
+    return m_addOffAtEnd || widgetLinkHasImplicitOff();
 }
 
 QSharedPointer<QLCInputSource> MultiButtonWidget::widgetLiveInputSourceResolved() const
@@ -1959,7 +2015,7 @@ public:
             const QString text = rowLabel(i);
             w = qMax(w, fm.horizontalAdvance(text) + 72);
         }
-        if (m_owner->m_addOffAtEnd)
+        if (m_owner->offSlotAvailable())
             w = qMax(w, fm.horizontalAdvance(m_owner->tr("OFF (deactivate)")) + 24);
 
         const bool hasTitle = !m_owner->caption().isEmpty();
@@ -2088,7 +2144,7 @@ private:
         const int n = m_owner->entryCount();
         if (n <= 0)
             return 0;
-        return n + (m_owner->m_addOffAtEnd ? 1 : 0);
+        return n + (m_owner->offSlotAvailable() ? 1 : 0);
     }
 
     int contentTop() const
@@ -2243,24 +2299,28 @@ void MultiButtonWidget::cycleNext()
     if (m_logPresetChanges)
         qDebug().nospace() << "MultiButton id=" << id() << " cycleNext";
 
-    int total = entryCount() + (m_addOffAtEnd ? 1 : 0);
+    int total = entryCount() + (offSlotAvailable() ? 1 : 0);
     if (widgetLinkUsesInternalStaging())
         syncWidgetLinkLiveStagedState();
 
-    const int base = widgetLinkUsesInternalStaging() && hasLocalStagedSelection()
+    int base = widgetLinkUsesInternalStaging() && hasLocalStagedSelection()
             ? m_stagedIndex : m_currentIndex;
+    if (m_layout == MultiButtonLayout::Single
+            && m_monitorChannelValues
+            && !widgetLinkUsesInternalStaging()
+            && !stagingActive()
+            && m_monitorDisplayIndex >= 0)
+    {
+        base = m_monitorDisplayIndex;
+    }
     int next  = (base + 1) % total;
 
-    if (m_addOffAtEnd && next == entryCount())
+    if (offSlotAvailable() && next == entryCount())
     {
         if (widgetLinkUsesInternalStaging() || stagingActive())
             stageEntry(-1);
         else
-        {
-            stopCurrent();
-            updateFeedback();
-            update();
-        }
+            activate(-1);
     }
     else if (widgetLinkUsesInternalStaging() || stagingActive())
         stageEntry(next, m_layout == MultiButtonLayout::Single);
@@ -2272,9 +2332,20 @@ void MultiButtonWidget::cycleNext()
 
 void MultiButtonWidget::setAutomationEnabled(bool enable)
 {
+    if (m_automationEnabled == enable)
+    {
+        if (!enable && m_automationProfileSelectorValue != 0)
+        {
+            m_automationProfileSelectorValue = 0;
+            bumpAutomationProfileTargetRevision();
+            update();
+        }
+        return;
+    }
     m_automationEnabled = enable;
     if (!enable)
         m_automationProfileSelectorValue = 0;
+    bumpAutomationProfileTargetRevision();
     update();
 }
 
@@ -2290,6 +2361,147 @@ void MultiButtonWidget::setAutomationProfiles(const QList<MultiButtonAutomationP
     }
     m_activeAutomationProfile = qBound(0, activeIndex, m_automationProfiles.size() - 1);
     m_automationPulseCounter = 0;
+    bumpAutomationProfileTargetRevision();
+}
+
+QString MultiButtonWidget::targetDisplayName() const
+{
+    const QString listName = m_targetListName.trimmed();
+    if (!listName.isEmpty())
+        return listName;
+    const QString cap = caption().trimmed();
+    if (!cap.isEmpty())
+        return cap;
+    return tr("Multi Button");
+}
+
+bool MultiButtonWidget::automationProfileTargetValid(int outputIdx, int parameter) const
+{
+    return outputIdx == 0 && parameter == 0;
+}
+
+void MultiButtonWidget::bumpAutomationProfileTargetRevision()
+{
+    ++m_automationProfileTargetRevision;
+    if (m_automationProfileTargetRevision == 0)
+        m_automationProfileTargetRevision = 1;
+}
+
+int MultiButtonWidget::multiButtonOutputCount() const
+{
+    return 1;
+}
+
+QString MultiButtonWidget::multiButtonOutputName(int outputIdx) const
+{
+    return outputIdx == 0 ? tr("Automation") : QString();
+}
+
+int MultiButtonWidget::multiButtonParameterCount() const
+{
+    return 1;
+}
+
+QString MultiButtonWidget::multiButtonParameterName(int parameter) const
+{
+    return parameter == 0 ? tr("Automation profile") : QString();
+}
+
+int MultiButtonWidget::multiButtonEntryCount(int outputIdx, int parameter) const
+{
+    return automationProfileTargetValid(outputIdx, parameter)
+            ? m_automationProfiles.size() : 0;
+}
+
+QString MultiButtonWidget::multiButtonEntryName(int outputIdx, int parameter, int index) const
+{
+    if (!automationProfileTargetValid(outputIdx, parameter)
+            || index < 0 || index >= m_automationProfiles.size())
+        return QString();
+    const QString name = m_automationProfiles.at(index).name.trimmed();
+    return name.isEmpty() ? tr("Profile %1").arg(index + 1) : name;
+}
+
+int MultiButtonWidget::multiButtonCurrentIndex(int outputIdx, int parameter) const
+{
+    return multiButtonLiveIndex(outputIdx, parameter);
+}
+
+int MultiButtonWidget::multiButtonLiveIndex(int outputIdx, int parameter) const
+{
+    if (!automationProfileTargetValid(outputIdx, parameter)
+            || m_automationSuspended
+            || m_automationProfileSelectorValue == 0
+            || m_automationProfiles.isEmpty())
+        return -1;
+    return qBound(0, m_activeAutomationProfile, m_automationProfiles.size() - 1);
+}
+
+bool MultiButtonWidget::multiButtonStagingAvailable(int outputIdx, int parameter) const
+{
+    Q_UNUSED(outputIdx);
+    Q_UNUSED(parameter);
+    return false;
+}
+
+quint64 MultiButtonWidget::multiButtonStateRevision(int outputIdx, int parameter) const
+{
+    return automationProfileTargetValid(outputIdx, parameter)
+            ? m_automationProfileTargetRevision : 0;
+}
+
+bool MultiButtonWidget::multiButtonHasStagedIndex(int outputIdx, int parameter) const
+{
+    Q_UNUSED(outputIdx);
+    Q_UNUSED(parameter);
+    return false;
+}
+
+int MultiButtonWidget::multiButtonStagedIndex(int outputIdx, int parameter) const
+{
+    Q_UNUSED(outputIdx);
+    Q_UNUSED(parameter);
+    return -1;
+}
+
+bool MultiButtonWidget::multiButtonActivate(int outputIdx, int parameter, int index)
+{
+    if (!automationProfileTargetValid(outputIdx, parameter))
+        return false;
+    if (index < -1 || index >= m_automationProfiles.size())
+        return false;
+
+    handlePresetChooseInput(selectorIndexToBusValue(index));
+    if (m_doc)
+        m_doc->setModified();
+    return true;
+}
+
+bool MultiButtonWidget::multiButtonActivateStaged(int outputIdx, int parameter, int index)
+{
+    Q_UNUSED(outputIdx);
+    Q_UNUSED(parameter);
+    Q_UNUSED(index);
+    return false;
+}
+
+QSharedPointer<QLCInputSource> MultiButtonWidget::multiButtonLiveInputSource(int outputIdx,
+                                                                             int parameter) const
+{
+    if (!automationProfileTargetValid(outputIdx, parameter))
+        return QSharedPointer<QLCInputSource>();
+    return inputSource(presetChooseInputSourceId);
+}
+
+bool MultiButtonWidget::multiButtonSetLiveInputSource(int outputIdx, int parameter,
+                                                      QSharedPointer<QLCInputSource> src)
+{
+    if (!automationProfileTargetValid(outputIdx, parameter))
+        return false;
+    setInputSource(src, presetChooseInputSourceId);
+    if (m_doc)
+        m_doc->setModified();
+    return true;
 }
 
 void MultiButtonWidget::onAutomationTrigger()
@@ -2327,7 +2539,7 @@ QVector<int> MultiButtonWidget::buildAllowedAutomationSlots(
         if ((profile.excludeMask & (1u << i)) == 0)
             allowed.append(i);
     }
-    if (m_addOffAtEnd)
+    if (offSlotAvailable())
         allowed.append(-1);
     return allowed;
 }
@@ -2455,6 +2667,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
         }
         m_currentIndex = -1;
         m_visualOnly   = false;
+        m_monitorDisplayIndex = -1;
         updateFeedback();
         update();
         return;
@@ -2501,9 +2714,11 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     m_stagedIndex         = m_currentIndex;
     m_stagedValid         = false;
     m_monitorMatchIndex   = idx;
+    m_monitorDisplayIndex = idx;
     m_lastMonitorMatchIdx = idx;
-    m_pendingMonitorMatchIdx = idx;
+    m_pendingMonitorMatchIdx = -2;
     m_pendingMonitorMatchCount = 0;
+    m_monitorNoMatchCount = 0;
     m_lastActivationTime.restart();
     if (m_mode == MultiButtonMode::Widget)
     {
@@ -2541,9 +2756,11 @@ void MultiButtonWidget::activateAutomationLive(int idx)
             m_currentIndex = -1;
             m_visualOnly = false;
             m_monitorMatchIndex = -1;
+            m_monitorDisplayIndex = -1;
             m_lastMonitorMatchIdx = -1;
             m_pendingMonitorMatchIdx = -2;
             m_pendingMonitorMatchCount = 0;
+            m_monitorNoMatchCount = 0;
         }
 
         updateFeedback();
@@ -2580,6 +2797,7 @@ void MultiButtonWidget::stopCurrent()
 
     m_currentIndex = -1;
     m_visualOnly   = false;
+    m_monitorDisplayIndex = -1;
     clearLocalStagedSelection();
     m_lastActivationTime.restart();
 }
@@ -2670,12 +2888,6 @@ void MultiButtonWidget::clearStagedOnExternalMonitorChange(int matchIdx)
 
 void MultiButtonWidget::slotCheckChannelValues()
 {
-    if (!m_monitorChannelValues) return;
-
-    const int debounceMs = stagingActive() ? 100 : 500;
-    if (m_lastActivationTime.isValid() && m_lastActivationTime.elapsed() < debounceMs)
-        return;
-
     if (m_mode == MultiButtonMode::Widget)
     {
         syncDynamicEntryCountLayout();
@@ -2683,6 +2895,16 @@ void MultiButtonWidget::slotCheckChannelValues()
             update();
         return;
     }
+
+    if (!m_monitorChannelValues) return;
+
+    const bool fastSingleLevelDisplay = m_layout == MultiButtonLayout::Single
+            && m_mode == MultiButtonMode::Level
+            && !stagingActive()
+            && !widgetLinkUsesInternalStaging();
+    const int debounceMs = fastSingleLevelDisplay ? 0 : (stagingActive() ? 100 : 100);
+    if (m_lastActivationTime.isValid() && m_lastActivationTime.elapsed() < debounceMs)
+        return;
 
     QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
     int matchIdx = -1;
@@ -2725,7 +2947,17 @@ void MultiButtonWidget::slotCheckChannelValues()
 
         if (!matches.isEmpty())
         {
-            if (m_currentIndex >= 0 && matches.contains(m_currentIndex))
+            if (fastSingleLevelDisplay
+                    && m_monitorDisplayIndex >= 0
+                    && matches.contains(m_monitorDisplayIndex))
+                matchIdx = m_monitorDisplayIndex;
+            else if (fastSingleLevelDisplay
+                     && m_monitorMatchIndex >= 0
+                     && matches.contains(m_monitorMatchIndex))
+                matchIdx = m_monitorMatchIndex;
+            else if (!fastSingleLevelDisplay
+                     && m_currentIndex >= 0
+                     && matches.contains(m_currentIndex))
                 matchIdx = m_currentIndex;
             else
                 matchIdx = matches.first();
@@ -2776,6 +3008,11 @@ void MultiButtonWidget::slotCheckChannelValues()
 
     m_doc->inputOutputMap()->releaseUniverses(false);
 
+    if (matchIdx >= 0)
+        m_monitorNoMatchCount = 0;
+    else
+        ++m_monitorNoMatchCount;
+
     if (matchIdx == m_pendingMonitorMatchIdx)
         ++m_pendingMonitorMatchCount;
     else
@@ -2784,7 +3021,8 @@ void MultiButtonWidget::slotCheckChannelValues()
         m_pendingMonitorMatchCount = 1;
     }
 
-    const int stableCount = (matchIdx < 0) ? 3 : 2;
+    const int noMatchGraceCount = fastSingleLevelDisplay ? 7 : 3;
+    const int stableCount = (matchIdx < 0) ? 3 : (fastSingleLevelDisplay ? 1 : 2);
     if (m_pendingMonitorMatchCount < stableCount
             && matchIdx != m_monitorMatchIndex)
     {
@@ -2793,6 +3031,7 @@ void MultiButtonWidget::slotCheckChannelValues()
 
     bool stagedCleared = false;
     const int prevMonitorMatch = m_monitorMatchIndex;
+    const int prevMonitorDisplay = m_monitorDisplayIndex;
 
     if (matchIdx >= 0 && stagingActive() && hasLocalStagedSelection()
             && matchIdx != m_lastMonitorMatchIdx)
@@ -2803,21 +3042,19 @@ void MultiButtonWidget::slotCheckChannelValues()
 
     m_monitorMatchIndex = matchIdx;
     m_lastMonitorMatchIdx = matchIdx;
-
-    // Restore visual tracking for non-staging Level/Function mode.
-    // When the monitor detects a stable match, update m_currentIndex so
-    // paintSingle shows the externally-active preset (label, icon, color).
-    // Guarded by !stagingActive() so the committed/staged indices are never
-    // disturbed while the user is mid-commit; Widget mode returns early above.
-    if (!stagingActive() && !widgetLinkUsesInternalStaging()
-            && matchIdx >= 0 && matchIdx != m_currentIndex)
+    if (!stagingActive() && !widgetLinkUsesInternalStaging())
     {
-        m_currentIndex = matchIdx;
-        m_visualOnly   = true;
-        updateFeedback();
+        if (matchIdx >= 0 || m_monitorNoMatchCount >= noMatchGraceCount)
+            m_monitorDisplayIndex = matchIdx;
+    }
+    else if (matchIdx < 0 && m_monitorNoMatchCount >= noMatchGraceCount)
+    {
+        m_monitorDisplayIndex = -1;
     }
 
-    if (m_monitorMatchIndex != prevMonitorMatch || stagedCleared)
+    if (m_monitorMatchIndex != prevMonitorMatch
+            || m_monitorDisplayIndex != prevMonitorDisplay
+            || stagedCleared)
         update();
 }
 
@@ -2844,12 +3081,13 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
 
         clearLocalStagedSelection();
         m_monitorMatchIndex   = -1;
+        m_monitorDisplayIndex = -1;
         m_lastMonitorMatchIdx = -2;
         m_pendingMonitorMatchIdx = -2;
         m_pendingMonitorMatchCount = 0;
+        m_monitorNoMatchCount = 0;
 
-        if (m_channelMonitorTimer)
-            m_channelMonitorTimer->stop();
+        updateChannelMonitorTimerState();
     }
     else if (mode == Doc::Operate)
     {
@@ -2864,14 +3102,9 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
         if (m_mode == MultiButtonMode::Widget)
             markWidgetSelectorPublishPending();
         reactivateLevelPreset();
-        updateChannelMonitorTimerInterval();
-
         if (m_monitorChannelValues)
-        {
             rebuildSceneCache();
-            if (m_channelMonitorTimer)
-                m_channelMonitorTimer->start();
-        }
+        updateChannelMonitorTimerState();
     }
 
     VCWidget::slotModeChanged(mode);
@@ -2953,7 +3186,7 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
                     }
                     else if (hit < 0)
                     {
-                        stopCurrent();
+                        activate(-1);
                     }
                     else if (!entryIsFlash(hit))
                     {
@@ -3020,7 +3253,7 @@ int MultiButtonWidget::selectableSlotCount() const
     const int n = entryCount();
     if (n <= 0)
         return 0;
-    return n + (m_addOffAtEnd ? 1 : 0);
+    return n + (offSlotAvailable() ? 1 : 0);
 }
 
 int MultiButtonWidget::slotFromInputValue(uchar value, const QLCInputSource* src) const
@@ -3053,7 +3286,7 @@ int MultiButtonWidget::slotToEntryIndex(int slot) const
     if (n <= 0)
         return -1;
 
-    if (m_addOffAtEnd && slot >= n)
+    if (offSlotAvailable() && slot >= n)
         return -1;
 
     return qBound(0, slot, n - 1);
@@ -3162,6 +3395,14 @@ int MultiButtonWidget::displayedEntryIndex() const
         return m_entrySelectPreviewIndex;
     if ((stagingActive() || widgetLinkUsesInternalStaging()) && hasLocalStagedSelection())
         return m_stagedIndex;
+    if (m_layout == MultiButtonLayout::Single
+            && m_monitorChannelValues
+            && m_mode != MultiButtonMode::Widget
+            && !stagingActive()
+            && m_monitorDisplayIndex >= 0)
+    {
+        return m_monitorDisplayIndex;
+    }
     return m_currentIndex;
 }
 
@@ -3173,6 +3414,8 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
     PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
     const int liveIdx = target
             ? target->multiButtonLiveIndex(m_widgetOutputIndex, m_widgetParameter) : -1;
+    const quint64 stateRevision = target
+            ? target->multiButtonStateRevision(m_widgetOutputIndex, m_widgetParameter) : 0;
     const bool stagedValid = target && widgetLinkUsesInternalStaging()
             && target->multiButtonHasStagedIndex(m_widgetOutputIndex, m_widgetParameter);
     const int stagedIdx = stagedValid
@@ -3180,21 +3423,27 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
 
     const int prevLive = m_currentIndex;
     const int prevMonitor = m_monitorMatchIndex;
+    const int prevMonitorDisplay = m_monitorDisplayIndex;
     const int prevLastMonitor = m_lastMonitorMatchIdx;
     const int prevStaged = m_stagedIndex;
     const bool prevStagedValid = m_stagedValid;
+    const quint64 prevRevision = m_widgetTargetStateRevision;
 
     m_currentIndex = liveIdx;
     m_monitorMatchIndex = liveIdx;
+    m_monitorDisplayIndex = liveIdx;
     m_lastMonitorMatchIdx = liveIdx;
     m_stagedIndex = stagedIdx;
     m_stagedValid = stagedValid;
+    m_widgetTargetStateRevision = stateRevision;
 
     const bool changed = m_currentIndex != prevLive
             || m_monitorMatchIndex != prevMonitor
+            || m_monitorDisplayIndex != prevMonitorDisplay
             || m_lastMonitorMatchIdx != prevLastMonitor
             || m_stagedIndex != prevStaged
-            || m_stagedValid != prevStagedValid;
+            || m_stagedValid != prevStagedValid
+            || m_widgetTargetStateRevision != prevRevision;
 
     if (changed && m_mode == MultiButtonMode::Widget)
     {
@@ -3262,11 +3511,13 @@ bool MultiButtonWidget::stagedHighlightValid() const
 
 bool MultiButtonWidget::widgetLinkUsesInternalStaging() const
 {
-    return m_mode == MultiButtonMode::Widget
-            && (m_widgetParameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
-                || m_widgetParameter == PresetTableV2MultiButtonTargetIface::SecondaryRow
-                || m_widgetParameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset
-                || m_widgetParameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset);
+    if (m_mode != MultiButtonMode::Widget)
+        return false;
+
+    PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+    return target
+            && target->multiButtonStagingAvailable(m_widgetOutputIndex,
+                                                   m_widgetParameter);
 }
 
 void MultiButtonWidget::cancelEntrySelectPreview()
@@ -3294,10 +3545,7 @@ void MultiButtonWidget::commitEntrySelectPreview()
         return;
     }
 
-    if (idx < 0)
-        stopCurrent();
-    else
-        activate(idx, m_layout == MultiButtonLayout::Single);
+    activate(idx, m_layout == MultiButtonLayout::Single);
 }
 
 void MultiButtonWidget::destroyEntrySelectOverlay()
@@ -3319,16 +3567,7 @@ void MultiButtonWidget::applyEntryPick(int idx)
         return;
     }
 
-    if (idx < 0)
-    {
-        stopCurrent();
-        updateFeedback();
-        update();
-    }
-    else
-    {
-        activate(idx, m_layout == MultiButtonLayout::Single);
-    }
+    activate(idx, m_layout == MultiButtonLayout::Single);
 }
 
 void MultiButtonWidget::showPopupMenu(const QPoint& globalPos)
@@ -3729,10 +3968,18 @@ void MultiButtonWidget::sendPresetChooseFeedback(uchar value)
 
 void MultiButtonWidget::handlePresetChooseInput(uchar value)
 {
+    const uchar previousValue = m_automationProfileSelectorValue;
+    const bool previousSuspended = m_automationSuspended;
+    const int previousProfile = m_activeAutomationProfile;
+
     m_automationProfileSelectorValue = value;
     if (value == 0)
     {
         m_automationSuspended = true;
+        if (previousValue != m_automationProfileSelectorValue
+                || previousSuspended != m_automationSuspended
+                || previousProfile != m_activeAutomationProfile)
+            bumpAutomationProfileTargetRevision();
         sendPresetChooseFeedback(0);
         updateFeedback();
         update();
@@ -3769,6 +4016,11 @@ void MultiButtonWidget::handlePresetChooseInput(uchar value)
             activateAutomationLive(snap);
         }
     }
+
+    if (previousValue != m_automationProfileSelectorValue
+            || previousSuspended != m_automationSuspended
+            || previousProfile != m_activeAutomationProfile)
+        bumpAutomationProfileTargetRevision();
 
     sendPresetChooseFeedback(value);
     updateFeedback();
@@ -4108,7 +4360,7 @@ void MultiButtonWidget::updateFeedback()
     int slot = 0;
     if (m_currentIndex >= 0)
         slot = m_currentIndex;
-    else if (m_addOffAtEnd)
+    else if (offSlotAvailable())
         slot = slotCount - 1;
 
     src->updateOuputValue(entrySelectOutputValueForSlot(slot));
@@ -4123,6 +4375,7 @@ void MultiButtonWidget::editProperties()
     MultiButtonConfigDialog dlg(
         m_doc,
         m_mode,
+        m_targetListName,
         m_functionIds,
         m_functionLabels,
         m_iconPaths,
@@ -4163,6 +4416,7 @@ void MultiButtonWidget::editProperties()
         m_functionEntryFlashOverride,
         m_functionEntryFlashForceLtp,
         m_functionEntryLabelColors,
+        id(),
         m_widgetTargetId,
         m_widgetOutputIndex,
         m_widgetParameter,
@@ -4173,6 +4427,7 @@ void MultiButtonWidget::editProperties()
 
     if (dlg.exec() != QDialog::Accepted) return;
 
+    m_targetListName = dlg.targetListName();
     setWidgetMode(dlg.widgetMode());
     setEntries(dlg.functionIds(), dlg.functionLabels(), dlg.iconPaths());
     m_functionEntryFlash = dlg.functionEntryFlash();
@@ -4225,6 +4480,8 @@ void MultiButtonWidget::editProperties()
     releaseWidgetLiveFaders();
     syncWidgetLiveInputSourceToTarget();
     m_lastResolvedEntryCount = -1;
+    syncWidgetLinkLiveStagedState();
+    updateChannelMonitorTimerState();
     setWidgetLayout(dlg.widgetLayout());
     setSpreadColumns(dlg.spreadColumns());
     setSpreadRows(dlg.spreadRows());
@@ -4295,9 +4552,12 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->m_widgetParameter = m_widgetParameter;
     copy->m_widgetLiveInputSource = cloneInputSource(m_widgetLiveInputSource);
     copy->m_widgetBusPolicy = m_widgetBusPolicy;
+    copy->m_targetListName = m_targetListName;
     copy->m_widgetEntryAppearance = m_widgetEntryAppearance;
     for (LevelPreset& preset : copy->m_widgetEntryAppearance)
         preset.entryInput = cloneInputSource(preset.entryInput);
+    copy->syncWidgetLinkLiveStagedState();
+    copy->updateChannelMonitorTimerState();
     copy->assignInputSource(cloneInputSource(inputSource(commitInputSourceId)),
                             commitInputSourceId);
     copy->setWidgetLayout(m_layout);
@@ -4516,9 +4776,12 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         m_widgetParameter = src->m_widgetParameter;
         m_widgetLiveInputSource = cloneInputSource(src->m_widgetLiveInputSource);
         m_widgetBusPolicy = src->m_widgetBusPolicy;
+        m_targetListName = src->m_targetListName;
         releaseWidgetLiveFaders();
         syncWidgetLiveInputSourceToTarget();
         updateDmxRegistration();
+        syncWidgetLinkLiveStagedState();
+        updateChannelMonitorTimerState();
     }
 
     if (flags & PasteSpecific1)
@@ -4576,6 +4839,8 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     VCWidget::toClipboardJson(obj, doc);
 
     obj["widgetMode"]           = modeToString(m_mode);
+    if (!m_targetListName.trimmed().isEmpty())
+        obj["targetListName"] = m_targetListName.trimmed();
     QJsonObject widgetLink;
     widgetLink["targetWidgetId"] = QString::number(m_widgetTargetId);
     widgetLink["outputIndex"] = m_widgetOutputIndex;
@@ -4788,6 +5053,7 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
 {
     VCWidget::fromClipboardJson(obj, doc);
 
+    m_targetListName = obj["targetListName"].toString().trimmed();
     setWidgetMode(stringToMode(obj["widgetMode"].toString()));
     const QJsonObject widgetLink = obj["widgetLink"].toObject();
     m_widgetTargetId = widgetLink["targetWidgetId"].toString(
@@ -4811,12 +5077,14 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     syncWidgetLiveInputSourceToTarget();
     releaseWidgetLiveFaders();
     updateDmxRegistration();
+    syncWidgetLinkLiveStagedState();
     m_lastResolvedEntryCount = -1;
     m_longPressMs          = obj["longPressMs"].toInt(500);
     m_addOffAtEnd          = obj["addOffAtEnd"].toBool(false);
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
     m_receiveInputOnInactiveFramePage = obj["receiveInputOnInactiveFramePage"].toBool(false);
     setStageBeforeCommit(obj["stageBeforeCommit"].toBool(false));
+    updateChannelMonitorTimerState();
     m_entrySelectAutoCommit = obj.contains(QStringLiteral("entrySelectAutoCommit"))
         ? obj["entrySelectAutoCommit"].toBool(true)
         : true;
@@ -5178,6 +5446,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         else if (root.name() == KXMLWidgetMode)
         {
             widgetMode = stringToMode(root.readElementText());
+        }
+        else if (root.name() == KXMLTargetListName)
+        {
+            m_targetListName = root.readElementText().trimmed();
         }
         else if (root.name() == KXMLCurrentIndex)
         {
@@ -5568,6 +5840,9 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     m_triggerLastValue    = 0;
     m_automationLastValue = 0;
     recalcLayoutSize();
+    updateDmxRegistration();
+    syncWidgetLinkLiveStagedState();
+    updateChannelMonitorTimerState();
 
     if (root.hasError())
     {
@@ -5591,6 +5866,8 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
 
     if (m_mode != MultiButtonMode::Function)
         doc->writeTextElement(KXMLWidgetMode, modeToString(m_mode));
+    if (!m_targetListName.trimmed().isEmpty())
+        doc->writeTextElement(KXMLTargetListName, m_targetListName.trimmed());
 
     if (m_mode == MultiButtonMode::Widget)
     {
@@ -6048,6 +6325,10 @@ void MultiButtonWidget::paintSingle(QPainter& p)
 
     const int displayIdx = displayedEntryIndex();
     const int monitorIdx = monitorHighlightIndex();
+    const bool hasLiveDot = m_mode == MultiButtonMode::Widget || m_monitorChannelValues;
+    const int liveDotIdx = hasLiveDot ? m_monitorMatchIndex : -1;
+    const int stagedDotIdx = stagedHighlightIndex();
+    const bool hasStagedDot = stagedHighlightValid();
     const bool isPressed = m_pressActive;
 
     QColor bg = defaultTileBackground();
@@ -6142,7 +6423,7 @@ void MultiButtonWidget::paintSingle(QPainter& p)
     }
 
     int n         = entryCount();
-    int totalDots = n + (m_addOffAtEnd ? 1 : 0);
+    int totalDots = n + (offSlotAvailable() ? 1 : 0);
     if (totalDots > 0)
     {
         if (totalDots <= 12)
@@ -6155,25 +6436,31 @@ void MultiButtonWidget::paintSingle(QPainter& p)
 
             for (int i = 0; i < totalDots; ++i)
             {
-                bool isOffDot = (m_addOffAtEnd && i == n);
-                bool active   = isOffDot ? (displayIdx < 0)
-                                         : (i == displayIdx);
-                const bool live = (m_mode == MultiButtonMode::Widget || m_monitorChannelValues)
-                        && (isOffDot ? (monitorIdx < 0)
-                                     : (i == monitorIdx));
-                const QColor dotColor = live ? QColor(255, 150, 0) : fg;
+                const bool isOffDot = (offSlotAvailable() && i == n);
+                const bool isDisplayDot = isOffDot ? (displayIdx < 0)
+                                                   : (i == displayIdx);
+                const bool isLiveDot = hasLiveDot
+                        && (isOffDot ? (liveDotIdx < 0) : (i == liveDotIdx));
+                const bool isStagedDot = hasStagedDot
+                        && (isOffDot ? (stagedDotIdx < 0) : (i == stagedDotIdx));
+                const QColor dotColor = isLiveDot ? QColor(255, 150, 0)
+                                      : (isStagedDot ? QColor(45, 210, 95) : fg);
 
                 if (isOffDot)
                 {
-                    p.setBrush((active || live) ? dotColor : fg.darker(200));
-                    p.setPen(live ? QPen(dotColor.lighter(130), 1)
-                                  : (active ? QPen(fg, 1) : Qt::NoPen));
+                    p.setBrush((isDisplayDot || isLiveDot || isStagedDot)
+                               ? dotColor : fg.darker(200));
+                    p.setPen(isLiveDot ? QPen(dotColor.lighter(130), 1)
+                             : (isStagedDot ? QPen(dotColor.lighter(130), 1)
+                             : (isDisplayDot ? QPen(fg, 1) : Qt::NoPen)));
                     p.drawRect(x0 + i * (dotSize + gap), y0, dotSize, dotSize);
                 }
                 else
                 {
-                    p.setBrush((active || live) ? dotColor : fg.darker(180));
-                    p.setPen(live ? QPen(dotColor.lighter(130), 1) : Qt::NoPen);
+                    p.setBrush((isDisplayDot || isLiveDot || isStagedDot)
+                               ? dotColor : fg.darker(180));
+                    p.setPen((isLiveDot || isStagedDot)
+                             ? QPen(dotColor.lighter(130), 1) : Qt::NoPen);
                     p.drawEllipse(x0 + i * (dotSize + gap), y0, dotSize, dotSize);
                 }
             }
