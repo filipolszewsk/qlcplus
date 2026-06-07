@@ -634,10 +634,12 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     colLayout->addLayout(colBtnRow);
 
     tabs->addTab(colTab, tr("Columns"));
-    root->addWidget(tabs);
 
-    // ---- Crossfade section --------------------------------------------------
-    QGroupBox* xfGrp = new QGroupBox(tr("Crossfade"), this);
+    // ---- TAB: Crossfade / Transitions ---------------------------------------
+    QWidget* xfTab = new QWidget(tabs);
+    QVBoxLayout* xfTabLayout = new QVBoxLayout(xfTab);
+
+    QGroupBox* xfGrp = new QGroupBox(tr("Crossfade"), xfTab);
     QVBoxLayout* xfLayout = new QVBoxLayout(xfGrp);
 
     m_crossfadeChk = new QCheckBox(tr("Enable crossfade (row selector sets staged, not current)"), xfGrp);
@@ -711,7 +713,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     xfLayout->addWidget(multiFxInputWidget);
 
     m_xfadeInputWidget->setVisible(crossfadeEnabled);
-    root->addWidget(xfGrp);
+    xfTabLayout->addWidget(xfGrp);
 
     connect(m_crossfadeChk, &QCheckBox::toggled, m_xfadeInputWidget, &QWidget::setVisible);
     connect(m_crossfadeChk, &QCheckBox::toggled, m_syncMultiFxPhaseChk, &QWidget::setEnabled);
@@ -726,7 +728,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     connect(m_syncMultiFxPhaseChk, &QCheckBox::toggled, this, updateMultiFxSyncOffsetEnabled);
 
     // ---- Transition panel link ----------------------------------------------
-    QGroupBox* spatialGrp = new QGroupBox(tr("Transitions + Continuous FX"), this);
+    QGroupBox* spatialGrp = new QGroupBox(tr("Transitions + Continuous FX"), xfTab);
     QVBoxLayout* spatialLay = new QVBoxLayout(spatialGrp);
 
     m_spatialChk = new QCheckBox(tr("Enable spatial transition on row recall"), spatialGrp);
@@ -782,7 +784,10 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
             row->setTransitionProvider(provider);
     });
 
-    root->addWidget(spatialGrp);
+    xfTabLayout->addWidget(spatialGrp);
+    xfTabLayout->addStretch();
+    tabs->addTab(xfTab, tr("Crossfade / Transitions"));
+    root->addWidget(tabs);
 
     // ---- Error label --------------------------------------------------------
     m_errorLabel = new QLabel(this);

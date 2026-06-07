@@ -327,7 +327,6 @@ private:
     QComboBox*    m_widgetParameterCombo = nullptr;
     QListWidget*  m_widgetPreviewList = nullptr;
     QLabel*       m_widgetLiveInputStatus = nullptr;
-    QComboBox*    m_widgetBusPolicyCombo = nullptr;
     InputSelectionWidget* m_widgetLiveInputSel = nullptr;
     quint32       m_widgetTargetId = VCWidget::invalidId();
     int           m_widgetOutputIndex = 0;
@@ -384,7 +383,6 @@ private:
     InputSelectionWidget* m_commitInputSel       = nullptr;
     QCheckBox*            m_stageBeforeCommitCheck = nullptr;
     QCheckBox*            m_entrySelectAutoCommitCheck = nullptr;
-    QCheckBox*            m_logPresetChangesCheck = nullptr;
     QCheckBox*            m_receiveInputInactiveFrameCheck = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
 

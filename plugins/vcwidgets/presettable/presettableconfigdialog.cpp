@@ -443,10 +443,12 @@ PresetTableConfigDialog::PresetTableConfigDialog(Doc* doc,
     colLayout->addLayout(colBtnRow);
 
     tabs->addTab(colTab, tr("Columns"));
-    root->addWidget(tabs);
 
-    // ---- Crossfade section --------------------------------------------------
-    QGroupBox* xfGrp = new QGroupBox(tr("Crossfade"), this);
+    // ---- TAB: Crossfade / Transitions ---------------------------------------
+    QWidget* xfTab = new QWidget(tabs);
+    QVBoxLayout* xfTabLayout = new QVBoxLayout(xfTab);
+
+    QGroupBox* xfGrp = new QGroupBox(tr("Crossfade"), xfTab);
     QVBoxLayout* xfLayout = new QVBoxLayout(xfGrp);
 
     m_crossfadeChk = new QCheckBox(tr("Enable crossfade (row selector sets staged, not current)"), xfGrp);
@@ -465,7 +467,10 @@ PresetTableConfigDialog::PresetTableConfigDialog(Doc* doc,
     xfLayout->addWidget(m_xfadeInputWidget);
 
     m_xfadeInputWidget->setVisible(crossfadeEnabled);
-    root->addWidget(xfGrp);
+    xfTabLayout->addWidget(xfGrp);
+    xfTabLayout->addStretch();
+    tabs->addTab(xfTab, tr("Crossfade / Transitions"));
+    root->addWidget(tabs);
 
     connect(m_crossfadeChk, &QCheckBox::toggled, m_xfadeInputWidget, &QWidget::setVisible);
 
