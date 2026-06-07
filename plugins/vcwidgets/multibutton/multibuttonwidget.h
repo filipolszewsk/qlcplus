@@ -428,6 +428,7 @@ private:
     void bumpAutomationProfileTargetRevision();
 
     void applyEntryNamesFrom(const MultiButtonWidget* src);
+    void applyEntryButtonColorsFrom(const MultiButtonWidget* src);
     void applyChannelBindingsFrom(const MultiButtonWidget* src);
     void applyFunctionAssignmentsFrom(const MultiButtonWidget* src);
     void applyLevelValuesFrom(const MultiButtonWidget* src);

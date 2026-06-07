@@ -226,7 +226,8 @@ public:
         PasteSpecific4    = (1 << 12),
         PasteSpecific5    = (1 << 13),
         PasteSpecific6    = (1 << 14),
-        PasteSpecific7    = (1 << 15)
+        PasteSpecific7    = (1 << 15),
+        PasteSpecific8    = (1 << 16)
     };
     Q_DECLARE_FLAGS(PastePropertyGroups, PastePropertyGroup)
 

@@ -70,6 +70,7 @@ static const QString KXMLTargetListName    = QStringLiteral("TargetListName");
 static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
 static const int kWidgetBusPublishSuppressMs = 250;
+static const QColor KDefaultTileBackground(58, 58, 58);
 
 static QString widgetBusPolicyToString(MultiButtonWidgetBusPolicy policy)
 {
@@ -1867,9 +1868,15 @@ void MultiButtonWidget::paintTileBackground(QPainter& p, const QRect& rect, int 
     }
 
     if (!hasColorOverride)
+    {
+        buttonColor = defaultTileBackground();
         outBg = defaultTileBackground();
+        hasColorOverride = true;
+    }
     else
+    {
         outBg = buttonColor;
+    }
 
     const bool sunken = isPressed || isLive || isStaged;
     const bool borderActive = isLive || isStaged;
@@ -4687,6 +4694,23 @@ void MultiButtonWidget::applyEntryNamesFrom(const MultiButtonWidget* src)
     m_iconCache.clear();
 }
 
+void MultiButtonWidget::applyEntryButtonColorsFrom(const MultiButtonWidget* src)
+{
+    if (!src)
+        return;
+
+    const int n = qMin(entryCount(), src->entryCount());
+    for (int i = 0; i < n; ++i)
+    {
+        LevelPreset* target = mutableEntryAppearancePreset(i);
+        if (!target)
+            continue;
+
+        const LevelPreset* source = src->entryAppearancePreset(i);
+        target->color = source ? source->color : QColor();
+    }
+}
+
 void MultiButtonWidget::applyChannelBindingsFrom(const MultiButtonWidget* src)
 {
     if (!src)
@@ -4756,6 +4780,7 @@ MultiButtonWidget::pasteablePropertyGroups() const
     groups << qMakePair(PasteSpecific5, tr("Layout (Single/Spread, columns, pages, tile size)"));
     groups << qMakePair(PasteSpecific6, tr("Automation (profiles, enabled, active profile)"));
     groups << qMakePair(PasteSpecific7, tr("General (long-press, off at end, monitor)"));
+    groups << qMakePair(PasteSpecific8, tr("Entries — Button colors only"));
     return groups;
 }
 
@@ -4826,6 +4851,9 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         assignInputSource(cloneInputSource(src->inputSource(commitInputSourceId)),
                           commitInputSourceId);
     }
+
+    if (flags & PasteSpecific8)
+        applyEntryButtonColorsFrom(src);
 
     VCWidget::applyPropertiesFrom(source, flags);
     m_doc->setModified();
@@ -6159,7 +6187,7 @@ QColor MultiButtonWidget::defaultTileBackground() const
 {
     if (hasCustomBackgroundColor())
         return backgroundColor();
-    return palette().button().color();
+    return KDefaultTileBackground;
 }
 
 QColor MultiButtonWidget::buttonTextColor(const QColor& tileBg) const
