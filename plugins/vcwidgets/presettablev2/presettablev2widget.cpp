@@ -51,6 +51,7 @@
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QTableView>
+#include <QTimer>
 #include <QDebug>
 #include <algorithm>
 #include <climits>
@@ -674,6 +675,7 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_nameFrozenTable->horizontalHeader()->setStretchLastSection(true);
     m_nameFrozenTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_nameFrozenTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nameFrozenTable->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_nameFrozenTable->setFixedWidth((m_nameColWidth > 0 ? m_nameColWidth : 140) + 2);
     m_nameFrozenTable->installEventFilter(this);
     m_nameFrozenTable->viewport()->installEventFilter(this);
@@ -894,9 +896,19 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
         // won't add badge-prefixed text back into cells
         rebuildTable();
     }
+    else
+    {
+        syncFrozenNameColumnLayout();
+    }
 
     refreshRowHighlights();
     update();
+
+    QTimer::singleShot(0, this, [this]() {
+        syncFrozenNameColumnLayout();
+        refreshRowHighlights();
+        update();
+    });
 }
 
 // ==========================================================================
@@ -1340,20 +1352,7 @@ void PresetTableV2Widget::rebuildTable()
     // Apply persisted column widths
     if (m_nameColWidth > 0)
         m_table->setColumnWidth(0, m_nameColWidth);
-    if (m_nameFrozenTable)
-    {
-        m_nameFrozenTable->setModel(m_table->model());
-        m_nameFrozenTable->setSelectionModel(m_table->selectionModel());
-        m_nameFrozenTable->setColumnHidden(0, false);
-        for (int c = 1; c < numCols; ++c)
-            m_nameFrozenTable->setColumnHidden(c, true);
-        const int frozenWidth = m_nameColWidth > 0 ? m_nameColWidth : 140;
-        m_nameFrozenTable->setColumnWidth(0, frozenWidth);
-        m_nameFrozenTable->setFixedWidth(frozenWidth + 2);
-        for (int r = 0; r < numRows; ++r)
-            m_nameFrozenTable->setRowHeight(r, m_table->rowHeight(r));
-    }
-    m_table->setColumnHidden(0, true);
+    syncFrozenNameColumnLayout();
     for (int c = 0; c < m_columns.size(); ++c)
         if (m_columns[c].width > 0)
             m_table->setColumnWidth(c + 1, m_columns[c].width);
@@ -1362,6 +1361,38 @@ void PresetTableV2Widget::rebuildTable()
     m_rebuildingTable = false;
 
     refreshRowHighlights();
+}
+
+void PresetTableV2Widget::syncFrozenNameColumnLayout()
+{
+    if (!m_table || !m_nameFrozenTable)
+        return;
+
+    const int numCols = m_table->columnCount();
+    const int numRows = m_table->rowCount();
+    const int frozenWidth = m_nameColWidth > 0 ? m_nameColWidth : 140;
+
+    m_nameFrozenTable->setModel(m_table->model());
+    m_nameFrozenTable->setSelectionModel(m_table->selectionModel());
+    m_nameFrozenTable->setColumnHidden(0, false);
+    for (int c = 1; c < numCols; ++c)
+        m_nameFrozenTable->setColumnHidden(c, true);
+
+    m_nameFrozenTable->setColumnWidth(0, frozenWidth);
+    m_nameFrozenTable->setMinimumWidth(frozenWidth + 2);
+    m_nameFrozenTable->setFixedWidth(frozenWidth + 2);
+
+    for (int r = 0; r < numRows; ++r)
+        m_nameFrozenTable->setRowHeight(r, m_table->rowHeight(r));
+
+    m_table->setColumnHidden(0, true);
+
+    m_nameFrozenTable->horizontalHeader()->setVisible(true);
+    m_table->horizontalHeader()->setVisible(true);
+    m_nameFrozenTable->horizontalHeader()->updateGeometry();
+    m_table->horizontalHeader()->updateGeometry();
+    m_nameFrozenTable->viewport()->update();
+    m_table->viewport()->update();
 }
 
 // ==========================================================================
@@ -5626,6 +5657,12 @@ void PresetTableV2Widget::paintEvent(QPaintEvent* e)
     p.fillRect(rect(), bg);
     p.end();
     VCWidget::paintEvent(e);
+}
+
+void PresetTableV2Widget::resizeEvent(QResizeEvent* e)
+{
+    VCWidget::resizeEvent(e);
+    syncFrozenNameColumnLayout();
 }
 
 // ==========================================================================

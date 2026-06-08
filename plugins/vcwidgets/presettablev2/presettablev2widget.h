@@ -243,6 +243,7 @@ protected slots:
 
 protected:
     void paintEvent(QPaintEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
     void keyPressEvent(QKeyEvent* e) override;
     bool eventFilter(QObject* obj, QEvent* ev) override;
 
@@ -266,6 +267,7 @@ private slots:
 
 private:
     void rebuildTable();
+    void syncFrozenNameColumnLayout();
     void refreshTableFromData();
     void setActiveRow(int outputIdx, int rowIdx);   // -1 = off
     void refreshRowHighlights();
