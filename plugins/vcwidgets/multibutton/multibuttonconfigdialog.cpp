@@ -1452,7 +1452,7 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::widgetLiveInputSource() 
 
 MultiButtonWidgetBusPolicy MultiButtonConfigDialog::widgetBusPolicy() const
 {
-    return MultiButtonWidgetBusPolicy::SharedBus;
+    return m_widgetBusPolicy;
 }
 
 QString MultiButtonConfigDialog::formatInputPatch(const QSharedPointer<QLCInputSource>& src,
@@ -2178,10 +2178,16 @@ void MultiButtonConfigDialog::updateWidgetLiveInputUi()
     if (!m_widgetLiveInputSel || !m_widgetLiveInputStatus)
         return;
 
-    const QString status = tr("Raw selector channel shared with cue/snapshot.");
-    const QString details = tr("One raw DMX channel (not a patched fixture intensity channel) shared with cuelist/snapshots. "
-                               "Multi Button and cues take turns via LTP: last action wins. Button click holds staged over a held cue; "
-                               "starting a cue adopts into Preset Table. Not wired into Preset Table inputs.");
+    const bool sharedBus = m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus;
+    const QString status = sharedBus
+            ? tr("Raw selector channel shared with cue/snapshot.")
+            : tr("Legacy hold override selector channel.");
+    const QString details = sharedBus
+            ? tr("One raw DMX channel (not a patched fixture intensity channel) shared with cuelist/snapshots. "
+                 "Multi Button and cues take turns via LTP: last action wins. Button click holds staged over a held cue; "
+                 "starting a cue adopts into Preset Table. Not wired into Preset Table inputs.")
+            : tr("This saved widget still uses the legacy hold override selector channel. "
+                 "The selector policy is preserved for compatibility, but no longer exposed as an editable option.");
     m_widgetLiveInputStatus->setText(status);
     m_widgetLiveInputStatus->setToolTip(details);
     m_widgetLiveInputSel->setEnabled(true);
