@@ -134,6 +134,7 @@ struct PTSpatialChaseOutput
     PTTransitionPreset spatialPreset;
     QList<QLCPoint>    order;
     QSet<QLCPoint>     armed;
+    QSet<quint32>      armedFixtures;
 };
 
 class PresetTableV2SpatialEngine

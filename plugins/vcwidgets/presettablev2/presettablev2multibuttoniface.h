@@ -39,4 +39,15 @@ public:
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetIface,
-                    "org.qlcplus.PresetTableV2MultiButtonTargetIface/1.0")
+                    "org.qlcplus.PresetTableV2MultiButtonTargetIface/1.1")
+
+class PresetTableV2MultiButtonTargetExtrasIface
+{
+public:
+    virtual ~PresetTableV2MultiButtonTargetExtrasIface() = default;
+    virtual bool multiButtonSupportsAllOutputs() const = 0;
+    virtual bool multiButtonOutputControlsParameter(int outputIdx, int parameter) const = 0;
+};
+
+Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetExtrasIface,
+                    "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.1")

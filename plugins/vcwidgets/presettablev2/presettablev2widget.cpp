@@ -38,6 +38,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMutexLocker>
+#include <QSet>
 #include <QSpinBox>
 #include <QComboBox>
 #include <QStyleOptionViewItem>
@@ -226,6 +227,54 @@ static bool outputScopeAllowsPoint(PTOutputScope scope, const QLCPoint& pt, cons
                 return true;
             return out.groupRows.contains(pt.y());
     }
+}
+
+struct PTOutputScopeFixture
+{
+    quint32   fxiId = UINT_MAX;
+    GroupHead head;
+    QLCPoint  point;
+};
+
+static QList<PTOutputScopeFixture> collectOutputScopeFixtures(
+        const QMap<QLCPoint, GroupHead>& headsMap, const PTOutput& out)
+{
+    QList<PTOutputScopeFixture> result;
+    QSet<quint32> seen;
+    for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
+    {
+        const QLCPoint& pt = it.key();
+        if (!outputScopeAllowsPoint(out.scope, pt, out))
+            continue;
+        const GroupHead& head = it.value();
+        if (seen.contains(head.fxi))
+            continue;
+        seen.insert(head.fxi);
+        PTOutputScopeFixture entry;
+        entry.fxiId = head.fxi;
+        entry.head = head;
+        entry.point = pt;
+        result.append(entry);
+    }
+    return result;
+}
+
+static bool columnBindingMatchesFixture(const PTColumn& col, Fixture* fxi)
+{
+    if (!col.binding.isValid() || !fxi)
+        return false;
+    QLCFixtureDef* fxDef = fxi->fixtureDef();
+    QLCFixtureMode* fxMode = fxi->fixtureMode();
+    if (!fxDef || !fxMode)
+        return false;
+    if (fxDef->manufacturer() != col.binding.manufacturer)
+        return false;
+    if (fxDef->model() != col.binding.model)
+        return false;
+    if (fxMode->name() != col.binding.modeName)
+        return false;
+    const quint32 absChannel = quint32(col.binding.channelIndex);
+    return absChannel < fxi->channels();
 }
 static const QString KXMLBindMfg        = QStringLiteral("BindMfg");
 static const QString KXMLBindModel      = QStringLiteral("BindModel");
@@ -2127,6 +2176,11 @@ QString PresetTableV2Widget::multiButtonOutputName(int outputIdx) const
     return name.isEmpty() ? tr("Output %1").arg(outputIdx + 1) : name;
 }
 
+bool PresetTableV2Widget::multiButtonSupportsAllOutputs() const
+{
+    return true;
+}
+
 int PresetTableV2Widget::multiButtonParameterCount() const
 {
     return 5;
@@ -2278,6 +2332,63 @@ quint64 PresetTableV2Widget::multiButtonStateRevision(int outputIdx, int paramet
             || slot >= m_multiButtonStateRevision.at(outputIdx).size())
         return 0;
     return m_multiButtonStateRevision.at(outputIdx).at(slot);
+}
+
+bool PresetTableV2Widget::multiButtonOutputControlsParameter(int outputIdx,
+                                                             int parameter) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return false;
+    if (parameter < 0 || parameter >= multiButtonParameterCount())
+        return false;
+    if (m_mode != PTMode::FixtureGroup)
+        return true;
+    if (!m_doc || m_fixtureGroupId == UINT_MAX)
+        return false;
+
+    FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
+    if (!grp)
+        return false;
+
+    bool hasBoundColumn = false;
+    for (const PTColumn& col : m_columns)
+    {
+        if (col.binding.isValid())
+        {
+            hasBoundColumn = true;
+            break;
+        }
+    }
+    if (!hasBoundColumn)
+        return false;
+
+    const PTOutput& out = m_outputs.at(outputIdx);
+    const FixtureGroupMask docMask = m_doc->fixtureGroupMask(m_fixtureGroupId);
+    if (out.scope == PTOutputScope::Mask && !docMask.isActive())
+        return false;
+
+    const QMap<QLCPoint, GroupHead> maskedHeads = m_doc->effectiveHeadsMap(grp);
+    const QMap<QLCPoint, GroupHead> fullHeads = grp->headsMap();
+    const QMap<QLCPoint, GroupHead>& headsMap =
+            (out.scope == PTOutputScope::Rows) ? fullHeads : maskedHeads;
+
+    const QList<PTOutputScopeFixture> scopeFixtures =
+            collectOutputScopeFixtures(headsMap, out);
+    for (const PTOutputScopeFixture& sf : scopeFixtures)
+    {
+        Fixture* fxi = m_doc->fixture(sf.fxiId);
+        if (!fxi)
+            continue;
+
+        for (const PTColumn& col : m_columns)
+        {
+            if (columnBindingMatchesFixture(col, fxi))
+                return true;
+        }
+    }
+
+    return false;
 }
 
 bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter) const
@@ -3310,12 +3421,6 @@ void PresetTableV2Widget::applyPointChannels(GenericFader* fader, Universe* uni,
         quint32 absChannel = quint32(col.binding.channelIndex);
         if (absChannel >= fxi->channels()) continue;
 
-        if (!fxMode->heads().isEmpty())
-        {
-            if (head.head < 0 || head.head >= (int)fxMode->heads().size()) continue;
-            if (!fxMode->heads()[head.head].channels().contains(absChannel)) continue;
-        }
-
         uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
         applyFadeValueTimed(fader, m_doc, uni, head.fxi, absChannel, aVal, fadeTimeMs);
     }
@@ -3355,12 +3460,6 @@ void PresetTableV2Widget::applyBlendedPointChannels(GenericFader* fader, Univers
         quint32 absChannel = quint32(col.binding.channelIndex);
         if (absChannel >= fxi->channels()) continue;
 
-        if (!fxMode->heads().isEmpty())
-        {
-            if (head.head < 0 || head.head >= (int)fxMode->heads().size()) continue;
-            if (!fxMode->heads()[head.head].channels().contains(absChannel)) continue;
-        }
-
         const uchar pri = (c < priVals.size()) ? priVals[c] : 0;
         const uchar sec = (c < secVals.size()) ? secVals[c] : 0;
         const bool sharpWave = (waveFadeIn == 0 && waveFadeOut == 0);
@@ -3394,6 +3493,7 @@ void PresetTableV2Widget::startSpatialChase(int outputIdx, int rowIdx, const QLi
     chase.progress = 0.0;
     chase.spatialPreset = preset;
     chase.armed.clear();
+    chase.armedFixtures.clear();
     chase.order = PresetTableV2SpatialEngine::buildChaseOrder(points, preset, gridWidth, gridHeight);
 }
 
@@ -3444,6 +3544,12 @@ void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
             continue;
 
         const GroupHead& head = hit.value();
+        if (chase.armedFixtures.contains(head.fxi))
+        {
+            chase.armed.insert(pt);
+            continue;
+        }
+
         Fixture* fxi = m_doc->fixture(head.fxi);
         if (!fxi) continue;
 
@@ -3459,6 +3565,7 @@ void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
 
         applyPointChannels(fader.data(), universes[uni], head, fxi, pt, aVals, fadeMs);
         chase.armed.insert(pt);
+        chase.armedFixtures.insert(head.fxi);
     }
 
     if (pointCount == 0 || chase.progress >= 1.0)
@@ -3573,6 +3680,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         stagedMultiFxSerialIndex.insert(stagedMultiFxOrder.at(i), i);
 
     const quint32 fadeMs = 0;
+    QSet<quint32> writtenFixtures;
 
     for (const QLCPoint& pt : points)
     {
@@ -3634,6 +3742,9 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         }
 
         const GroupHead& head = hit.value();
+        if (writtenFixtures.contains(head.fxi))
+            continue;
+
         Fixture* fxi = m_doc->fixture(head.fxi);
         if (!fxi)
             continue;
@@ -3696,6 +3807,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                                           double(m_multiFxBlend) / 255.0);
         }
         applyPointChannels(fader.data(), universes[uni], head, fxi, pt, normalValues, fadeMs);
+        writtenFixtures.insert(head.fxi);
     }
 }
 
@@ -4118,6 +4230,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
 
     int sweepScopeCount = 0;
     int sweepDoneCount = 0;
+    QSet<quint32> writtenFixtures;
 
     for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
     {
@@ -4144,11 +4257,16 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         }
 
         auto applyRow = [&](const QVector<uchar>& rowVals) {
+            if (writtenFixtures.contains(head.fxi))
+                return;
             QVector<uchar> vals = PTParamMatrixEngine::blendWithIntensity(rowVals, global.intensity);
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, fadeMs);
+            writtenFixtures.insert(head.fxi);
         };
 
         auto applyContinuous = [&]() {
+            if (writtenFixtures.contains(head.fxi))
+                return;
             const float dimmer = dimmerAtPoint(pt, elapsedMs);
             QVector<uchar> finalValues;
             if (morphOutput)
@@ -4201,6 +4319,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                                              double(m_multiFxBlend) / 255.0);
             }
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues, 0);
+            writtenFixtures.insert(head.fxi);
         };
 
         if (st.flashActive)
@@ -4242,18 +4361,26 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             }
             st.sweepManualPhasePrev = st.sweepManualPhase;
 
-            const float blend = spatialPlan.sweepBlend01(
-                    st.sweepManualPhase, pt, preset, global);
-            const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
-            applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
+            if (!writtenFixtures.contains(head.fxi))
+            {
+                const float blend = spatialPlan.sweepBlend01(
+                        st.sweepManualPhase, pt, preset, global);
+                const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
+                applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
+                writtenFixtures.insert(head.fxi);
+            }
         }
         else if (st.sweepRunning)
         {
             ++sweepScopeCount;
             const float blend = spatialPlan.sweepBlend01(
                     sweepTimedProgress01, pt, preset, global);
-            const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
-            applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
+            if (!writtenFixtures.contains(head.fxi))
+            {
+                const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
+                applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
+                writtenFixtures.insert(head.fxi);
+            }
             if (blend >= 0.99f)
                 ++sweepDoneCount;
         }
@@ -4434,13 +4561,11 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
 
         if (crossfadeSweep && stagedRow >= 0 && stagedRow != activeRow)
         {
-            for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
+            const QList<PTOutputScopeFixture> scopeFixtures =
+                    collectOutputScopeFixtures(headsMap, out);
+            for (const PTOutputScopeFixture& sf : scopeFixtures)
             {
-                const QLCPoint& pt = it.key();
-                if (!outputScopeAllowsPoint(out.scope, pt, out))
-                    continue;
-                const GroupHead& head = it.value();
-                Fixture* fxi = m_doc->fixture(head.fxi);
+                Fixture* fxi = m_doc->fixture(sf.fxiId);
                 if (!fxi)
                     continue;
                 quint32 uni = fxi->universe();
@@ -4454,7 +4579,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
                 }
                 QVector<uchar> vals = aVals;
                 vals = PTParamMatrixEngine::blendWithIntensity(vals, globalFx.intensity);
-                applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
+                applyPointChannels(fader.data(), universes[uni], sf.head, fxi, sf.point, vals, 0);
             }
             continue;
         }
@@ -4512,23 +4637,22 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
             }
         }
 
-        for (auto it = headsMap.constBegin(); it != headsMap.constEnd(); ++it)
+        const QList<PTOutputScopeFixture> scopeFixtures =
+                collectOutputScopeFixtures(headsMap, out);
+        for (const PTOutputScopeFixture& sf : scopeFixtures)
         {
-            const QLCPoint&  pt   = it.key();
-            const GroupHead& head = it.value();
-
-            if (!outputScopeAllowsPoint(out.scope, pt, out))
+            Fixture* fxi = m_doc->fixture(sf.fxiId);
+            if (!fxi)
                 continue;
-
-            Fixture* fxi = m_doc->fixture(head.fxi);
-            if (!fxi) continue;
 
             QLCFixtureDef*  fxDef  = fxi->fixtureDef();
             QLCFixtureMode* fxMode = fxi->fixtureMode();
-            if (!fxDef || !fxMode) continue;
+            if (!fxDef || !fxMode)
+                continue;
 
             quint32 uni = fxi->universe();
-            if ((int)uni >= universes.size()) continue;
+            if ((int)uni >= universes.size())
+                continue;
 
             auto fader = m_faders.value(uni);
             if (fader.isNull())
@@ -4540,27 +4664,16 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
             for (int c = 0; c < m_columns.size(); ++c)
             {
                 const PTColumn& col = m_columns[c];
-                if (!col.binding.isValid()) continue;
+                if (!columnBindingMatchesFixture(col, fxi))
+                    continue;
 
-                if (fxDef->manufacturer() != col.binding.manufacturer) continue;
-                if (fxDef->model()        != col.binding.model)        continue;
-                if (fxMode->name()        != col.binding.modeName)     continue;
-
-                quint32 absChannel = quint32(col.binding.channelIndex);
-                if (absChannel >= fxi->channels()) continue;
-
-                if (!fxMode->heads().isEmpty())
-                {
-                    if (head.head < 0 || head.head >= (int)fxMode->heads().size()) continue;
-                    if (!fxMode->heads()[head.head].channels().contains(absChannel)) continue;
-                }
-
+                const quint32 absChannel = quint32(col.binding.channelIndex);
                 uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
                 uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
                 const bool linearCrossfade = m_crossfadeEnabled && hasStaged
                         && !crossfadeSweep;
                 applyFadeValue(fader.data(), m_doc, universes[uni],
-                               head.fxi, absChannel,
+                               sf.head.fxi, absChannel,
                                aVal, bVal,
                                linearCrossfade, linearCrossfade && hasStaged,
                                col.fade, xfEffective);

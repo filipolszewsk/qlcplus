@@ -160,11 +160,13 @@ private:
 // ---------------------------------------------------------------------------
 
 class PresetTableV2Widget : public VCWidget, public DMXSource, public PresetTableV2ControlIface,
-                            public PresetTableV2MultiButtonTargetIface
+                            public PresetTableV2MultiButtonTargetIface,
+                            public PresetTableV2MultiButtonTargetExtrasIface
 {
     Q_OBJECT
     Q_INTERFACES(PresetTableV2ControlIface)
     Q_INTERFACES(PresetTableV2MultiButtonTargetIface)
+    Q_INTERFACES(PresetTableV2MultiButtonTargetExtrasIface)
 
 public:
     explicit PresetTableV2Widget(QWidget* parent, Doc* doc);
@@ -205,6 +207,7 @@ public:
 
     int multiButtonOutputCount() const override;
     QString multiButtonOutputName(int outputIdx) const override;
+    bool multiButtonSupportsAllOutputs() const override;
     int multiButtonParameterCount() const override;
     QString multiButtonParameterName(int parameter) const override;
     int multiButtonEntryCount(int outputIdx, int parameter) const override;
@@ -213,6 +216,7 @@ public:
     int multiButtonLiveIndex(int outputIdx, int parameter) const override;
     bool multiButtonStagingAvailable(int outputIdx, int parameter) const override;
     quint64 multiButtonStateRevision(int outputIdx, int parameter) const override;
+    bool multiButtonOutputControlsParameter(int outputIdx, int parameter) const override;
     bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
     int multiButtonStagedIndex(int outputIdx, int parameter) const override;
     bool multiButtonActivate(int outputIdx, int parameter, int index) override;

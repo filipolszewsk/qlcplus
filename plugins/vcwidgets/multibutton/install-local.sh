@@ -1,34 +1,37 @@
 #!/usr/bin/env bash
-# Install multibutton VC widget to user folder (macOS).
-# Always codesigns the DESTINATION — required or QLC+ crashes on startup.
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+FIX="${ROOT}/install-vcwidget-dylib.sh"
 BUILD_DIR="${SCRIPT_DIR}/build"
 DYLIB="${BUILD_DIR}/libmultibutton_vcwidget.dylib"
-BUNDLE="${HOME}/QLC+.app"
-DEST="${HOME}/Library/Application Support/QLC+/VCWidgets"
+QLCPLUS_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+QLCPLUS_BUILD="${QLCPLUS_ROOT}/build"
+QT_CMAKE="${HOME}/Qt/6.8.1/macos/lib/cmake"
 
-if [[ ! -f "${DYLIB}" ]]; then
-  echo "Build first: cmake --build \"${BUILD_DIR}\"" >&2
+if [[ ! -x "$FIX" ]]; then
+  echo "Missing $FIX" >&2
   exit 1
 fi
 
-if [[ ! -d "${BUNDLE}/Contents/Frameworks" ]]; then
-  echo "Missing ${BUNDLE} — run ./install.sh in qlcplus repo first." >&2
+if [[ ! -d "${HOME}/QLC+.app/Contents/Frameworks" ]]; then
+  echo "Missing ~/QLC+.app — run ./install.sh in qlcplus repo first." >&2
   exit 1
 fi
 
-mkdir -p "${DEST}"
+if [[ ! -d "$QT_CMAKE" ]]; then
+  echo "Qt 6.8.1 not found. Run: ./install.sh setup" >&2
+  exit 1
+fi
 
-install_name_tool -add_rpath "${BUNDLE}/Contents/Frameworks" "${DYLIB}" 2>/dev/null || true
-codesign --force --sign - "${DYLIB}"
+if [[ ! -f "${BUILD_DIR}/Makefile" ]]; then
+  cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" \
+    -DQLCPLUS_SRC_DIR="${QLCPLUS_ROOT}" \
+    -DQLCPLUS_BUILD_DIR="${QLCPLUS_BUILD}" \
+    -DCMAKE_PREFIX_PATH="${QT_CMAKE}"
+fi
 
-cp "${DYLIB}" "${DEST}/"
-# Re-sign destination (cp preserves signature, but re-sign after any install_name_tool on dest is safest)
-DEST_DYLIB="${DEST}/$(basename "${DYLIB}")"
-codesign --force --sign - "${DEST_DYLIB}"
-
-codesign --verify --verbose=2 "${DEST_DYLIB}"
-echo "Installed and signed: ${DEST_DYLIB}"
+cmake --build "${BUILD_DIR}" -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+"$FIX" "$DYLIB"
+echo "Restart ~/QLC+.app — VC → Add → Multi Button"
