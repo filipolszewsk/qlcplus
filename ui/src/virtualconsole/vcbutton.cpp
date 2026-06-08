@@ -1003,23 +1003,20 @@ void VCButton::pressFunction()
         if (f == NULL)
             return;
 
-        // Use m_functionOwner to decide toggle-off, not just visual state.
-        // This handles the case where the monitor timer set state to Inactive
-        // but the function is still running (owned by this button).
-        if ((m_functionOwner || state() == Active) &&
-            !(isChildOfSoloFrame() && f->startedAsChild()))
+        const bool soloChild = isChildOfSoloFrame() && f->startedAsChild();
+
+        // Toggle off whenever the attached function is running (startup function,
+        // cue list, monitor override with m_functionOwner, etc.) — not only when
+        // the button visually shows Active.
+        if (f->isRunning() && !soloChild)
         {
             f->stop(functionParent());
             resetIntensityOverrideAttribute();
             m_functionOwner = false;
+            setState(Inactive);
         }
         else
         {
-            // If the function is already running (ghost - e.g. we lost ownership
-            // tracking due to monitor), stop it first to get a clean start
-            if (f->isRunning())
-                f->stop(functionParent());
-
             adjustFunctionIntensity(f, intensity());
 
             // starting a Chaser is a special case, since it is necessary
