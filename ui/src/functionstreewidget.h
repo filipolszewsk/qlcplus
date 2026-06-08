@@ -128,6 +128,9 @@ public:
 private:
     QTreeWidgetItem *folderItem(QString name);
 
+    /** Folder path for a drop target (folder node or function inside a folder). */
+    QString folderPathForDropTarget(const QTreeWidgetItem *item) const;
+
 private slots:
     void slotItemChanged(QTreeWidgetItem *item);
 

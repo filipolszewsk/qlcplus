@@ -470,6 +470,21 @@ void FunctionsTreeWidget::mousePressEvent(QMouseEvent *event)
     m_draggedItems = selectedItems(); //itemAt(event->pos());
 }
 
+QString FunctionsTreeWidget::folderPathForDropTarget(const QTreeWidgetItem *item) const
+{
+    if (item == NULL)
+        return QString();
+
+    const QString path = item->text(COL_PATH);
+    if (path.isEmpty() == false)
+        return path;
+
+    const QTreeWidgetItem *parent = item->parent();
+    if (parent != NULL)
+        return parent->text(COL_PATH);
+
+    return QString();
+}
 
 void FunctionsTreeWidget::dropEvent(QDropEvent *event)
 {
@@ -486,7 +501,8 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
         return;
 
     int dropType = var.toInt();
-    //QString folderName = dropItem->text(COL_PATH);
+    const QString dropFolderPath = folderPathForDropTarget(dropItem);
+    bool docModified = false;
 
     foreach (QTreeWidgetItem *item, m_draggedItems)
     {
@@ -497,8 +513,11 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
             QTreeWidget::dropEvent(event);
             quint32 fid = item->data(COL_NAME, Qt::UserRole).toUInt();
             Function *func = m_doc->function(fid);
-            if (func != NULL)
-                func->setPath(dropItem->text(COL_PATH));
+            if (func != NULL && dropFolderPath.isEmpty() == false)
+            {
+                func->setPath(dropFolderPath);
+                docModified = true;
+            }
         }
         else
         {
@@ -507,8 +526,12 @@ void FunctionsTreeWidget::dropEvent(QDropEvent *event)
             if (dragType == dropType)
                 QTreeWidget::dropEvent(event);
             slotItemChanged(item);
+            docModified = true;
         }
     }
+
+    if (docModified)
+        m_doc->setModified();
 
     m_draggedItems.clear();
 }
