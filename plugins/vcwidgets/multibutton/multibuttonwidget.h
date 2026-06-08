@@ -133,6 +133,7 @@ public:
     static const quint8 spreadPageInputSourceId   = 5;   // spread page index (0-based channel value)
     static const quint8 commitInputSourceId       = 6;   // 0 = idle, upper (255) = apply staged
     static const quint8 widgetRecallInputSourceId = 7;   // widget selector/recall channel
+    static constexpr int kAllWidgetOutputsIndex = -1;
 
     explicit MultiButtonWidget(QWidget* parent, Doc* doc);
     ~MultiButtonWidget() override;
@@ -438,6 +439,13 @@ private:
     quint8 resolvedPresetChannelValue(const LevelPreset& preset, int channelIndex,
                                       const QList<Universe*>& universes) const;
     class PresetTableV2MultiButtonTargetIface* widgetLinkTarget() const;
+    class PresetTableV2MultiButtonTargetExtrasIface* widgetLinkTargetExtras() const;
+    bool isAllOutputsMode() const;
+    int  leaderOutputIndex() const;
+    int  widgetLinkReadOutputIndex() const;
+    bool activateLinkedOutput(PresetTableV2MultiButtonTargetIface* target, int idx,
+                              bool staged) const;
+    void normalizeWidgetOutputIndexAfterLoad();
     void releaseWidgetLiveFaders();
 
     // ---- Mode ------------------------------------------------------------

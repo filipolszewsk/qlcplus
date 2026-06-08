@@ -147,7 +147,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     , m_functionEntryLabelColors(functionEntryLabelColors)
     , m_ownerWidgetId(ownerWidgetId)
     , m_widgetTargetId(widgetTargetId)
-    , m_widgetOutputIndex(qMax(0, widgetOutputIndex))
+    , m_widgetOutputIndex(widgetOutputIndex)
     , m_widgetParameter(qMax(0, widgetParameter))
     , m_widgetLiveInputSource(widgetLiveInputSource)
     , m_widgetBusPolicy(widgetBusPolicy)
@@ -1433,7 +1433,7 @@ quint32 MultiButtonConfigDialog::widgetTargetId() const
 
 int MultiButtonConfigDialog::widgetOutputIndex() const
 {
-    return m_widgetOutputCombo ? qMax(0, m_widgetOutputCombo->currentData().toInt())
+    return m_widgetOutputCombo ? m_widgetOutputCombo->currentData().toInt()
                                : m_widgetOutputIndex;
 }
 
@@ -1927,6 +1927,20 @@ PresetTableV2MultiButtonTargetIface* MultiButtonConfigDialog::selectedWidgetTarg
     return qobject_cast<PresetTableV2MultiButtonTargetIface*>(vc->widget(widgetTargetId()));
 }
 
+PresetTableV2MultiButtonTargetExtrasIface* MultiButtonConfigDialog::selectedWidgetTargetExtras() const
+{
+    VirtualConsole* vc = VirtualConsole::instance();
+    if (!vc)
+        return nullptr;
+    return qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(vc->widget(widgetTargetId()));
+}
+
+int MultiButtonConfigDialog::widgetPreviewOutputIndex() const
+{
+    const int outputIdx = widgetOutputIndex();
+    return outputIdx < 0 ? 0 : outputIdx;
+}
+
 void MultiButtonConfigDialog::rebuildWidgetTargetCombo(quint32 preferredId)
 {
     if (!m_widgetTargetTree)
@@ -2088,7 +2102,10 @@ void MultiButtonConfigDialog::rebuildWidgetOutputCombo()
     m_widgetOutputCombo->clear();
 
     PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget();
+    PresetTableV2MultiButtonTargetExtrasIface* extras = selectedWidgetTargetExtras();
     const int count = target ? target->multiButtonOutputCount() : 0;
+    if (extras && extras->multiButtonSupportsAllOutputs() && count > 0)
+        m_widgetOutputCombo->addItem(tr("All outputs"), MultiButtonWidget::kAllWidgetOutputsIndex);
     for (int i = 0; i < count; ++i)
     {
         QString name = target->multiButtonOutputName(i);
@@ -2147,7 +2164,7 @@ void MultiButtonConfigDialog::rebuildWidgetPreview()
         return;
     }
 
-    const int outputIdx = widgetOutputIndex();
+    const int outputIdx = widgetPreviewOutputIndex();
     const int parameter = widgetParameter();
     const int count = target->multiButtonEntryCount(outputIdx, parameter);
     while (m_widgetEntryAppearance.size() < count)
@@ -2479,7 +2496,7 @@ void MultiButtonConfigDialog::syncPresetNameFromCell(int row, const QString& cel
         if (PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget())
         {
             const QString linked = target->multiButtonEntryName(
-                    widgetOutputIndex(), widgetParameter(), row);
+                    widgetPreviewOutputIndex(), widgetParameter(), row);
             if (!linked.isEmpty())
                 def = linked;
         }
@@ -2519,7 +2536,7 @@ QString MultiButtonConfigDialog::presetNameCellText(int row) const
         if (PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget())
         {
             const QString linked = target->multiButtonEntryName(
-                    widgetOutputIndex(), widgetParameter(), row);
+                    widgetPreviewOutputIndex(), widgetParameter(), row);
             if (!linked.isEmpty())
                 return linked;
         }
@@ -2817,7 +2834,7 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
                 else if (widgetTable)
                 {
                     if (PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget())
-                        display = target->multiButtonEntryName(widgetOutputIndex(), widgetParameter(), r);
+                        display = target->multiButtonEntryName(widgetPreviewOutputIndex(), widgetParameter(), r);
                 }
                 if (display.isEmpty())
                     display = tr("Preset %1").arg(r + 1);
@@ -3929,7 +3946,7 @@ int MultiButtonConfigDialog::entryCountForAutomation() const
     if (widgetMode() == MultiButtonMode::Widget)
     {
         PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget();
-        return target ? target->multiButtonEntryCount(widgetOutputIndex(), widgetParameter()) : 0;
+        return target ? target->multiButtonEntryCount(widgetPreviewOutputIndex(), widgetParameter()) : 0;
     }
     return m_listWidget ? m_listWidget->count() : 0;
 }
@@ -3954,7 +3971,7 @@ QString MultiButtonConfigDialog::entryLabelForAutomation(int index) const
         PresetTableV2MultiButtonTargetIface* target = selectedWidgetTarget();
         if (!target)
             return QString();
-        QString name = target->multiButtonEntryName(widgetOutputIndex(), widgetParameter(), index);
+        QString name = target->multiButtonEntryName(widgetPreviewOutputIndex(), widgetParameter(), index);
         if (name.isEmpty())
             name = tr("Preset %1").arg(index + 1);
         return name;

@@ -33,6 +33,7 @@
 class Doc;
 class InputSelectionWidget;
 class PresetTableV2MultiButtonTargetIface;
+class PresetTableV2MultiButtonTargetExtrasIface;
 
 class MultiButtonConfigDialog : public QDialog
 {
@@ -256,6 +257,8 @@ private:
     void rebuildWidgetPreview();
     void updateWidgetLiveInputUi();
     PresetTableV2MultiButtonTargetIface* selectedWidgetTarget() const;
+    PresetTableV2MultiButtonTargetExtrasIface* selectedWidgetTargetExtras() const;
+    int widgetPreviewOutputIndex() const;
     static quint64 bindingKey(quint32 fixtureId, quint32 channel);
     static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
 
