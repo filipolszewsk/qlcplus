@@ -446,6 +446,23 @@ private:
     bool activateLinkedOutput(PresetTableV2MultiButtonTargetIface* target, int idx,
                               bool staged) const;
     void normalizeWidgetOutputIndexAfterLoad();
+    struct WidgetLinkOutputState
+    {
+        int liveIdx = -1;
+        int stagedIdx = -1;
+        bool stagedValid = false;
+        bool matches(const WidgetLinkOutputState& other) const;
+    };
+    struct WidgetLinkConsensusState
+    {
+        int liveIdx = -1;
+        int stagedIdx = -1;
+        bool stagedValid = false;
+        bool valid = false;
+    };
+    WidgetLinkOutputState widgetLinkOutputState(PresetTableV2MultiButtonTargetIface* target,
+                                                int outputIdx) const;
+    bool refreshAllOutputsConsensus(PresetTableV2MultiButtonTargetIface* target);
     void releaseWidgetLiveFaders();
 
     // ---- Mode ------------------------------------------------------------
@@ -475,6 +492,7 @@ private:
     QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
     MultiButtonWidgetBusPolicy m_widgetBusPolicy = MultiButtonWidgetBusPolicy::SharedBus;
     quint64        m_widgetTargetStateRevision = 0;
+    WidgetLinkConsensusState m_allOutputsConsensusState;
     mutable QMutex     m_dmxMutex;
     QMap<quint32, QSharedPointer<GenericFader>> m_fadersMap;
     QMap<quint32, QSharedPointer<GenericFader>> m_widgetLiveFaders;

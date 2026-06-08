@@ -1396,8 +1396,63 @@ void MultiButtonWidget::normalizeWidgetOutputIndexAfterLoad()
         return;
 
     PresetTableV2MultiButtonTargetExtrasIface* extras = widgetLinkTargetExtras();
-    if (!extras || !extras->multiButtonSupportsAllOutputs())
+    if (!extras)
+        return;
+
+    if (!extras->multiButtonSupportsAllOutputs())
         m_widgetOutputIndex = 0;
+}
+
+bool MultiButtonWidget::WidgetLinkOutputState::matches(const WidgetLinkOutputState& other) const
+{
+    return liveIdx == other.liveIdx
+            && stagedValid == other.stagedValid
+            && (!stagedValid || stagedIdx == other.stagedIdx);
+}
+
+MultiButtonWidget::WidgetLinkOutputState MultiButtonWidget::widgetLinkOutputState(
+        PresetTableV2MultiButtonTargetIface* target, int outputIdx) const
+{
+    WidgetLinkOutputState state;
+    if (!target || outputIdx < 0)
+        return state;
+
+    state.liveIdx = target->multiButtonLiveIndex(outputIdx, m_widgetParameter);
+    state.stagedValid = target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter);
+    if (state.stagedValid)
+        state.stagedIdx = target->multiButtonStagedIndex(outputIdx, m_widgetParameter);
+    return state;
+}
+
+bool MultiButtonWidget::refreshAllOutputsConsensus(PresetTableV2MultiButtonTargetIface* target)
+{
+    if (!target)
+        return false;
+
+    const int count = target->multiButtonOutputCount();
+    if (count <= 0)
+        return false;
+
+    WidgetLinkOutputState reference;
+    bool hasReference = false;
+    for (int outputIdx = 0; outputIdx < count; ++outputIdx)
+    {
+        const WidgetLinkOutputState state = widgetLinkOutputState(target, outputIdx);
+        if (!hasReference)
+        {
+            reference = state;
+            hasReference = true;
+            continue;
+        }
+        if (!state.matches(reference))
+            return false;
+    }
+
+    m_allOutputsConsensusState.liveIdx = reference.liveIdx;
+    m_allOutputsConsensusState.stagedIdx = reference.stagedIdx;
+    m_allOutputsConsensusState.stagedValid = reference.stagedValid;
+    m_allOutputsConsensusState.valid = true;
+    return true;
 }
 
 bool MultiButtonWidget::widgetLinkHasImplicitOff() const
@@ -1465,6 +1520,15 @@ int MultiButtonWidget::widgetBusTargetIndex(PresetTableV2MultiButtonTargetIface*
 {
     if (!target)
         return -1;
+
+    if (isAllOutputsMode())
+    {
+        if (!m_allOutputsConsensusState.valid)
+            return -1;
+        if (widgetLinkUsesInternalStaging() && m_allOutputsConsensusState.stagedValid)
+            return m_allOutputsConsensusState.stagedIdx;
+        return m_allOutputsConsensusState.liveIdx;
+    }
 
     const int outputIdx = widgetLinkReadOutputIndex();
     if (widgetLinkUsesInternalStaging())
@@ -2759,8 +2823,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
         }
         if (widgetInternalStage)
         {
-            m_stagedIndex = idx;
-            m_stagedValid = true;
+            syncWidgetLinkLiveStagedState();
             if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
                 publishSelectorToBus(idx);
             else
@@ -3472,15 +3535,39 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
         return false;
 
     PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-    const int outputIdx = widgetLinkReadOutputIndex();
-    const int liveIdx = target
-            ? target->multiButtonLiveIndex(outputIdx, m_widgetParameter) : -1;
-    const quint64 stateRevision = target
-            ? target->multiButtonStateRevision(outputIdx, m_widgetParameter) : 0;
-    const bool stagedValid = target && widgetLinkUsesInternalStaging()
-            && target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter);
-    const int stagedIdx = stagedValid
-            ? target->multiButtonStagedIndex(outputIdx, m_widgetParameter) : -1;
+
+    int liveIdx = -1;
+    int stagedIdx = -1;
+    bool stagedValid = false;
+    quint64 stateRevision = 0;
+
+    if (isAllOutputsMode())
+    {
+        refreshAllOutputsConsensus(target);
+        if (!m_allOutputsConsensusState.valid)
+            return false;
+
+        liveIdx = m_allOutputsConsensusState.liveIdx;
+        stagedValid = m_allOutputsConsensusState.stagedValid;
+        stagedIdx = stagedValid ? m_allOutputsConsensusState.stagedIdx : -1;
+        if (target)
+        {
+            stateRevision = target->multiButtonStateRevision(leaderOutputIndex(),
+                                                             m_widgetParameter);
+        }
+    }
+    else
+    {
+        const int outputIdx = widgetLinkReadOutputIndex();
+        liveIdx = target
+                ? target->multiButtonLiveIndex(outputIdx, m_widgetParameter) : -1;
+        stateRevision = target
+                ? target->multiButtonStateRevision(outputIdx, m_widgetParameter) : 0;
+        stagedValid = target && widgetLinkUsesInternalStaging()
+                && target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter);
+        stagedIdx = stagedValid
+                ? target->multiButtonStagedIndex(outputIdx, m_widgetParameter) : -1;
+    }
 
     const int prevLive = m_currentIndex;
     const int prevMonitor = m_monitorMatchIndex;
@@ -3522,6 +3609,12 @@ int MultiButtonWidget::monitorHighlightIndex() const
 {
     if (m_mode == MultiButtonMode::Widget)
     {
+        if (isAllOutputsMode())
+        {
+            if (!m_allOutputsConsensusState.valid)
+                return -1;
+            return m_monitorMatchIndex >= 0 ? m_monitorMatchIndex : m_currentIndex;
+        }
         if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
             return target->multiButtonLiveIndex(widgetLinkReadOutputIndex(), m_widgetParameter);
         return m_monitorMatchIndex >= 0 ? m_monitorMatchIndex : m_currentIndex;
@@ -3562,6 +3655,8 @@ bool MultiButtonWidget::stagedHighlightValid() const
 
     if (widgetLinkUsesInternalStaging())
     {
+        if (isAllOutputsMode())
+            return m_allOutputsConsensusState.valid && m_allOutputsConsensusState.stagedValid;
         PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
         return target
                 && target->multiButtonHasStagedIndex(widgetLinkReadOutputIndex(), m_widgetParameter);
@@ -4535,6 +4630,7 @@ void MultiButtonWidget::editProperties()
     setLogPresetChanges(dlg.logPresetChanges());
     m_widgetTargetId = dlg.widgetTargetId();
     m_widgetOutputIndex = dlg.widgetOutputIndex();
+    m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = dlg.widgetParameter();
     m_widgetLiveInputSource = cloneInputSource(dlg.widgetLiveInputSource());
     m_widgetBusPolicy = dlg.widgetBusPolicy();
@@ -5141,8 +5237,8 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_widgetTargetId = widgetLink["targetWidgetId"].toString(
             QString::number(VCWidget::invalidId())).toUInt();
     m_widgetOutputIndex = widgetLink["outputIndex"].toInt(0);
+    m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetLink["parameter"].toInt(0));
-    normalizeWidgetOutputIndexAfterLoad();
     if (widgetLink.contains(QStringLiteral("busPolicy")))
     {
         m_widgetBusPolicy = stringToWidgetBusPolicy(
@@ -5828,8 +5924,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     m_mode = widgetMode;
     m_widgetTargetId = widgetTargetId;
     m_widgetOutputIndex = widgetOutputIndex;
+    m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetParameter);
-    normalizeWidgetOutputIndexAfterLoad();
     m_widgetLiveInputSource = cloneInputSource(widgetLiveInputSource);
     syncWidgetLiveInputSourceToTarget();
     releaseWidgetLiveFaders();
