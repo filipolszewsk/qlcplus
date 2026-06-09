@@ -58,6 +58,8 @@ protected slots:
     void slotAutoDetectInputToggled(bool checked);
     void slotInputValueChanged(quint32 universe, quint32 channel);
     void slotChooseInputClicked();
+    void slotClearInputClicked();
+    void slotAddressEditingFinished();
 
     void slotCustomFeedbackClicked();
 
@@ -68,6 +70,7 @@ signals:
 
 protected:
     void updateInputSource();
+    void applyInputAddress(quint32 universe, quint32 channel);
 
 private:
     Doc *m_doc;

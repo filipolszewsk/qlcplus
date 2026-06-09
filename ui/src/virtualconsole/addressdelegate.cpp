@@ -19,6 +19,7 @@
 #include <QStringList>
 
 #include "addressdelegate.h"
+#include "qlcinputaddress.h"
 #include "qlcioplugin.h"
 
 AddressDelegate::AddressDelegate(QObject *parent) :
@@ -47,7 +48,7 @@ void AddressDelegate::setEditorData(QWidget *editor, const QModelIndex &index) c
         if (inputVal.isValid() && inputVal.toInt() >= 0)
             lineEdit->setText(QString("%1.%2.%3").arg(universe + 1).arg(channel + 1).arg(inputVal.toInt()));
         else
-            lineEdit->setText(QString("%1.%2").arg(universe + 1).arg(channel + 1));
+            lineEdit->setText(QLCInputAddress::format(universe, channel));
     }
     else
     {
@@ -64,13 +65,10 @@ void AddressDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, c
     if (text.isEmpty() == false)
     {
         QStringList parts = text.split('.');
-        if (parts.length() >= 2)
-        {
-            quint32 universe = parts[0].toUInt();
-            quint32 channel = parts[1].toUInt();
-            if (universe > 0 && channel > 0)
-                address = ((universe - 1) << 16) | (channel - 1);
-        }
+        quint32 universe = 0;
+        quint32 channel = 0;
+        if (QLCInputAddress::parse(text, universe, channel))
+            address = QLCInputAddress::encode(universe, channel);
         if (parts.length() >= 3)
         {
             bool ok = false;
@@ -103,7 +101,7 @@ QString AddressDelegate::displayText(const QVariant &value, const QLocale &local
     {
         quint32 universe = address >> 16;
         quint32 channel = address & 0xFFFF;
-        return QString("%1.%2").arg(universe + 1).arg(channel + 1);
+        return QLCInputAddress::format(universe, channel);
     }
     return QString();
 }
@@ -116,5 +114,5 @@ QString AddressDelegate::displayTextWithValue(quint32 address, int inputValue)
     quint32 channel = address & 0xFFFF;
     if (inputValue >= 0)
         return QString("%1.%2.%3").arg(universe + 1).arg(channel + 1).arg(inputValue);
-    return QString("%1.%2").arg(universe + 1).arg(channel + 1);
+    return QLCInputAddress::format(universe, channel);
 }

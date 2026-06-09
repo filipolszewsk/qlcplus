@@ -22,6 +22,7 @@
 #include "customfeedbackdialog.h"
 #include "inputselectionwidget.h"
 #include "selectinputchannel.h"
+#include "qlcinputaddress.h"
 #include "qlcinputchannel.h"
 #include "assignhotkey.h"
 #include "inputpatch.h"
@@ -48,6 +49,10 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
             this, SLOT(slotAutoDetectInputToggled(bool)));
     connect(m_chooseInputButton, SIGNAL(clicked()),
             this, SLOT(slotChooseInputClicked()));
+    connect(m_clearInputButton, SIGNAL(clicked()),
+            this, SLOT(slotClearInputClicked()));
+    connect(m_inputAddressEdit, SIGNAL(editingFinished()),
+            this, SLOT(slotAddressEditingFinished()));
 
     connect(m_customFbButton, SIGNAL(clicked(bool)),
             this, SLOT(slotCustomFeedbackClicked()));
@@ -155,30 +160,54 @@ void InputSelectionWidget::slotAutoDetectInputToggled(bool checked)
 
 void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 channel)
 {
+    quint32 fullChannel = (m_widgetPage << 16) | channel;
     if (m_emitOdd == true && m_signalsReceived % 2)
     {
-        emit inputValueChanged(universe, (m_widgetPage << 16) | channel);
+        emit inputValueChanged(universe, fullChannel);
         m_signalsReceived++;
         return;
     }
 
-    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, (m_widgetPage << 16) | channel));
+    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, fullChannel));
     updateInputSource();
     m_signalsReceived++;
 
     if (m_emitOdd == false)
-        emit inputValueChanged(universe, (m_widgetPage << 16) | channel);
+        emit inputValueChanged(universe, fullChannel);
 }
 
 void InputSelectionWidget::slotChooseInputClicked()
 {
     SelectInputChannel sic(this, m_doc->inputOutputMap());
     if (sic.exec() == QDialog::Accepted)
+        applyInputAddress(sic.universe(), sic.channel());
+}
+
+void InputSelectionWidget::slotClearInputClicked()
+{
+    m_inputSource.clear();
+    updateInputSource();
+}
+
+void InputSelectionWidget::slotAddressEditingFinished()
+{
+    QString text = m_inputAddressEdit->text().trimmed();
+    if (text.isEmpty())
     {
-        m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(sic.universe(), (m_widgetPage << 16) | sic.channel()));
+        m_inputSource.clear();
         updateInputSource();
-        emit inputValueChanged(sic.universe(), (m_widgetPage << 16) | sic.channel());
+        return;
     }
+
+    quint32 universe = 0;
+    quint32 channel = 0;
+    if (QLCInputAddress::parse(text, universe, channel) == false)
+    {
+        updateInputSource();
+        return;
+    }
+
+    applyInputAddress(universe, channel);
 }
 
 void InputSelectionWidget::slotCustomFeedbackClicked()
@@ -188,17 +217,21 @@ void InputSelectionWidget::slotCustomFeedbackClicked()
     cfDialog.exec();
 }
 
+void InputSelectionWidget::applyInputAddress(quint32 universe, quint32 channel)
+{
+    quint32 fullChannel = (m_widgetPage << 16) | (channel & 0xFFFF);
+    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, fullChannel));
+    updateInputSource();
+    emit inputValueChanged(universe, fullChannel);
+}
+
 void InputSelectionWidget::updateInputSource()
 {
-    QString uniName;
-    QString chName;
-
-    if (!m_inputSource || m_doc->inputOutputMap()->inputSourceNames(m_inputSource, uniName, chName) == false)
-    {
-        uniName = KInputNone;
-        chName = KInputNone;
-    }
-
-    m_inputUniverseEdit->setText(uniName);
-    m_inputChannelEdit->setText(chName);
+    m_inputAddressEdit->blockSignals(true);
+    if (!m_inputSource || m_inputSource->isValid() == false)
+        m_inputAddressEdit->clear();
+    else
+        m_inputAddressEdit->setText(QLCInputAddress::format(m_inputSource->universe(),
+                                                            m_inputSource->channel()));
+    m_inputAddressEdit->blockSignals(false);
 }
