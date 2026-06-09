@@ -508,6 +508,10 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    QSharedPointer<QLCInputSource> crossfadeSrc,
                                                    QSharedPointer<QLCInputSource> multiFxBlendSrc,
                                                    QSharedPointer<QLCInputSource> multiFxRestartSrc,
+                                                   const QKeySequence& multiFxRestartKey,
+                                                   QSharedPointer<QLCInputSource> widgetFlashGateSrc,
+                                                   const QKeySequence& widgetFlashGateKey,
+                                                   int widgetFlashTimeMultiplierIndex,
                                                    PTContinuousFxSelectorMode continuousFxSelectorMode,
                                                    int widgetPage,
                                                    PTMode mode,
@@ -706,11 +710,48 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     multiFxInputRow->addWidget(m_multiFxBlendInputSel, 1);
     multiFxInputRow->addWidget(new QLabel(tr("Restart/start:"), multiFxInputWidget));
     m_multiFxRestartInputSel = new InputSelectionWidget(doc, multiFxInputWidget);
-    m_multiFxRestartInputSel->setKeyInputVisibility(false);
+    m_multiFxRestartInputSel->setKeyInputVisibility(true);
     m_multiFxRestartInputSel->setWidgetPage(widgetPage);
     m_multiFxRestartInputSel->setInputSource(multiFxRestartSrc);
+    m_multiFxRestartInputSel->setKeySequence(multiFxRestartKey);
     multiFxInputRow->addWidget(m_multiFxRestartInputSel, 1);
     xfLayout->addWidget(multiFxInputWidget);
+
+    QGroupBox* widgetFlashGrp = new QGroupBox(tr("Widget flash"), xfTab);
+    QVBoxLayout* widgetFlashLay = new QVBoxLayout(widgetFlashGrp);
+    QLabel* widgetFlashHint = new QLabel(
+            tr("Hold gate for Multi Button Widget links targeting Primary Row. "
+               "0/released = normal mode, value > 0/held key = flash mode."),
+            widgetFlashGrp);
+    widgetFlashHint->setWordWrap(true);
+    widgetFlashLay->addWidget(widgetFlashHint);
+    QWidget* widgetFlashInputWidget = new QWidget(widgetFlashGrp);
+    QHBoxLayout* widgetFlashInputRow = new QHBoxLayout(widgetFlashInputWidget);
+    widgetFlashInputRow->setContentsMargins(0, 0, 0, 0);
+    widgetFlashInputRow->addWidget(new QLabel(tr("Flash hold gate:"), widgetFlashInputWidget));
+    m_widgetFlashGateInputSel = new InputSelectionWidget(doc, widgetFlashInputWidget);
+    m_widgetFlashGateInputSel->setKeyInputVisibility(true);
+    m_widgetFlashGateInputSel->setWidgetPage(widgetPage);
+    m_widgetFlashGateInputSel->setInputSource(widgetFlashGateSrc);
+    m_widgetFlashGateInputSel->setKeySequence(widgetFlashGateKey);
+    widgetFlashInputRow->addWidget(m_widgetFlashGateInputSel, 1);
+    widgetFlashLay->addWidget(widgetFlashInputWidget);
+    QWidget* widgetFlashTimeWidget = new QWidget(widgetFlashGrp);
+    QHBoxLayout* widgetFlashTimeRow = new QHBoxLayout(widgetFlashTimeWidget);
+    widgetFlashTimeRow->setContentsMargins(0, 0, 0, 0);
+    widgetFlashTimeRow->addWidget(new QLabel(tr("Flash time multiplier:"), widgetFlashTimeWidget));
+    m_widgetFlashTimeMultCombo = new QComboBox(widgetFlashTimeWidget);
+    m_widgetFlashTimeMultCombo->addItem(tr("0.25x"), 0);
+    m_widgetFlashTimeMultCombo->addItem(tr("0.5x"), 1);
+    m_widgetFlashTimeMultCombo->addItem(tr("1x"), 2);
+    m_widgetFlashTimeMultCombo->addItem(tr("2x"), 3);
+    m_widgetFlashTimeMultCombo->addItem(tr("4x"), 4);
+    m_widgetFlashTimeMultCombo->setCurrentIndex(
+            qBound(0, widgetFlashTimeMultiplierIndex,
+                   m_widgetFlashTimeMultCombo->count() - 1));
+    widgetFlashTimeRow->addWidget(m_widgetFlashTimeMultCombo, 1);
+    widgetFlashLay->addWidget(widgetFlashTimeWidget);
+    xfTabLayout->addWidget(widgetFlashGrp);
 
     m_xfadeInputWidget->setVisible(crossfadeEnabled);
     xfTabLayout->addWidget(xfGrp);
@@ -981,6 +1022,32 @@ QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::multiFxRestartInputSou
 {
     return m_multiFxRestartInputSel ? m_multiFxRestartInputSel->inputSource()
                                     : QSharedPointer<QLCInputSource>();
+}
+
+QKeySequence PresetTableV2ConfigDialog::multiFxRestartKeySequence() const
+{
+    return m_multiFxRestartInputSel
+            ? VCWidget::stripKeySequence(m_multiFxRestartInputSel->keySequence())
+            : QKeySequence();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::widgetFlashGateInputSource() const
+{
+    return m_widgetFlashGateInputSel ? m_widgetFlashGateInputSel->inputSource()
+                                     : QSharedPointer<QLCInputSource>();
+}
+
+QKeySequence PresetTableV2ConfigDialog::widgetFlashGateKeySequence() const
+{
+    return m_widgetFlashGateInputSel
+            ? VCWidget::stripKeySequence(m_widgetFlashGateInputSel->keySequence())
+            : QKeySequence();
+}
+
+int PresetTableV2ConfigDialog::widgetFlashTimeMultiplierIndex() const
+{
+    return m_widgetFlashTimeMultCombo ? m_widgetFlashTimeMultCombo->currentData().toInt()
+                                      : 2;
 }
 
 PTContinuousFxSelectorMode PresetTableV2ConfigDialog::continuousFxSelectorMode() const

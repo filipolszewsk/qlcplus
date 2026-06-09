@@ -336,6 +336,10 @@ private:
     bool entryIsFlash(int idx) const;
     void beginFlashHold(int idx);
     void endFlashHold();
+    bool widgetPrimaryFlashAvailable() const;
+    bool widgetFlashModifierActive() const;
+    bool beginWidgetFlashHold(int idx);
+    void endWidgetFlashHold();
     int  levelDmxPresetIndex() const;
     void paintTileBackground(QPainter& p, const QRect& rect, int tileIndex,
                              bool isLive, bool isStaged, bool isPressed,
@@ -440,6 +444,7 @@ private:
                                       const QList<Universe*>& universes) const;
     class PresetTableV2MultiButtonTargetIface* widgetLinkTarget() const;
     class PresetTableV2MultiButtonTargetExtrasIface* widgetLinkTargetExtras() const;
+    class PresetTableV2MultiButtonFlashIface* widgetLinkFlashTarget() const;
     bool isAllOutputsMode() const;
     int  leaderOutputIndex() const;
     int  widgetLinkReadOutputIndex() const;
@@ -517,6 +522,10 @@ private:
     int            m_stagedIndex          = -1;
     bool           m_stagedValid          = false;
     uchar          m_commitInputLastValue = 0;
+    QKeySequence   m_triggerKey;
+    QKeySequence   m_popupKey;
+    QKeySequence   m_automationKey;
+    QKeySequence   m_commitKey;
     QList<bool>    m_entryInputValueMatched;
 
     // ---- Icon cache (keyed by entry index) ------------------------------
@@ -575,6 +584,9 @@ private:
 
     int     m_flashHoldIndex = -1;   // entry held for flash (-1 = none)
     int     m_restoreIndex   = -1;   // latched index before flash hold
+    int     m_widgetFlashHoldIndex = -1;
+    quint64 m_widgetFlashToken = 0;
+    quint64 m_nextWidgetFlashToken = 1;
 
     QPointer<EntrySelectOverlay> m_entrySelectOverlay;
     QTimer*         m_entrySelectDismissTimer  = nullptr;

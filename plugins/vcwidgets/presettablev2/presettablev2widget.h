@@ -161,12 +161,14 @@ private:
 
 class PresetTableV2Widget : public VCWidget, public DMXSource, public PresetTableV2ControlIface,
                             public PresetTableV2MultiButtonTargetIface,
-                            public PresetTableV2MultiButtonTargetExtrasIface
+                            public PresetTableV2MultiButtonTargetExtrasIface,
+                            public PresetTableV2MultiButtonFlashIface
 {
     Q_OBJECT
     Q_INTERFACES(PresetTableV2ControlIface)
     Q_INTERFACES(PresetTableV2MultiButtonTargetIface)
     Q_INTERFACES(PresetTableV2MultiButtonTargetExtrasIface)
+    Q_INTERFACES(PresetTableV2MultiButtonFlashIface)
 
 public:
     explicit PresetTableV2Widget(QWidget* parent, Doc* doc);
@@ -224,6 +226,12 @@ public:
     QSharedPointer<QLCInputSource> multiButtonLiveInputSource(int outputIdx, int parameter) const override;
     bool multiButtonSetLiveInputSource(int outputIdx, int parameter,
                                        QSharedPointer<QLCInputSource> src) override;
+    bool multiButtonBeginFlash(int outputIdx, int parameter, int index,
+                               quint32 sourceWidgetId, quint64 token,
+                               double timeMultiplier = 1.0) override;
+    bool multiButtonEndFlash(int outputIdx, int parameter, int index,
+                             quint32 sourceWidgetId, quint64 token) override;
+    bool multiButtonFlashGateActive() const override;
 
     // ---- VCWidget overrides -----------------------------------------------
     VCWidget* createCopy(VCWidget* parent) override;
@@ -240,6 +248,8 @@ public:
 protected slots:
     void slotModeChanged(Doc::Mode mode) override;
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
+    void slotKeyPressed(const QKeySequence& keySequence) override;
+    void slotKeyReleased(const QKeySequence& keySequence) override;
 
 protected:
     void paintEvent(QPaintEvent* e) override;
@@ -428,6 +438,11 @@ private:
     void resetAllMatrixStatesLocked();
     void beginMatrixSweepLocked(int outputIdx, int prevRow, int newRowIdx,
                                 bool forceSpatialSweep = false);
+    bool beginMatrixFlashLocked(int outputIdx, int rowIdx, int transitionPresetIndex,
+                                quint32 sourceWidgetId, quint64 token,
+                                double timeMultiplier = 1.0);
+    bool endMatrixFlashLocked(int outputIdx, int rowIdx, quint32 sourceWidgetId,
+                              quint64 token);
     void releaseMatrixFlashLocked(int outputIdx);
     void writeMatrixSpatial(int outputIdx, MasterTimer* timer, QList<Universe*>& universes,
                             const PTOutput& out, int activeRow, int secondaryRow,
@@ -505,11 +520,16 @@ public:
     QVector<quint32>            m_continuousLastCycleMs;
     QVector<quint32>            m_multiFxLastCycleMs;
     QVector<quint32>            m_multiFxStagedLastCycleMs;
+    QKeySequence                m_multiFxRestartKey;
     uchar                       m_multiFxBlend = 0;
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;
     QVector<PTOutputMatrixState>    m_matrixState;
     QVector<int>                    m_flashInputHeldRow;
+    bool                            m_widgetFlashGateActive = false;
+    uchar                           m_widgetFlashGateLastValue = 0;
+    QKeySequence                    m_widgetFlashGateKey;
+    int                             m_widgetFlashTimeMultiplierIndex = 2;
 
     // ---- DMX faders (per universe, lazy) ---------------------------------
     QHash<quint32, QSharedPointer<GenericFader>> m_faders;

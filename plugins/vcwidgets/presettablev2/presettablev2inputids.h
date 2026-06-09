@@ -16,6 +16,7 @@ static const quint8 kMultiFxBankBase = 192;
 static const quint8 kCrossfade = 240;
 static const quint8 kMultiFxBlend = 241;
 static const quint8 kMultiFxRestart = 242;
+static const quint8 kWidgetFlashGate = 243;
 
 inline quint8 rowSelector(int outputIdx) { return quint8(outputIdx); }
 /** Transition selector (legacy selector_sweep) — bank preset index (0 = instant). */

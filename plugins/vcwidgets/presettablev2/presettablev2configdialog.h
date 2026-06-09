@@ -19,6 +19,7 @@
 #include <QSharedPointer>
 #include <QVector>
 #include <QList>
+#include <QKeySequence>
 
 #include "presettablev2widget.h"
 #include "qlcinputsource.h"
@@ -146,6 +147,10 @@ public:
                                      QSharedPointer<QLCInputSource> crossfadeSrc,
                                      QSharedPointer<QLCInputSource> multiFxBlendSrc,
                                      QSharedPointer<QLCInputSource> multiFxRestartSrc,
+                                     const QKeySequence& multiFxRestartKey,
+                                     QSharedPointer<QLCInputSource> widgetFlashGateSrc,
+                                     const QKeySequence& widgetFlashGateKey,
+                                     int widgetFlashTimeMultiplierIndex,
                                      PTContinuousFxSelectorMode continuousFxSelectorMode,
                                      int widgetPage,
                                      PTMode mode,
@@ -170,6 +175,10 @@ public:
     QSharedPointer<QLCInputSource> crossfadeInputSource() const;
     QSharedPointer<QLCInputSource> multiFxBlendInputSource() const;
     QSharedPointer<QLCInputSource> multiFxRestartInputSource() const;
+    QKeySequence multiFxRestartKeySequence() const;
+    QSharedPointer<QLCInputSource> widgetFlashGateInputSource() const;
+    QKeySequence widgetFlashGateKeySequence() const;
+    int widgetFlashTimeMultiplierIndex() const;
     PTContinuousFxSelectorMode continuousFxSelectorMode() const;
 
     PTMode   widgetMode()            const;
@@ -243,6 +252,8 @@ private:
     InputSelectionWidget* m_xfadeInputSel     = nullptr;
     InputSelectionWidget* m_multiFxBlendInputSel = nullptr;
     InputSelectionWidget* m_multiFxRestartInputSel = nullptr;
+    InputSelectionWidget* m_widgetFlashGateInputSel = nullptr;
+    QComboBox*            m_widgetFlashTimeMultCombo = nullptr;
     QWidget*              m_xfadeInputWidget  = nullptr;
 
     QCheckBox*            m_spatialChk         = nullptr;

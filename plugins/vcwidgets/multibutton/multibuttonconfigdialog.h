@@ -23,6 +23,7 @@
 #include <QHBoxLayout>
 #include <QSharedPointer>
 #include <QList>
+#include <QKeySequence>
 #include <QStringList>
 #include <QHash>
 #include <functional>
@@ -72,6 +73,10 @@ public:
         QSharedPointer<QLCInputSource>     entrySelectSrc,
         QSharedPointer<QLCInputSource>     spreadPageSrc,
         QSharedPointer<QLCInputSource>     commitSrc,
+        const QKeySequence&                triggerKey,
+        const QKeySequence&                popupKey,
+        const QKeySequence&                automationKey,
+        const QKeySequence&                commitKey,
         bool                               stageBeforeCommit,
         bool                               entrySelectAutoCommit,
         bool                               logPresetChanges,
@@ -79,11 +84,11 @@ public:
         const QList<QKeySequence>&                   functionEntryKeys,
         const QList<int>&                            functionEntryInputValues,
         const QList<QSharedPointer<QLCInputSource>>& spreadSlotInputs,
-    const QList<QKeySequence>&                   spreadSlotKeys,
-    const QList<bool>&                           functionEntryFlash,
-    const QList<bool>&                           functionEntryFlashOverride,
-    const QList<bool>&                           functionEntryFlashForceLtp,
-    const QList<QColor>&                         functionEntryLabelColors,
+        const QList<QKeySequence>&                   spreadSlotKeys,
+        const QList<bool>&                           functionEntryFlash,
+        const QList<bool>&                           functionEntryFlashOverride,
+        const QList<bool>&                           functionEntryFlashForceLtp,
+        const QList<QColor>&                         functionEntryLabelColors,
         quint32                            ownerWidgetId,
         quint32                            widgetTargetId,
         int                                widgetOutputIndex,
@@ -123,6 +128,10 @@ public:
     QSharedPointer<QLCInputSource> entrySelectInputSource() const;
     QSharedPointer<QLCInputSource> spreadPageInputSource()  const;
     QSharedPointer<QLCInputSource> commitInputSource()      const;
+    QKeySequence                   triggerKeySequence()     const;
+    QKeySequence                   popupKeySequence()       const;
+    QKeySequence                   automationKeySequence()  const;
+    QKeySequence                   commitKeySequence()      const;
     bool                           stageBeforeCommit()     const;
     bool                           entrySelectAutoCommit() const;
     bool                           logPresetChanges()      const;

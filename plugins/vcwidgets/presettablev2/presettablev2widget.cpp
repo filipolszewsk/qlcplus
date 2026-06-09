@@ -98,6 +98,8 @@ static const QString KXMLMultiFxCrossfadeSyncOffsetMs = QStringLiteral("MultiFxC
 static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
 static const QString KXMLMultiFxBlendInput = QStringLiteral("MultiFxBlendInput");
 static const QString KXMLMultiFxRestartInput = QStringLiteral("MultiFxRestartInput");
+static const QString KXMLWidgetFlashGateInput = QStringLiteral("WidgetFlashGateInput");
+static const QString KXMLWidgetFlashTimeMultiplier = QStringLiteral("WidgetFlashTimeMultiplier");
 static const QString KXMLSelectorStateOutput = QStringLiteral("SelectorStateOutput");
 static const QString KXMLContinuousFxSelectorMode = QStringLiteral("ContinuousFxSelectorMode");
 static const QString KXMLColWidth        = QStringLiteral("Width");
@@ -119,6 +121,57 @@ static const QString KXMLOutTransSweepInput = QStringLiteral("OutTransSweepInput
 static const QString KXMLOutTransContinuousInput = QStringLiteral("OutTransContinuousInput");
 static const QString KXMLOutTransSecondaryInput = QStringLiteral("OutTransSecondaryInput");
 static const QString KXMLOutMultiFxInput = QStringLiteral("OutMultiFxInput");
+
+struct PTInputBinding
+{
+    QSharedPointer<QLCInputSource> source;
+    QKeySequence key;
+};
+
+static PTInputBinding readPTInputBlock(QXmlStreamReader& root, VCWidget* widget)
+{
+    PTInputBinding binding;
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLQLCVCWidgetInput)
+        {
+            binding.source = widget->getXMLInput(root);
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLQLCVCWidgetKey)
+        {
+            binding.key = VCWidget::stripKeySequence(QKeySequence(root.readElementText()));
+        }
+        else
+        {
+            root.skipCurrentElement();
+        }
+    }
+    return binding;
+}
+
+static void savePTInputBlock(QXmlStreamWriter* doc,
+                             const QSharedPointer<QLCInputSource>& src,
+                             const QKeySequence& key = QKeySequence())
+{
+    if (!src.isNull() && src->isValid())
+        VCWidget::saveXMLInput(doc, src);
+    if (!key.isEmpty())
+        doc->writeTextElement(KXMLQLCVCWidgetKey, key.toString());
+}
+
+static double widgetFlashTimeMultiplierValue(int index)
+{
+    switch (index)
+    {
+        case 0: return 0.25;
+        case 1: return 0.5;
+        case 3: return 2.0;
+        case 4: return 4.0;
+        case 2:
+        default: return 1.0;
+    }
+}
 
 static int cueListCrossfadeSliderValue(uchar value)
 {
@@ -878,6 +931,10 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_crossfadeSessionActive = false;
             m_crossfadeEditLaneStaged = true;
             m_initialInputSyncPending = false;
+            m_widgetFlashGateActive = false;
+            m_widgetFlashGateLastValue = 0;
+            for (int o = 0; o < m_matrixState.size(); ++o)
+                releaseMatrixFlashLocked(o);
         }
     }
 
@@ -2587,6 +2644,40 @@ bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter
     return true;
 }
 
+bool PresetTableV2Widget::multiButtonBeginFlash(int outputIdx, int parameter, int index,
+                                                quint32 sourceWidgetId, quint64 token,
+                                                double timeMultiplier)
+{
+    if (parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
+        return false;
+
+    QMutexLocker lk(&m_stateMutex);
+    if (outputIdx < 0 || outputIdx >= m_outputs.size()
+            || index < 0 || index >= m_rows.size())
+        return false;
+
+    const int presetIdx = liveSweepPresetIndexLocked(outputIdx);
+    timeMultiplier = widgetFlashTimeMultiplierValue(m_widgetFlashTimeMultiplierIndex);
+    return beginMatrixFlashLocked(outputIdx, index, presetIdx, sourceWidgetId, token,
+                                  timeMultiplier);
+}
+
+bool PresetTableV2Widget::multiButtonEndFlash(int outputIdx, int parameter, int index,
+                                              quint32 sourceWidgetId, quint64 token)
+{
+    if (parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
+        return false;
+
+    QMutexLocker lk(&m_stateMutex);
+    return endMatrixFlashLocked(outputIdx, index, sourceWidgetId, token);
+}
+
+bool PresetTableV2Widget::multiButtonFlashGateActive() const
+{
+    QMutexLocker lk(&m_stateMutex);
+    return m_widgetFlashGateActive;
+}
+
 bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int index)
 {
     QMutexLocker lk(&m_stateMutex);
@@ -3917,6 +4008,16 @@ void PresetTableV2Widget::resetMatrixStateLocked(int outputIdx)
     st.flashActive = false;
     st.flashPhase = PTFlashPhase::Idle;
     st.flashWaveProgress = 0.0;
+    st.flashElapsedMs = 0;
+    st.flashLastCycleMs = 0;
+    st.flashSourceWidgetId = 0;
+    st.flashToken = 0;
+    st.flashRow = -1;
+    st.flashReturnRow = -1;
+    st.flashValues.clear();
+    st.flashReturnValues.clear();
+    st.flashPreset = PTTransitionPreset();
+    st.flashTimeMultiplier = 1.0;
     st.appliedRow = -1;
     if (outputIdx < m_continuousElapsedMs.size())
         m_continuousElapsedMs[outputIdx] = 0;
@@ -3969,6 +4070,79 @@ void PresetTableV2Widget::beginMatrixSweepLocked(int outputIdx, int prevRow, int
     st.sweepManualPhase = 0.0;
 }
 
+bool PresetTableV2Widget::beginMatrixFlashLocked(int outputIdx, int rowIdx,
+                                                 int transitionPresetIndex,
+                                                 quint32 sourceWidgetId,
+                                                 quint64 token,
+                                                 double timeMultiplier)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size()
+            || rowIdx < 0 || rowIdx >= m_rows.size())
+        return false;
+
+    ensureMatrixState(outputIdx);
+    PTOutputMatrixState& st = m_matrixState[outputIdx];
+
+    if (!st.flashActive)
+    {
+        st.flashReturnRow = (outputIdx < m_activeRow.size()) ? m_activeRow[outputIdx] : -1;
+        st.flashReturnValues = (st.flashReturnRow >= 0 && st.flashReturnRow < m_rows.size())
+                ? m_rows[st.flashReturnRow].values : QVector<uchar>(m_columns.size(), uchar(0));
+    }
+
+    st.flashSourceWidgetId = sourceWidgetId;
+    st.flashToken = token;
+    st.flashRow = rowIdx;
+    st.flashValues = m_rows[rowIdx].values;
+    st.flashPreset = transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly,
+                                                   transitionPresetIndex, outputIdx);
+    if (transitionPresetIndex < 0 || !st.flashPreset.enabled)
+        st.flashPreset = transitionPresetForOutputLocked(outputIdx);
+    st.flashTimeMultiplier = qBound(0.05, timeMultiplier, 16.0);
+
+    st.flashActive = true;
+    st.flashElapsedMs = 0;
+    st.flashLastCycleMs = 0;
+    st.flashWaveProgress = 0.0;
+
+    if (PTParamMatrixEngine::waveFrontFromOffset(st.flashPreset.offsetDirection) <= 0)
+        st.flashPhase = PTFlashPhase::Hold;
+    else
+        st.flashPhase = PTFlashPhase::WaveIn;
+
+    return true;
+}
+
+bool PresetTableV2Widget::endMatrixFlashLocked(int outputIdx, int rowIdx,
+                                               quint32 sourceWidgetId, quint64 token)
+{
+    if (outputIdx < 0 || outputIdx >= m_matrixState.size())
+        return false;
+
+    PTOutputMatrixState& st = m_matrixState[outputIdx];
+    if (!st.flashActive)
+        return false;
+    if (st.flashSourceWidgetId != sourceWidgetId || st.flashToken != token)
+        return false;
+    if (rowIdx >= 0 && st.flashRow != rowIdx)
+        return false;
+
+    st.flashElapsedMs = 0;
+    st.flashLastCycleMs = 0;
+    st.flashWaveProgress = 0.0;
+    if (PTParamMatrixEngine::waveFrontFromOffset(st.flashPreset.offsetDirection) <= 0)
+    {
+        st.flashActive = false;
+        st.flashPhase = PTFlashPhase::Idle;
+        st.flashRow = -1;
+    }
+    else
+    {
+        st.flashPhase = PTFlashPhase::WaveOut;
+    }
+    return true;
+}
+
 void PresetTableV2Widget::releaseMatrixFlashLocked(int outputIdx)
 {
     if (outputIdx < 0 || outputIdx >= m_matrixState.size())
@@ -3980,71 +4154,41 @@ void PresetTableV2Widget::releaseMatrixFlashLocked(int outputIdx)
 
     if (st.flashPhase == PTFlashPhase::WaveIn)
     {
-        st.flashActive = false;
-        st.flashPhase = PTFlashPhase::Idle;
+        st.flashPhase = PTFlashPhase::WaveOut;
         st.flashWaveProgress = 0.0;
+        st.flashElapsedMs = 0;
+        st.flashLastCycleMs = 0;
     }
     else if (st.flashPhase == PTFlashPhase::Hold)
     {
-        const PTTransitionPreset fxPreset = transitionPresetForOutputLocked(outputIdx);
+        const PTTransitionPreset fxPreset = st.flashPreset;
         if (PTParamMatrixEngine::waveFrontFromOffset(fxPreset.offsetDirection) <= 0)
         {
             st.flashActive = false;
             st.flashPhase = PTFlashPhase::Idle;
+            st.flashRow = -1;
         }
         else
         {
             st.flashPhase = PTFlashPhase::WaveOut;
             st.flashWaveProgress = 0.0;
+            st.flashElapsedMs = 0;
+            st.flashLastCycleMs = 0;
         }
     }
 }
 
 void PresetTableV2Widget::requestTableFlash(int tableRowIndex, int transitionPresetIndex)
 {
-    Q_UNUSED(transitionPresetIndex);
-
     QMutexLocker lk(&m_stateMutex);
     if (tableRowIndex < 0 || tableRowIndex >= m_rows.size())
         return;
-
-    const QVector<uchar> flashVals = m_rows[tableRowIndex].values;
 
     for (int o = 0; o < m_outputs.size(); ++o)
     {
         if (o >= m_activeRow.size() || m_activeRow[o] < 0)
             continue;
-
-        ensureMatrixState(o);
-        PTOutputMatrixState& st = m_matrixState[o];
-        if (!st.flashActive)
-        {
-            if (continuousEfxActiveForOutputLocked(o))
-            {
-                const PTTransitionPreset fxPreset = continuousPresetForOutputLocked(o);
-                if (o < m_liveSecondaryRow.size() && m_liveSecondaryRow[o] >= 0)
-                    st.preFlashState = PTPreFlashState::ColorFx;
-                else if (st.sweepRunning)
-                    st.preFlashState = PTPreFlashState::Sweep;
-                else
-                    st.preFlashState = PTPreFlashState::Idle;
-            }
-            else if (st.sweepRunning)
-                st.preFlashState = PTPreFlashState::Sweep;
-            else
-                st.preFlashState = PTPreFlashState::Idle;
-        }
-
-        st.flashValues = flashVals;
-        st.flashActive = true;
-        const PTTransitionPreset fxPreset = transitionPresetForOutputLocked(o);
-        if (PTParamMatrixEngine::waveFrontFromOffset(fxPreset.offsetDirection) <= 0)
-            st.flashPhase = PTFlashPhase::Hold;
-        else
-        {
-            st.flashPhase = PTFlashPhase::WaveIn;
-            st.flashWaveProgress = 0.0;
-        }
+        beginMatrixFlashLocked(o, tableRowIndex, transitionPresetIndex, id(), 0, 1.0);
     }
 }
 
@@ -4116,15 +4260,6 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
             && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
 
-    const double increment = PTParamMatrixEngine::transitionIncrement(global, preset);
-    const PTTransitionAxis spatialAxis = (global.fxOrientation == 1)
-            ? PTTransitionAxis::Y : preset.axis;
-
-    const int fixtureCount = qMax(1,
-            PTParamMatrixEngine::linearPosition(
-                    QLCPoint(qMax(0, gridSize.width() - 1), qMax(0, gridSize.height() - 1)),
-                    spatialAxis, gridSize.width()) + 1);
-
     const bool continuousFx = forceContinuousBlend
             || (!st.sweepRunning
                 && preset.playbackMode == PTTransitionMode::Continuous);
@@ -4162,9 +4297,14 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             points.append(it.key());
     }
 
+    const PTTransitionPreset activeFlashPreset = st.flashActive ? st.flashPreset : preset;
     const PTSpatialFixturePlan spatialPlan = PTSpatialFixturePlan::build(
             points, preset, global, gridSize.width(), gridSize.height());
     const int serialCount = qMax(1, spatialPlan.count());
+    const PTSpatialFixturePlan flashSpatialPlan = st.flashActive
+            ? PTSpatialFixturePlan::build(points, activeFlashPreset, global,
+                                          gridSize.width(), gridSize.height())
+            : PTSpatialFixturePlan();
     const PTSpatialFixturePlan stagedSpatialPlan = morphOutput
             ? PTSpatialFixturePlan::build(points, stagedPreset, global,
                                           gridSize.width(), gridSize.height())
@@ -4230,30 +4370,52 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         st.sweepElapsedMs += MasterTimer::tick();
     }
 
+    const double flashTimeMultiplier = st.flashActive
+            ? qBound(0.05, st.flashTimeMultiplier, 16.0) : 1.0;
+    const quint32 baseFlashCycleMs = cycleDurationMsLocked(global, activeFlashPreset);
+    const quint32 flashCycleMs = qMax(quint32(MasterTimer::tick()),
+            quint32(qRound64(double(baseFlashCycleMs) * flashTimeMultiplier)));
+
     if (st.flashActive)
     {
+        if (st.flashLastCycleMs > 0 && st.flashLastCycleMs != flashCycleMs)
+            rescaleElapsedForDurationChange(st.flashElapsedMs,
+                                            st.flashLastCycleMs,
+                                            flashCycleMs);
+        st.flashLastCycleMs = flashCycleMs;
+        st.flashElapsedMs += MasterTimer::tick();
+        st.flashWaveProgress = qMin(1.0, double(st.flashElapsedMs)
+                / double(flashCycleMs));
+
         if (st.flashPhase == PTFlashPhase::WaveIn)
         {
-            st.flashWaveProgress += increment;
             if (st.flashWaveProgress >= 1.0)
             {
                 st.flashPhase = PTFlashPhase::Hold;
                 st.flashWaveProgress = 0.0;
+                st.flashElapsedMs = 0;
+                st.flashLastCycleMs = 0;
             }
         }
         else if (st.flashPhase == PTFlashPhase::WaveOut)
         {
-            st.flashWaveProgress += increment;
             if (st.flashWaveProgress >= 1.0)
             {
                 st.flashActive = false;
                 st.flashPhase = PTFlashPhase::Idle;
                 st.flashWaveProgress = 0.0;
+                st.flashElapsedMs = 0;
+                st.flashLastCycleMs = 0;
+                st.flashSourceWidgetId = 0;
+                st.flashToken = 0;
+                st.flashRow = -1;
+                st.flashReturnRow = -1;
+                st.flashValues.clear();
+                st.flashReturnValues.clear();
             }
         }
     }
-    const quint32 fadeMs = st.flashActive ? qMax(quint32(1), preset.fadeMs) : 0;
-    const int waveFront = PTParamMatrixEngine::waveFrontFromOffset(preset.offsetDirection);
+    const quint32 fadeMs = st.flashActive ? qMax(quint32(1), activeFlashPreset.fadeMs) : 0;
 
     const double sweepTimedProgress01 = (st.sweepRunning && !st.sweepManualCrossfade && cycleMs > 0)
             ? qMin(1.0, double(st.sweepElapsedMs) / double(cycleMs * 2))
@@ -4268,8 +4430,6 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         const QLCPoint& pt = it.key();
         if (!outputScopeAllowsPoint(out.scope, pt, out))
             continue;
-
-        const int posIndex = PTParamMatrixEngine::linearPosition(pt, spatialAxis, gridSize.width());
 
         const GroupHead& head = it.value();
         Fixture* fxi = m_doc->fixture(head.fxi);
@@ -4295,9 +4455,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             writtenFixtures.insert(head.fxi);
         };
 
-        auto applyContinuous = [&]() {
-            if (writtenFixtures.contains(head.fxi))
-                return;
+        auto continuousValuesAtPoint = [&]() -> QVector<uchar> {
             const float dimmer = dimmerAtPoint(pt, elapsedMs);
             QVector<uchar> finalValues;
             if (morphOutput)
@@ -4349,6 +4507,13 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 finalValues = blendRowValues(finalValues, effectiveMultiValues,
                                              double(m_multiFxBlend) / 255.0);
             }
+            return finalValues;
+        };
+
+        auto applyContinuous = [&]() {
+            if (writtenFixtures.contains(head.fxi))
+                return;
+            const QVector<uchar> finalValues = continuousValuesAtPoint();
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues, 0);
             writtenFixtures.insert(head.fxi);
         };
@@ -4359,28 +4524,37 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 applyRow(st.flashValues);
             else if (st.flashPhase == PTFlashPhase::WaveIn)
             {
-                const bool showFlash = PTParamMatrixEngine::waveShowNew(
-                        posIndex, fixtureCount, st.flashWaveProgress, waveFront);
-                if (showFlash)
-                    applyRow(st.flashValues);
-                else if (continuousFx)
-                    applyContinuous();
-                else
-                    applyRow(priVals);
+                const float blend = flashSpatialPlan.sweepBlend01(
+                        st.flashWaveProgress, pt, activeFlashPreset, global);
+                const QVector<uchar> fromValues = continuousFx
+                        ? continuousValuesAtPoint()
+                        : PTParamMatrixEngine::blendWithIntensity(
+                            st.flashReturnValues.isEmpty() ? priVals : st.flashReturnValues,
+                            global.intensity);
+                const QVector<uchar> toValues =
+                        PTParamMatrixEngine::blendWithIntensity(st.flashValues,
+                                                                global.intensity);
+                const QVector<uchar> finalValues = blendRowValues(fromValues, toValues, blend);
+                applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues,
+                                   fadeMs);
+                writtenFixtures.insert(head.fxi);
             }
             else
             {
-                const bool showUnder = PTParamMatrixEngine::waveShowNew(
-                        posIndex, fixtureCount, st.flashWaveProgress, waveFront);
-                if (showUnder)
-                {
-                    if (continuousFx)
-                        applyContinuous();
-                    else
-                        applyRow(priVals);
-                }
-                else
-                    applyRow(st.flashValues);
+                const float blend = flashSpatialPlan.sweepBlend01(
+                        st.flashWaveProgress, pt, activeFlashPreset, global);
+                const QVector<uchar> fromValues =
+                        PTParamMatrixEngine::blendWithIntensity(st.flashValues,
+                                                                global.intensity);
+                const QVector<uchar> toValues = continuousFx
+                        ? continuousValuesAtPoint()
+                        : PTParamMatrixEngine::blendWithIntensity(
+                            st.flashReturnValues.isEmpty() ? priVals : st.flashReturnValues,
+                            global.intensity);
+                const QVector<uchar> finalValues = blendRowValues(fromValues, toValues, blend);
+                applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues,
+                                   fadeMs);
+                writtenFixtures.insert(head.fxi);
             }
         }
         else if (st.sweepRunning && st.sweepManualCrossfade)
@@ -4842,6 +5016,23 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         return;
     }
 
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kWidgetFlashGate))
+    {
+        const bool active = value > 0;
+        QMutexLocker lk2(&m_stateMutex);
+        if (m_widgetFlashGateActive != active)
+        {
+            m_widgetFlashGateActive = active;
+            if (!active)
+            {
+                for (int o = 0; o < m_matrixState.size(); ++o)
+                    releaseMatrixFlashLocked(o);
+            }
+        }
+        m_widgetFlashGateLastValue = value;
+        return;
+    }
+
     // Global crossfade position
     if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kCrossfade))
     {
@@ -5135,6 +5326,54 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
     }
 }
 
+void PresetTableV2Widget::slotKeyPressed(const QKeySequence& keySequence)
+{
+    if (!acceptsInput())
+        return;
+
+    const QKeySequence key = stripKeySequence(keySequence);
+    if (key.isEmpty())
+        return;
+
+    if (!m_widgetFlashGateKey.isEmpty()
+            && stripKeySequence(m_widgetFlashGateKey) == key)
+    {
+        QMutexLocker lk(&m_stateMutex);
+        m_widgetFlashGateActive = true;
+        m_widgetFlashGateLastValue = 255;
+        return;
+    }
+
+    if (!m_multiFxRestartKey.isEmpty()
+            && stripKeySequence(m_multiFxRestartKey) == key)
+    {
+        QMutexLocker lk(&m_stateMutex);
+        m_multiFxElapsedMs.fill(0, m_outputs.size());
+        m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
+        m_multiFxLastCycleMs.fill(0, m_outputs.size());
+        m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+        resetMultiFxCrossfadePhaseAnchorLocked();
+        return;
+    }
+}
+
+void PresetTableV2Widget::slotKeyReleased(const QKeySequence& keySequence)
+{
+    if (!acceptsInput())
+        return;
+
+    const QKeySequence key = stripKeySequence(keySequence);
+    if (key.isEmpty() || m_widgetFlashGateKey.isEmpty()
+            || stripKeySequence(m_widgetFlashGateKey) != key)
+        return;
+
+    QMutexLocker lk(&m_stateMutex);
+    m_widgetFlashGateActive = false;
+    m_widgetFlashGateLastValue = 0;
+    for (int o = 0; o < m_matrixState.size(); ++o)
+        releaseMatrixFlashLocked(o);
+}
+
 void PresetTableV2Widget::updateFeedback()
 {
     QMutexLocker lk(&m_stateMutex);
@@ -5181,6 +5420,10 @@ void PresetTableV2Widget::editProperties()
     QSharedPointer<QLCInputSource> xfSrc;
     QSharedPointer<QLCInputSource> multiFxBlendSrc;
     QSharedPointer<QLCInputSource> multiFxRestartSrc;
+    QSharedPointer<QLCInputSource> widgetFlashGateSrc;
+    QKeySequence multiFxRestartKey;
+    QKeySequence widgetFlashGateKey;
+    int widgetFlashTimeMultiplierIndex;
     {
         QMutexLocker lk(&m_stateMutex);
         xfEnabled = m_crossfadeEnabled;
@@ -5189,14 +5432,20 @@ void PresetTableV2Widget::editProperties()
         contFxSelectorMode = m_continuousFxSelectorMode;
         spatialCopy = m_spatialEffects;
         linkedTransitionId = m_linkedTransitionWidgetId;
+        multiFxRestartKey = m_multiFxRestartKey;
+        widgetFlashGateKey = m_widgetFlashGateKey;
+        widgetFlashTimeMultiplierIndex = m_widgetFlashTimeMultiplierIndex;
     }
     xfSrc = inputSource(PTInputId::kCrossfade);
     multiFxBlendSrc = inputSource(PTInputId::kMultiFxBlend);
     multiFxRestartSrc = inputSource(PTInputId::kMultiFxRestart);
+    widgetFlashGateSrc = inputSource(PTInputId::kWidgetFlashGate);
 
     PresetTableV2ConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy,
                                 xfEnabled, syncMultiFxPhase, multiFxSyncOffsetMs,
                                 xfSrc, multiFxBlendSrc, multiFxRestartSrc,
+                                multiFxRestartKey, widgetFlashGateSrc,
+                                widgetFlashGateKey, widgetFlashTimeMultiplierIndex,
                                 contFxSelectorMode, page(),
                                 modeCopy, groupIdCopy, spatialCopy, linkedTransitionId,
                                 this);
@@ -5265,12 +5514,19 @@ void PresetTableV2Widget::editProperties()
     setInputSource(dlg.crossfadeInputSource(), PTInputId::kCrossfade);
     setInputSource(dlg.multiFxBlendInputSource(), PTInputId::kMultiFxBlend);
     setInputSource(dlg.multiFxRestartInputSource(), PTInputId::kMultiFxRestart);
+    setInputSource(dlg.widgetFlashGateInputSource(), PTInputId::kWidgetFlashGate);
     {
         QMutexLocker lk(&m_stateMutex);
         m_crossfadeEnabled = dlg.crossfadeEnabled();
         m_syncMultiFxPhaseToCrossfade = dlg.syncMultiFxPhaseToCrossfade();
         m_multiFxCrossfadeSyncOffsetMs = dlg.multiFxCrossfadeSyncOffsetMs();
         m_continuousFxSelectorMode = dlg.continuousFxSelectorMode();
+        m_multiFxRestartKey = dlg.multiFxRestartKeySequence();
+        m_widgetFlashGateKey = dlg.widgetFlashGateKeySequence();
+        m_widgetFlashTimeMultiplierIndex =
+                qBound(0, dlg.widgetFlashTimeMultiplierIndex(), 4);
+        if (!m_widgetFlashGateActive)
+            m_widgetFlashGateLastValue = 0;
         if (!m_crossfadeEnabled)
         {
             m_stagedRow.fill(-1, m_stagedRow.size());
@@ -5330,6 +5586,9 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     PTSpatialEffectSettings spatialCopy;
     PTContinuousFxSelectorMode contFxSelectorModeCopy;
     quint32 linkedTransitionCopy;
+    QKeySequence multiFxRestartKeyCopy;
+    QKeySequence widgetFlashGateKeyCopy;
+    int widgetFlashTimeMultiplierIndexCopy;
 
     {
         QMutexLocker lk(&m_stateMutex);
@@ -5351,6 +5610,9 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         spatialCopy     = m_spatialEffects;
         contFxSelectorModeCopy = m_continuousFxSelectorMode;
         linkedTransitionCopy = m_linkedTransitionWidgetId;
+        multiFxRestartKeyCopy = m_multiFxRestartKey;
+        widgetFlashGateKeyCopy = m_widgetFlashGateKey;
+        widgetFlashTimeMultiplierIndexCopy = m_widgetFlashTimeMultiplierIndex;
     }
 
     {
@@ -5373,6 +5635,11 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         copy->m_spatialEffects             = spatialCopy;
         copy->m_continuousFxSelectorMode   = contFxSelectorModeCopy;
         copy->m_linkedTransitionWidgetId   = linkedTransitionCopy;
+        copy->m_multiFxRestartKey          = multiFxRestartKeyCopy;
+        copy->m_widgetFlashGateKey         = widgetFlashGateKeyCopy;
+        copy->m_widgetFlashTimeMultiplierIndex = widgetFlashTimeMultiplierIndexCopy;
+        copy->m_widgetFlashGateActive      = false;
+        copy->m_widgetFlashGateLastValue   = 0;
         copy->m_spatialAppliedRow.resize(outsCopy.size());
         copy->m_spatialAppliedRow.fill(-1);
         copy->m_spatialChase.resize(outsCopy.size());
@@ -5403,6 +5670,7 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     copy->setInputSource(inputSource(PTInputId::kCrossfade), PTInputId::kCrossfade);
     copy->setInputSource(inputSource(PTInputId::kMultiFxBlend), PTInputId::kMultiFxBlend);
     copy->setInputSource(inputSource(PTInputId::kMultiFxRestart), PTInputId::kMultiFxRestart);
+    copy->setInputSource(inputSource(PTInputId::kWidgetFlashGate), PTInputId::kWidgetFlashGate);
 
     copy->rebuildTable();
     return copy;
@@ -5425,6 +5693,11 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
     obj["syncMultiFxPhaseToCrossfade"] = m_syncMultiFxPhaseToCrossfade;
     obj["multiFxCrossfadeSyncOffsetMs"] = m_multiFxCrossfadeSyncOffsetMs;
     obj["continuousFxSelectorMode"] = continuousFxSelectorModeToString(m_continuousFxSelectorMode);
+    obj["widgetFlashTimeMultiplier"] = qBound(0, m_widgetFlashTimeMultiplierIndex, 4);
+    if (!m_multiFxRestartKey.isEmpty())
+        obj["multiFxRestartKey"] = m_multiFxRestartKey.toString(QKeySequence::PortableText);
+    if (!m_widgetFlashGateKey.isEmpty())
+        obj["widgetFlashGateKey"] = m_widgetFlashGateKey.toString(QKeySequence::PortableText);
     obj["mode"] = (m_mode == PTMode::FixtureGroup) ? QStringLiteral("FixtureGroup")
                                                     : QStringLiteral("Legacy");
     if (m_mode == PTMode::FixtureGroup)
@@ -5530,6 +5803,12 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
             200);
     m_continuousFxSelectorMode = continuousFxSelectorModeFromString(
             obj["continuousFxSelectorMode"].toString());
+    m_widgetFlashTimeMultiplierIndex =
+            qBound(0, obj["widgetFlashTimeMultiplier"].toInt(2), 4);
+    m_multiFxRestartKey = stripKeySequence(QKeySequence(obj["multiFxRestartKey"].toString()));
+    m_widgetFlashGateKey = stripKeySequence(QKeySequence(obj["widgetFlashGateKey"].toString()));
+    m_widgetFlashGateActive = false;
+    m_widgetFlashGateLastValue = 0;
     m_mode = (obj["mode"].toString() == QLatin1String("FixtureGroup"))
              ? PTMode::FixtureGroup : PTMode::Legacy;
 
@@ -5680,6 +5959,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
             == QLatin1String("True"));
     int multiFxSyncOffsetMs = root.attributes().hasAttribute(KXMLMultiFxCrossfadeSyncOffsetMs)
             ? root.attributes().value(KXMLMultiFxCrossfadeSyncOffsetMs).toInt() : 40;
+    int widgetFlashTimeMultiplierIndex = root.attributes().hasAttribute(KXMLWidgetFlashTimeMultiplier)
+            ? qBound(0, root.attributes().value(KXMLWidgetFlashTimeMultiplier).toInt(), 4) : 2;
     int  nameColW  = root.attributes().value(KXMLNameColWidth).toInt();
     PTContinuousFxSelectorMode loadedContFxSelectorMode = continuousFxSelectorModeFromString(
             root.attributes().value(KXMLContinuousFxSelectorMode).toString());
@@ -5713,6 +5994,10 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
     QVector<PTColumn> cols;
     QVector<PTRow>    rows;
     QVector<PTOutput> outs;
+    QKeySequence loadedMultiFxRestartKey;
+    QKeySequence loadedWidgetFlashGateKey;
+    QSharedPointer<QLCInputSource> loadedMultiFxRestartSource;
+    QSharedPointer<QLCInputSource> loadedWidgetFlashGateSource;
 
     while (root.readNextStartElement())
     {
@@ -5890,7 +6175,17 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         }
         else if (root.name() == KXMLMultiFxRestartInput)
         {
-            loadXMLSources(root, PTInputId::kMultiFxRestart);
+            const PTInputBinding binding = readPTInputBlock(root, this);
+            loadedMultiFxRestartSource = binding.source;
+            loadedMultiFxRestartKey = binding.key;
+            setInputSource(binding.source, PTInputId::kMultiFxRestart);
+        }
+        else if (root.name() == KXMLWidgetFlashGateInput)
+        {
+            const PTInputBinding binding = readPTInputBlock(root, this);
+            loadedWidgetFlashGateSource = binding.source;
+            loadedWidgetFlashGateKey = binding.key;
+            setInputSource(binding.source, PTInputId::kWidgetFlashGate);
         }
         else if (root.name() == KXMLSelectorStateOutput)
         {
@@ -5920,6 +6215,11 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_syncMultiFxPhaseToCrossfade = syncMultiFxPhase;
         m_multiFxCrossfadeSyncOffsetMs = qBound(0, multiFxSyncOffsetMs, 200);
         m_continuousFxSelectorMode = loadedContFxSelectorMode;
+        m_multiFxRestartKey = loadedMultiFxRestartKey;
+        m_widgetFlashGateKey = loadedWidgetFlashGateKey;
+        m_widgetFlashTimeMultiplierIndex = qBound(0, widgetFlashTimeMultiplierIndex, 4);
+        m_widgetFlashGateActive = false;
+        m_widgetFlashGateLastValue = 0;
         m_crossfadeGlobalPos = 0;
         m_crossfadeStartPos  = 0;
         m_crossfadePrevPos   = 0;
@@ -5967,6 +6267,8 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
                             QString::number(qBound(0, m_multiFxCrossfadeSyncOffsetMs, 200)));
         doc->writeAttribute(KXMLContinuousFxSelectorMode,
                             continuousFxSelectorModeToString(m_continuousFxSelectorMode));
+        doc->writeAttribute(KXMLWidgetFlashTimeMultiplier,
+                            QString::number(qBound(0, m_widgetFlashTimeMultiplierIndex, 4)));
         if (m_nameColWidth > 0)
             doc->writeAttribute(KXMLNameColWidth, QString::number(m_nameColWidth));
 
@@ -6165,10 +6467,27 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
     }
 
     auto multiFxRestartSrc = inputSource(PTInputId::kMultiFxRestart);
-    if (!multiFxRestartSrc.isNull() && multiFxRestartSrc->isValid())
+    QKeySequence multiFxRestartKey;
+    QKeySequence widgetFlashGateKey;
+    {
+        QMutexLocker keyLock(&m_stateMutex);
+        multiFxRestartKey = m_multiFxRestartKey;
+        widgetFlashGateKey = m_widgetFlashGateKey;
+    }
+    if ((!multiFxRestartSrc.isNull() && multiFxRestartSrc->isValid())
+            || !multiFxRestartKey.isEmpty())
     {
         doc->writeStartElement(KXMLMultiFxRestartInput);
-        saveXMLInput(doc, multiFxRestartSrc);
+        savePTInputBlock(doc, multiFxRestartSrc, multiFxRestartKey);
+        doc->writeEndElement();
+    }
+
+    auto widgetFlashGateSrc = inputSource(PTInputId::kWidgetFlashGate);
+    if ((!widgetFlashGateSrc.isNull() && widgetFlashGateSrc->isValid())
+            || !widgetFlashGateKey.isEmpty())
+    {
+        doc->writeStartElement(KXMLWidgetFlashGateInput);
+        savePTInputBlock(doc, widgetFlashGateSrc, widgetFlashGateKey);
         doc->writeEndElement();
     }
 

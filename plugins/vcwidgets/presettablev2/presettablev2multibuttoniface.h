@@ -51,3 +51,19 @@ public:
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetExtrasIface,
                     "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.1")
+
+class PresetTableV2MultiButtonFlashIface
+{
+public:
+    virtual ~PresetTableV2MultiButtonFlashIface() = default;
+
+    virtual bool multiButtonBeginFlash(int outputIdx, int parameter, int index,
+                                       quint32 sourceWidgetId, quint64 token,
+                                       double timeMultiplier = 1.0) = 0;
+    virtual bool multiButtonEndFlash(int outputIdx, int parameter, int index,
+                                     quint32 sourceWidgetId, quint64 token) = 0;
+    virtual bool multiButtonFlashGateActive() const = 0;
+};
+
+Q_DECLARE_INTERFACE(PresetTableV2MultiButtonFlashIface,
+                    "org.qlcplus.PresetTableV2MultiButtonFlashIface/1.2")

@@ -66,6 +66,7 @@ static const QString KXMLWidgetLinkOutput  = QStringLiteral("OutputIndex");
 static const QString KXMLWidgetLinkParam   = QStringLiteral("Parameter");
 static const QString KXMLWidgetLiveInput   = QStringLiteral("WidgetLiveInput");
 static const QString KXMLWidgetBusPolicy   = QStringLiteral("WidgetBusPolicy");
+static const QString KXMLWidgetFlashGateInput = QStringLiteral("WidgetFlashGateInput");
 static const QString KXMLTargetListName    = QStringLiteral("TargetListName");
 static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
@@ -84,6 +85,7 @@ static MultiButtonWidgetBusPolicy stringToWidgetBusPolicy(const QString& s)
         return MultiButtonWidgetBusPolicy::HoldOverride;
     return MultiButtonWidgetBusPolicy::SharedBus;
 }
+
 static const QString KXMLCurrentIndex      = QStringLiteral("CurrentIndex");
 static const QString KXMLLongPressMs       = QStringLiteral("LongPressMs");
 static const QString KXMLFunction          = QStringLiteral("Function");
@@ -1346,6 +1348,16 @@ PresetTableV2MultiButtonTargetExtrasIface* MultiButtonWidget::widgetLinkTargetEx
     return qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(vc->widget(m_widgetTargetId));
 }
 
+PresetTableV2MultiButtonFlashIface* MultiButtonWidget::widgetLinkFlashTarget() const
+{
+    if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
+        return nullptr;
+    VirtualConsole* vc = VirtualConsole::instance();
+    if (!vc)
+        return nullptr;
+    return qobject_cast<PresetTableV2MultiButtonFlashIface*>(vc->widget(m_widgetTargetId));
+}
+
 bool MultiButtonWidget::isAllOutputsMode() const
 {
     return m_widgetOutputIndex < 0;
@@ -1881,6 +1893,92 @@ void MultiButtonWidget::endFlashHold()
             activate(restore);
         else
             stopCurrent();
+    }
+
+    update();
+}
+
+bool MultiButtonWidget::widgetPrimaryFlashAvailable() const
+{
+    return m_mode == MultiButtonMode::Widget
+            && m_widgetParameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            && widgetLinkFlashTarget() != nullptr;
+}
+
+bool MultiButtonWidget::widgetFlashModifierActive() const
+{
+    PresetTableV2MultiButtonFlashIface* target = widgetLinkFlashTarget();
+    return target != nullptr && target->multiButtonFlashGateActive();
+}
+
+bool MultiButtonWidget::beginWidgetFlashHold(int idx)
+{
+    if (!widgetPrimaryFlashAvailable() || idx < 0 || idx >= entryCount())
+        return false;
+
+    PresetTableV2MultiButtonFlashIface* target = widgetLinkFlashTarget();
+    if (!target)
+        return false;
+
+    if (m_widgetFlashHoldIndex >= 0)
+        endWidgetFlashHold();
+
+    const quint64 token = m_nextWidgetFlashToken++;
+    bool leaderOk = false;
+
+    if (!isAllOutputsMode())
+    {
+        leaderOk = target->multiButtonBeginFlash(m_widgetOutputIndex, m_widgetParameter,
+                                                 idx, id(), token);
+    }
+    else if (PresetTableV2MultiButtonTargetIface* linked = widgetLinkTarget())
+    {
+        const int count = linked->multiButtonOutputCount();
+        for (int outputIdx = 0; outputIdx < count; ++outputIdx)
+        {
+            const bool ok = target->multiButtonBeginFlash(outputIdx, m_widgetParameter,
+                                                          idx, id(), token);
+            if (outputIdx == leaderOutputIndex())
+                leaderOk = ok;
+        }
+    }
+
+    if (!leaderOk)
+        return false;
+
+    m_widgetFlashHoldIndex = idx;
+    m_widgetFlashToken = token;
+    update();
+    return true;
+}
+
+void MultiButtonWidget::endWidgetFlashHold()
+{
+    if (m_widgetFlashHoldIndex < 0)
+        return;
+
+    PresetTableV2MultiButtonFlashIface* target = widgetLinkFlashTarget();
+    const int idx = m_widgetFlashHoldIndex;
+    const quint64 token = m_widgetFlashToken;
+    m_widgetFlashHoldIndex = -1;
+    m_widgetFlashToken = 0;
+
+    if (target)
+    {
+        if (!isAllOutputsMode())
+        {
+            target->multiButtonEndFlash(m_widgetOutputIndex, m_widgetParameter,
+                                        idx, id(), token);
+        }
+        else if (PresetTableV2MultiButtonTargetIface* linked = widgetLinkTarget())
+        {
+            const int count = linked->multiButtonOutputCount();
+            for (int outputIdx = 0; outputIdx < count; ++outputIdx)
+            {
+                target->multiButtonEndFlash(outputIdx, m_widgetParameter,
+                                            idx, id(), token);
+            }
+        }
     }
 
     update();
@@ -2762,6 +2860,9 @@ quint8 MultiButtonWidget::monitorExpectedChannelValue(const LevelPreset& preset,
 
 void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
 {
+    if (m_widgetFlashHoldIndex >= 0)
+        endWidgetFlashHold();
+
     if (!allowFlashEntry && entryIsFlash(idx))
         return;
 
@@ -2944,6 +3045,9 @@ void MultiButtonWidget::clearLocalStagedSelection()
 
 void MultiButtonWidget::stageEntry(int idx, bool allowFlashEntry)
 {
+    if (m_widgetFlashHoldIndex >= 0)
+        endWidgetFlashHold();
+
     if (!stagingActive() && !widgetLinkUsesInternalStaging())
         return;
     if (idx < -1 || idx >= entryCount())
@@ -3191,7 +3295,7 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
         m_doc->masterTimer()->unregisterDMXSource(this);
         releaseLevelFaders();
         releaseWidgetLiveFaders();
-
+        endWidgetFlashHold();
         if (m_visualOnly)
         {
             m_currentIndex = -1;
@@ -3247,7 +3351,11 @@ void MultiButtonWidget::mousePressEvent(QMouseEvent* e)
         if (m_layout == MultiButtonLayout::Spread)
         {
             m_pressTileIndex = spreadHitTest(e->pos());
-            if (m_pressTileIndex >= 0 && entryIsFlash(m_pressTileIndex))
+            if (m_pressTileIndex >= 0
+                    && widgetPrimaryFlashAvailable()
+                    && widgetFlashModifierActive())
+                beginWidgetFlashHold(m_pressTileIndex);
+            else if (m_pressTileIndex >= 0 && entryIsFlash(m_pressTileIndex))
                 beginFlashHold(m_pressTileIndex);
             else if (m_pressTileIndex >= -1)
                 m_longPressTimer->start(m_longPressMs);
@@ -3291,7 +3399,11 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
 
         if (m_layout == MultiButtonLayout::Spread)
         {
-            if (m_flashHoldIndex >= 0)
+            if (m_widgetFlashHoldIndex >= 0)
+            {
+                endWidgetFlashHold();
+            }
+            else if (m_flashHoldIndex >= 0)
             {
                 endFlashHold();
             }
@@ -3337,6 +3449,7 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
 
 void MultiButtonWidget::clearPressTracking()
 {
+    endWidgetFlashHold();
     m_pressActive = false;
     m_longPressTimer->stop();
     m_pressTileIndex = -2;
@@ -3512,6 +3625,8 @@ void MultiButtonWidget::syncEntrySelectInputOutput(uchar rawValue)
 
 int MultiButtonWidget::displayedEntryIndex() const
 {
+    if (m_widgetFlashHoldIndex >= 0)
+        return m_widgetFlashHoldIndex;
     if (m_flashHoldIndex >= 0)
         return m_flashHoldIndex;
     if (m_entrySelectPreviewActive)
@@ -4031,7 +4146,9 @@ void MultiButtonWidget::syncAllInputSourcePages()
         automationInputSourceId,
         presetChooseInputSourceId,
         entrySelectInputSourceId,
-        spreadPageInputSourceId
+        spreadPageInputSourceId,
+        commitInputSourceId,
+        widgetRecallInputSourceId
     };
 
     for (quint8 id : globalIds)
@@ -4397,7 +4514,14 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             if (i < m_entryInputValueMatched.size())
                 m_entryInputValueMatched[i] = matchedValue;
 
-            if (entryIsFlash(i))
+            if (widgetPrimaryFlashAvailable() && widgetFlashModifierActive())
+            {
+                if (matchedValue)
+                    beginWidgetFlashHold(i);
+                else if (!exactValue || (wasMatched && m_widgetFlashHoldIndex == i))
+                    endWidgetFlashHold();
+            }
+            else if (entryIsFlash(i))
             {
                 if (matchedValue)
                     beginFlashHold(i);
@@ -4429,6 +4553,28 @@ void MultiButtonWidget::slotKeyPressed(const QKeySequence& keySequence)
     if (key.isEmpty())
         return;
 
+    if (!m_triggerKey.isEmpty() && stripKeySequence(m_triggerKey) == key)
+    {
+        cycleNext();
+        return;
+    }
+    if (!m_popupKey.isEmpty() && stripKeySequence(m_popupKey) == key)
+    {
+        showPopupMenu(mapToGlobal(rect().center()));
+        return;
+    }
+    if (!m_automationKey.isEmpty() && stripKeySequence(m_automationKey) == key)
+    {
+        if (m_automationEnabled && !m_automationSuspended)
+            onAutomationTrigger();
+        return;
+    }
+    if (!m_commitKey.isEmpty() && stripKeySequence(m_commitKey) == key)
+    {
+        handleCommitInput(255);
+        return;
+    }
+
     if (spreadPagingActive())
     {
         const int spp = spreadSlotsPerPage(true);
@@ -4446,6 +4592,11 @@ void MultiButtonWidget::slotKeyPressed(const QKeySequence& keySequence)
     {
         if (stripKeySequence(entryKeySource(i)) == key)
         {
+            if (widgetPrimaryFlashAvailable() && widgetFlashModifierActive())
+            {
+                beginWidgetFlashHold(i);
+                return;
+            }
             if (entryIsFlash(i))
             {
                 beginFlashHold(i);
@@ -4466,15 +4617,34 @@ void MultiButtonWidget::slotKeyReleased(const QKeySequence& keySequence)
     if (key.isEmpty())
         return;
 
+    if (!m_commitKey.isEmpty() && stripKeySequence(m_commitKey) == key)
+    {
+        handleCommitInput(0);
+        return;
+    }
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    const QKeySequence keyWithoutShift(key[0] & ~Qt::ShiftModifier);
+#else
+    const QKeySequence keyWithoutShift(
+            QKeyCombination::fromCombined(key[0].toCombined() & ~Qt::ShiftModifier));
+#endif
+
     for (int i = 0; i < entryCount() && i < MBInputId::kMaxEntryInputs; ++i)
     {
-        if (stripKeySequence(entryKeySource(i)) == key)
+        const QKeySequence entryKey = stripKeySequence(entryKeySource(i));
+        if (entryKey == key || entryKey == keyWithoutShift)
         {
+            if (m_widgetFlashHoldIndex == i)
+                endWidgetFlashHold();
             if (entryIsFlash(i) && m_flashHoldIndex == i)
                 endFlashHold();
             return;
         }
     }
+
+    if (m_widgetFlashHoldIndex >= 0 && !widgetFlashModifierActive())
+        endWidgetFlashHold();
 }
 
 void MultiButtonWidget::updateFeedback()
@@ -4560,6 +4730,10 @@ void MultiButtonWidget::editProperties()
         inputSource(entrySelectInputSourceId),
         inputSource(spreadPageInputSourceId),
         inputSource(commitInputSourceId),
+        m_triggerKey,
+        m_popupKey,
+        m_automationKey,
+        m_commitKey,
         m_stageBeforeCommit,
         m_entrySelectAutoCommit,
         m_logPresetChanges,
@@ -4656,6 +4830,10 @@ void MultiButtonWidget::editProperties()
     assignInputSource(dlg.entrySelectInputSource(), entrySelectInputSourceId);
     assignInputSource(dlg.spreadPageInputSource(), spreadPageInputSourceId);
     assignInputSource(dlg.commitInputSource(), commitInputSourceId);
+    m_triggerKey = dlg.triggerKeySequence();
+    m_popupKey = dlg.popupKeySequence();
+    m_automationKey = dlg.automationKeySequence();
+    m_commitKey = dlg.commitKeySequence();
     syncAutomationSuspendDefault();
     m_triggerLastValue     = 0;
     m_automationLastValue  = 0;
@@ -4704,6 +4882,10 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->setStageBeforeCommit(m_stageBeforeCommit);
     copy->setEntrySelectAutoCommit(m_entrySelectAutoCommit);
     copy->setLogPresetChanges(m_logPresetChanges);
+    copy->m_triggerKey = m_triggerKey;
+    copy->m_popupKey = m_popupKey;
+    copy->m_automationKey = m_automationKey;
+    copy->m_commitKey = m_commitKey;
     copy->m_widgetTargetId = m_widgetTargetId;
     copy->m_widgetOutputIndex = m_widgetOutputIndex;
     copy->m_widgetParameter = m_widgetParameter;
@@ -4998,6 +5180,10 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         setStageBeforeCommit(src->m_stageBeforeCommit);
         setEntrySelectAutoCommit(src->m_entrySelectAutoCommit);
         setLogPresetChanges(src->m_logPresetChanges);
+        m_triggerKey = src->m_triggerKey;
+        m_popupKey = src->m_popupKey;
+        m_automationKey = src->m_automationKey;
+        m_commitKey = src->m_commitKey;
         assignInputSource(cloneInputSource(src->inputSource(commitInputSourceId)),
                           commitInputSourceId);
     }
@@ -5037,6 +5223,14 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     obj["stageBeforeCommit"] = m_stageBeforeCommit;
     obj["entrySelectAutoCommit"] = m_entrySelectAutoCommit;
     obj["logPresetChanges"] = m_logPresetChanges;
+    if (!m_triggerKey.isEmpty())
+        obj["triggerKey"] = m_triggerKey.toString(QKeySequence::PortableText);
+    if (!m_popupKey.isEmpty())
+        obj["popupKey"] = m_popupKey.toString(QKeySequence::PortableText);
+    if (!m_automationKey.isEmpty())
+        obj["automationKey"] = m_automationKey.toString(QKeySequence::PortableText);
+    if (!m_commitKey.isEmpty())
+        obj["commitKey"] = m_commitKey.toString(QKeySequence::PortableText);
 
     QJsonObject spread;
     spread["enabled"]   = (m_layout == MultiButtonLayout::Spread);
@@ -5263,6 +5457,10 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_monitorChannelValues = obj["monitorChannelValues"].toBool(false);
     m_receiveInputOnInactiveFramePage = obj["receiveInputOnInactiveFramePage"].toBool(false);
     setStageBeforeCommit(obj["stageBeforeCommit"].toBool(false));
+    m_triggerKey = stripKeySequence(QKeySequence(obj["triggerKey"].toString()));
+    m_popupKey = stripKeySequence(QKeySequence(obj["popupKey"].toString()));
+    m_automationKey = stripKeySequence(QKeySequence(obj["automationKey"].toString()));
+    m_commitKey = stripKeySequence(QKeySequence(obj["commitKey"].toString()));
     updateChannelMonitorTimerState();
     m_entrySelectAutoCommit = obj.contains(QStringLiteral("entrySelectAutoCommit"))
         ? obj["entrySelectAutoCommit"].toBool(true)
@@ -5605,6 +5803,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     bool hasAutomationElement = false;
     QMap<int, EntryInputBinding> functionInputsLoaded;
     QMap<int, EntryInputBinding> spreadSlotsLoaded;
+    EntryInputBinding triggerBindingLoaded;
+    EntryInputBinding popupBindingLoaded;
+    EntryInputBinding automationBindingLoaded;
+    EntryInputBinding commitBindingLoaded;
     QList<bool>  functionFlashLoaded;
     QList<bool>  functionFlashOverrideLoaded;
     QList<bool>  functionFlashForceLtpLoaded;
@@ -5650,6 +5852,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             {
                 if (root.name() == KXMLWidgetLiveInput)
                     widgetLiveInputSource = readInputBlock(root, this).source;
+                else if (root.name() == KXMLWidgetFlashGateInput)
+                    root.skipCurrentElement();
                 else
                     root.skipCurrentElement();
             }
@@ -5889,15 +6093,18 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         }
         else if (root.name() == KXMLTriggerInput)
         {
-            loadXMLSources(root, triggerInputSourceId);
+            triggerBindingLoaded = readInputBlock(root, this);
+            assignInputSource(triggerBindingLoaded.source, triggerInputSourceId);
         }
         else if (root.name() == KXMLPopupInput)
         {
-            loadXMLSources(root, popupInputSourceId);
+            popupBindingLoaded = readInputBlock(root, this);
+            assignInputSource(popupBindingLoaded.source, popupInputSourceId);
         }
         else if (root.name() == KXMLAutomationTriggerInput)
         {
-            loadXMLSources(root, automationInputSourceId);
+            automationBindingLoaded = readInputBlock(root, this);
+            assignInputSource(automationBindingLoaded.source, automationInputSourceId);
         }
         else if (root.name() == KXMLPresetChooseInput)
         {
@@ -5913,7 +6120,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
         }
         else if (root.name() == KXMLCommitInput)
         {
-            loadXMLSources(root, commitInputSourceId);
+            commitBindingLoaded = readInputBlock(root, this);
+            assignInputSource(commitBindingLoaded.source, commitInputSourceId);
         }
         else
         {
@@ -6018,6 +6226,10 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     syncEntryInputSources();
     syncAllInputSourcePages();
     syncAutomationSuspendDefault();
+    m_triggerKey = triggerBindingLoaded.key;
+    m_popupKey = popupBindingLoaded.key;
+    m_automationKey = automationBindingLoaded.key;
+    m_commitKey = commitBindingLoaded.key;
     m_triggerLastValue    = 0;
     m_automationLastValue = 0;
     recalcLayoutSize();
@@ -6254,26 +6466,26 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     }
 
     auto trigSrc = inputSource(triggerInputSourceId);
-    if (!trigSrc.isNull() && trigSrc->isValid())
+    if ((!trigSrc.isNull() && trigSrc->isValid()) || !m_triggerKey.isEmpty())
     {
         doc->writeStartElement(KXMLTriggerInput);
-        saveXMLInput(doc, trigSrc);
+        saveInputBlock(doc, trigSrc, m_triggerKey);
         doc->writeEndElement();
     }
 
     auto popSrc = inputSource(popupInputSourceId);
-    if (!popSrc.isNull() && popSrc->isValid())
+    if ((!popSrc.isNull() && popSrc->isValid()) || !m_popupKey.isEmpty())
     {
         doc->writeStartElement(KXMLPopupInput);
-        saveXMLInput(doc, popSrc);
+        saveInputBlock(doc, popSrc, m_popupKey);
         doc->writeEndElement();
     }
 
     auto autoSrc = inputSource(automationInputSourceId);
-    if (!autoSrc.isNull() && autoSrc->isValid())
+    if ((!autoSrc.isNull() && autoSrc->isValid()) || !m_automationKey.isEmpty())
     {
         doc->writeStartElement(KXMLAutomationTriggerInput);
-        saveXMLInput(doc, autoSrc);
+        saveInputBlock(doc, autoSrc, m_automationKey);
         doc->writeEndElement();
     }
 
@@ -6302,10 +6514,10 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
     }
 
     auto commitSrc = inputSource(commitInputSourceId);
-    if (!commitSrc.isNull() && commitSrc->isValid())
+    if ((!commitSrc.isNull() && commitSrc->isValid()) || !m_commitKey.isEmpty())
     {
         doc->writeStartElement(KXMLCommitInput);
-        saveXMLInput(doc, commitSrc);
+        saveInputBlock(doc, commitSrc, m_commitKey);
         doc->writeEndElement();
     }
 
@@ -6494,7 +6706,8 @@ void MultiButtonWidget::paintSpread(QPainter& p)
             p.drawRoundedRect(tile.rect.adjusted(2, 2, -3, -3), 4, 4);
             p.restore();
         }
-        if (tile.index >= 0 && tile.index == m_flashHoldIndex)
+        if (tile.index >= 0
+                && (tile.index == m_flashHoldIndex || tile.index == m_widgetFlashHoldIndex))
             drawFlashHoldBorder(p, tile.rect);
     }
 }
@@ -6688,7 +6901,8 @@ void MultiButtonWidget::paintSingle(QPainter& p)
         p.drawRoundedRect(rect().adjusted(2, 2, -3, -3), 4, 4);
     }
 
-    if (displayIdx >= 0 && displayIdx == m_flashHoldIndex)
+    if (displayIdx >= 0
+            && (displayIdx == m_flashHoldIndex || displayIdx == m_widgetFlashHoldIndex))
         drawFlashHoldBorder(p, rect());
 }
 

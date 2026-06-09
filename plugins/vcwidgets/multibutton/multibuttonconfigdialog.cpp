@@ -107,6 +107,10 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QSharedPointer<QLCInputSource>     entrySelectSrc,
     QSharedPointer<QLCInputSource>     spreadPageSrc,
     QSharedPointer<QLCInputSource>     commitSrc,
+    const QKeySequence&                triggerKey,
+    const QKeySequence&                popupKey,
+    const QKeySequence&                automationKey,
+    const QKeySequence&                commitKey,
     bool                               stageBeforeCommit,
     bool                               entrySelectAutoCommit,
     bool                               /*logPresetChanges*/,
@@ -934,36 +938,40 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     commitHint->setWordWrap(true);
     commitInputLayout->addWidget(commitHint);
     m_commitInputSel = new InputSelectionWidget(doc, commitInputGrp);
-    m_commitInputSel->setKeyInputVisibility(false);
+    m_commitInputSel->setKeyInputVisibility(true);
     m_commitInputSel->setWidgetPage(widgetPage);
     m_commitInputSel->setInputSource(commitSrc);
+    m_commitInputSel->setKeySequence(commitKey);
     commitInputLayout->addWidget(m_commitInputSel);
     inputLayout->addWidget(commitInputGrp);
 
     QGroupBox* trigGrp = new QGroupBox(tr("Cycle trigger (short press equivalent)"), inputScrollContent);
     QVBoxLayout* trigLayout = new QVBoxLayout(trigGrp);
     m_triggerInputSel = new InputSelectionWidget(doc, trigGrp);
-    m_triggerInputSel->setKeyInputVisibility(false);
+    m_triggerInputSel->setKeyInputVisibility(true);
     m_triggerInputSel->setWidgetPage(widgetPage);
     m_triggerInputSel->setInputSource(triggerSrc);
+    m_triggerInputSel->setKeySequence(triggerKey);
     trigLayout->addWidget(m_triggerInputSel);
     inputLayout->addWidget(trigGrp);
 
     QGroupBox* popGrp = new QGroupBox(tr("Popup trigger (long press equivalent)"), inputScrollContent);
     QVBoxLayout* popLayout = new QVBoxLayout(popGrp);
     m_popupInputSel = new InputSelectionWidget(doc, popGrp);
-    m_popupInputSel->setKeyInputVisibility(false);
+    m_popupInputSel->setKeyInputVisibility(true);
     m_popupInputSel->setWidgetPage(widgetPage);
     m_popupInputSel->setInputSource(popupSrc);
+    m_popupInputSel->setKeySequence(popupKey);
     popLayout->addWidget(m_popupInputSel);
     inputLayout->addWidget(popGrp);
 
     QGroupBox* autoTrigGrp = new QGroupBox(tr("Automation trigger"), inputScrollContent);
     QVBoxLayout* autoTrigLayout = new QVBoxLayout(autoTrigGrp);
     m_automationInputSel = new InputSelectionWidget(doc, autoTrigGrp);
-    m_automationInputSel->setKeyInputVisibility(false);
+    m_automationInputSel->setKeyInputVisibility(true);
     m_automationInputSel->setWidgetPage(widgetPage);
     m_automationInputSel->setInputSource(automationSrc);
+    m_automationInputSel->setKeySequence(automationKey);
     autoTrigLayout->addWidget(m_automationInputSel);
     inputLayout->addWidget(autoTrigGrp);
 
@@ -1342,6 +1350,31 @@ QSharedPointer<QLCInputSource> MultiButtonConfigDialog::commitInputSource() cons
 {
     return m_commitInputSel ? m_commitInputSel->inputSource()
                             : QSharedPointer<QLCInputSource>();
+}
+
+QKeySequence MultiButtonConfigDialog::triggerKeySequence() const
+{
+    return m_triggerInputSel ? VCWidget::stripKeySequence(m_triggerInputSel->keySequence())
+                             : QKeySequence();
+}
+
+QKeySequence MultiButtonConfigDialog::popupKeySequence() const
+{
+    return m_popupInputSel ? VCWidget::stripKeySequence(m_popupInputSel->keySequence())
+                           : QKeySequence();
+}
+
+QKeySequence MultiButtonConfigDialog::automationKeySequence() const
+{
+    return m_automationInputSel
+            ? VCWidget::stripKeySequence(m_automationInputSel->keySequence())
+            : QKeySequence();
+}
+
+QKeySequence MultiButtonConfigDialog::commitKeySequence() const
+{
+    return m_commitInputSel ? VCWidget::stripKeySequence(m_commitInputSel->keySequence())
+                            : QKeySequence();
 }
 
 bool MultiButtonConfigDialog::stageBeforeCommit() const

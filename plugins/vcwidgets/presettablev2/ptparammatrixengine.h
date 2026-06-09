@@ -60,7 +60,16 @@ struct PTOutputMatrixState
     bool           flashActive       = false;
     PTFlashPhase   flashPhase        = PTFlashPhase::Idle;
     double         flashWaveProgress = 0.0;
+    quint32        flashElapsedMs    = 0;
+    quint32        flashLastCycleMs  = 0;
+    quint32        flashSourceWidgetId = 0;
+    quint64        flashToken        = 0;
+    int            flashRow          = -1;
+    int            flashReturnRow    = -1;
     QVector<uchar> flashValues;
+    QVector<uchar> flashReturnValues;
+    PTTransitionPreset flashPreset;
+    double flashTimeMultiplier = 1.0;
     PTPreFlashState preFlashState    = PTPreFlashState::Idle;
 
     quint32 fxStep = 0;
