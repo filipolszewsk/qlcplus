@@ -68,6 +68,12 @@ enum class PTContinuousFxSelectorMode
     SmoothMorph
 };
 
+enum class PTWidgetFlashBehavior
+{
+    PrimaryRowModifier = 0,
+    StagedRowTrigger
+};
+
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
@@ -444,6 +450,10 @@ private:
     bool endMatrixFlashLocked(int outputIdx, int rowIdx, quint32 sourceWidgetId,
                               quint64 token);
     void releaseMatrixFlashLocked(int outputIdx);
+    void beginMatrixFlashWaveOutLocked(PTOutputMatrixState& st);
+    void setWidgetFlashGateActiveLocked(bool active, uchar value);
+    void beginWidgetStagedFlashLocked();
+    void endWidgetStagedFlashLocked();
     void writeMatrixSpatial(int outputIdx, MasterTimer* timer, QList<Universe*>& universes,
                             const PTOutput& out, int activeRow, int secondaryRow,
                             const PTTransitionPreset& preset,
@@ -530,6 +540,10 @@ public:
     uchar                           m_widgetFlashGateLastValue = 0;
     QKeySequence                    m_widgetFlashGateKey;
     int                             m_widgetFlashTimeMultiplierIndex = 2;
+    PTWidgetFlashBehavior           m_widgetFlashBehavior =
+            PTWidgetFlashBehavior::PrimaryRowModifier;
+    quint64                         m_nextWidgetStagedFlashToken = 1;
+    quint64                         m_widgetStagedFlashToken = 0;
 
     // ---- DMX faders (per universe, lazy) ---------------------------------
     QHash<quint32, QSharedPointer<GenericFader>> m_faders;

@@ -151,6 +151,7 @@ public:
                                      QSharedPointer<QLCInputSource> widgetFlashGateSrc,
                                      const QKeySequence& widgetFlashGateKey,
                                      int widgetFlashTimeMultiplierIndex,
+                                     PTWidgetFlashBehavior widgetFlashBehavior,
                                      PTContinuousFxSelectorMode continuousFxSelectorMode,
                                      int widgetPage,
                                      PTMode mode,
@@ -179,6 +180,7 @@ public:
     QSharedPointer<QLCInputSource> widgetFlashGateInputSource() const;
     QKeySequence widgetFlashGateKeySequence() const;
     int widgetFlashTimeMultiplierIndex() const;
+    PTWidgetFlashBehavior widgetFlashBehavior() const;
     PTContinuousFxSelectorMode continuousFxSelectorMode() const;
 
     PTMode   widgetMode()            const;
@@ -254,6 +256,7 @@ private:
     InputSelectionWidget* m_multiFxRestartInputSel = nullptr;
     InputSelectionWidget* m_widgetFlashGateInputSel = nullptr;
     QComboBox*            m_widgetFlashTimeMultCombo = nullptr;
+    QComboBox*            m_widgetFlashBehaviorCombo = nullptr;
     QWidget*              m_xfadeInputWidget  = nullptr;
 
     QCheckBox*            m_spatialChk         = nullptr;

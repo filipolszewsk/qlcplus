@@ -60,6 +60,8 @@ struct PTOutputMatrixState
     bool           flashActive       = false;
     PTFlashPhase   flashPhase        = PTFlashPhase::Idle;
     double         flashWaveProgress = 0.0;
+    /** WaveIn progress captured at release; 1.0 = full hold release. */
+    double         flashReleaseProgress = 1.0;
     quint32        flashElapsedMs    = 0;
     quint32        flashLastCycleMs  = 0;
     quint32        flashSourceWidgetId = 0;

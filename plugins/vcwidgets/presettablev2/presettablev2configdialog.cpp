@@ -512,6 +512,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    QSharedPointer<QLCInputSource> widgetFlashGateSrc,
                                                    const QKeySequence& widgetFlashGateKey,
                                                    int widgetFlashTimeMultiplierIndex,
+                                                   PTWidgetFlashBehavior widgetFlashBehavior,
                                                    PTContinuousFxSelectorMode continuousFxSelectorMode,
                                                    int widgetPage,
                                                    PTMode mode,
@@ -725,6 +726,21 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
             widgetFlashGrp);
     widgetFlashHint->setWordWrap(true);
     widgetFlashLay->addWidget(widgetFlashHint);
+    QWidget* widgetFlashBehaviorWidget = new QWidget(widgetFlashGrp);
+    QHBoxLayout* widgetFlashBehaviorRow = new QHBoxLayout(widgetFlashBehaviorWidget);
+    widgetFlashBehaviorRow->setContentsMargins(0, 0, 0, 0);
+    widgetFlashBehaviorRow->addWidget(new QLabel(tr("Behavior:"), widgetFlashBehaviorWidget));
+    m_widgetFlashBehaviorCombo = new QComboBox(widgetFlashBehaviorWidget);
+    m_widgetFlashBehaviorCombo->addItem(tr("Primary row modifier"),
+                                        int(PTWidgetFlashBehavior::PrimaryRowModifier));
+    m_widgetFlashBehaviorCombo->addItem(tr("Staged row trigger"),
+                                        int(PTWidgetFlashBehavior::StagedRowTrigger));
+    const int widgetFlashBehaviorIdx =
+            m_widgetFlashBehaviorCombo->findData(int(widgetFlashBehavior));
+    m_widgetFlashBehaviorCombo->setCurrentIndex(widgetFlashBehaviorIdx >= 0
+            ? widgetFlashBehaviorIdx : 0);
+    widgetFlashBehaviorRow->addWidget(m_widgetFlashBehaviorCombo, 1);
+    widgetFlashLay->addWidget(widgetFlashBehaviorWidget);
     QWidget* widgetFlashInputWidget = new QWidget(widgetFlashGrp);
     QHBoxLayout* widgetFlashInputRow = new QHBoxLayout(widgetFlashInputWidget);
     widgetFlashInputRow->setContentsMargins(0, 0, 0, 0);
@@ -741,14 +757,19 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     widgetFlashTimeRow->setContentsMargins(0, 0, 0, 0);
     widgetFlashTimeRow->addWidget(new QLabel(tr("Flash time multiplier:"), widgetFlashTimeWidget));
     m_widgetFlashTimeMultCombo = new QComboBox(widgetFlashTimeWidget);
+    m_widgetFlashTimeMultCombo->addItem(tr("1/16x"), 6);
+    m_widgetFlashTimeMultCombo->addItem(tr("1/8x"), 5);
     m_widgetFlashTimeMultCombo->addItem(tr("0.25x"), 0);
     m_widgetFlashTimeMultCombo->addItem(tr("0.5x"), 1);
     m_widgetFlashTimeMultCombo->addItem(tr("1x"), 2);
     m_widgetFlashTimeMultCombo->addItem(tr("2x"), 3);
     m_widgetFlashTimeMultCombo->addItem(tr("4x"), 4);
-    m_widgetFlashTimeMultCombo->setCurrentIndex(
-            qBound(0, widgetFlashTimeMultiplierIndex,
-                   m_widgetFlashTimeMultCombo->count() - 1));
+    {
+        const int idx = m_widgetFlashTimeMultCombo->findData(widgetFlashTimeMultiplierIndex);
+        const int defaultIdx = m_widgetFlashTimeMultCombo->findData(2);
+        m_widgetFlashTimeMultCombo->setCurrentIndex(idx >= 0 ? idx
+                : (defaultIdx >= 0 ? defaultIdx : 0));
+    }
     widgetFlashTimeRow->addWidget(m_widgetFlashTimeMultCombo, 1);
     widgetFlashLay->addWidget(widgetFlashTimeWidget);
     xfTabLayout->addWidget(widgetFlashGrp);
@@ -1048,6 +1069,16 @@ int PresetTableV2ConfigDialog::widgetFlashTimeMultiplierIndex() const
 {
     return m_widgetFlashTimeMultCombo ? m_widgetFlashTimeMultCombo->currentData().toInt()
                                       : 2;
+}
+
+PTWidgetFlashBehavior PresetTableV2ConfigDialog::widgetFlashBehavior() const
+{
+    const int value = m_widgetFlashBehaviorCombo
+            ? m_widgetFlashBehaviorCombo->currentData().toInt()
+            : int(PTWidgetFlashBehavior::PrimaryRowModifier);
+    return value == int(PTWidgetFlashBehavior::StagedRowTrigger)
+            ? PTWidgetFlashBehavior::StagedRowTrigger
+            : PTWidgetFlashBehavior::PrimaryRowModifier;
 }
 
 PTContinuousFxSelectorMode PresetTableV2ConfigDialog::continuousFxSelectorMode() const
