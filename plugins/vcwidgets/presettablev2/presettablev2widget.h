@@ -90,6 +90,11 @@ struct PTColumnTypeBinding {
     QString  modeName;
     qint32   channelIndex = -1;  // 0-based index within the fixture mode channels
     bool isValid() const { return channelIndex >= 0 && !manufacturer.isEmpty(); }
+    bool operator==(const PTColumnTypeBinding& o) const
+    {
+        return manufacturer == o.manufacturer && model == o.model
+                && modeName == o.modeName && channelIndex == o.channelIndex;
+    }
 };
 
 struct PTColumn {
@@ -100,7 +105,16 @@ struct PTColumn {
     bool              fade         = true;    // true=interpolate, false=snap at 127
     QVector<PTOption> options;                // used when type == Dropdown
     int               width        = -1;      // persisted pixel width; -1 = Qt default
-    PTColumnTypeBinding binding;              // used only in PTMode::FixtureGroup
+    QVector<PTColumnTypeBinding> bindings;    // used only in PTMode::FixtureGroup
+    bool hasBindings() const
+    {
+        for (const PTColumnTypeBinding& b : bindings)
+        {
+            if (b.isValid())
+                return true;
+        }
+        return false;
+    }
     // Scaler type fields
     int               scalerMin    = 0;
     int               scalerMax    = 360;

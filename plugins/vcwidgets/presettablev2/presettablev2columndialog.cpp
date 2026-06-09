@@ -22,10 +22,15 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QScrollArea>
+#include <QListWidget>
 #include <QPushButton>
 #include <QPixmap>
 #include <QIcon>
 #include <QColor>
+#include <QSet>
+#include <algorithm>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,17 +82,27 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     // ---- Fixture Binding (FixtureGroup mode only) -------------------
     m_bindGrp = new QGroupBox(tr("Fixture Binding"), this);
     m_bindGrp->setVisible(mode == PTMode::FixtureGroup);
-    QFormLayout* bindForm = new QFormLayout(m_bindGrp);
+    QVBoxLayout* bindLayout = new QVBoxLayout(m_bindGrp);
 
-    m_fxTypeLabel  = new QLabel(tr("Fixture type:"), m_bindGrp);
-    m_fxTypeCombo  = new QComboBox(m_bindGrp);
-    m_fxTypeCombo->setMinimumWidth(240);
-    bindForm->addRow(m_fxTypeLabel, m_fxTypeCombo);
+    m_bindTable = new QTableWidget(0, 2, m_bindGrp);
+    m_bindTable->setHorizontalHeaderLabels(QStringList()
+            << tr("Fixture type") << tr("Channel"));
+    m_bindTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_bindTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_bindTable->verticalHeader()->hide();
+    m_bindTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_bindTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_bindTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_bindTable->setMinimumHeight(120);
+    bindLayout->addWidget(m_bindTable);
 
-    m_channelLabel = new QLabel(tr("Channel:"), m_bindGrp);
-    m_channelCombo = new QComboBox(m_bindGrp);
-    m_channelCombo->setMinimumWidth(240);
-    bindForm->addRow(m_channelLabel, m_channelCombo);
+    QHBoxLayout* bindBtnRow = new QHBoxLayout;
+    m_addBindBtn = new QPushButton(tr("+ Add channels..."), m_bindGrp);
+    m_remBindBtn = new QPushButton(tr("- Remove"), m_bindGrp);
+    bindBtnRow->addWidget(m_addBindBtn);
+    bindBtnRow->addWidget(m_remBindBtn);
+    bindBtnRow->addStretch();
+    bindLayout->addLayout(bindBtnRow);
 
     root->addWidget(m_bindGrp);
 
@@ -192,41 +207,12 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     }
     m_optTable->blockSignals(false);
 
-    // Populate fixture binding combos (FG mode)
+    // Populate fixture bindings (FG mode)
     if (mode == PTMode::FixtureGroup && group)
     {
-        populateFixtureTypeCombo();
-
-        // Pre-select current binding if valid
-        if (column.binding.isValid())
-        {
-            for (int i = 0; i < m_fxTypeEntries.size(); ++i)
-            {
-                const FxTypeEntry& e = m_fxTypeEntries[i];
-                if (e.manufacturer == column.binding.manufacturer &&
-                    e.model        == column.binding.model        &&
-                    e.modeName     == column.binding.modeName)
-                {
-                    m_fxTypeCombo->setCurrentIndex(i);
-                    populateChannelCombo(i);
-
-                    // Select the matching channel
-                    for (int ci = 0; ci < m_channelCombo->count(); ++ci)
-                    {
-                        if (m_channelCombo->itemData(ci).toInt() == column.binding.channelIndex)
-                        {
-                            m_channelCombo->setCurrentIndex(ci);
-                            break;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        else if (m_fxTypeCombo->count() > 0)
-        {
-            populateChannelCombo(0);
-        }
+        populateFixtureTypeEntries();
+        m_bindings = column.bindings;
+        rebuildBindTable();
     }
 
     updateOptionsEnabled();
@@ -240,10 +226,8 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     connect(m_importBtn,  &QPushButton::clicked,  this, &PresetTableV2ColumnDialog::slotImportFromChannel);
     connect(m_buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    connect(m_fxTypeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PresetTableV2ColumnDialog::slotFixtureTypeChanged);
-    connect(m_channelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PresetTableV2ColumnDialog::slotChannelComboChanged);
+    connect(m_addBindBtn, &QPushButton::clicked, this, &PresetTableV2ColumnDialog::slotAddBindings);
+    connect(m_remBindBtn, &QPushButton::clicked, this, &PresetTableV2ColumnDialog::slotRemoveBindings);
 
     // If opened with Dropdown already selected but no options yet (e.g. type was
     // changed inline in the table before opening the dialog), auto-import now that
@@ -256,14 +240,13 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
 // Fixture binding population
 // ---------------------------------------------------------------------------
 
-void PresetTableV2ColumnDialog::populateFixtureTypeCombo()
+void PresetTableV2ColumnDialog::populateFixtureTypeEntries()
 {
-    m_fxTypeCombo->clear();
     m_fxTypeEntries.clear();
 
-    if (!m_group || !m_doc) return;
+    if (!m_group || !m_doc)
+        return;
 
-    // Build a deduplicated list of (manufacturer, model, modeName) in the group
     for (quint32 fxiId : m_group->fixtureList())
     {
         Fixture* fxi = m_doc->fixture(fxiId);
@@ -273,9 +256,9 @@ void PresetTableV2ColumnDialog::populateFixtureTypeCombo()
         QLCFixtureMode* mode = fxi->fixtureMode();
         if (!def || !mode) continue;
 
-        QString mfg    = def->manufacturer();
-        QString model  = def->model();
-        QString mName  = mode->name();
+        const QString mfg   = def->manufacturer();
+        const QString model = def->model();
+        const QString mName = mode->name();
 
         bool found = false;
         for (FxTypeEntry& e : m_fxTypeEntries)
@@ -297,27 +280,15 @@ void PresetTableV2ColumnDialog::populateFixtureTypeCombo()
             m_fxTypeEntries.append(e);
         }
     }
-
-    for (const FxTypeEntry& e : m_fxTypeEntries)
-    {
-        QString label = QString("%1 %2 — %3 (%4×)")
-            .arg(e.manufacturer, e.model, e.modeName)
-            .arg(e.count);
-        m_fxTypeCombo->addItem(label);
-    }
 }
 
-void PresetTableV2ColumnDialog::populateChannelCombo(int fixtureTypeIndex)
+QLCFixtureMode* PresetTableV2ColumnDialog::representativeMode(const QString& mfg,
+                                                              const QString& model,
+                                                              const QString& modeName) const
 {
-    m_channelCombo->clear();
+    if (!m_group || !m_doc)
+        return nullptr;
 
-    if (fixtureTypeIndex < 0 || fixtureTypeIndex >= m_fxTypeEntries.size()) return;
-    if (!m_group || !m_doc) return;
-
-    const FxTypeEntry& entry = m_fxTypeEntries[fixtureTypeIndex];
-
-    // Find a representative fixture of this type in the group
-    QLCFixtureMode* fxMode = nullptr;
     for (quint32 fxiId : m_group->fixtureList())
     {
         Fixture* fxi = m_doc->fixture(fxiId);
@@ -325,46 +296,75 @@ void PresetTableV2ColumnDialog::populateChannelCombo(int fixtureTypeIndex)
         QLCFixtureDef*  def  = fxi->fixtureDef();
         QLCFixtureMode* mode = fxi->fixtureMode();
         if (!def || !mode) continue;
-        if (def->manufacturer() == entry.manufacturer &&
-            def->model()        == entry.model        &&
-            mode->name()        == entry.modeName)
+        if (def->manufacturer() == mfg && def->model() == model && mode->name() == modeName)
+            return mode;
+    }
+    return nullptr;
+}
+
+QString PresetTableV2ColumnDialog::bindingTypeLabel(const PTColumnTypeBinding& binding) const
+{
+    return QString("%1 %2 — %3")
+            .arg(binding.manufacturer, binding.model, binding.modeName);
+}
+
+QString PresetTableV2ColumnDialog::bindingChannelLabel(const PTColumnTypeBinding& binding) const
+{
+    QLCFixtureMode* fxMode = representativeMode(binding.manufacturer,
+                                                binding.model,
+                                                binding.modeName);
+    if (!fxMode)
+        return tr("ch%1").arg(binding.channelIndex + 1);
+
+    QLCChannel* ch = fxMode->channel(quint32(binding.channelIndex));
+    const QVector<QLCFixtureHead>& heads = fxMode->heads();
+    int headIdx = -1;
+    for (int hi = 0; hi < heads.size(); ++hi)
+    {
+        if (heads[hi].channels().contains(quint32(binding.channelIndex)))
         {
-            fxMode = mode;
+            headIdx = hi;
             break;
         }
     }
 
-    if (!fxMode) return;
+    QString prefix;
+    if (!heads.isEmpty())
+        prefix = (headIdx >= 0) ? QString("[H%1] ").arg(headIdx) : tr("[shared] ");
 
-    // Show ALL channels; label each with its head ([H0], [H1], [shared])
-    int nChannels = fxMode->channels().size();
-    const QVector<QLCFixtureHead>& heads = fxMode->heads();
+    if (ch)
+        return prefix + QString("%1: %2").arg(binding.channelIndex + 1).arg(ch->name());
+    return prefix + tr("Ch %1").arg(binding.channelIndex + 1);
+}
 
-    for (int ci = 0; ci < nChannels; ++ci)
+bool PresetTableV2ColumnDialog::bindingsContain(const PTColumnTypeBinding& binding) const
+{
+    for (const PTColumnTypeBinding& existing : m_bindings)
     {
-        QLCChannel* ch = fxMode->channel(ci);
+        if (existing == binding)
+            return true;
+    }
+    return false;
+}
 
-        // Find which head owns this channel (if heads are defined)
-        int headIdx = -1;
-        for (int hi = 0; hi < heads.size(); ++hi)
-        {
-            if (heads[hi].channels().contains(quint32(ci)))
-            {
-                headIdx = hi;
-                break;
-            }
-        }
+void PresetTableV2ColumnDialog::rebuildBindTable()
+{
+    if (!m_bindTable)
+        return;
 
-        QString prefix;
-        if (!heads.isEmpty())
-            prefix = (headIdx >= 0) ? QString("[H%1] ").arg(headIdx)
-                                    : tr("[shared] ");
+    m_bindTable->setRowCount(0);
+    for (int i = 0; i < m_bindings.size(); ++i)
+    {
+        const PTColumnTypeBinding& binding = m_bindings[i];
+        if (!binding.isValid())
+            continue;
 
-        QString label = prefix + (ch
-            ? QString("%1: %2").arg(ci + 1).arg(ch->name())
-            : tr("Ch %1").arg(ci + 1));
-
-        m_channelCombo->addItem(label, ci);  // data = absolute channel index
+        const int row = m_bindTable->rowCount();
+        m_bindTable->insertRow(row);
+        auto* typeItem = new QTableWidgetItem(bindingTypeLabel(binding));
+        typeItem->setData(Qt::UserRole, i);
+        m_bindTable->setItem(row, 0, typeItem);
+        m_bindTable->setItem(row, 1, new QTableWidgetItem(bindingChannelLabel(binding)));
     }
 }
 
@@ -403,24 +403,8 @@ PTColumn PresetTableV2ColumnDialog::column() const
         }
     }
 
-    // Read binding (FG mode).
-    // NOTE: do NOT use m_bindGrp->isVisible() here — QDialog::accept() hides the dialog
-    // (and all children) before exec() returns, so isVisible() is always false at this point.
-    if (m_mode == PTMode::FixtureGroup && m_fxTypeCombo && !m_fxTypeEntries.isEmpty())
-    {
-        int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
-        int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
-            ? m_channelCombo->currentData().toInt() : -1;
-
-        if (typeIdx >= 0 && typeIdx < m_fxTypeEntries.size() && chanIdx >= 0)
-        {
-            const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
-            col.binding.manufacturer = e.manufacturer;
-            col.binding.model        = e.model;
-            col.binding.modeName     = e.modeName;
-            col.binding.channelIndex = chanIdx;
-        }
-    }
+    if (m_mode == PTMode::FixtureGroup)
+        col.bindings = m_bindings;
 
     return col;
 }
@@ -440,31 +424,20 @@ void PresetTableV2ColumnDialog::autoImportFromBinding(bool onlyIfEmpty)
     if (!m_rbDropdown->isChecked()) return;
     if (onlyIfEmpty && m_optTable->rowCount() > 0) return;
 
-    if (m_fxTypeEntries.isEmpty() || !m_group || !m_doc) return;
-    int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
-    int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
-                  ? m_channelCombo->currentData().toInt() : -1;
-    if (typeIdx < 0 || chanIdx < 0) return;
+    if (m_bindings.isEmpty() || !m_group || !m_doc)
+        return;
 
-    const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
+    const PTColumnTypeBinding& binding = m_bindings.first();
+    if (!binding.isValid())
+        return;
 
-    // Find a representative fixture mode for this binding type
-    QLCFixtureMode* fxMode = nullptr;
-    for (quint32 fxiId : m_group->fixtureList())
-    {
-        Fixture* fxi = m_doc->fixture(fxiId);
-        if (!fxi) continue;
-        QLCFixtureDef*  def  = fxi->fixtureDef();
-        QLCFixtureMode* mode = fxi->fixtureMode();
-        if (!def || !mode) continue;
-        if (def->manufacturer() == e.manufacturer &&
-            def->model()        == e.model        &&
-            mode->name()        == e.modeName)
-        { fxMode = mode; break; }
-    }
-    if (!fxMode) return;
+    QLCFixtureMode* fxMode = representativeMode(binding.manufacturer,
+                                                binding.model,
+                                                binding.modeName);
+    if (!fxMode)
+        return;
 
-    const QLCChannel* chan = fxMode->channel(quint32(chanIdx));
+    const QLCChannel* chan = fxMode->channel(quint32(binding.channelIndex));
     if (!chan || chan->capabilities().isEmpty()) return;
 
     // Clear and repopulate options from channel capabilities
@@ -492,42 +465,200 @@ void PresetTableV2ColumnDialog::autoImportFromBinding(bool onlyIfEmpty)
     }
 }
 
-void PresetTableV2ColumnDialog::slotChannelComboChanged(int /*index*/)
+void PresetTableV2ColumnDialog::slotAddBindings()
 {
-    // Auto-set column name from the bound channel
-    if (!m_fxTypeEntries.isEmpty() && m_group && m_doc)
+    if (!m_group || !m_doc || m_fxTypeEntries.isEmpty())
+        return;
+
+    QDialog picker(this);
+    picker.setWindowTitle(tr("Add fixture channels"));
+    picker.resize(520, 480);
+    QVBoxLayout* pl = new QVBoxLayout(&picker);
+
+    QScrollArea* scroll = new QScrollArea(&picker);
+    scroll->setWidgetResizable(true);
+    QWidget* scrollBody = new QWidget(scroll);
+    QVBoxLayout* bodyLayout = new QVBoxLayout(scrollBody);
+
+    QList<QListWidget*> channelLists;
+    for (const FxTypeEntry& entry : m_fxTypeEntries)
     {
-        int typeIdx = m_fxTypeCombo ? m_fxTypeCombo->currentIndex() : -1;
-        int chanIdx = (m_channelCombo && m_channelCombo->currentIndex() >= 0)
-                      ? m_channelCombo->currentData().toInt() : -1;
-        if (typeIdx >= 0 && chanIdx >= 0)
+        QLCFixtureMode* fxMode = representativeMode(entry.manufacturer,
+                                                    entry.model,
+                                                    entry.modeName);
+        if (!fxMode)
+            continue;
+
+        QLabel* typeLabel = new QLabel(QString("%1 %2 — %3 (%4×)")
+                .arg(entry.manufacturer, entry.model, entry.modeName)
+                .arg(entry.count), scrollBody);
+        typeLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+        bodyLayout->addWidget(typeLabel);
+
+        QListWidget* chanList = new QListWidget(scrollBody);
+        channelLists.append(chanList);
+        const QVector<QLCFixtureHead>& heads = fxMode->heads();
+        const int nChannels = fxMode->channels().size();
+
+        for (int ci = 0; ci < nChannels; ++ci)
         {
-            const FxTypeEntry& e = m_fxTypeEntries[typeIdx];
-            for (quint32 fxiId : m_group->fixtureList())
+            PTColumnTypeBinding candidate;
+            candidate.manufacturer = entry.manufacturer;
+            candidate.model        = entry.model;
+            candidate.modeName     = entry.modeName;
+            candidate.channelIndex = ci;
+
+            int headIdx = -1;
+            for (int hi = 0; hi < heads.size(); ++hi)
             {
-                Fixture* fxi = m_doc->fixture(fxiId);
-                if (!fxi) continue;
-                QLCFixtureDef*  def  = fxi->fixtureDef();
-                QLCFixtureMode* mode = fxi->fixtureMode();
-                if (!def || !mode) continue;
-                if (def->manufacturer() == e.manufacturer &&
-                    def->model()        == e.model        &&
-                    mode->name()        == e.modeName)
+                if (heads[hi].channels().contains(quint32(ci)))
                 {
-                    const QLCChannel* ch = mode->channel(quint32(chanIdx));
-                    if (ch && m_nameEdit)
-                        m_nameEdit->setText(ch->name());
+                    headIdx = hi;
                     break;
                 }
             }
+
+            QString prefix;
+            if (!heads.isEmpty())
+                prefix = (headIdx >= 0) ? QString("[H%1] ").arg(headIdx) : tr("[shared] ");
+
+            QLCChannel* ch = fxMode->channel(ci);
+            const QString label = prefix + (ch
+                    ? QString("%1: %2").arg(ci + 1).arg(ch->name())
+                    : tr("Ch %1").arg(ci + 1));
+
+            QListWidgetItem* item = new QListWidgetItem(label, chanList);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setData(Qt::UserRole, ci);
+            item->setData(Qt::UserRole + 1, entry.manufacturer);
+            item->setData(Qt::UserRole + 2, entry.model);
+            item->setData(Qt::UserRole + 3, entry.modeName);
+
+            if (bindingsContain(candidate))
+            {
+                item->setCheckState(Qt::Checked);
+                item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            }
+            else
+            {
+                item->setCheckState(Qt::Unchecked);
+            }
+        }
+
+        bodyLayout->addWidget(chanList);
+    }
+
+    bodyLayout->addStretch();
+    scroll->setWidget(scrollBody);
+    pl->addWidget(scroll, 1);
+
+    QHBoxLayout* selRow = new QHBoxLayout;
+    QPushButton* selAll = new QPushButton(tr("Select all"), &picker);
+    QPushButton* selNone = new QPushButton(tr("Clear"), &picker);
+    selRow->addWidget(selAll);
+    selRow->addWidget(selNone);
+    selRow->addStretch();
+    pl->addLayout(selRow);
+
+    connect(selAll, &QPushButton::clicked, &picker, [&channelLists]() {
+        for (QListWidget* list : channelLists)
+        {
+            for (int i = 0; i < list->count(); ++i)
+            {
+                QListWidgetItem* item = list->item(i);
+                if (item->flags() & Qt::ItemIsEnabled)
+                    item->setCheckState(Qt::Checked);
+            }
+        }
+    });
+    connect(selNone, &QPushButton::clicked, &picker, [&channelLists]() {
+        for (QListWidget* list : channelLists)
+        {
+            for (int i = 0; i < list->count(); ++i)
+            {
+                QListWidgetItem* item = list->item(i);
+                if (item->flags() & Qt::ItemIsEnabled)
+                    item->setCheckState(Qt::Unchecked);
+            }
+        }
+    });
+
+    QDialogButtonBox* pb = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &picker);
+    pl->addWidget(pb);
+    connect(pb, &QDialogButtonBox::accepted, &picker, &QDialog::accept);
+    connect(pb, &QDialogButtonBox::rejected, &picker, &QDialog::reject);
+
+    if (picker.exec() != QDialog::Accepted)
+        return;
+
+    bool addedAny = false;
+    for (QListWidget* list : channelLists)
+    {
+        for (int i = 0; i < list->count(); ++i)
+        {
+            QListWidgetItem* item = list->item(i);
+            if (item->checkState() != Qt::Checked)
+                continue;
+            if (!(item->flags() & Qt::ItemIsEnabled))
+                continue;
+
+            PTColumnTypeBinding binding;
+            binding.manufacturer = item->data(Qt::UserRole + 1).toString();
+            binding.model        = item->data(Qt::UserRole + 2).toString();
+            binding.modeName     = item->data(Qt::UserRole + 3).toString();
+            binding.channelIndex = item->data(Qt::UserRole).toInt();
+            if (!binding.isValid() || bindingsContain(binding))
+                continue;
+
+            m_bindings.append(binding);
+            addedAny = true;
         }
     }
-    autoImportFromBinding(/*onlyIfEmpty=*/false);
+
+    if (addedAny)
+    {
+        rebuildBindTable();
+        if (m_bindings.size() == 1 && m_nameEdit)
+        {
+            const PTColumnTypeBinding& first = m_bindings.first();
+            QLCFixtureMode* fxMode = representativeMode(first.manufacturer,
+                                                        first.model,
+                                                        first.modeName);
+            if (fxMode)
+            {
+                const QLCChannel* ch = fxMode->channel(quint32(first.channelIndex));
+                if (ch)
+                    m_nameEdit->setText(ch->name());
+            }
+        }
+        autoImportFromBinding(/*onlyIfEmpty=*/true);
+    }
 }
 
-void PresetTableV2ColumnDialog::slotFixtureTypeChanged(int index)
+void PresetTableV2ColumnDialog::slotRemoveBindings()
 {
-    populateChannelCombo(index);
+    if (!m_bindTable)
+        return;
+
+    QSet<int> removeIndices;
+    for (QTableWidgetItem* item : m_bindTable->selectedItems())
+    {
+        if (item->column() != 0)
+            continue;
+        removeIndices.insert(item->data(Qt::UserRole).toInt());
+    }
+
+    QVector<PTColumnTypeBinding> kept;
+    kept.reserve(m_bindings.size());
+    for (int i = 0; i < m_bindings.size(); ++i)
+    {
+        if (removeIndices.contains(i))
+            continue;
+        kept.append(m_bindings[i]);
+    }
+    m_bindings = kept;
+    rebuildBindTable();
 }
 
 void PresetTableV2ColumnDialog::slotAddOption()

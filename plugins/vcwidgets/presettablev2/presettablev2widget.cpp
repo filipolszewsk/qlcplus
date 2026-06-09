@@ -337,24 +337,36 @@ static QList<PTOutputScopeFixture> collectOutputScopeFixtures(
     return result;
 }
 
-static bool columnBindingMatchesFixture(const PTColumn& col, Fixture* fxi)
+static bool bindingMatchesFixture(const PTColumnTypeBinding& binding, Fixture* fxi)
 {
-    if (!col.binding.isValid() || !fxi)
+    if (!binding.isValid() || !fxi)
         return false;
     QLCFixtureDef* fxDef = fxi->fixtureDef();
     QLCFixtureMode* fxMode = fxi->fixtureMode();
     if (!fxDef || !fxMode)
         return false;
-    if (fxDef->manufacturer() != col.binding.manufacturer)
+    if (fxDef->manufacturer() != binding.manufacturer)
         return false;
-    if (fxDef->model() != col.binding.model)
+    if (fxDef->model() != binding.model)
         return false;
-    if (fxMode->name() != col.binding.modeName)
+    if (fxMode->name() != binding.modeName)
         return false;
-    const quint32 absChannel = quint32(col.binding.channelIndex);
+    const quint32 absChannel = quint32(binding.channelIndex);
     return absChannel < fxi->channels();
 }
+
+static bool columnBindingMatchesFixture(const PTColumn& col, Fixture* fxi)
+{
+    for (const PTColumnTypeBinding& binding : col.bindings)
+    {
+        if (bindingMatchesFixture(binding, fxi))
+            return true;
+    }
+    return false;
+}
+
 static const QString KXMLBindMfg        = QStringLiteral("BindMfg");
+static const QString KXMLBinding        = QStringLiteral("Binding");
 static const QString KXMLBindModel      = QStringLiteral("BindModel");
 static const QString KXMLBindMode       = QStringLiteral("BindMode");
 static const QString KXMLBindChan       = QStringLiteral("BindChan");
@@ -2466,7 +2478,7 @@ bool PresetTableV2Widget::multiButtonOutputControlsParameter(int outputIdx,
     bool hasBoundColumn = false;
     for (const PTColumn& col : m_columns)
     {
-        if (col.binding.isValid())
+        if (col.hasBindings())
         {
             hasBoundColumn = true;
             break;
@@ -3301,7 +3313,7 @@ void PresetTableV2Widget::refreshRowHighlights()
     int boundCols = 0;
     for (const PTColumn& col : m_columns)
     {
-        if (col.binding.isValid())
+        if (col.hasBindings())
             ++boundCols;
     }
 
@@ -3519,11 +3531,24 @@ void PresetTableV2Widget::writeDMXLegacy(QList<Universe*>& universes, uchar xfEf
 const QLCChannel* PresetTableV2Widget::resolveBoundChannel(const PTColumn& col) const
 {
     if (m_mode != PTMode::FixtureGroup) return nullptr;
-    if (!col.binding.isValid()) return nullptr;
+    if (!col.hasBindings()) return nullptr;
     if (!m_doc) return nullptr;
 
     FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
     if (!grp) return nullptr;
+
+    const PTColumnTypeBinding* bindingPtr = nullptr;
+    for (const PTColumnTypeBinding& candidate : col.bindings)
+    {
+        if (candidate.isValid())
+        {
+            bindingPtr = &candidate;
+            break;
+        }
+    }
+    if (bindingPtr == nullptr)
+        return nullptr;
+    const PTColumnTypeBinding& binding = *bindingPtr;
 
     // Find the first fixture in the group that matches the binding's manufacturer/model/mode
     const QMap<QLCPoint, GroupHead> headsMap = m_doc->effectiveHeadsMap(grp);
@@ -3536,12 +3561,11 @@ const QLCChannel* PresetTableV2Widget::resolveBoundChannel(const PTColumn& col) 
         QLCFixtureMode* fxMode = fxi->fixtureMode();
         if (!fxDef || !fxMode) continue;
 
-        if (fxDef->manufacturer() != col.binding.manufacturer) continue;
-        if (fxDef->model()        != col.binding.model)        continue;
-        if (fxMode->name()        != col.binding.modeName)     continue;
+        if (fxDef->manufacturer() != binding.manufacturer) continue;
+        if (fxDef->model()        != binding.model)        continue;
+        if (fxMode->name()        != binding.modeName)     continue;
 
-        // Found a matching fixture — return the channel at the absolute index
-        return fxMode->channel(quint32(col.binding.channelIndex));
+        return fxMode->channel(quint32(binding.channelIndex));
     }
     return nullptr;
 }
@@ -3559,17 +3583,16 @@ void PresetTableV2Widget::applyPointChannels(GenericFader* fader, Universe* uni,
     for (int c = 0; c < m_columns.size(); ++c)
     {
         const PTColumn& col = m_columns[c];
-        if (!col.binding.isValid()) continue;
+        const uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
 
-        if (fxDef->manufacturer() != col.binding.manufacturer) continue;
-        if (fxDef->model()        != col.binding.model)        continue;
-        if (fxMode->name()        != col.binding.modeName)     continue;
+        for (const PTColumnTypeBinding& binding : col.bindings)
+        {
+            if (!bindingMatchesFixture(binding, fxi))
+                continue;
 
-        quint32 absChannel = quint32(col.binding.channelIndex);
-        if (absChannel >= fxi->channels()) continue;
-
-        uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
-        applyFadeValueTimed(fader, m_doc, uni, head.fxi, absChannel, aVal, fadeTimeMs);
+            const quint32 absChannel = quint32(binding.channelIndex);
+            applyFadeValueTimed(fader, m_doc, uni, head.fxi, absChannel, aVal, fadeTimeMs);
+        }
     }
 }
 
@@ -3598,15 +3621,6 @@ void PresetTableV2Widget::applyBlendedPointChannels(GenericFader* fader, Univers
     for (int c = 0; c < m_columns.size(); ++c)
     {
         const PTColumn& col = m_columns[c];
-        if (!col.binding.isValid()) continue;
-
-        if (fxDef->manufacturer() != col.binding.manufacturer) continue;
-        if (fxDef->model()        != col.binding.model)        continue;
-        if (fxMode->name()        != col.binding.modeName)     continue;
-
-        quint32 absChannel = quint32(col.binding.channelIndex);
-        if (absChannel >= fxi->channels()) continue;
-
         const uchar pri = (c < priVals.size()) ? priVals[c] : 0;
         const uchar sec = (c < secVals.size()) ? secVals[c] : 0;
         const bool sharpWave = (waveFadeIn == 0 && waveFadeOut == 0);
@@ -3621,7 +3635,15 @@ void PresetTableV2Widget::applyBlendedPointChannels(GenericFader* fader, Univers
             val = uchar(qBound(0, int(std::lround(double(val) * double(intensity) / 255.0)), 255));
 
         const uint chFade = snap ? 0 : presetFadeMs;
-        applyFadeValueTimed(fader, m_doc, uni, head.fxi, absChannel, val, chFade);
+
+        for (const PTColumnTypeBinding& binding : col.bindings)
+        {
+            if (!bindingMatchesFixture(binding, fxi))
+                continue;
+
+            const quint32 absChannel = quint32(binding.channelIndex);
+            applyFadeValueTimed(fader, m_doc, uni, head.fxi, absChannel, val, chFade);
+        }
     }
 }
 
@@ -4972,19 +4994,23 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
             for (int c = 0; c < m_columns.size(); ++c)
             {
                 const PTColumn& col = m_columns[c];
-                if (!columnBindingMatchesFixture(col, fxi))
-                    continue;
-
-                const quint32 absChannel = quint32(col.binding.channelIndex);
                 uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
                 uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
                 const bool linearCrossfade = m_crossfadeEnabled && hasStaged
                         && !crossfadeSweep;
-                applyFadeValue(fader.data(), m_doc, universes[uni],
-                               sf.head.fxi, absChannel,
-                               aVal, bVal,
-                               linearCrossfade, linearCrossfade && hasStaged,
-                               col.fade, xfEffective);
+
+                for (const PTColumnTypeBinding& binding : col.bindings)
+                {
+                    if (!bindingMatchesFixture(binding, fxi))
+                        continue;
+
+                    const quint32 absChannel = quint32(binding.channelIndex);
+                    applyFadeValue(fader.data(), m_doc, universes[uni],
+                                   sf.head.fxi, absChannel,
+                                   aVal, bVal,
+                                   linearCrossfade, linearCrossfade && hasStaged,
+                                   col.fade, xfEffective);
+                }
             }
         }
 
@@ -5837,14 +5863,22 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
             c["scalerMax"] = col.scalerMax;
             c["scalerSuffix"] = col.scalerSuffix;
         }
-        if (col.binding.isValid())
+        QJsonArray bindArr;
+        for (const PTColumnTypeBinding& binding : col.bindings)
         {
+            if (!binding.isValid())
+                continue;
             QJsonObject b;
-            b["mfg"]  = col.binding.manufacturer;
-            b["model"]= col.binding.model;
-            b["mode"] = col.binding.modeName;
-            b["chan"] = col.binding.channelIndex;
-            c["binding"] = b;
+            b["mfg"]  = binding.manufacturer;
+            b["model"]= binding.model;
+            b["mode"] = binding.modeName;
+            b["chan"] = binding.channelIndex;
+            bindArr.append(b);
+        }
+        if (!bindArr.isEmpty())
+        {
+            c["bindings"] = bindArr;
+            c["binding"] = bindArr.first().toObject();
         }
         QJsonArray opts;
         for (const PTOption &opt : col.options)
@@ -5965,13 +5999,23 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
             col.scalerMax    = c["scalerMax"].toInt(360);
             col.scalerSuffix = c["scalerSuffix"].toString();
         }
-        if (c.contains("binding"))
+        auto appendBindingFromJson = [&](const QJsonObject& b) {
+            PTColumnTypeBinding binding;
+            binding.manufacturer = b["mfg"].toString();
+            binding.model        = b["model"].toString();
+            binding.modeName     = b["mode"].toString();
+            binding.channelIndex = b["chan"].toInt(-1);
+            if (binding.isValid())
+                col.bindings.append(binding);
+        };
+        if (c.contains("bindings"))
         {
-            QJsonObject b = c["binding"].toObject();
-            col.binding.manufacturer = b["mfg"].toString();
-            col.binding.model        = b["model"].toString();
-            col.binding.modeName     = b["mode"].toString();
-            col.binding.channelIndex = b["chan"].toInt(-1);
+            for (const QJsonValue& bv : c["bindings"].toArray())
+                appendBindingFromJson(bv.toObject());
+        }
+        else if (c.contains("binding"))
+        {
+            appendBindingFromJson(c["binding"].toObject());
         }
         for (const QJsonValue &ov : c["options"].toArray())
         {
@@ -6150,18 +6194,11 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
             col.width = attrs.value(KXMLColWidth).toInt();
             if (col.width <= 0) col.width = -1;
 
-            // FixtureGroup binding (absent in legacy files → isValid() returns false)
+            // FixtureGroup binding — legacy attrs on Column + optional Binding children
             QString bindMfg  = attrs.value(KXMLBindMfg).toString();
             QString bindMod  = attrs.value(KXMLBindModel).toString();
             QString bindMode = attrs.value(KXMLBindMode).toString();
             int     bindChan = attrs.value(KXMLBindChan).toInt() - 1;  // stored as 1-based, 0 if absent
-            if (!bindMfg.isEmpty() && bindChan >= 0)
-            {
-                col.binding.manufacturer = bindMfg;
-                col.binding.model        = bindMod;
-                col.binding.modeName     = bindMode;
-                col.binding.channelIndex = bindChan;
-            }
 
             // Scaler attributes (absent in older files → defaults kept)
             if (col.type == PTColumn::Scaler)
@@ -6172,7 +6209,7 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                 col.scalerSuffix = attrs.value(KXMLColScalerSfx).toString();
             }
 
-            // Read child <Option> elements
+            // Read child <Option> and <Binding> elements
             while (root.readNextStartElement())
             {
                 if (root.name() == KXMLOption)
@@ -6184,10 +6221,33 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                     col.options.append(opt);
                     root.skipCurrentElement();
                 }
+                else if (root.name() == KXMLBinding)
+                {
+                    PTColumnTypeBinding binding;
+                    binding.manufacturer = root.attributes().value(KXMLBindMfg).toString();
+                    binding.model        = root.attributes().value(KXMLBindModel).toString();
+                    binding.modeName     = root.attributes().value(KXMLBindMode).toString();
+                    const int chan = root.attributes().value(KXMLBindChan).toInt() - 1;
+                    if (!binding.manufacturer.isEmpty() && chan >= 0)
+                    {
+                        binding.channelIndex = chan;
+                        col.bindings.append(binding);
+                    }
+                    root.skipCurrentElement();
+                }
                 else
                 {
                     root.skipCurrentElement();
                 }
+            }
+            if (col.bindings.isEmpty() && !bindMfg.isEmpty() && bindChan >= 0)
+            {
+                PTColumnTypeBinding binding;
+                binding.manufacturer = bindMfg;
+                binding.model        = bindMod;
+                binding.modeName     = bindMode;
+                binding.channelIndex = bindChan;
+                col.bindings.append(binding);
             }
             cols.append(col);
         }
@@ -6443,13 +6503,32 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         if (col.width > 0)
             doc->writeAttribute(KXMLColWidth, QString::number(col.width));
 
-        // FixtureGroup binding — stored as 1-based channelIndex so 0 means "absent"
-        if (col.binding.isValid())
+        // FixtureGroup bindings — legacy attrs mirror first entry for old readers
+        const PTColumnTypeBinding* firstBinding = nullptr;
+        for (const PTColumnTypeBinding& binding : col.bindings)
         {
-            doc->writeAttribute(KXMLBindMfg,   col.binding.manufacturer);
-            doc->writeAttribute(KXMLBindModel, col.binding.model);
-            doc->writeAttribute(KXMLBindMode,  col.binding.modeName);
-            doc->writeAttribute(KXMLBindChan,  QString::number(col.binding.channelIndex + 1));
+            if (!binding.isValid())
+                continue;
+            if (firstBinding == nullptr)
+                firstBinding = &binding;
+        }
+        if (firstBinding != nullptr)
+        {
+            doc->writeAttribute(KXMLBindMfg,   firstBinding->manufacturer);
+            doc->writeAttribute(KXMLBindModel, firstBinding->model);
+            doc->writeAttribute(KXMLBindMode,  firstBinding->modeName);
+            doc->writeAttribute(KXMLBindChan,  QString::number(firstBinding->channelIndex + 1));
+        }
+        for (const PTColumnTypeBinding& binding : col.bindings)
+        {
+            if (!binding.isValid())
+                continue;
+            doc->writeStartElement(KXMLBinding);
+            doc->writeAttribute(KXMLBindMfg,   binding.manufacturer);
+            doc->writeAttribute(KXMLBindModel, binding.model);
+            doc->writeAttribute(KXMLBindMode,  binding.modeName);
+            doc->writeAttribute(KXMLBindChan,  QString::number(binding.channelIndex + 1));
+            doc->writeEndElement();
         }
 
         for (const PTOption& opt : col.options)

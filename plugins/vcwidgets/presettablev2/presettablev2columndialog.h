@@ -21,6 +21,7 @@
 
 class Doc;
 class FixtureGroup;
+class QLCFixtureMode;
 
 class PresetTableV2ColumnDialog : public QDialog
 {
@@ -42,33 +43,38 @@ private slots:
     void slotAddOption();
     void slotRemoveOption();
     void slotImportFromChannel();
-    void slotFixtureTypeChanged(int index);
-    void slotChannelComboChanged(int index);
+    void slotAddBindings();
+    void slotRemoveBindings();
 
 private:
     void updateOptionsEnabled();
-    void populateFixtureTypeCombo();
-    void populateChannelCombo(int fixtureTypeIndex);
+    void populateFixtureTypeEntries();
+    void rebuildBindTable();
     void autoImportFromBinding(bool onlyIfEmpty);
     static QIcon makeResourceIcon(const QString& resource);
+
+    QString bindingTypeLabel(const PTColumnTypeBinding& binding) const;
+    QString bindingChannelLabel(const PTColumnTypeBinding& binding) const;
+    QLCFixtureMode* representativeMode(const QString& mfg, const QString& model,
+                                        const QString& modeName) const;
+    bool bindingsContain(const PTColumnTypeBinding& binding) const;
 
     Doc*          m_doc   = nullptr;
     PTMode        m_mode;
     FixtureGroup* m_group = nullptr;
 
     // Binding section (FG mode only)
-    QGroupBox*    m_bindGrp       = nullptr;
-    QComboBox*    m_fxTypeCombo   = nullptr;
-    QLabel*       m_fxTypeLabel   = nullptr;
-    QComboBox*    m_channelCombo  = nullptr;
-    QLabel*       m_channelLabel  = nullptr;
+    QGroupBox*    m_bindGrp     = nullptr;
+    QTableWidget* m_bindTable   = nullptr;
+    QPushButton*  m_addBindBtn  = nullptr;
+    QPushButton*  m_remBindBtn  = nullptr;
+    QVector<PTColumnTypeBinding> m_bindings;
 
-    // Binding data: one entry per combo index
     struct FxTypeEntry {
         QString manufacturer;
         QString model;
         QString modeName;
-        int     count = 0;   // number of fixtures of this type in the group
+        int     count = 0;
     };
     QList<FxTypeEntry> m_fxTypeEntries;
 

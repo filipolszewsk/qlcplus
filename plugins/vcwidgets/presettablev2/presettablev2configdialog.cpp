@@ -36,6 +36,7 @@
 #include <QTableWidget>
 #include <QDialogButtonBox>
 #include <QSpinBox>
+#include <QSet>
 #include <algorithm>
 
 // ==========================================================================
@@ -1377,34 +1378,56 @@ void PresetTableV2ConfigDialog::rebuildColumnTable()
 
 QString PresetTableV2ConfigDialog::bindingSummary(const PTColumn& col) const
 {
-    if (!col.binding.isValid()) return tr("—");
+    if (!col.hasBindings())
+        return tr("—");
 
-    // Try to resolve the channel name from the group
-    if (m_doc)
+    int validCount = 0;
+    QSet<QString> typeKeys;
+    QString firstLabel;
+    for (const PTColumnTypeBinding& binding : col.bindings)
     {
-        FixtureGroup* grp = currentFixtureGroup();
-        if (grp)
+        if (!binding.isValid())
+            continue;
+        ++validCount;
+        typeKeys.insert(QStringLiteral("%1|%2|%3")
+                .arg(binding.manufacturer, binding.model, binding.modeName));
+
+        if (!firstLabel.isEmpty())
+            continue;
+
+        if (m_doc)
         {
-            for (quint32 fxiId : grp->fixtureList())
+            FixtureGroup* grp = currentFixtureGroup();
+            if (grp)
             {
-                Fixture* fxi = m_doc->fixture(fxiId);
-                if (!fxi) continue;
-                QLCFixtureDef*  def  = fxi->fixtureDef();
-                QLCFixtureMode* mode = fxi->fixtureMode();
-                if (!def || !mode) continue;
-                if (def->manufacturer() == col.binding.manufacturer &&
-                    def->model()        == col.binding.model &&
-                    mode->name()        == col.binding.modeName)
+                for (quint32 fxiId : grp->fixtureList())
                 {
-                    QLCChannel* ch = mode->channel(quint32(col.binding.channelIndex));
-                    if (ch)
-                        return QString("ch%1: %2").arg(col.binding.channelIndex + 1).arg(ch->name());
-                    break;
+                    Fixture* fxi = m_doc->fixture(fxiId);
+                    if (!fxi) continue;
+                    QLCFixtureDef*  def  = fxi->fixtureDef();
+                    QLCFixtureMode* mode = fxi->fixtureMode();
+                    if (!def || !mode) continue;
+                    if (def->manufacturer() == binding.manufacturer &&
+                        def->model()        == binding.model &&
+                        mode->name()        == binding.modeName)
+                    {
+                        QLCChannel* ch = mode->channel(quint32(binding.channelIndex));
+                        if (ch)
+                            firstLabel = ch->name();
+                        break;
+                    }
                 }
             }
         }
+        if (firstLabel.isEmpty())
+            firstLabel = QString("ch%1").arg(binding.channelIndex + 1);
     }
-    return QString("%1 ch%2").arg(col.binding.model).arg(col.binding.channelIndex + 1);
+
+    if (validCount == 1)
+        return firstLabel;
+    if (validCount > 1 && typeKeys.size() == 1)
+        return tr("%1 (+%2)").arg(firstLabel).arg(validCount - 1);
+    return tr("%1 ch, %2 types").arg(validCount).arg(typeKeys.size());
 }
 
 void PresetTableV2ConfigDialog::updateColumnButtons()
@@ -1613,10 +1636,12 @@ void PresetTableV2ConfigDialog::slotColumnsAddFromChannels()
         col.name               = ch ? ch->name() : tr("Ch %1").arg(chanIdx + 1);
         col.type               = PTColumn::Numeric;
         col.fade               = true;
-        col.binding.manufacturer = fxEntry.manufacturer;
-        col.binding.model        = fxEntry.model;
-        col.binding.modeName     = fxEntry.modeName;
-        col.binding.channelIndex = chanIdx;
+        PTColumnTypeBinding binding;
+        binding.manufacturer = fxEntry.manufacturer;
+        binding.model        = fxEntry.model;
+        binding.modeName     = fxEntry.modeName;
+        binding.channelIndex = chanIdx;
+        col.bindings.append(binding);
         m_columns.append(col);
         anyAdded = true;
     }
@@ -1713,7 +1738,7 @@ void PresetTableV2ConfigDialog::slotValidate()
             // Warn if any column has no binding
             for (const PTColumn& col : m_columns)
             {
-                if (!col.binding.isValid())
+                if (!col.hasBindings())
                     errors.append(tr("Column \"%1\" has no fixture binding set.").arg(col.name));
             }
         }
