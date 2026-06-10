@@ -35,6 +35,11 @@ public:
         Q_UNUSED(outputIdx);
         return QString();
     }
+    virtual QList<QLCPoint> outputPointsForPresetOverride(int outputIdx) const
+    {
+        Q_UNUSED(outputIdx);
+        return QList<QLCPoint>();
+    }
 
     /** Span along preset axis from linked fixture group; 0 if unavailable. */
     virtual int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
@@ -43,6 +48,14 @@ public:
     virtual bool spatialGridPreview(const PTTransitionPreset& preset,
                                     const PTGlobalEffectSettings& global,
                                     PTSpatialGridPreview& out) const = 0;
+    virtual bool spatialGridPreviewForOutput(int outputIdx,
+                                             const PTTransitionPreset& preset,
+                                             const PTGlobalEffectSettings& global,
+                                             PTSpatialGridPreview& out) const
+    {
+        Q_UNUSED(outputIdx);
+        return spatialGridPreview(preset, global, out);
+    }
 
     /** @deprecated Use transition presets on linked Transition widget. */
     virtual PTSpatialEffectSettings spatialEffectSettings() const = 0;

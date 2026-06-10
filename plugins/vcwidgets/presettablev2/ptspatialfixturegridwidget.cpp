@@ -6,6 +6,7 @@
 
 #include <QPainter>
 #include <QPaintEvent>
+#include <QMouseEvent>
 
 namespace {
 
@@ -92,6 +93,34 @@ void PTSpatialFixtureGridWidget::setPlaceholderText(const QString& text)
 {
     m_preview = PTSpatialGridPreview();
     m_placeholder = text;
+    m_selectionEditing = false;
+    m_activeSelectionIndex = -1;
+    m_selectionScopeCells.clear();
+    m_activeSelectionCells.clear();
+    m_selectionLayers.clear();
+    update();
+}
+
+void PTSpatialFixtureGridWidget::setSelectionLayers(
+        bool editable,
+        int activeSelectionIndex,
+        const QSet<QLCPoint>& scopeCells,
+        const QVector<PTSpatialGridSelectionLayer>& layers)
+{
+    m_selectionEditing = editable;
+    m_activeSelectionIndex = activeSelectionIndex;
+    m_selectionScopeCells = scopeCells;
+    m_selectionLayers = layers;
+    m_activeSelectionCells.clear();
+    for (const PTSpatialGridSelectionLayer& layer : m_selectionLayers)
+    {
+        if (layer.selectionIndex == m_activeSelectionIndex)
+        {
+            m_activeSelectionCells = layer.cells;
+            break;
+        }
+    }
+    setCursor(m_selectionEditing ? Qt::PointingHandCursor : Qt::ArrowCursor);
     update();
 }
 
@@ -104,6 +133,74 @@ QSize PTSpatialFixtureGridWidget::sizeHint() const
     const int ch = qMin(48, qMax(28, 240 / qMax(1, m_preview.gridSize.height())));
     return QSize(qMax(120, m_preview.gridSize.width() * cw + 16),
                  qMax(100, m_preview.gridSize.height() * ch + 36));
+}
+
+QRect PTSpatialFixtureGridWidget::gridCellRect(const QLCPoint& pt) const
+{
+    if (!m_preview.valid)
+        return QRect();
+
+    const int cols = qMax(1, m_preview.gridSize.width());
+    const int rows = qMax(1, m_preview.gridSize.height());
+    if (pt.x() < 0 || pt.y() < 0 || pt.x() >= cols || pt.y() >= rows)
+        return QRect();
+
+    const QRect area = rect().adjusted(6, 6, -6, -28);
+    const int cellW = qMax(24, area.width() / cols);
+    const int cellH = qMax(24, area.height() / rows);
+    const int totalW = cellW * cols;
+    const int totalH = cellH * rows;
+    const int ox = area.left() + (area.width() - totalW) / 2;
+    const int oy = area.top() + (area.height() - totalH) / 2;
+    return QRect(ox + pt.x() * cellW, oy + pt.y() * cellH, cellW - 2, cellH - 2);
+}
+
+QLCPoint PTSpatialFixtureGridWidget::pointAtPosition(const QPoint& pos) const
+{
+    if (!m_preview.valid)
+        return QLCPoint(-1, -1);
+
+    const int cols = qMax(1, m_preview.gridSize.width());
+    const int rows = qMax(1, m_preview.gridSize.height());
+    for (int y = 0; y < rows; ++y)
+    {
+        for (int x = 0; x < cols; ++x)
+        {
+            const QLCPoint pt(x, y);
+            if (gridCellRect(pt).contains(pos))
+                return pt;
+        }
+    }
+    return QLCPoint(-1, -1);
+}
+
+void PTSpatialFixtureGridWidget::mousePressEvent(QMouseEvent* event)
+{
+    if (!m_selectionEditing || !m_preview.valid || event->button() != Qt::LeftButton)
+    {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    const QLCPoint pt = pointAtPosition(event->pos());
+    if (pt.x() < 0 || !m_selectionScopeCells.contains(pt))
+        return;
+
+    if (m_activeSelectionCells.contains(pt))
+        m_activeSelectionCells.remove(pt);
+    else
+        m_activeSelectionCells.insert(pt);
+
+    for (PTSpatialGridSelectionLayer& layer : m_selectionLayers)
+    {
+        if (layer.selectionIndex == m_activeSelectionIndex)
+            layer.cells = m_activeSelectionCells;
+        else
+            layer.cells.remove(pt);
+    }
+
+    emit selectionCellsChanged(m_activeSelectionCells);
+    update();
 }
 
 void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
@@ -161,6 +258,26 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
 
             drawOutputBorder(p, cr, cell.outputIndexes);
 
+            if (!m_selectionLayers.isEmpty() && m_selectionScopeCells.contains(pt))
+            {
+                for (const PTSpatialGridSelectionLayer& layer : m_selectionLayers)
+                {
+                    if (!layer.cells.contains(pt))
+                        continue;
+                    const bool activeLayer = layer.selectionIndex == m_activeSelectionIndex;
+                    const QColor color = layer.color.isValid() ? layer.color : QColor(70, 210, 255);
+                    QColor fillColor = color;
+                    fillColor.setAlpha(activeLayer ? 85 : 55);
+                    p.fillRect(cr.adjusted(4, 4, -4, -4), fillColor);
+                    p.setPen(QPen(color, activeLayer ? 3 : 2));
+                    p.drawRect(cr.adjusted(activeLayer ? 6 : 5,
+                                           activeLayer ? 6 : 5,
+                                           activeLayer ? -6 : -5,
+                                           activeLayer ? -6 : -5));
+                    break;
+                }
+            }
+
             if (cell.offsetCollision || !m_preview.offsetStepOk)
             {
                 const QColor warn = cell.offsetCollision ? QColor(220, 60, 40) : QColor(220, 160, 40);
@@ -205,6 +322,8 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             .arg(m_preview.slotsPerWing)
             .arg(m_preview.maxOffsetStep);
     legend += tr("  · fill = offset shade · colored border = output");
+    if (!m_selectionLayers.isEmpty())
+        legend += tr("  · inner color = custom selection");
     if (m_preview.hasOffsetCollisions)
         legend += tr("  · offset collision");
     if (!m_preview.offsetStepOk)

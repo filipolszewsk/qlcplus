@@ -221,11 +221,16 @@ public:
     bool continuousCrossfadeStagedEditing() const override;
     int outputCountForPresetOverrides() const override;
     QString outputNameForPresetOverride(int outputIdx) const override;
+    QList<QLCPoint> outputPointsForPresetOverride(int outputIdx) const override;
     int fixtureGroupSpanAlongAxis(const PTTransitionPreset& preset,
                                   const PTGlobalEffectSettings& global) const override;
     bool spatialGridPreview(const PTTransitionPreset& preset,
                             const PTGlobalEffectSettings& global,
                             PTSpatialGridPreview& out) const override;
+    bool spatialGridPreviewForOutput(int outputIdx,
+                                     const PTTransitionPreset& preset,
+                                     const PTGlobalEffectSettings& global,
+                                     PTSpatialGridPreview& out) const override;
 
     int multiButtonOutputCount() const override;
     QString multiButtonOutputName(int outputIdx) const override;
@@ -346,7 +351,8 @@ private:
     /** Caller must hold m_stateMutex (writeDMX path). */
     PTTransitionPreset transitionPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset transitionPresetAtIndexLocked(PTTransitionMode mode, int presetIndex,
-                                                     int outputIdx = -1) const;
+                                                     int outputIdx = -1,
+                                                     const QLCPoint* point = nullptr) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
@@ -454,6 +460,7 @@ private:
                                                            bool matrixReady,
                                                            bool spatialOn) const;
     void ensureMatrixState(int outputIdx);
+    int matrixStateSlotForSelectionLocked(int outputIdx, int selectionKey);
     void resetMatrixStateLocked(int outputIdx);
     void resetAllMatrixStatesLocked();
     void beginMatrixSweepLocked(int outputIdx, int prevRow, int newRowIdx,
@@ -481,7 +488,8 @@ private:
                             const QVector<uchar>* stagedSecondaryOverride = nullptr,
                             const PTTransitionPreset* stagedPresetOverride = nullptr,
                             double morphProgress = 0.0,
-                            bool useMultiFx = false);
+                            bool useMultiFx = false,
+                            int stateSlot = -1);
 
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
@@ -549,6 +557,7 @@ public:
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;
     QVector<PTOutputMatrixState>    m_matrixState;
+    QHash<quint64, int>             m_selectionMatrixStateSlots;
     QVector<int>                    m_flashInputHeldRow;
     bool                            m_widgetFlashGateActive = false;
     uchar                           m_widgetFlashGateLastValue = 0;

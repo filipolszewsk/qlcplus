@@ -7,6 +7,7 @@
 #include <QtPlugin>
 #include "presettablev2effectengine.h"
 #include "ptparammatrixengine.h"
+#include "qlcpoint.h"
 
 class PresetTableV2TransitionProviderIface
 {
@@ -22,6 +23,34 @@ public:
     {
         Q_UNUSED(outputIdx);
         return effectiveTransitionPreset(mode, index);
+    }
+    virtual PTTransitionPreset effectiveTransitionPresetForPoint(PTTransitionMode mode,
+                                                                 int index,
+                                                                 int outputIdx,
+                                                                 const QLCPoint& point) const
+    {
+        Q_UNUSED(point);
+        return effectiveTransitionPresetForOutput(mode, index, outputIdx);
+    }
+    virtual int transitionSelectionKeyForPoint(PTTransitionMode mode,
+                                               int index,
+                                               int outputIdx,
+                                               const QLCPoint& point) const
+    {
+        Q_UNUSED(mode);
+        Q_UNUSED(index);
+        Q_UNUSED(outputIdx);
+        Q_UNUSED(point);
+        return -1;
+    }
+    virtual PTTransitionPreset effectiveTransitionPresetForSelection(PTTransitionMode mode,
+                                                                     int index,
+                                                                     int outputIdx,
+                                                                     int selectionKey) const
+    {
+        if (selectionKey < 0)
+            return effectiveTransitionPresetForOutput(mode, index, outputIdx);
+        return effectiveTransitionPresetForOutput(mode, index, outputIdx);
     }
     virtual QString transitionPresetName(PTTransitionMode mode, int index) const = 0;
 

@@ -151,7 +151,8 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
     {
         const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
                 e.pt.x(), e.pt.y(), gridWidth, gridHeight, waveParams);
-        offsetSlotsByDegree[info.wingIndex * 10000 + info.headOffsetDeg].insert(info.offsetSlot);
+        const int finalOffset = ((info.headOffsetDeg + preset.startOffset) % 360 + 360) % 360;
+        offsetSlotsByDegree[info.wingIndex * 10000 + finalOffset].insert(info.offsetSlot);
     }
 
     for (int y = 0; y < gridHeight; ++y)
@@ -172,9 +173,16 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
                 cell.blockIndex = info.blockIndex;
                 cell.localOrder = info.localOrder;
                 cell.offsetSlot = info.offsetSlot;
-                cell.headOffsetDeg = e->headOffsetDeg;
-                cell.phaseStart01 = e->phaseStart01;
-                if (offsetSlotsByDegree.value(info.wingIndex * 10000 + info.headOffsetDeg).size() > 1)
+                cell.headOffsetDeg = ((e->headOffsetDeg + preset.startOffset) % 360 + 360) % 360;
+                cell.phaseStart01 = qBound(0.0, double(cell.headOffsetDeg) / 360.0, 1.0);
+                if (preset.propagation == PTPropagationMode::Serial && plan.count() > 1)
+                {
+                    const double width01 = PTSpatialFixturePlan::windowWidth01(preset);
+                    const double serialSpread = double(e->serialIndex) / double(plan.count() - 1)
+                            * qMax(0.0, 1.0 - width01);
+                    cell.phaseStart01 = qMin(1.0, cell.phaseStart01 + serialSpread);
+                }
+                if (offsetSlotsByDegree.value(info.wingIndex * 10000 + cell.headOffsetDeg).size() > 1)
                 {
                     cell.offsetCollision = true;
                     preview.hasOffsetCollisions = true;
