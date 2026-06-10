@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <QtGlobal>
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -73,6 +74,17 @@ enum class PTTransitionMode
     MultiFx = 3
 };
 
+/** Relative position orbit type (Position Mode only — separate from dimmer waveShape). */
+enum class PTPositionMotion : int
+{
+    Off = 0,
+    Pan1D = 1,
+    Tilt1D = 2,
+    Circle2D = 3,
+    Line2D = 4,
+    Figure8_2D = 5
+};
+
 struct PTCustomCurvePoint
 {
     enum SegmentMode
@@ -94,6 +106,13 @@ struct PTCustomCurveGalleryItem
 {
     QString name;
     QVector<PTCustomCurvePoint> points;
+};
+
+struct PTPositionValue
+{
+    bool  valid = false;
+    qreal panDeg = 0;
+    qreal tiltDeg = 0;
 };
 
 /** EFX DimmerWave-aligned transition preset (per spatial preset row). */
@@ -124,6 +143,10 @@ struct PTTransitionPreset
     int                speedMultiplier = 1;
     quint32            stepDelayMs = 50;
     quint32            fadeMs = 150;
+    /** Position Mode: relative orbit around base row (independent of dimmer wave fields). */
+    int                positionMotion = int(PTPositionMotion::Off);
+    int                positionPanSize = 45;
+    int                positionTiltSize = 30;
 };
 
 struct PTSpatialChaseOutput

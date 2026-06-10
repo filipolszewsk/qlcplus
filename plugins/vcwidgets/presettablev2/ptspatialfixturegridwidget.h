@@ -32,10 +32,18 @@ public:
                             int activeSelectionIndex,
                             const QSet<QLCPoint>& scopeCells,
                             const QVector<PTSpatialGridSelectionLayer>& layers);
+
+    /** Position edit mode: highlight cells with stored positions and pick active cell. */
+    void setPositionEditMode(const PTSpatialGridPreview& preview,
+                             const QSet<QLCPoint>& filledCells,
+                             const QSet<QLCPoint>& selectedCells,
+                             const QSet<QLCPoint>& inheritedCells);
+
     QSet<QLCPoint> activeSelectionCells() const { return m_activeSelectionCells; }
 
 signals:
     void selectionCellsChanged(const QSet<QLCPoint>& cells);
+    void positionCellClicked(const QLCPoint& point);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -48,6 +56,10 @@ private:
 
     PTSpatialGridPreview m_preview;
     QString m_placeholder;
+    bool m_positionEditMode = false;
+    QSet<QLCPoint> m_positionFilledCells;
+    QSet<QLCPoint> m_positionSelectedCells;
+    QSet<QLCPoint> m_positionInheritedCells;
     bool m_selectionEditing = false;
     int m_activeSelectionIndex = -1;
     QSet<QLCPoint> m_selectionScopeCells;

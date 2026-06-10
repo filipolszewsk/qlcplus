@@ -120,7 +120,26 @@ void PTSpatialFixtureGridWidget::setSelectionLayers(
             break;
         }
     }
+    m_positionEditMode = false;
     setCursor(m_selectionEditing ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+}
+
+void PTSpatialFixtureGridWidget::setPositionEditMode(
+        const PTSpatialGridPreview& preview,
+        const QSet<QLCPoint>& filledCells,
+        const QSet<QLCPoint>& selectedCells,
+        const QSet<QLCPoint>& inheritedCells)
+{
+    m_positionEditMode = true;
+    m_selectionEditing = false;
+    m_preview = preview;
+    m_placeholder.clear();
+    m_positionFilledCells = filledCells;
+    m_positionSelectedCells = selectedCells;
+    m_positionInheritedCells = inheritedCells;
+    setCursor(Qt::PointingHandCursor);
+    updateGeometry();
     update();
 }
 
@@ -176,6 +195,14 @@ QLCPoint PTSpatialFixtureGridWidget::pointAtPosition(const QPoint& pos) const
 
 void PTSpatialFixtureGridWidget::mousePressEvent(QMouseEvent* event)
 {
+    if (m_positionEditMode && m_preview.valid && event->button() == Qt::LeftButton)
+    {
+        const QLCPoint pt = pointAtPosition(event->pos());
+        if (pt.x() >= 0)
+            emit positionCellClicked(pt);
+        return;
+    }
+
     if (!m_selectionEditing || !m_preview.valid || event->button() != Qt::LeftButton)
     {
         QWidget::mousePressEvent(event);
@@ -314,13 +341,46 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
         }
     }
 
+    if (m_positionEditMode)
+    {
+        for (int y = 0; y < rows; ++y)
+        {
+            for (int x = 0; x < cols; ++x)
+            {
+                const QLCPoint pt(x, y);
+                const PTSpatialGridCellData cell = m_preview.cells.value(pt);
+                if (!cell.occupied)
+                    continue;
+                const QRect cr(ox + x * cellW, oy + y * cellH, cellW - 2, cellH - 2);
+                if (m_positionInheritedCells.contains(pt))
+                {
+                    p.fillRect(cr.adjusted(3, 3, -3, -3), QColor(90, 90, 90, 70));
+                }
+                if (m_positionFilledCells.contains(pt))
+                {
+                    p.setPen(QPen(QColor(80, 180, 110), 2));
+                    p.drawRect(cr.adjusted(2, 2, -2, -2));
+                }
+                if (m_positionSelectedCells.contains(pt))
+                {
+                    p.setPen(QPen(QColor(60, 140, 240), 3));
+                    p.drawRect(cr.adjusted(1, 1, -1, -1));
+                }
+            }
+        }
+    }
+
     p.setFont(baseFont);
     p.setPen(textColor);
-    QString legend = tr("wings %1 · blocks %2 · slots/wing %3 · max step %4°")
-            .arg(m_preview.wings)
-            .arg(m_preview.blocks)
-            .arg(m_preview.slotsPerWing)
-            .arg(m_preview.maxOffsetStep);
+    QString legend;
+    if (m_positionEditMode)
+        legend = tr("green = stored position · grey = inherited · blue = selected");
+    else
+        legend = tr("wings %1 · blocks %2 · slots/wing %3 · max step %4°")
+                .arg(m_preview.wings)
+                .arg(m_preview.blocks)
+                .arg(m_preview.slotsPerWing)
+                .arg(m_preview.maxOffsetStep);
     legend += tr("  · fill = offset shade · colored border = output");
     if (!m_selectionLayers.isEmpty())
         legend += tr("  · inner color = custom selection");

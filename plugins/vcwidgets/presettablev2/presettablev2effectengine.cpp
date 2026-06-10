@@ -294,6 +294,12 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
                 ? PTPropagationMode::Parallel : PTPropagationMode::Serial;
     if (liveByColumn.contains(PTEfxCol::InputSpeedMult))
         p.speedMultiplier = qBound(0, int(val(PTEfxCol::InputSpeedMult)) * 5 / 255, 5);
+    if (liveByColumn.contains(PTEfxCol::InputPositionMotion))
+        p.positionMotion = int(val(PTEfxCol::InputPositionMotion)) % 6;
+    if (liveByColumn.contains(PTEfxCol::InputPositionPanSize))
+        p.positionPanSize = qBound(0, int(val(PTEfxCol::InputPositionPanSize)) * 540 / 255, 540);
+    if (liveByColumn.contains(PTEfxCol::InputPositionTiltSize))
+        p.positionTiltSize = qBound(0, int(val(PTEfxCol::InputPositionTiltSize)) * 270 / 255, 270);
     return p;
 }
 

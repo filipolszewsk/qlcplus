@@ -5,8 +5,10 @@
 
 #pragma once
 
+#include <QColor>
 #include <QMutex>
 #include <QHash>
+#include <QMap>
 #include <QVector>
 #include <QList>
 #include <QTableWidget>
@@ -46,12 +48,19 @@ class Universe;
 class GenericFader;
 class GroupHead;
 class Fixture;
+class PTPositionFixtureGridWidget;
+class PTPositionXYPadWidget;
+class QListWidget;
+class QSplitter;
+class QComboBox;
+class QPushButton;
+class QDoubleSpinBox;
 
 // ---------------------------------------------------------------------------
 // Widget mode
 // ---------------------------------------------------------------------------
 
-enum class PTMode { Legacy = 0, FixtureGroup = 1 };
+enum class PTMode { Legacy = 0, FixtureGroup = 1, Position = 2 };
 
 /** Which fixture-group grid cells an output drives (see Doc mask for Mask / RowsAndMask). */
 enum class PTOutputScope
@@ -121,9 +130,28 @@ struct PTColumn {
     QString           scalerSuffix;           // e.g. "°"
 };
 
+struct PTPositionSelectionLayer {
+    QString name;
+    QColor  color;
+    QSet<QLCPoint> cells;
+    QMap<QLCPoint, PTPositionValue> overrides;
+};
+
+struct PTPositionOutputLayer {
+    QMap<QLCPoint, PTPositionValue> allOverrides;
+    QVector<PTPositionSelectionLayer> selections;
+};
+
+struct PTPositionDraftContext {
+    int row = -1;
+    int output = -1;
+    int selection = -1;
+};
+
 struct PTRow {
     QString        name;
     QVector<uchar> values;  // size == number of value columns
+    QMap<QLCPoint, PTPositionValue> positions; // Position mode: per fixture-group cell
 };
 
 struct PTOutput {
@@ -231,6 +259,10 @@ public:
                                      const PTTransitionPreset& preset,
                                      const PTGlobalEffectSettings& global,
                                      PTSpatialGridPreview& out) const override;
+    bool tableUsesPositionMode() const override;
+    QList<QLCPoint> fixtureGroupPoints() const override;
+    PTPositionValue positionForPreview(int tableRow, int outputIdx, int selectionIdx,
+                                       const QLCPoint& pt) const override;
 
     int multiButtonOutputCount() const override;
     QString multiButtonOutputName(int outputIdx) const override;
@@ -299,9 +331,57 @@ private slots:
     void slotPasteSelection();
     void slotTableContextMenu(const QPoint& pos);
     void slotFixtureGroupMaskChanged(quint32 groupId);
+    void slotPositionGridSelectionChanged(const QSet<QLCPoint>& cells);
+    void slotPositionRowListChanged(int index);
+    void slotPositionXYPadChanged(qreal xNorm, qreal yNorm);
+    void slotPositionPanSpinChanged(double value);
+    void slotPositionTiltSpinChanged(double value);
+    void slotPositionEditLayerChanged(int index);
+    void slotPositionCopyCell();
+    void slotPositionPasteCell();
+    void slotPositionClearCell();
+    void slotPositionOverwrite();
+    void slotPositionSaveAs();
+    void slotPositionRevert();
+    void slotTableCurrentCellChanged(int row, int col);
 
 private:
     void rebuildTable();
+    void updatePositionModeChrome();
+    void rebuildPositionEditor();
+    void rebuildPositionRowList();
+    void refreshPositionGridCells();
+    void updatePositionValueStrip();
+    void refreshPositionEditorFromSelection();
+    void initOperatePositionSelection();
+    void refreshOperatePositionChrome();
+    void updateOperateRowListLiveMarkers();
+    int currentPositionEditRow() const;
+    void writePositionEditorValue(const PTPositionValue& pos, bool liveUpdateOnly = false);
+    void writePositionToCells(const QSet<QLCPoint>& cells, const PTPositionValue& pos,
+                              int row, int output, int selection);
+    void stagePositionEditorValue(const PTPositionValue& pos);
+    void clearPositionDraft();
+    void commitPositionDraftOverwrite();
+    void commitPositionDraftSaveAs();
+    bool confirmDiscardPositionDraft();
+    void updatePositionDraftButtons();
+    PTPositionValue readPositionEditorValue() const;
+    PTPositionValue effectivePositionValue(int rowIdx, int outputIdx,
+                                          const QLCPoint& point) const;
+    PTPositionValue positionValueForEditLayer(int rowIdx, int outputIdx, int selectionIdx,
+                                              const QLCPoint& point) const;
+    PTPositionValue positionValueForDisplay(int rowIdx, int outputIdx, int selectionIdx,
+                                            const QLCPoint& point) const;
+    PTPositionValue positionDraftValueForOutput(int outputIdx, int rowIdx,
+                                                const QLCPoint& point) const;
+    bool positionDraftAppliesToDmx(int outputIdx, int activeRow) const;
+    void applyDraftToRowData(int targetRow, const PTPositionDraftContext& ctx,
+                             const QMap<QLCPoint, PTPositionValue>& cells);
+    QString positionColumnHeader(const QLCPoint& pt) const;
+    QString positionCellTooltip(const QLCPoint& pt) const;
+    GroupHead groupHeadAtPoint(const QLCPoint& pt) const;
+    Fixture* fixtureAtPoint(const QLCPoint& pt) const;
     void syncFrozenNameColumnLayout();
     void refreshTableFromData();
     void setActiveRow(int outputIdx, int rowIdx);   // -1 = off
@@ -315,10 +395,16 @@ private:
     // writeDMX helpers
     void writeDMXLegacy(QList<Universe*>& universes, uchar xfEffective);
     void writeDMXFixtureGroup(MasterTimer* timer, QList<Universe*>& universes, uchar xfEffective);
+    void writeDMXPositionFixtureGroup(MasterTimer* timer, QList<Universe*>& universes,
+                                      uchar xfEffective);
 
     void applyPointChannels(GenericFader* fader, Universe* uni,
                             const GroupHead& head, Fixture* fxi,
                             const QLCPoint& pt, const QVector<uchar>& aVals,
+                            uint fadeTimeMs);
+    void applyPointPosition(GenericFader* fader, Universe* uni,
+                            const GroupHead& head, Fixture* fxi,
+                            const PTPositionValue& pos,
                             uint fadeTimeMs);
 
     void applyBlendedPointChannels(GenericFader* fader, Universe* uni,
@@ -494,11 +580,14 @@ private:
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
     const QLCChannel* resolveBoundChannel(const PTColumn& col) const;
+    QVector<QLCPoint> positionTablePoints() const;
 
     // ---- Shared state (mutex-protected, read in writeDMX) ----------------
     mutable QMutex   m_stateMutex;
     QVector<PTColumn> m_columns;
     QVector<PTRow>    m_rows;
+    /** Position mode: per-row per-output override layers (inherit + override). */
+    QVector<QHash<int, PTPositionOutputLayer>> m_positionOverrides;
     QVector<PTOutput> m_outputs;
     QVector<int>      m_activeRow;           // per output, -1 = off
     QVector<int>      m_stagedRow;           // per output, -1 = off/no row; m_stagedRowValid disambiguates
@@ -585,6 +674,32 @@ public:
     QAction* m_actProps   = nullptr;
     QAction* m_actColSep  = nullptr;
     QAction* m_actPropSep = nullptr;
+
+    // Position mode editor (Design mode)
+    QSplitter*                    m_positionSplitter = nullptr;
+    QWidget*                      m_tableWrap = nullptr;
+    QWidget*                      m_positionRowListPanel = nullptr;
+    QListWidget*                  m_positionRowList = nullptr;
+    QWidget*                      m_positionEditorPanel = nullptr;
+    PTPositionFixtureGridWidget*  m_positionGrid = nullptr;
+    QLabel*                       m_positionValueStrip = nullptr;
+    QLabel*                       m_positionHintLabel = nullptr;
+    PTPositionXYPadWidget*        m_positionXYPad = nullptr;
+    QComboBox*                    m_positionEditLayerCombo = nullptr;
+    QDoubleSpinBox*               m_positionPanSpin = nullptr;
+    QDoubleSpinBox*               m_positionTiltSpin = nullptr;
+    QPushButton*                  m_positionOverwriteBtn = nullptr;
+    QPushButton*                  m_positionSaveAsBtn = nullptr;
+    QPushButton*                  m_positionRevertBtn = nullptr;
+    QSet<QLCPoint>              m_positionSelectedCells;
+    PTPositionValue             m_positionClipboard;
+    int                         m_positionEditRow = -1;
+    int                         m_positionEditOutput = -1;
+    int                         m_positionEditSelection = -1;
+    bool                        m_positionEditorSyncing = false;
+    bool                        m_positionDraftDirty = false;
+    PTPositionDraftContext      m_positionDraftCtx;
+    QMap<QLCPoint, PTPositionValue> m_positionDraftCells;
 
     bool m_rebuildingTable  = false;   // guard against recursive slotCellChanged
     bool m_resizingColumns  = false;

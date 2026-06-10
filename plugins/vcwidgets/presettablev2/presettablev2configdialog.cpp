@@ -544,7 +544,11 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     m_modeCombo = new QComboBox(modeWidget);
     m_modeCombo->addItem(tr("Single Fixture (Legacy)"), int(PTMode::Legacy));
     m_modeCombo->addItem(tr("Fixture Group"),           int(PTMode::FixtureGroup));
-    m_modeCombo->setCurrentIndex(mode == PTMode::FixtureGroup ? 1 : 0);
+    m_modeCombo->addItem(tr("Position Mode"),           int(PTMode::Position));
+    {
+        const int idx = m_modeCombo->findData(int(mode));
+        m_modeCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+    }
     modeRow->addWidget(m_modeCombo);
 
     // Fixture Group selector (hidden when Legacy)
@@ -575,12 +579,13 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
         }
     }
 
-    m_groupRow->setVisible(mode == PTMode::FixtureGroup);
+    m_groupRow->setVisible(mode == PTMode::FixtureGroup || mode == PTMode::Position);
 
     // ============================
     // Tabs
     // ============================
-    QTabWidget* tabs = new QTabWidget(this);
+    m_configTabs = new QTabWidget(this);
+    QTabWidget* tabs = m_configTabs;
 
     // ---- TAB: Outputs -------------------------------------------------------
     QWidget* outTab = new QWidget(tabs);
@@ -639,7 +644,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     colBtnRow->addStretch();
     colLayout->addLayout(colBtnRow);
 
-    tabs->addTab(colTab, tr("Columns"));
+    m_colTabIndex = tabs->addTab(colTab, tr("Columns"));
 
     // ---- TAB: Crossfade / Transitions ---------------------------------------
     QWidget* xfTab = new QWidget(tabs);
@@ -864,7 +869,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     root->addWidget(m_buttons);
 
     // ---- Populate output rows -----------------------------------------------
-    bool isFG = (mode == PTMode::FixtureGroup);
+    bool isFG = (mode == PTMode::FixtureGroup || mode == PTMode::Position);
     FixtureGroup* grp = isFG ? m_doc->fixtureGroup(fixtureGroupId) : nullptr;
 
     PresetTableV2TransitionProviderIface* transitionProvider =
@@ -913,6 +918,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     }
 
     updateHintLabel();
+    if (m_configTabs && m_colTabIndex >= 0)
+        m_configTabs->setTabVisible(m_colTabIndex, mode != PTMode::Position);
 
     // ---- Populate column table ----------------------------------------------
     rebuildColumnTable();
@@ -1102,7 +1109,7 @@ quint32 PresetTableV2ConfigDialog::linkedTransitionWidgetId() const
 PTMode PresetTableV2ConfigDialog::widgetMode() const
 {
     if (!m_modeCombo) return PTMode::Legacy;
-    return (m_modeCombo->currentIndex() == 1) ? PTMode::FixtureGroup : PTMode::Legacy;
+    return PTMode(m_modeCombo->currentData().toInt());
 }
 
 quint32 PresetTableV2ConfigDialog::selectedFixtureGroupId() const
@@ -1169,9 +1176,11 @@ void PresetTableV2ConfigDialog::rebuildOutputList()
 void PresetTableV2ConfigDialog::slotModeComboChanged(int /*index*/)
 {
     PTMode newMode = widgetMode();
-    bool isFG = (newMode == PTMode::FixtureGroup);
+    bool isFG = (newMode == PTMode::FixtureGroup || newMode == PTMode::Position);
 
     m_groupRow->setVisible(isFG);
+    if (m_configTabs && m_colTabIndex >= 0)
+        m_configTabs->setTabVisible(m_colTabIndex, newMode != PTMode::Position);
     updateHintLabel();
     updateColumnButtons();
 
@@ -1186,7 +1195,8 @@ void PresetTableV2ConfigDialog::slotModeComboChanged(int /*index*/)
         {
             // Revert combo silently
             QSignalBlocker sb(m_modeCombo);
-            m_modeCombo->setCurrentIndex(isFG ? 0 : 1);
+            const int legacyIdx = m_modeCombo->findData(int(isFG ? PTMode::Legacy : PTMode::FixtureGroup));
+            m_modeCombo->setCurrentIndex(legacyIdx >= 0 ? legacyIdx : 0);
             m_groupRow->setVisible(!isFG);
             updateHintLabel();
             return;
@@ -1302,7 +1312,8 @@ void PresetTableV2ConfigDialog::slotEditColumn()
     if (idx < 0 || idx >= m_columns.size()) return;
 
     PTMode   curMode = widgetMode();
-    FixtureGroup* grp = (curMode == PTMode::FixtureGroup) ? currentFixtureGroup() : nullptr;
+    FixtureGroup* grp = (curMode == PTMode::FixtureGroup || curMode == PTMode::Position)
+            ? currentFixtureGroup() : nullptr;
 
     PresetTableV2ColumnDialog dlg(m_doc, m_columns[idx], curMode, grp, this);
     if (dlg.exec() != QDialog::Accepted) return;
@@ -1432,7 +1443,7 @@ QString PresetTableV2ConfigDialog::bindingSummary(const PTColumn& col) const
 
 void PresetTableV2ConfigDialog::updateColumnButtons()
 {
-    bool fgMode = (widgetMode() == PTMode::FixtureGroup);
+    bool fgMode = (widgetMode() == PTMode::FixtureGroup || widgetMode() == PTMode::Position);
     bool hasGrp = (currentFixtureGroup() != nullptr);
     if (m_addChFromGrpBtn)
         m_addChFromGrpBtn->setEnabled(fgMode && hasGrp);
@@ -1735,8 +1746,8 @@ void PresetTableV2ConfigDialog::slotValidate()
                 }
             }
 
-            // Warn if any column has no binding
-            for (const PTColumn& col : m_columns)
+            // Warn if any parameter column has no binding. Position mode resolves Pan/Tilt automatically.
+            for (const PTColumn& col : (curMode == PTMode::Position ? QVector<PTColumn>() : m_columns))
             {
                 if (!col.hasBindings())
                     errors.append(tr("Column \"%1\" has no fixture binding set.").arg(col.name));

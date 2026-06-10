@@ -76,6 +76,8 @@ public:
     void updateFeedback() override {}
 
     static QString columnTitle(int col);
+    QString columnTitleForCol(int col) const;
+    bool linkedTableUsesPositionMode() const;
 
 protected slots:
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
@@ -114,6 +116,9 @@ private:
         ColStartOffset,
         ColPropagation,
         ColSpeedMult,
+        ColPositionMotion,
+        ColPositionPanSize,
+        ColPositionTiltSize,
         ColCount
     };
 
@@ -214,6 +219,7 @@ private:
     static QComboBox* makeAxisCombo(QWidget* parent);
     static QComboBox* makeOffsetDirCombo(QWidget* parent);
     static QComboBox* makeWaveShapeCombo(QWidget* parent);
+    static QComboBox* makePositionMotionCombo(QWidget* parent);
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);
     static QComboBox* makeSpeedMultCombo(QWidget* parent);
@@ -245,7 +251,10 @@ private:
     QCheckBox*    m_enableChk = nullptr;
     QToolBar*     m_toolbar = nullptr;
     QWidget*                 m_previewRow = nullptr;
+    QLabel*                  m_curveLabel = nullptr;
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
+    QLabel*                  m_positionPreviewLabel = nullptr;
+    class PTPositionPathPreviewWidget* m_positionPathWidget = nullptr;
     PTSpatialFixtureGridWidget* m_spatialGridWidget = nullptr;
     QTabWidget*   m_bankTabs = nullptr;
     QTreeWidget* m_sweepTable = nullptr;

@@ -234,6 +234,9 @@ private:
     // FixtureGroup rows
     QList<FGOutputEditorRow*> m_fgOutputRows;
 
+    QTabWidget*     m_configTabs         = nullptr;
+    int             m_colTabIndex        = -1;
+
     // Tab: Columns
     QTableWidget*   m_colTable           = nullptr;
     QPushButton*    m_editColBtn         = nullptr;

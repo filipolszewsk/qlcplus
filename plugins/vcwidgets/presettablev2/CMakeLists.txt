@@ -36,6 +36,11 @@ add_library(presettablev2_vcwidget MODULE
     ptparammatrixengine.cpp ptparammatrixengine.h
     ptspatialfixtureplan.cpp ptspatialfixtureplan.h
     ptspatialfixturegridwidget.cpp ptspatialfixturegridwidget.h
+    ptpositionconverter.cpp ptpositionconverter.h
+    ptpositionxypadwidget.cpp ptpositionxypadwidget.h
+    ptpositionfixturegridwidget.cpp ptpositionfixturegridwidget.h
+    ptpositionfxengine.cpp ptpositionfxengine.h
+    ptpositionpathpreviewwidget.cpp ptpositionpathpreviewwidget.h
     presettablev2controliface.h
     presettablev2multibuttoniface.h
     presettablev2transitionprovideriface.h

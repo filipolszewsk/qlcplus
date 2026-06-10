@@ -27,6 +27,9 @@ enum Column : quint8
     StartOffset,
     Propagation,
     SpeedMult,
+    PositionMotion,
+    PositionPanSize,
+    PositionTiltSize,
     Count
 };
 
@@ -50,6 +53,9 @@ enum Input : quint8
     /** @deprecated No table column; legacy projects / live merge only. */
     InputPlaybackMode = 46,
     InputSpeedMult = 53,
+    InputPositionMotion = 54,
+    InputPositionPanSize = 55,
+    InputPositionTiltSize = 56,
 
     InputGlobalSpeed = 48,
     InputGlobalDirection = 49,
@@ -64,6 +70,7 @@ inline bool isStableInputId(quint8 id)
 {
     return (id >= InputAxis && id <= InputPropagation)
             || id == InputSpeedMult
+            || (id >= InputPositionMotion && id <= InputPositionTiltSize)
             || (id >= InputGlobalSpeed && id <= InputGlobalIntensity)
             || id == InputCrossfadeManual;
 }
@@ -86,8 +93,11 @@ inline quint8 inputIdForColumn(int col)
         case WaveLevel:     return InputWaveLevel;
         case StartOffset:   return InputStartOffset;
         case Propagation:   return InputPropagation;
-        case SpeedMult:     return InputSpeedMult;
-        default:            return 0;
+        case SpeedMult:         return InputSpeedMult;
+        case PositionMotion:    return InputPositionMotion;
+        case PositionPanSize:   return InputPositionPanSize;
+        case PositionTiltSize:  return InputPositionTiltSize;
+        default:                return 0;
     }
 }
 

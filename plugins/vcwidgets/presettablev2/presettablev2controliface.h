@@ -60,6 +60,24 @@ public:
     /** @deprecated Use transition presets on linked Transition widget. */
     virtual PTSpatialEffectSettings spatialEffectSettings() const = 0;
     virtual void setSpatialEffectSettings(const PTSpatialEffectSettings& settings) = 0;
+
+    /** True when linked table stores pan/tilt position presets (Position Mode). */
+    virtual bool tableUsesPositionMode() const { return false; }
+
+    /** All fixture-group grid points (Position / FixtureGroup mode). */
+    virtual QList<QLCPoint> fixtureGroupPoints() const { return QList<QLCPoint>(); }
+
+    /** Position stored on table row for preview (output/selection layer aware). */
+    virtual PTPositionValue positionForPreview(int tableRow, int outputIdx,
+                                               int selectionIdx,
+                                               const QLCPoint& pt) const
+    {
+        Q_UNUSED(tableRow);
+        Q_UNUSED(outputIdx);
+        Q_UNUSED(selectionIdx);
+        Q_UNUSED(pt);
+        return PTPositionValue();
+    }
 };
 
-Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.4")
+Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.5")
