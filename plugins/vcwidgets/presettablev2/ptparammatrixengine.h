@@ -20,6 +20,8 @@ struct PTGlobalEffectSettings
     int       speedMultiplier  = 1;   /**< 0=0.5x … 5=5.0x */
     int       transitionDirection = 0; /**< 0=All, 1=LR, 2=RL, 3=CenterOut, 4=OutsideIn */
     uchar     intensity        = 255;
+    /** Position orbit master size: 0 = no motion, 255 = full smart range per axis. */
+    uchar     positionSize     = 255;
     int       fxBlocks         = 1;
     int       fxPhaseOffset    = 0;   /**< 0–255 */
     int       fxWingsSymmetry  = 0;   /**< 0=Normal, 1=Alternate, 2=Mirror */

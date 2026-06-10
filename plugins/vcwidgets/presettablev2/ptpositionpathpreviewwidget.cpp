@@ -84,7 +84,7 @@ void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
     p.setPen(palette().text().color());
     p.drawText(QRectF(rect().left(), 2, rect().width(), 14),
                Qt::AlignLeft | Qt::AlignVCenter,
-               tr("Position motion (relative °)"));
+               tr("Position motion (unit shape — global size at runtime)"));
 
     if (m_motion == PTPositionMotion::Off)
     {

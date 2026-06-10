@@ -6,6 +6,8 @@
 
 #include "presettablev2effectengine.h"
 
+class Fixture;
+
 class PTPositionFxEngine
 {
 public:
@@ -22,4 +24,7 @@ public:
     static void relativeOffset(Shape shape, double phaseRadians,
                                qreal panSizeDeg, qreal tiltSizeDeg,
                                qreal& panOffDeg, qreal& tiltOffDeg);
+    /** Smart compressor: pivot shifts toward axis center only when amplitude would clip. */
+    static PTPositionValue applySmartMotion(const PTPositionValue& base, Fixture* fxi, int head,
+                                            Shape shape, double phaseRadians, qreal size01);
 };

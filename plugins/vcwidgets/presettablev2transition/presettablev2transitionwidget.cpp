@@ -87,6 +87,7 @@ static const QString KXMLCustomCurveItemName = QStringLiteral("Name");
 static const QString KXMLCustomCurveItemCurve = QStringLiteral("Curve");
 static const QString KXMLGlobalSpeedInput = QStringLiteral("GlobalSpeedInput");
 static const QString KXMLGlobalIntensityInput = QStringLiteral("GlobalIntensityInput");
+static const QString KXMLGlobalPositionSizeInput = QStringLiteral("GlobalPositionSizeInput");
 static const QString KXMLGlobalCrossfadeManualInput = QStringLiteral("GlobalCrossfadeManualInput");
 static const QString KXMLEfxColumnInput = QStringLiteral("EfxColumnInput");
 static const QString KXMLInputIdAttr = QStringLiteral("InputId");
@@ -99,6 +100,7 @@ static const QString KXMLGlobalMaxMs = QStringLiteral("MaxMs");
 static const QString KXMLGlobalMultiplier = QStringLiteral("Multiplier");
 static const QString KXMLGlobalDirection = QStringLiteral("Direction");
 static const QString KXMLGlobalIntensity = QStringLiteral("Intensity");
+static const QString KXMLGlobalPositionSize = QStringLiteral("PositionSize");
 static const QString KXMLGlobalBlocks = QStringLiteral("Blocks");
 static const QString KXMLGlobalPhase = QStringLiteral("Phase");
 static const QString KXMLGlobalSymmetry = QStringLiteral("Symmetry");
@@ -668,18 +670,20 @@ void PresetTableV2TransitionWidget::updateGlobalSummaryLabel()
 
     const QString xfMode = crossfadeManualControlEnabled()
             ? tr("XF manual ON") : tr("XF clock");
-    const QString text = tr("Speed: %1%2 | Intensity: %3%4 | Cycle: %5–%6 ms | %7%8")
+    const QString text = tr("Speed: %1%2 | Intensity: %3%4 | Pos size: %5%6 | Cycle: %7–%8 ms | %9%10")
             .arg(m_globalSettings.speed)
             .arg(inputMark(PTEfxCol::InputGlobalSpeed))
             .arg(m_globalSettings.intensity)
             .arg(inputMark(PTEfxCol::InputGlobalIntensity))
+            .arg(m_globalSettings.positionSize)
+            .arg(inputMark(PTEfxCol::InputGlobalPositionSize))
             .arg(m_globalSettings.minDurationMs)
             .arg(m_globalSettings.maxDurationMs)
             .arg(xfMode)
             .arg(inputMark(PTEfxCol::InputCrossfadeManual));
     m_globalSummaryLabel->setText(text);
     m_globalSummaryLabel->setToolTip(
-            tr("Global speed, intensity and min/max cycle times — open widget properties to edit."));
+            tr("Global speed, intensity, position size and min/max cycle times — open widget properties to edit."));
 }
 
 void PresetTableV2TransitionWidget::buildUi()
@@ -1115,8 +1119,8 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
     table->setColumnHidden(ColDuration, true);
     const bool positionMode = linkedTableUsesPositionMode();
     table->setColumnHidden(ColPositionMotion, !positionMode);
-    table->setColumnHidden(ColPositionPanSize, !positionMode);
-    table->setColumnHidden(ColPositionTiltSize, !positionMode);
+    table->setColumnHidden(ColPositionPanSize, true);
+    table->setColumnHidden(ColPositionTiltSize, true);
     configureFrozenNameView(mode);
     if (currentRow >= 0)
     {
@@ -1631,6 +1635,10 @@ bool PresetTableV2TransitionWidget::applyGlobalInput(quint8 inputId, uchar value
             m_globalSettings.intensity = value;
             updateGlobalSummaryLabel();
             return true;
+        case PTEfxCol::InputGlobalPositionSize:
+            m_globalSettings.positionSize = value;
+            updateGlobalSummaryLabel();
+            return true;
         case PTEfxCol::InputCrossfadeManual:
             m_crossfadeManualInputMapped = true;
             m_crossfadeManualControl = (value > 127);
@@ -1880,9 +1888,7 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                 const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
                 if (motion != PTPositionMotion::Off)
                 {
-                    m_positionPathWidget->setOrbitPreview(motion,
-                            preset.positionPanSize, preset.positionTiltSize,
-                            balls, cycleMs);
+                    m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
                 }
                 else
                 {
@@ -3041,6 +3047,7 @@ void PresetTableV2TransitionWidget::slotInputValueChanged(quint32 universe, quin
         PTEfxCol::InputPositionTiltSize,
         PTEfxCol::InputGlobalSpeed,
         PTEfxCol::InputGlobalIntensity,
+        PTEfxCol::InputGlobalPositionSize,
         PTEfxCol::InputCrossfadeManual
     };
 
@@ -3101,11 +3108,13 @@ void PresetTableV2TransitionWidget::editProperties()
     const PTGlobalEffectSettings gs = dlg.globalSettings();
     m_globalSettings.speed = gs.speed;
     m_globalSettings.intensity = gs.intensity;
+    m_globalSettings.positionSize = gs.positionSize;
     m_globalSettings.minDurationMs = gs.minDurationMs;
     m_globalSettings.maxDurationMs = gs.maxDurationMs;
 
     setInputSource(dlg.globalSpeedInputSource(), PTEfxCol::InputGlobalSpeed);
     setInputSource(dlg.globalIntensityInputSource(), PTEfxCol::InputGlobalIntensity);
+    setInputSource(dlg.globalPositionSizeInputSource(), PTEfxCol::InputGlobalPositionSize);
     setInputSource(dlg.globalCrossfadeManualInputSource(), PTEfxCol::InputCrossfadeManual);
     m_crossfadeManualInputMapped = dlg.globalCrossfadeManualInputSource()
             && dlg.globalCrossfadeManualInputSource()->isValid();
@@ -3424,6 +3433,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
             loadXMLSources(root, PTEfxCol::InputGlobalSpeed);
         else if (root.name() == KXMLGlobalIntensityInput)
             loadXMLSources(root, PTEfxCol::InputGlobalIntensity);
+        else if (root.name() == KXMLGlobalPositionSizeInput)
+            loadXMLSources(root, PTEfxCol::InputGlobalPositionSize);
         else if (root.name() == KXMLGlobalCrossfadeManualInput)
             loadXMLSources(root, PTEfxCol::InputCrossfadeManual);
         else if (root.name() == KXMLEfxColumnInput)
@@ -3450,6 +3461,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                 legacySweepDir = gattrs.value(KXMLGlobalDirection).toInt();
             if (gattrs.hasAttribute(KXMLGlobalIntensity))
                 m_globalSettings.intensity = uchar(gattrs.value(KXMLGlobalIntensity).toInt());
+            if (gattrs.hasAttribute(KXMLGlobalPositionSize))
+                m_globalSettings.positionSize = uchar(gattrs.value(KXMLGlobalPositionSize).toInt());
             if (gattrs.hasAttribute(KXMLGlobalBlocks))
                 m_globalSettings.fxBlocks = gattrs.value(KXMLGlobalBlocks).toInt();
             if (gattrs.hasAttribute(KXMLGlobalPhase))
@@ -3712,6 +3725,7 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeAttribute(KXMLGlobalMinMs, QString::number(m_globalSettings.minDurationMs));
     doc->writeAttribute(KXMLGlobalMaxMs, QString::number(m_globalSettings.maxDurationMs));
     doc->writeAttribute(KXMLGlobalIntensity, QString::number(m_globalSettings.intensity));
+    doc->writeAttribute(KXMLGlobalPositionSize, QString::number(m_globalSettings.positionSize));
     doc->writeAttribute(KXMLGlobalPhase, QString::number(m_globalSettings.fxPhaseOffset));
     doc->writeAttribute(KXMLGlobalSymmetry, QString::number(m_globalSettings.fxWingsSymmetry));
     doc->writeAttribute(KXMLGlobalOrientation, QString::number(m_globalSettings.fxOrientation));
@@ -3731,6 +3745,7 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
 
     saveInputBinding(PTEfxCol::InputGlobalSpeed, KXMLGlobalSpeedInput);
     saveInputBinding(PTEfxCol::InputGlobalIntensity, KXMLGlobalIntensityInput);
+    saveInputBinding(PTEfxCol::InputGlobalPositionSize, KXMLGlobalPositionSizeInput);
     saveInputBinding(PTEfxCol::InputCrossfadeManual, KXMLGlobalCrossfadeManualInput);
 
     for (int col = 1; col < ColCount; ++col)

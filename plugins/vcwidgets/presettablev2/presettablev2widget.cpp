@@ -5824,15 +5824,11 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 const float iterator = PTDimmerWaveEngine::iteratorFromElapsed(
                         elapsedMs, cycleMs, waveParams.startOffset, headOffset, timeOffset);
                 const double angle = double(iterator) * 2.0 * M_PI;
-                const qreal panAmp = qreal(fxPreset.positionPanSize);
-                const qreal tiltAmp = qreal(qMax(0, fxPreset.positionTiltSize));
+                const qreal size01 = qreal(globalFx.positionSize) / 255.0;
                 const auto shape = PTPositionFxEngine::shapeFromPositionMotion(
                         PTPositionMotion(fxPreset.positionMotion));
-                qreal panOff = 0;
-                qreal tiltOff = 0;
-                PTPositionFxEngine::relativeOffset(shape, angle, panAmp, tiltAmp, panOff, tiltOff);
-                base = PTPositionConverter::addRelativeOffset(
-                        base, fxi, sf.head.head, panOff, tiltOff);
+                base = PTPositionFxEngine::applySmartMotion(
+                        base, fxi, sf.head.head, shape, angle, size01);
             }
 
             if (multiFxOn)
@@ -5865,16 +5861,11 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                             headOffset, timeOffset);
                     const double angle = double(iterator) * 2.0 * M_PI;
                     const qreal blend = qreal(m_multiFxBlend) / 255.0;
+                    const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * blend;
                     const auto shape = PTPositionFxEngine::shapeFromPositionMotion(
                             PTPositionMotion(mfPreset.positionMotion));
-                    qreal panOff = 0;
-                    qreal tiltOff = 0;
-                    PTPositionFxEngine::relativeOffset(shape, angle,
-                            qreal(mfPreset.positionPanSize) * blend,
-                            qreal(qMax(0, mfPreset.positionTiltSize)) * blend,
-                            panOff, tiltOff);
-                    base = PTPositionConverter::addRelativeOffset(
-                            base, fxi, sf.head.head, panOff, tiltOff);
+                    base = PTPositionFxEngine::applySmartMotion(
+                            base, fxi, sf.head.head, shape, angle, size01);
                 }
             }
 

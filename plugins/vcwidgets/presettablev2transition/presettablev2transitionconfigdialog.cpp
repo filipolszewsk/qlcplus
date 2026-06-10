@@ -23,7 +23,7 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     QVBoxLayout* root = new QVBoxLayout(this);
 
     QLabel* hint = new QLabel(
-            tr("Global speed, intensity and min/max cycle times are edited here only.\n"
+            tr("Global speed, intensity, position size and min/max cycle times are edited here only.\n"
                "Preset banks: Transitions / Continuous FX tabs on the widget.\n"
                "Per-column external inputs: double-click column headers on the widget."),
             this);
@@ -70,6 +70,16 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     intRow->addWidget(m_intensityValueLabel);
     globalForm->addRow(tr("Intensity:"), intRow);
 
+    m_positionSizeSlider = new QSlider(Qt::Horizontal, globalBox);
+    m_positionSizeSlider->setRange(0, 255);
+    m_positionSizeSlider->setValue(gs.positionSize);
+    m_positionSizeValueLabel = new QLabel(QString::number(gs.positionSize), globalBox);
+    m_positionSizeValueLabel->setMinimumWidth(36);
+    auto* posSizeRow = new QHBoxLayout;
+    posSizeRow->addWidget(m_positionSizeSlider, 1);
+    posSizeRow->addWidget(m_positionSizeValueLabel);
+    globalForm->addRow(tr("Position size:"), posSizeRow);
+
     m_minDurationSpin = new QSpinBox(globalBox);
     m_minDurationSpin->setRange(20, 60000);
     m_minDurationSpin->setSuffix(tr(" ms"));
@@ -88,6 +98,8 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
             this, &PresetTableV2TransitionConfigDialog::slotSpeedSliderChanged);
     connect(m_intensitySlider, &QSlider::valueChanged,
             this, &PresetTableV2TransitionConfigDialog::slotIntensitySliderChanged);
+    connect(m_positionSizeSlider, &QSlider::valueChanged,
+            this, &PresetTableV2TransitionConfigDialog::slotPositionSizeSliderChanged);
 
     auto* inputBox = new QGroupBox(tr("External inputs (global)"), this);
     auto* inputForm = new QFormLayout(inputBox);
@@ -108,6 +120,14 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     if (m_widget)
         m_intensityInputSel->setInputSource(m_widget->inputSource(PTEfxCol::InputGlobalIntensity));
     inputForm->addRow(tr("Global intensity:"), m_intensityInputSel);
+
+    m_positionSizeInputSel = new InputSelectionWidget(doc, inputBox);
+    m_positionSizeInputSel->setKeyInputVisibility(false);
+    m_positionSizeInputSel->setWidgetPage(widgetPage);
+    if (m_widget)
+        m_positionSizeInputSel->setInputSource(
+                m_widget->inputSource(PTEfxCol::InputGlobalPositionSize));
+    inputForm->addRow(tr("Global position size:"), m_positionSizeInputSel);
 
     m_crossfadeManualInputSel = new InputSelectionWidget(doc, inputBox);
     m_crossfadeManualInputSel->setKeyInputVisibility(false);
@@ -134,6 +154,12 @@ void PresetTableV2TransitionConfigDialog::slotIntensitySliderChanged(int v)
 {
     if (m_intensityValueLabel)
         m_intensityValueLabel->setText(QString::number(v));
+}
+
+void PresetTableV2TransitionConfigDialog::slotPositionSizeSliderChanged(int v)
+{
+    if (m_positionSizeValueLabel)
+        m_positionSizeValueLabel->setText(QString::number(v));
 }
 
 void PresetTableV2TransitionConfigDialog::rebuildTableCombo()
@@ -177,6 +203,8 @@ PTGlobalEffectSettings PresetTableV2TransitionConfigDialog::globalSettings() con
         gs.speed = uchar(m_speedSlider->value());
     if (m_intensitySlider)
         gs.intensity = uchar(m_intensitySlider->value());
+    if (m_positionSizeSlider)
+        gs.positionSize = uchar(m_positionSizeSlider->value());
     if (m_minDurationSpin)
         gs.minDurationMs = quint32(m_minDurationSpin->value());
     if (m_maxDurationSpin)
@@ -194,6 +222,12 @@ QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalSpeedI
 QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalIntensityInputSource() const
 {
     return m_intensityInputSel ? m_intensityInputSel->inputSource() : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalPositionSizeInputSource() const
+{
+    return m_positionSizeInputSel ? m_positionSizeInputSel->inputSource()
+                                  : QSharedPointer<QLCInputSource>();
 }
 
 QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalCrossfadeManualInputSource() const

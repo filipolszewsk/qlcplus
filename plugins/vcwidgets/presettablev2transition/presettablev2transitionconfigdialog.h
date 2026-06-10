@@ -26,12 +26,14 @@ public:
     PTGlobalEffectSettings globalSettings() const;
     QSharedPointer<QLCInputSource> globalSpeedInputSource() const;
     QSharedPointer<QLCInputSource> globalIntensityInputSource() const;
+    QSharedPointer<QLCInputSource> globalPositionSizeInputSource() const;
     QSharedPointer<QLCInputSource> globalCrossfadeManualInputSource() const;
 
 private slots:
     void slotValidate();
     void slotSpeedSliderChanged(int v);
     void slotIntensitySliderChanged(int v);
+    void slotPositionSizeSliderChanged(int v);
 
 private:
     void rebuildTableCombo();
@@ -43,10 +45,13 @@ private:
     QLabel*                        m_speedValueLabel = nullptr;
     QSlider*                       m_intensitySlider = nullptr;
     QLabel*                        m_intensityValueLabel = nullptr;
+    QSlider*                       m_positionSizeSlider = nullptr;
+    QLabel*                        m_positionSizeValueLabel = nullptr;
     QSpinBox*                      m_minDurationSpin = nullptr;
     QSpinBox*                      m_maxDurationSpin = nullptr;
     InputSelectionWidget*          m_speedInputSel = nullptr;
     InputSelectionWidget*          m_intensityInputSel = nullptr;
+    InputSelectionWidget*          m_positionSizeInputSel = nullptr;
     InputSelectionWidget*          m_crossfadeManualInputSel = nullptr;
     QDialogButtonBox*              m_buttons = nullptr;
 };

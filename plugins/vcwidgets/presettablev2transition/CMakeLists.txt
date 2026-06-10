@@ -34,6 +34,7 @@ add_library(presettablev2transition_vcwidget MODULE
     ../presettablev2/ptdimmerwavecurvewidget.cpp ../presettablev2/ptdimmerwavecurvewidget.h
     ../presettablev2/ptpositionpathpreviewwidget.cpp ../presettablev2/ptpositionpathpreviewwidget.h
     ../presettablev2/ptpositionfxengine.cpp ../presettablev2/ptpositionfxengine.h
+    ../presettablev2/ptpositionconverter.cpp ../presettablev2/ptpositionconverter.h
     ../presettablev2/ptparammatrixengine.cpp ../presettablev2/ptparammatrixengine.h
     ../presettablev2/ptspatialfixtureplan.cpp ../presettablev2/ptspatialfixtureplan.h
     ../presettablev2/ptspatialfixturegridwidget.cpp ../presettablev2/ptspatialfixturegridwidget.h
