@@ -156,6 +156,7 @@ private:
     void syncActiveBankFromTable();
     void pushSpatialEnabledToTable();
     void notifyTablePresetCacheRefresh();
+    void scheduleDeferredTableLinkRefresh(int attemptsLeft = 6);
     bool editCustomCurveForPreset(PTTransitionMode mode, int row,
                                   int outputIdx = -1, int selectionIdx = -1);
     void migrateLegacyInputSources();

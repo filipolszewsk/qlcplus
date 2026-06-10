@@ -35,6 +35,7 @@
 #include <QRegularExpression>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -681,28 +682,34 @@ void PresetTableV2TransitionWidget::buildUi()
         connect(table->header(), &QHeaderView::sectionDoubleClicked,
                 this, &PresetTableV2TransitionWidget::slotColumnHeaderDoubleClicked);
         connect(table, &QTreeWidget::itemExpanded, this, [this, table](QTreeWidgetItem* item) {
-            if (!item || item->parent())
+            if (!item)
                 return;
             PTTransitionMode mode = PTTransitionMode::SweepOnly;
             if (table == m_continuousTable)
                 mode = PTTransitionMode::Continuous;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
-            const int row = item->data(0, kItemPresetIndexRole).toInt();
-            expandedSetForMode(mode).insert(row);
+            if (!item->parent())
+            {
+                const int row = item->data(0, kItemPresetIndexRole).toInt();
+                expandedSetForMode(mode).insert(row);
+            }
             if (QTreeView* frozen = frozenNameViewForMode(mode))
                 frozen->expand(table->indexFromItem(item));
         });
         connect(table, &QTreeWidget::itemCollapsed, this, [this, table](QTreeWidgetItem* item) {
-            if (!item || item->parent())
+            if (!item)
                 return;
             PTTransitionMode mode = PTTransitionMode::SweepOnly;
             if (table == m_continuousTable)
                 mode = PTTransitionMode::Continuous;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
-            const int row = item->data(0, kItemPresetIndexRole).toInt();
-            expandedSetForMode(mode).remove(row);
+            if (!item->parent())
+            {
+                const int row = item->data(0, kItemPresetIndexRole).toInt();
+                expandedSetForMode(mode).remove(row);
+            }
             if (QTreeView* frozen = frozenNameViewForMode(mode))
                 frozen->collapse(table->indexFromItem(item));
         });
@@ -712,7 +719,12 @@ void PresetTableV2TransitionWidget::buildUi()
         QHBoxLayout* lay = new QHBoxLayout(page);
         lay->setContentsMargins(0, 0, 0, 0);
         lay->setSpacing(0);
-        lay->addWidget(names);
+        QWidget* nameWrap = new QWidget(page);
+        QHBoxLayout* nameLay = new QHBoxLayout(nameWrap);
+        nameLay->setContentsMargins(12, 0, 0, 0);
+        nameLay->setSpacing(0);
+        nameLay->addWidget(names);
+        lay->addWidget(nameWrap);
         lay->addWidget(table, 1);
         return page;
     };
@@ -726,30 +738,55 @@ void PresetTableV2TransitionWidget::buildUi()
         frozen->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(frozen, &QTreeView::expanded, this,
                 [this, mode](const QModelIndex& idx) {
+            if (!idx.isValid())
+                return;
+            const int row = idx.data(kItemPresetIndexRole).toInt();
+            const int outputIdx = idx.data(kItemOutputIndexRole).toInt();
+            const int selectionIdx = idx.data(kItemSelectionIndexRole).toInt();
+            QTreeWidgetItem* item = parentItemForPreset(mode, row);
+            if (item && outputIdx >= 0)
+                item = item->child(outputIdx);
+            if (item && selectionIdx > 0)
+                item = item->child(selectionIdx - 1);
+            if (item)
+                item->setExpanded(true);
             if (idx.data(kItemOutputIndexRole).toInt() < 0)
             {
-                const int row = idx.data(kItemPresetIndexRole).toInt();
                 expandedSetForMode(mode).insert(row);
-                if (QTreeWidgetItem* item = parentItemForPreset(mode, row))
-                    item->setExpanded(true);
             }
         });
         connect(frozen, &QTreeView::collapsed, this,
                 [this, mode](const QModelIndex& idx) {
+            if (!idx.isValid())
+                return;
+            const int row = idx.data(kItemPresetIndexRole).toInt();
+            const int outputIdx = idx.data(kItemOutputIndexRole).toInt();
+            const int selectionIdx = idx.data(kItemSelectionIndexRole).toInt();
+            QTreeWidgetItem* item = parentItemForPreset(mode, row);
+            if (item && outputIdx >= 0)
+                item = item->child(outputIdx);
+            if (item && selectionIdx > 0)
+                item = item->child(selectionIdx - 1);
+            if (item)
+                item->setExpanded(false);
             if (idx.data(kItemOutputIndexRole).toInt() < 0)
             {
-                const int row = idx.data(kItemPresetIndexRole).toInt();
                 expandedSetForMode(mode).remove(row);
-                if (QTreeWidgetItem* item = parentItemForPreset(mode, row))
-                    item->setExpanded(false);
             }
         });
         connect(frozen, &QTreeView::doubleClicked, this,
                 [this, mode](const QModelIndex& idx) {
-            if (idx.data(kItemOutputIndexRole).toInt() >= 0)
+            if (!idx.isValid())
                 return;
             const int row = idx.data(kItemPresetIndexRole).toInt();
-            if (QTreeWidgetItem* item = parentItemForPreset(mode, row))
+            const int outputIdx = idx.data(kItemOutputIndexRole).toInt();
+            const int selectionIdx = idx.data(kItemSelectionIndexRole).toInt();
+            QTreeWidgetItem* item = parentItemForPreset(mode, row);
+            if (item && outputIdx >= 0)
+                item = item->child(outputIdx);
+            if (item && selectionIdx > 0)
+                item = item->child(selectionIdx - 1);
+            if (item)
                 item->setExpanded(!item->isExpanded());
         });
         connect(frozen, &QTreeView::customContextMenuRequested, this,
@@ -1949,6 +1986,7 @@ void PresetTableV2TransitionWidget::configureFrozenNameView(PTTransitionMode mod
     frozen->setRootIsDecorated(true);
     frozen->setItemsExpandable(true);
     frozen->setExpandsOnDoubleClick(true);
+    frozen->setIndentation(22);
     frozen->setUniformRowHeights(true);
     frozen->setAlternatingRowColors(true);
     frozen->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -1961,7 +1999,7 @@ void PresetTableV2TransitionWidget::configureFrozenNameView(PTTransitionMode mod
     frozen->setColumnHidden(ColName, false);
     for (int c = ColAxis; c < ColCount; ++c)
         frozen->setColumnHidden(c, true);
-    frozen->setFixedWidth(190);
+    frozen->setFixedWidth(210);
     frozen->installEventFilter(this);
     frozen->viewport()->installEventFilter(this);
 
@@ -2584,6 +2622,18 @@ void PresetTableV2TransitionWidget::notifyTablePresetCacheRefresh()
         table->refreshTransitionPresetCache();
 }
 
+void PresetTableV2TransitionWidget::scheduleDeferredTableLinkRefresh(int attemptsLeft)
+{
+    if (attemptsLeft <= 0)
+        return;
+
+    QTimer::singleShot(attemptsLeft == 6 ? 0 : 50, this, [this, attemptsLeft]() {
+        slotRefreshTableLink();
+        if (!linkedTable() && m_targetTableId != VCWidget::invalidId())
+            scheduleDeferredTableLinkRefresh(attemptsLeft - 1);
+    });
+}
+
 quint32 PresetTableV2TransitionWidget::targetTableId() const
 {
     return m_targetTableId;
@@ -2608,11 +2658,30 @@ PresetTableV2ControlIface* PresetTableV2TransitionWidget::linkedTable() const
 void PresetTableV2TransitionWidget::slotRefreshTableLink()
 {
     PresetTableV2ControlIface* table = linkedTable();
+    if (!table)
+    {
+        for (VCWidget* candidate : PresetTableV2VCLookup::allVcWidgets())
+        {
+            auto* candidateTable = qobject_cast<PresetTableV2ControlIface*>(candidate);
+            if (candidateTable && candidateTable->linkedTransitionWidgetId() == id())
+            {
+                m_targetTableId = candidate->id();
+                table = candidateTable;
+                break;
+            }
+        }
+    }
+
     if (table)
     {
         VCWidget* w = qobject_cast<VCWidget*>(VirtualConsole::instance()->widget(m_targetTableId));
         m_linkLabel->setText(tr("Linked: %1").arg(w ? PresetTableV2VCLookup::vcWidgetLabel(w)
                                                       : QString::number(m_targetTableId)));
+
+        if (table->linkedTransitionWidgetId() != id())
+            table->setLinkedTransitionWidgetId(id());
+        else
+            table->refreshTransitionPresetCache();
 
         m_enableChk->blockSignals(true);
         m_enableChk->setChecked(table->spatialEffectsEnabled());
@@ -2794,6 +2863,12 @@ void PresetTableV2TransitionWidget::slotModeChanged(Doc::Mode mode)
         m_toolbar->setEnabled(enabled);
     if (m_bankTabs)
         m_bankTabs->setEnabled(enabled);
+    if (m_sweepTable)
+        configureFrozenNameView(PTTransitionMode::SweepOnly);
+    if (m_continuousTable)
+        configureFrozenNameView(PTTransitionMode::Continuous);
+    if (m_multiFxTable)
+        configureFrozenNameView(PTTransitionMode::MultiFx);
     slotRefreshTableLink();
 }
 
@@ -3370,6 +3445,7 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
     rebuildAllPresetTables();
     updateGlobalSummaryLabel();
     slotRefreshTableLink();
+    scheduleDeferredTableLinkRefresh();
     notifyTablePresetCacheRefresh();
     return true;
 }
