@@ -158,6 +158,7 @@ public:
                                      quint32 fixtureGroupId,
                                      const PTSpatialEffectSettings& spatialEffects,
                                      quint32 linkedTransitionWidgetId,
+                                     bool positionConfirmDiscardDraft,
                                      QWidget* parent = nullptr);
 
     bool spatialEffectsEnabled() const;
@@ -185,6 +186,7 @@ public:
 
     PTMode   widgetMode()            const;
     quint32  selectedFixtureGroupId() const;
+    bool positionConfirmDiscardDraft() const;
 
 private slots:
     void slotAddOutput();
@@ -236,6 +238,7 @@ private:
 
     QTabWidget*     m_configTabs         = nullptr;
     int             m_colTabIndex        = -1;
+    int             m_positionTabIndex   = -1;
 
     // Tab: Columns
     QTableWidget*   m_colTable           = nullptr;
@@ -264,5 +267,7 @@ private:
 
     QCheckBox*            m_spatialChk         = nullptr;
     QComboBox*            m_transitionLinkCombo = nullptr;
+
+    QCheckBox*            m_positionConfirmDiscardDraftChk = nullptr;
 
 };

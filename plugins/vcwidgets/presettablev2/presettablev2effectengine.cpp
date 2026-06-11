@@ -5,6 +5,7 @@
 
 #include "presettablev2effectengine.h"
 #include "ptdimmerwaveengine.h"
+#include "ptparammatrixengine.h"
 #include "ptefxinputids.h"
 
 #include <algorithm>
@@ -172,19 +173,23 @@ PTTransitionPreset PresetTableV2SpatialEngine::presetFromLegacySpatial(const PTS
 QList<QLCPoint> PresetTableV2SpatialEngine::buildChaseOrder(const QList<QLCPoint>& points,
                                                             const PTTransitionPreset& preset,
                                                             int gridWidth,
-                                                            int gridHeight)
+                                                            int gridHeight,
+                                                            const PTGlobalEffectSettings* global)
 {
     if (points.isEmpty())
         return {};
+
+    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, global);
+    if (global && global->fxOrientation == 1)
+        waveParams.axis = PTTransitionAxis::Y;
 
     std::vector<PointOffset> items;
     items.reserve(size_t(points.size()));
 
     for (const QLCPoint& pt : points)
     {
-        const int off = PTDimmerWaveEngine::calculateHeadStartOffset(
-                pt.x(), pt.y(), gridWidth, gridHeight, preset.axis, preset.wings,
-                preset.offsetStep, preset.offsetDirection);
+        const int off = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
+                pt.x(), pt.y(), gridWidth, gridHeight, waveParams);
         items.push_back({pt, off});
     }
 
@@ -271,7 +276,10 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     if (liveByColumn.contains(PTEfxCol::InputWingsSymmetry))
         p.wingsSymmetry = int(val(PTEfxCol::InputWingsSymmetry)) % 3;
     if (liveByColumn.contains(PTEfxCol::InputOffsetStep))
-        p.offsetStep = qBound(1, int(val(PTEfxCol::InputOffsetStep)) * 360 / 255, 360);
+    {
+        const int v = int(val(PTEfxCol::InputOffsetStep));
+        p.offsetStep = (v == 0) ? 0 : qBound(1, v * 360 / 255, 360);
+    }
     if (liveByColumn.contains(PTEfxCol::InputDuration))
         p.durationMs = durationMsFromInputByte(val(PTEfxCol::InputDuration));
     if (liveByColumn.contains(PTEfxCol::InputWaveWidth))

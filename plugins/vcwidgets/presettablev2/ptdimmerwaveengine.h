@@ -102,6 +102,10 @@ public:
     static quint32 serialTimeOffsetMs(int serialIndex, int fixtureCount,
                                       quint32 durationMs, PTPropagationMode propagation);
 
+    /** Cycle phase 0…1 at t=0 (matches iteratorFromElapsed / orbit / dimmer wave). */
+    static double phase01AtCycleStart(quint32 cycleMs, const PTDimmerWaveParams& params,
+                                      int headOffsetDeg, int serialIndex, int serialCount);
+
     static QString waveShapeToString(int shape);
     static int waveShapeFromString(const QString& s);
 };

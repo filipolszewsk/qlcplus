@@ -117,6 +117,7 @@ private:
         ColPropagation,
         ColSpeedMult,
         ColPositionMotion,
+        ColPositionMotionDir,
         ColPositionPanSize,
         ColPositionTiltSize,
         ColCount
@@ -208,6 +209,9 @@ private:
     void refreshOverrideVisualsForPreset(PTTransitionMode mode, int row);
     void refreshOverrideVisualsForItem(PTTransitionMode mode, QTreeWidgetItem* item);
     void configureFrozenNameView(PTTransitionMode mode);
+    void applyPositionModeColumnVisibility(QTreeWidget* table, PTTransitionMode mode);
+    void applyDefaultColumnWidths(QTreeWidget* table);
+    QString columnTooltipForCol(int col) const;
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
@@ -220,6 +224,7 @@ private:
     static QComboBox* makeOffsetDirCombo(QWidget* parent);
     static QComboBox* makeWaveShapeCombo(QWidget* parent);
     static QComboBox* makePositionMotionCombo(QWidget* parent);
+    static QComboBox* makePositionMotionDirCombo(QWidget* parent);
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);
     static QComboBox* makeSpeedMultCombo(QWidget* parent);

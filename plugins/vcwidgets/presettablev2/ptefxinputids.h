@@ -28,6 +28,7 @@ enum Column : quint8
     Propagation,
     SpeedMult,
     PositionMotion,
+    PositionMotionDir,
     PositionPanSize,
     PositionTiltSize,
     Count

@@ -16,6 +16,8 @@ public:
     static QRectF degreesRange(Fixture* fxi, int head);
     static PTPositionValue centerPosition(Fixture* fxi, int head);
 
+    static qreal symmetricHeadroom(qreal center, qreal min, qreal max);
+
     static qreal clampPanDeg(Fixture* fxi, int head, qreal panDeg);
     static qreal clampTiltDeg(Fixture* fxi, int head, qreal tiltDeg);
     static PTPositionValue clampPosition(Fixture* fxi, int head, const PTPositionValue& pos);

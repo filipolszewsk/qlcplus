@@ -665,6 +665,55 @@ void Scene_Test::flashUnflash()
     QVERIFY(timer.m_dmxSourceList.size() == 0);
 }
 
+void Scene_Test::flashRestoreUnderlyingScene()
+{
+    Doc *doc = new Doc(this);
+    QList<Universe*> ua;
+    MasterTimer timer(doc);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(3);
+    doc->addFixture(fxi);
+
+    ua = doc->inputOutputMap()->claimUniverses();
+    ua[0]->setChannelCapability(0, QLCChannel::Pan, Universe::LTP);
+    doc->inputOutputMap()->releaseUniverses(false);
+
+    Scene *toggle = new Scene(doc);
+    toggle->setFadeInSpeed(0);
+    toggle->setName("Toggle");
+    toggle->setValue(fxi->id(), 0, 5);
+    doc->addFunction(toggle);
+
+    Scene *flash = new Scene(doc);
+    flash->setName("Flash");
+    flash->setValue(fxi->id(), 0, 105);
+    doc->addFunction(flash);
+
+    toggle->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    ua = doc->inputOutputMap()->claimUniverses();
+    ua[0]->processFaders();
+    QCOMPARE(ua[0]->preGMValues()[0], char(5));
+    doc->inputOutputMap()->releaseUniverses(false);
+
+    flash->flash(&timer, false, true);
+    ua = doc->inputOutputMap()->claimUniverses();
+    flash->writeDMX(&timer, ua);
+    ua[0]->processFaders();
+    QCOMPARE(ua[0]->preGMValues()[0], char(105));
+    doc->inputOutputMap()->releaseUniverses(false);
+
+    flash->unFlash(&timer);
+    ua = doc->inputOutputMap()->claimUniverses();
+    QCOMPARE(ua[0]->preGMValues()[0], char(5));
+    doc->inputOutputMap()->releaseUniverses(false);
+
+    delete doc;
+}
+
 void Scene_Test::writeHTPZeroTicks()
 {
     Doc* doc = new Doc(this);

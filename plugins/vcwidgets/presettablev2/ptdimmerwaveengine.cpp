@@ -43,6 +43,19 @@ PTDimmerWaveParams PTDimmerWaveEngine::paramsFromPreset(const PTTransitionPreset
     if (global && preset.wingsSymmetry == 0 && global->fxWingsSymmetry != 0)
         p.wingsSymmetry = global->fxWingsSymmetry;
 
+    if (global)
+    {
+        if (preset.blocks <= 1 && global->fxBlocks > 1)
+            p.blocks = qMax(1, global->fxBlocks);
+
+        const int phaseOffsetDeg = int(std::floor((double(global->fxPhaseOffset) / 255.0) * 360.0));
+        p.startOffset = (p.startOffset + phaseOffsetDeg) % 360;
+
+        const double mult = PTParamMatrixEngine::fxMultiplierValue(global->fxMultiplier);
+        if (p.offsetStep != 0)
+            p.offsetStep = qMax(1, int(std::round(double(p.offsetStep) * mult)));
+    }
+
     return p;
 }
 
@@ -97,7 +110,9 @@ void PTDimmerWaveEngine::clampOffsetStep(PTTransitionPreset& preset, int gridSpa
 {
     if (gridSpanAlongAxis <= 0)
         return;
-    preset.offsetStep = qBound(1, preset.offsetStep, maxOffsetStepForGrid(gridSpanAlongAxis, preset));
+    if (preset.offsetStep == 0)
+        return;
+    preset.offsetStep = qBound(0, preset.offsetStep, maxOffsetStepForGrid(gridSpanAlongAxis, preset));
 }
 
 PTDimmerWaveSpatialSpan PTDimmerWaveEngine::spatialSpanForPoint(int col, int row, int gridWidth,
@@ -385,10 +400,6 @@ PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, 
     const int wings = qBound(1, params.wings, span);
     const int blocks = qMax(1, params.blocks);
 
-    int step = params.offsetStep;
-    if (step <= 0)
-        step = evenOffsetStepForSpan(span);
-
     const int positionsPerWing = ceilDivPositive(span, wings);
     const int wingIndex = qMin(wings - 1, position / positionsPerWing);
     const int localIndex = qMax(0, position - wingIndex * positionsPerWing);
@@ -404,7 +415,15 @@ PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, 
     info.localOrder = localIndex + 1;
     info.offsetSlot = index;
     info.slotsPerWing = blocksPerWing;
-    info.headOffsetDeg = (step * index) % 360;
+    if (params.offsetStep == 0)
+        info.headOffsetDeg = 0;
+    else
+    {
+        int step = params.offsetStep;
+        if (step < 0)
+            step = evenOffsetStepForSpan(span);
+        info.headOffsetDeg = (step * index) % 360;
+    }
     return info;
 }
 
@@ -427,6 +446,17 @@ quint32 PTDimmerWaveEngine::serialTimeOffsetMs(int serialIndex, int fixtureCount
     if (propagation != PTPropagationMode::Serial || fixtureCount <= 0 || durationMs == 0)
         return 0;
     return durationMs / quint32(fixtureCount + 1) * quint32(serialIndex);
+}
+
+double PTDimmerWaveEngine::phase01AtCycleStart(quint32 cycleMs, const PTDimmerWaveParams& params,
+                                               int headOffsetDeg, int serialIndex, int serialCount)
+{
+    cycleMs = qMax(quint32(1), cycleMs);
+    const quint32 timeOffset = serialTimeOffsetMs(serialIndex, serialCount, cycleMs,
+                                                  params.propagation);
+    const float iterator = iteratorFromElapsed(0, cycleMs, params.startOffset, headOffsetDeg,
+                                               timeOffset);
+    return double(iterator) / (2.0 * M_PI);
 }
 
 QString PTDimmerWaveEngine::waveShapeToString(int shape)

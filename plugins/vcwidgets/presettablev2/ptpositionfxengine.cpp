@@ -4,6 +4,7 @@
 
 #include "ptpositionfxengine.h"
 #include "ptpositionconverter.h"
+#include "ptdimmerwaveengine.h"
 
 #include "fixture.h"
 
@@ -88,6 +89,49 @@ void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
             tiltOffDeg = qreal(qSin(phaseRadians * 2.0)) * tiltSizeDeg;
             break;
     }
+}
+
+bool PTPositionFxEngine::orbitPhaseFromIterator(float iteratorRad, int waveWidthDeg,
+                                                double& outPhaseRad)
+{
+    const float widthRad = (float(qBound(1, waveWidthDeg, 360)) / 360.0f) * float(M_PI * 2.0);
+    if (widthRad <= 0.0f || iteratorRad >= widthRad)
+        return false;
+
+    outPhaseRad = double(iteratorRad / widthRad) * 2.0 * M_PI;
+    return true;
+}
+
+double PTPositionFxEngine::applyMotionDirection(double phaseRad,
+                                                PTPositionMotionDirection direction,
+                                                const PTDimmerWaveOffsetInfo& spatial)
+{
+    switch (direction)
+    {
+        case PTPositionMotionDirection::Reverse:
+            return -phaseRad;
+        case PTPositionMotionDirection::AlternateWings:
+            return (spatial.wingIndex % 2 == 1) ? -phaseRad : phaseRad;
+        case PTPositionMotionDirection::SymmetricPairs:
+            return (spatial.localIndex % 2 == 1) ? -phaseRad : phaseRad;
+        default:
+            return phaseRad;
+    }
+}
+
+qreal PTPositionFxEngine::orbitAmplitude01(float iteratorRad, int waveWidthDeg,
+                                           const PTDimmerWaveParams& waveParams, Shape shape)
+{
+    if (shape != Shape::PanOnly && shape != Shape::TiltOnly)
+        return 1.0;
+
+    const float widthRad = (float(qBound(1, waveWidthDeg, 360)) / 360.0f) * float(M_PI * 2.0);
+    if (widthRad <= 0.0f || iteratorRad >= widthRad)
+        return 0.0;
+
+    PTDimmerWaveParams envParams = waveParams;
+    envParams.waveLevel = 255;
+    return qreal(PTDimmerWaveEngine::dimmerAtPhaseInWidth(iteratorRad / widthRad, envParams));
 }
 
 PTPositionValue PTPositionFxEngine::applySmartMotion(const PTPositionValue& base, Fixture* fxi,

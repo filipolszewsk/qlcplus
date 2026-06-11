@@ -48,6 +48,7 @@ private slots:
     void preRunPostRun();
 
     void flashUnflash();
+    void flashRestoreUnderlyingScene();
 
     void writeHTPZeroTicks();
     void writeHTPTwoTicks();

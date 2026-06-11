@@ -28,6 +28,25 @@ qreal physicalTiltMax(Fixture* fxi)
     return v > 0 ? v : 270.0;
 }
 
+/** Custom Pan/Tilt Range: GenericFader expects logical 0-65535; Universe::applyPanTiltScaling maps to physical. */
+bool usesLogicalPanTilt16(Fixture* fxi, int head)
+{
+    return fxi && fxi->hasPanTiltRange(head);
+}
+
+quint16 degToLogicalPanTilt16(qreal clampedDeg, qreal rangeMin, qreal rangeSpan)
+{
+    qreal norm = rangeSpan > 0 ? (clampedDeg - rangeMin) / rangeSpan : 0.0;
+    norm = qBound(0.0, norm, 1.0);
+    return quint16(qBound(0, int(qRound(norm * 65535.0)), 65535));
+}
+
+qreal logicalPanTilt16ToDeg(quint16 value16, qreal rangeMin, qreal rangeSpan)
+{
+    const qreal norm = double(value16) / 65535.0;
+    return rangeMin + norm * rangeSpan;
+}
+
 } // namespace
 
 QRectF PTPositionConverter::degreesRange(Fixture* fxi, int head)
@@ -38,6 +57,11 @@ QRectF PTPositionConverter::degreesRange(Fixture* fxi, int head)
     if (!r.isValid() || r.width() <= 0 || r.height() <= 0)
         return QRectF(0, 0, physicalPanMax(fxi), physicalTiltMax(fxi));
     return r;
+}
+
+qreal PTPositionConverter::symmetricHeadroom(qreal center, qreal min, qreal max)
+{
+    return qMax(0.0, qMin(center - min, max - center));
 }
 
 PTPositionValue PTPositionConverter::centerPosition(Fixture* fxi, int head)
@@ -76,6 +100,12 @@ PTPositionValue PTPositionConverter::clampPosition(Fixture* fxi, int head,
 quint16 PTPositionConverter::panDegToPan16(Fixture* fxi, int head, qreal panDeg)
 {
     const qreal clamped = clampPanDeg(fxi, head, panDeg);
+    if (usesLogicalPanTilt16(fxi, head))
+    {
+        const QRectF r = degreesRange(fxi, head);
+        return degToLogicalPanTilt16(clamped, r.left(), r.width());
+    }
+
     qreal norm = clamped / physicalPanMax(fxi);
     if (fxi && fxi->hasPanTiltRange(head) && fxi->getPanTiltRange(head).panReverse)
         norm = 1.0 - norm;
@@ -85,6 +115,12 @@ quint16 PTPositionConverter::panDegToPan16(Fixture* fxi, int head, qreal panDeg)
 quint16 PTPositionConverter::tiltDegToTilt16(Fixture* fxi, int head, qreal tiltDeg)
 {
     const qreal clamped = clampTiltDeg(fxi, head, tiltDeg);
+    if (usesLogicalPanTilt16(fxi, head))
+    {
+        const QRectF r = degreesRange(fxi, head);
+        return degToLogicalPanTilt16(clamped, r.top(), r.height());
+    }
+
     qreal norm = clamped / physicalTiltMax(fxi);
     if (fxi && fxi->hasPanTiltRange(head) && fxi->getPanTiltRange(head).tiltReverse)
         norm = 1.0 - norm;
@@ -93,6 +129,12 @@ quint16 PTPositionConverter::tiltDegToTilt16(Fixture* fxi, int head, qreal tiltD
 
 qreal PTPositionConverter::pan16ToPanDeg(Fixture* fxi, int head, quint16 pan16)
 {
+    if (usesLogicalPanTilt16(fxi, head))
+    {
+        const QRectF r = degreesRange(fxi, head);
+        return clampPanDeg(fxi, head, logicalPanTilt16ToDeg(pan16, r.left(), r.width()));
+    }
+
     qreal norm = double(pan16) / 65535.0;
     if (fxi && fxi->hasPanTiltRange(head) && fxi->getPanTiltRange(head).panReverse)
         norm = 1.0 - norm;
@@ -101,6 +143,12 @@ qreal PTPositionConverter::pan16ToPanDeg(Fixture* fxi, int head, quint16 pan16)
 
 qreal PTPositionConverter::tilt16ToTiltDeg(Fixture* fxi, int head, quint16 tilt16)
 {
+    if (usesLogicalPanTilt16(fxi, head))
+    {
+        const QRectF r = degreesRange(fxi, head);
+        return clampTiltDeg(fxi, head, logicalPanTilt16ToDeg(tilt16, r.top(), r.height()));
+    }
+
     qreal norm = double(tilt16) / 65535.0;
     if (fxi && fxi->hasPanTiltRange(head) && fxi->getPanTiltRange(head).tiltReverse)
         norm = 1.0 - norm;

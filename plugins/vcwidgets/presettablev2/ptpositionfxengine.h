@@ -7,6 +7,8 @@
 #include "presettablev2effectengine.h"
 
 class Fixture;
+struct PTDimmerWaveOffsetInfo;
+struct PTDimmerWaveParams;
 
 class PTPositionFxEngine
 {
@@ -27,4 +29,17 @@ public:
     /** Smart compressor: pivot shifts toward axis center only when amplitude would clip. */
     static PTPositionValue applySmartMotion(const PTPositionValue& base, Fixture* fxi, int head,
                                             Shape shape, double phaseRadians, qreal size01);
+
+    /**
+     * Map dimmer-wave iterator (rad) into orbit phase when inside waveWidth window.
+     * Returns false outside the window (fixture stays at base).
+     */
+    static bool orbitPhaseFromIterator(float iteratorRad, int waveWidthDeg, double& outPhaseRad);
+
+    static double applyMotionDirection(double phaseRad, PTPositionMotionDirection direction,
+                                       const PTDimmerWaveOffsetInfo& spatial);
+
+    /** Fade-in/out envelope for 1D orbit; 1.0 for 2D shapes. */
+    static qreal orbitAmplitude01(float iteratorRad, int waveWidthDeg,
+                                  const PTDimmerWaveParams& waveParams, Shape shape);
 };

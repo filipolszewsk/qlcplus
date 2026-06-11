@@ -42,7 +42,7 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
         return plan;
 
     const QList<QLCPoint> chaseOrder = PresetTableV2SpatialEngine::buildChaseOrder(
-            scopePoints, preset, gridWidth, gridHeight);
+            scopePoints, preset, gridWidth, gridHeight, &global);
     const int count = qMax(1, chaseOrder.size());
     const double width01 = windowWidth01(preset);
 
@@ -138,9 +138,11 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
     preview.blocks = qMax(1, preset.blocks);
     preview.slotsPerWing = PTDimmerWaveEngine::offsetSlotCountForWing(span, preset);
     preview.maxOffsetStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
-    preview.offsetStepOk = preset.offsetStep <= preview.maxOffsetStep;
+    preview.offsetStepOk = preset.offsetStep == 0
+            || preset.offsetStep <= preview.maxOffsetStep;
 
     const PTSpatialFixturePlan plan = build(scopePoints, preset, global, gridWidth, gridHeight);
+    const quint32 cycleMs = qMax(quint32(1), PTParamMatrixEngine::effectiveDurationMs(global, preset));
 
     QHash<int, QSet<int>> offsetSlotsByDegree;
     PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, &global);
@@ -174,14 +176,11 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
                 cell.localOrder = info.localOrder;
                 cell.offsetSlot = info.offsetSlot;
                 cell.headOffsetDeg = ((e->headOffsetDeg + preset.startOffset) % 360 + 360) % 360;
-                cell.phaseStart01 = qBound(0.0, double(cell.headOffsetDeg) / 360.0, 1.0);
-                if (preset.propagation == PTPropagationMode::Serial && plan.count() > 1)
-                {
-                    const double width01 = PTSpatialFixturePlan::windowWidth01(preset);
-                    const double serialSpread = double(e->serialIndex) / double(plan.count() - 1)
-                            * qMax(0.0, 1.0 - width01);
-                    cell.phaseStart01 = qMin(1.0, cell.phaseStart01 + serialSpread);
-                }
+                cell.phaseStart01 = qBound(0.0,
+                        PTDimmerWaveEngine::phase01AtCycleStart(cycleMs, waveParams,
+                                                                e->headOffsetDeg, e->serialIndex,
+                                                                plan.count()),
+                        1.0);
                 if (offsetSlotsByDegree.value(info.wingIndex * 10000 + cell.headOffsetDeg).size() > 1)
                 {
                     cell.offsetCollision = true;

@@ -520,6 +520,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    quint32 fixtureGroupId,
                                                    const PTSpatialEffectSettings& spatialEffects,
                                                    quint32 linkedTransitionWidgetId,
+                                                   bool positionConfirmDiscardDraft,
                                                    QWidget* parent)
     : QDialog(parent)
     , m_doc(doc)
@@ -645,6 +646,26 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     colLayout->addLayout(colBtnRow);
 
     m_colTabIndex = tabs->addTab(colTab, tr("Columns"));
+
+    // ---- TAB: Position ------------------------------------------------------
+    QWidget* posTab = new QWidget(tabs);
+    QVBoxLayout* posTabLayout = new QVBoxLayout(posTab);
+
+    QGroupBox* posEditorGrp = new QGroupBox(tr("Position editor"), posTab);
+    QVBoxLayout* posEditorLayout = new QVBoxLayout(posEditorGrp);
+
+    m_positionConfirmDiscardDraftChk = new QCheckBox(
+            tr("Warn before discarding unsaved position edits"), posEditorGrp);
+    m_positionConfirmDiscardDraftChk->setChecked(positionConfirmDiscardDraft);
+    m_positionConfirmDiscardDraftChk->setToolTip(tr(
+            "When enabled, switching presets or layers asks before dropping unsaved edits. "
+            "When disabled, unsaved edits are discarded silently."));
+    posEditorLayout->addWidget(m_positionConfirmDiscardDraftChk);
+    posEditorLayout->addStretch();
+    posTabLayout->addWidget(posEditorGrp);
+    posTabLayout->addStretch();
+
+    m_positionTabIndex = tabs->addTab(posTab, tr("Position"));
 
     // ---- TAB: Crossfade / Transitions ---------------------------------------
     QWidget* xfTab = new QWidget(tabs);
@@ -920,6 +941,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     updateHintLabel();
     if (m_configTabs && m_colTabIndex >= 0)
         m_configTabs->setTabVisible(m_colTabIndex, mode != PTMode::Position);
+    if (m_configTabs && m_positionTabIndex >= 0)
+        m_configTabs->setTabVisible(m_positionTabIndex, mode == PTMode::Position);
 
     // ---- Populate column table ----------------------------------------------
     rebuildColumnTable();
@@ -1118,6 +1141,13 @@ quint32 PresetTableV2ConfigDialog::selectedFixtureGroupId() const
     return m_groupCombo->currentData().toUInt();
 }
 
+bool PresetTableV2ConfigDialog::positionConfirmDiscardDraft() const
+{
+    return m_positionConfirmDiscardDraftChk
+            ? m_positionConfirmDiscardDraftChk->isChecked()
+            : true;
+}
+
 // ==========================================================================
 // Private helpers
 // ==========================================================================
@@ -1181,6 +1211,8 @@ void PresetTableV2ConfigDialog::slotModeComboChanged(int /*index*/)
     m_groupRow->setVisible(isFG);
     if (m_configTabs && m_colTabIndex >= 0)
         m_configTabs->setTabVisible(m_colTabIndex, newMode != PTMode::Position);
+    if (m_configTabs && m_positionTabIndex >= 0)
+        m_configTabs->setTabVisible(m_positionTabIndex, newMode == PTMode::Position);
     updateHintLabel();
     updateColumnButtons();
 

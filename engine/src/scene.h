@@ -22,6 +22,7 @@
 #define SCENE_H
 
 #include <QMutex>
+#include <QHash>
 #include <QList>
 
 #include "genericfader.h"
@@ -272,6 +273,8 @@ public:
 private:
     bool m_flashOverrides;
     bool m_flashForceLTP;
+    /** preGM snapshot per (universe, address) taken when flash faders are created */
+    QHash<quint32, uchar> m_flashRestoreValues;
 
     /*********************************************************************
      * Running
@@ -292,6 +295,9 @@ private:
 
     /** Check whether a fade out is needed and cleanup faders */
     void handleFadersEnd(MasterTimer* timer);
+
+    /** End flash hold: dismiss flash faders and restore pre-flash preGM values */
+    void releaseFlashFaders(MasterTimer* timer, QList<Universe*>& universes);
 
     /*********************************************************************
      * Attributes

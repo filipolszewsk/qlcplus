@@ -736,6 +736,14 @@ void Scene::unFlash(MasterTimer *timer)
 
     Q_ASSERT(timer != NULL);
     Function::unFlash(timer);
+
+    Doc *d = doc();
+    if (d == NULL || d->inputOutputMap() == NULL)
+        return;
+
+    QList<Universe *> universes = d->inputOutputMap()->claimUniverses();
+    releaseFlashFaders(timer, universes);
+    d->inputOutputMap()->releaseUniverses();
 }
 
 void Scene::writeDMX(MasterTimer *timer, QList<Universe *> ua)
@@ -757,6 +765,13 @@ void Scene::writeDMX(MasterTimer *timer, QList<Universe *> ua)
                 quint32 universe = fc.universe();
                 if (universe == Universe::invalid())
                     continue;
+
+                const quint32 address = fc.addressInUniverse();
+                if (address != QLCChannel::invalid() && universe < (quint32) ua.count())
+                {
+                    const quint32 key = (universe << 16) | address;
+                    m_flashRestoreValues.insert(key, uchar(ua.at(universe)->preGMValue(address)));
+                }
 
                 QSharedPointer<GenericFader> fader = m_fadersMap.value(universe, QSharedPointer<GenericFader>());
                 if (fader.isNull())
@@ -780,9 +795,50 @@ void Scene::writeDMX(MasterTimer *timer, QList<Universe *> ua)
     }
     else
     {
-        handleFadersEnd(timer);
+        if (!m_fadersMap.isEmpty())
+            releaseFlashFaders(timer, ua);
         timer->unregisterDMXSource(this);
     }
+}
+
+void Scene::releaseFlashFaders(MasterTimer *timer, QList<Universe *> &universes)
+{
+    Q_UNUSED(timer);
+
+    QMapIterator<quint32, QSharedPointer<GenericFader> > faderIt(m_fadersMap);
+    while (faderIt.hasNext())
+    {
+        faderIt.next();
+        const quint32 universe = faderIt.key();
+        QSharedPointer<GenericFader> fader = faderIt.value();
+        if (fader.isNull() || universe >= (quint32) universes.count())
+            continue;
+
+        universes.at(universe)->dismissFader(fader);
+    }
+
+    QMapIterator<SceneValue, uchar> valueIt(m_values);
+    while (valueIt.hasNext())
+    {
+        valueIt.next();
+        const SceneValue &sv = valueIt.key();
+
+        FadeChannel fc(doc(), sv.fxi, sv.channel);
+        const quint32 universe = fc.universe();
+        if (universe == Universe::invalid() || universe >= (quint32) universes.count())
+            continue;
+
+        const quint32 address = fc.addressInUniverse();
+        if (address == QLCChannel::invalid())
+            continue;
+
+        const quint32 key = (universe << 16) | address;
+        const uchar restoreValue = m_flashRestoreValues.value(key, 0);
+        universes.at(universe)->write(address, restoreValue, true);
+    }
+
+    m_fadersMap.clear();
+    m_flashRestoreValues.clear();
 }
 
 /****************************************************************************

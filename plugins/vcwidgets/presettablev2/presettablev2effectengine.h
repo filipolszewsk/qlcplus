@@ -13,6 +13,8 @@
 #include <QString>
 #include "qlcpoint.h"
 
+struct PTGlobalEffectSettings;
+
 static const int kPTEfxStepMs = 20;
 
 enum class PTSpatialOrder
@@ -85,6 +87,15 @@ enum class PTPositionMotion : int
     Figure8_2D = 5
 };
 
+/** Orbit winding / symmetry (Position Mode). */
+enum class PTPositionMotionDirection : int
+{
+    Forward = 0,
+    Reverse,
+    AlternateWings,
+    SymmetricPairs
+};
+
 struct PTCustomCurvePoint
 {
     enum SegmentMode
@@ -145,6 +156,7 @@ struct PTTransitionPreset
     quint32            fadeMs = 150;
     /** Position Mode: relative orbit around base row (independent of dimmer wave fields). */
     int                positionMotion = int(PTPositionMotion::Off);
+    int                positionMotionDirection = int(PTPositionMotionDirection::Forward);
     int                positionPanSize = 45;
     int                positionTiltSize = 30;
 };
@@ -183,7 +195,8 @@ public:
     static QList<QLCPoint> buildChaseOrder(const QList<QLCPoint>& points,
                                            const PTTransitionPreset& preset,
                                            int gridWidth,
-                                           int gridHeight);
+                                           int gridHeight,
+                                           const PTGlobalEffectSettings* global = nullptr);
 
     static quint32 totalDurationMs(quint32 stepDelayMs, quint32 fadeMs, int pointCount);
     static quint32 totalDurationMs(const PTSpatialEffectSettings& fx, int pointCount);

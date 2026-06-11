@@ -8,6 +8,8 @@
 #include <QPainter>
 #include <QMouseEvent>
 
+#include <algorithm>
+
 PTPositionFixtureGridWidget::PTPositionFixtureGridWidget(QWidget* parent)
     : QWidget(parent)
 {
@@ -34,10 +36,55 @@ void PTPositionFixtureGridWidget::setPlaceholderText(const QString& text)
     update();
 }
 
-void PTPositionFixtureGridWidget::setSelectedCells(const QSet<QLCPoint>& cells)
+QList<QLCPoint> PTPositionFixtureGridWidget::rowMajorOrder(const QSet<QLCPoint>& cells)
+{
+    QList<QLCPoint> order;
+    for (const QLCPoint& pt : cells)
+        order.append(pt);
+    std::sort(order.begin(), order.end(), [](const QLCPoint& a, const QLCPoint& b) {
+        return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+    });
+    return order;
+}
+
+void PTPositionFixtureGridWidget::setImplicitAllSelection(bool implicitAll)
+{
+    if (m_implicitAllSelected == implicitAll)
+        return;
+    m_implicitAllSelected = implicitAll;
+    update();
+}
+
+void PTPositionFixtureGridWidget::setSelectedCells(const QSet<QLCPoint>& cells,
+                                                   const QList<QLCPoint>& order)
 {
     m_selectedCells = cells;
+    m_selectionOrder.clear();
+    for (const QLCPoint& pt : order)
+    {
+        if (cells.contains(pt))
+            m_selectionOrder.append(pt);
+    }
+    for (const QLCPoint& pt : cells)
+    {
+        if (!m_selectionOrder.contains(pt))
+            m_selectionOrder.append(pt);
+    }
+    if (!cells.isEmpty())
+        m_selectionAnchor = m_selectionOrder.isEmpty() ? *cells.constBegin() : m_selectionOrder.first();
+    else
+        m_selectionAnchor = QLCPoint(-1, -1);
     update();
+}
+
+void PTPositionFixtureGridWidget::emitSelectionChanged()
+{
+    emit selectionChanged(m_selectedCells, m_selectionOrder);
+}
+
+bool PTPositionFixtureGridWidget::hasAnchor() const
+{
+    return m_selectionAnchor.x() >= 0 && m_cells.contains(m_selectionAnchor);
 }
 
 QRect PTPositionFixtureGridWidget::cellRect(const QLCPoint& pt) const
@@ -70,20 +117,64 @@ QLCPoint PTPositionFixtureGridWidget::pointAt(const QPoint& pos) const
     return QLCPoint(-1, -1);
 }
 
-void PTPositionFixtureGridWidget::toggleSelection(const QLCPoint& pt, bool extend)
+void PTPositionFixtureGridWidget::selectSingleCell(const QLCPoint& pt)
 {
     if (!m_cells.contains(pt))
         return;
 
-    if (!extend)
-        m_selectedCells.clear();
+    m_selectedCells.clear();
+    m_selectedCells.insert(pt);
+    m_selectionOrder = QList<QLCPoint>() << pt;
+    m_selectionAnchor = pt;
+    emitSelectionChanged();
+    update();
+}
+
+void PTPositionFixtureGridWidget::selectRectRange(const QLCPoint& from, const QLCPoint& to)
+{
+    if (!m_cells.contains(from) || !m_cells.contains(to))
+        return;
+
+    const int x0 = qMin(from.x(), to.x());
+    const int x1 = qMax(from.x(), to.x());
+    const int y0 = qMin(from.y(), to.y());
+    const int y1 = qMax(from.y(), to.y());
+
+    m_selectedCells.clear();
+    m_selectionOrder.clear();
+    for (int y = y0; y <= y1; ++y)
+    {
+        for (int x = x0; x <= x1; ++x)
+        {
+            const QLCPoint pt(x, y);
+            if (!m_cells.contains(pt))
+                continue;
+            m_selectedCells.insert(pt);
+            m_selectionOrder.append(pt);
+        }
+    }
+
+    emitSelectionChanged();
+    update();
+}
+
+void PTPositionFixtureGridWidget::toggleSelectionCell(const QLCPoint& pt)
+{
+    if (!m_cells.contains(pt))
+        return;
 
     if (m_selectedCells.contains(pt))
+    {
         m_selectedCells.remove(pt);
+        m_selectionOrder.removeAll(pt);
+    }
     else
+    {
         m_selectedCells.insert(pt);
+        m_selectionOrder.append(pt);
+    }
 
-    emit selectionChanged(m_selectedCells);
+    emitSelectionChanged();
     update();
 }
 
@@ -97,11 +188,32 @@ void PTPositionFixtureGridWidget::mousePressEvent(QMouseEvent* event)
 
     const QLCPoint pt = pointAt(event->pos());
     if (pt.x() < 0)
+    {
+        if (!m_selectedCells.isEmpty())
+        {
+            m_selectedCells.clear();
+            m_selectionOrder.clear();
+            m_selectionAnchor = QLCPoint(-1, -1);
+            emitSelectionChanged();
+            update();
+        }
         return;
+    }
 
-    const bool extend = event->modifiers().testFlag(Qt::ShiftModifier)
-            || event->modifiers().testFlag(Qt::ControlModifier);
-    toggleSelection(pt, extend);
+    if (event->modifiers().testFlag(Qt::ShiftModifier))
+    {
+        if (!hasAnchor())
+            m_selectionAnchor = pt;
+        selectRectRange(m_selectionAnchor, pt);
+    }
+    else if (event->modifiers().testFlag(Qt::ControlModifier))
+    {
+        toggleSelectionCell(pt);
+    }
+    else
+    {
+        selectSingleCell(pt);
+    }
 }
 
 void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
@@ -139,7 +251,9 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
         p.setPen(QPen(palette().color(QPalette::Mid), 1));
         p.drawRect(cr);
 
-        if (m_selectedCells.contains(it.key()))
+        const bool selected = m_selectedCells.contains(it.key())
+                || (m_implicitAllSelected && m_selectedCells.isEmpty());
+        if (selected)
         {
             p.setPen(QPen(selectedBorder, 3));
             p.drawRect(cr.adjusted(1, 1, -1, -1));
@@ -166,7 +280,8 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
     p.setFont(font());
     p.setPen(palette().color(QPalette::Mid));
     p.drawText(QRect(6, height() - 20, width() - 12, 16), Qt::AlignLeft,
-               tr("Click = select · Shift/Ctrl+click = multi-select"));
+               tr("No selection = all fixtures · Click = one · Shift = range · "
+                  "Ctrl = toggle · click empty = all · green = stored · grey = inherited"));
 }
 
 QSize PTPositionFixtureGridWidget::sizeHint() const

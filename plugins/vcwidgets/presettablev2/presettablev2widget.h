@@ -27,6 +27,8 @@
 #include <QMouseEvent>
 #include <QApplication>
 #include <QClipboard>
+#include <QTreeWidget>
+#include <QSet>
 
 #include <QJsonObject>
 #include <QJsonArray>
@@ -54,6 +56,8 @@ class QListWidget;
 class QSplitter;
 class QComboBox;
 class QPushButton;
+class QCheckBox;
+class QSlider;
 class QDoubleSpinBox;
 
 // ---------------------------------------------------------------------------
@@ -147,6 +151,15 @@ struct PTPositionDraftContext {
     int output = -1;
     int selection = -1;
 };
+
+/** Navigation target in the position preset tree (General / Output / Selection). */
+struct PTPositionTreeRef {
+    int row = -1;
+    int output = -1;
+    int selection = -1;
+    bool isLayerLeaf = false;
+};
+Q_DECLARE_METATYPE(PTPositionTreeRef)
 
 struct PTRow {
     QString        name;
@@ -331,37 +344,61 @@ private slots:
     void slotPasteSelection();
     void slotTableContextMenu(const QPoint& pos);
     void slotFixtureGroupMaskChanged(quint32 groupId);
-    void slotPositionGridSelectionChanged(const QSet<QLCPoint>& cells);
-    void slotPositionRowListChanged(int index);
+    void slotPositionGridSelectionChanged(const QSet<QLCPoint>& cells,
+                                          const QList<QLCPoint>& order);
+    void slotPositionPresetTreeChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
+    void slotPositionPresetTreeDoubleClicked(QTreeWidgetItem* item, int column);
     void slotPositionXYPadChanged(qreal xNorm, qreal yNorm);
     void slotPositionPanSpinChanged(double value);
     void slotPositionTiltSpinChanged(double value);
-    void slotPositionEditLayerChanged(int index);
     void slotPositionCopyCell();
     void slotPositionPasteCell();
+    void slotPositionCopyLayer();
+    void slotPositionPasteLayer();
     void slotPositionClearCell();
     void slotPositionOverwrite();
     void slotPositionSaveAs();
     void slotPositionRevert();
+    void slotPositionSymmetricSpreadToggled(bool enabled);
+    void slotPositionSpreadChanged(int value);
+    void slotPositionSpreadAxisChanged(int index);
     void slotTableCurrentCellChanged(int row, int col);
 
 private:
     void rebuildTable();
     void updatePositionModeChrome();
     void rebuildPositionEditor();
-    void rebuildPositionRowList();
+    void rebuildPositionPresetTree();
+    bool selectPositionTreeLayer(int row, int output, int selection);
+    QTreeWidgetItem* positionTreeItemForLayer(int row, int output, int selection) const;
+    QString positionEditLayerLabel() const;
+    bool positionLayerHasOverrides(int row, int output, int selection) const;
+    QSet<QLCPoint> positionTargetCells() const;
+    QList<QLCPoint> positionTargetCellOrder() const;
+    QLCPoint positionReferencePoint() const;
     void refreshPositionGridCells();
     void updatePositionValueStrip();
     void refreshPositionEditorFromSelection();
     void initOperatePositionSelection();
-    void refreshOperatePositionChrome();
+    void refreshOperatePositionChrome(int drivingOutput = -1);
     void updateOperateRowListLiveMarkers();
+    void followLivePresetSelection(int drivingOutput = -1);
+    int positionContextOutput() const;
+    int positionMarkerContextOutput() const;
+    int effectivePrimaryRowForOutput(int outputIdx) const;
     int currentPositionEditRow() const;
     void writePositionEditorValue(const PTPositionValue& pos, bool liveUpdateOnly = false);
     void writePositionToCells(const QSet<QLCPoint>& cells, const PTPositionValue& pos,
                               int row, int output, int selection);
     void stagePositionEditorValue(const PTPositionValue& pos);
+    void stageFromEditorControls();
+    void updatePositionSpreadChrome();
+    void updatePositionSpreadValueLabel(int raw);
+    QLCPoint selectionMiddlePoint() const;
+    void capturePositionSpreadPivotFromSelection();
+    QLCPoint selectionGridCenter(const QSet<QLCPoint>& cells, qreal& cx, qreal& cy) const;
     void clearPositionDraft();
+    void flushPositionPromoteUiIfNeeded();
     void commitPositionDraftOverwrite();
     void commitPositionDraftSaveAs();
     bool confirmDiscardPositionDraft();
@@ -679,25 +716,38 @@ public:
     QSplitter*                    m_positionSplitter = nullptr;
     QWidget*                      m_tableWrap = nullptr;
     QWidget*                      m_positionRowListPanel = nullptr;
-    QListWidget*                  m_positionRowList = nullptr;
+    QTreeWidget*                  m_positionPresetTree = nullptr;
     QWidget*                      m_positionEditorPanel = nullptr;
     PTPositionFixtureGridWidget*  m_positionGrid = nullptr;
     QLabel*                       m_positionValueStrip = nullptr;
     QLabel*                       m_positionHintLabel = nullptr;
     PTPositionXYPadWidget*        m_positionXYPad = nullptr;
-    QComboBox*                    m_positionEditLayerCombo = nullptr;
     QDoubleSpinBox*               m_positionPanSpin = nullptr;
     QDoubleSpinBox*               m_positionTiltSpin = nullptr;
+    QCheckBox*                    m_positionSymmetricSpreadCheck = nullptr;
+    QComboBox*                    m_positionSpreadAxisCombo = nullptr;
+    QSlider*                      m_positionSpreadSlider = nullptr;
+    QLabel*                       m_positionSpreadValueLabel = nullptr;
     QPushButton*                  m_positionOverwriteBtn = nullptr;
     QPushButton*                  m_positionSaveAsBtn = nullptr;
     QPushButton*                  m_positionRevertBtn = nullptr;
     QSet<QLCPoint>              m_positionSelectedCells;
+    QList<QLCPoint>             m_positionSelectionOrder;
     PTPositionValue             m_positionClipboard;
+    QMap<QLCPoint, PTPositionValue> m_positionLayerClipboard;
+    QPushButton*                m_positionCopyLayerBtn = nullptr;
+    QPushButton*                m_positionPasteLayerBtn = nullptr;
+    QSet<int>                   m_positionTreeExpandedRows;
     int                         m_positionEditRow = -1;
     int                         m_positionEditOutput = -1;
     int                         m_positionEditSelection = -1;
     bool                        m_positionEditorSyncing = false;
     bool                        m_positionDraftDirty = false;
+    bool                        m_positionConfirmDiscardDraft = true;
+    int                         m_positionFollowLiveRow = -1;
+    int                         m_positionFollowLiveContextOut = -1;
+    int                         m_positionLastFollowDrivingOutput = -1;
+    bool                        m_positionPromoteUiRefresh = false;
     PTPositionDraftContext      m_positionDraftCtx;
     QMap<QLCPoint, PTPositionValue> m_positionDraftCells;
 
