@@ -216,6 +216,33 @@ QVector<PTShapeGalleryItem> PTShapesGallery::defaultBuiltinItems()
     add1D(QStringLiteral("Sine"), sine);
     add1D(QStringLiteral("Triangle"), defaultMotionCurve1D());
 
+    QVector<PTCustomCurvePoint> square;
+    {
+        PTCustomCurvePoint lo;
+        lo.xDeg = 0; lo.yValue = 255;
+        lo.rightHandleXDeg = 0; lo.rightHandleYValue = 255;
+        PTCustomCurvePoint hi;
+        hi.xDeg = 180; hi.yValue = 1;
+        hi.leftHandleXDeg = 180; hi.leftHandleYValue = 1;
+        hi.rightHandleXDeg = 180; hi.rightHandleYValue = 1;
+        PTCustomCurvePoint end;
+        end.xDeg = 360; end.yValue = 255;
+        end.leftHandleXDeg = 360; end.leftHandleYValue = 255;
+        square << lo << hi << end;
+    }
+    add1D(QStringLiteral("Square"), square);
+
+    QVector<PTCustomCurvePoint> sawUp;
+    for (int i = 0; i <= 2; ++i)
+    {
+        PTCustomCurvePoint p;
+        p.xDeg = i * 180.0;
+        p.yValue = i == 0 ? 1.0 : 255.0;
+        p.segmentMode = PTCustomCurvePoint::Linear;
+        sawUp.append(p);
+    }
+    add1D(QStringLiteral("Saw up"), sawUp);
+
     add2D(QStringLiteral("Circle"), path2DForBuiltinMotion(PTPositionMotion::Circle2D), true);
     add2D(QStringLiteral("Line"), path2DForBuiltinMotion(PTPositionMotion::Line2D), false);
     add2D(QStringLiteral("Figure-8"), path2DForBuiltinMotion(PTPositionMotion::Figure8_2D), true);

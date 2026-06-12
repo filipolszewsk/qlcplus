@@ -30,8 +30,11 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
     , m_motion(motion)
     , m_gallery(gallery.isEmpty() ? PTShapesGallery::defaultBuiltinItems() : gallery)
 {
+    const bool tiltAxis = motion == PTPositionMotion::CustomTilt1D
+            || motion == PTPositionMotion::Tilt1D;
     setWindowTitle(motion == PTPositionMotion::Custom2D
-            ? tr("Custom 2D motion path") : tr("Custom 1D motion curve"));
+            ? tr("Custom 2D motion path")
+            : tiltAxis ? tr("Tilt offset curve") : tr("Pan offset curve"));
     resize(860, 520);
 
     QHBoxLayout* root = new QHBoxLayout(this);
@@ -47,8 +50,10 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
     galleryLayout->addWidget(m_galleryList, 1);
     QPushButton* useBtn = new QPushButton(tr("Use"), galleryBox);
     QPushButton* saveBtn = new QPushButton(tr("Save current..."), galleryBox);
+    QPushButton* deleteBtn = new QPushButton(tr("Delete"), galleryBox);
     galleryLayout->addWidget(useBtn);
     galleryLayout->addWidget(saveBtn);
+    galleryLayout->addWidget(deleteBtn);
     root->addWidget(galleryBox);
 
     QVBoxLayout* editorCol = new QVBoxLayout();
@@ -57,6 +62,9 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
     m_curve1D->setEditable(true);
     PTDimmerWaveParams params;
     params.customCurveEnabled = true;
+    params.waveWidth = preset.waveWidth;
+    params.waveFadeIn = preset.waveFadeIn;
+    params.waveFadeOut = preset.waveFadeOut;
     params.customCurve = preset.positionMotionCurve.size() >= 2
             ? preset.positionMotionCurve : PTShapesGallery::defaultMotionCurve1D();
     m_curve1D->setParams(params);
@@ -70,6 +78,28 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
     m_editorStack->addWidget(m_curve1D);
     m_editorStack->addWidget(m_path2D);
     editorCol->addWidget(m_editorStack, 1);
+
+    if (motion != PTPositionMotion::Custom2D)
+    {
+        QLabel* hint = new QLabel(
+                tr("Y: offset (128 = center, 0 = min, 255 = max). "
+                   "Double-click = add point · Delete = remove point · "
+                   "Right-click point = Linear/Bezier."), this);
+        hint->setWordWrap(true);
+        editorCol->addWidget(hint);
+        QHBoxLayout* curveTools = new QHBoxLayout();
+        QPushButton* resetBtn = new QPushButton(tr("Reset"), this);
+        QPushButton* deletePtBtn = new QPushButton(tr("Delete point"), this);
+        curveTools->addWidget(resetBtn);
+        curveTools->addWidget(deletePtBtn);
+        curveTools->addStretch(1);
+        editorCol->addLayout(curveTools);
+        connect(resetBtn, &QPushButton::clicked, this, [this]() {
+            if (m_curve1D)
+                m_curve1D->setCustomCurve(PTShapesGallery::defaultMotionCurve1D());
+        });
+        connect(deletePtBtn, &QPushButton::clicked, m_curve1D, &PTDimmerWaveCurveWidget::deleteSelectedPoint);
+    }
 
     m_closedChk = new QCheckBox(tr("Closed path"), this);
     m_closedChk->setChecked(preset.positionPath2DClosed);
@@ -100,6 +130,7 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
             applyGalleryItem(m_gallery.at(idx));
     });
     connect(saveBtn, &QPushButton::clicked, this, [this]() { saveCurrentToGallery(); });
+    connect(deleteBtn, &QPushButton::clicked, this, [this]() { deleteSelectedGalleryItem(); });
 
     rebuildGalleryList();
 }
@@ -221,5 +252,18 @@ void PTPositionShapeDialog::saveCurrentToGallery()
     {
         m_gallery.append(item);
     }
+    rebuildGalleryList();
+}
+
+void PTPositionShapeDialog::deleteSelectedGalleryItem()
+{
+    const int idx = selectedGalleryIndex();
+    if (idx < 0 || idx >= m_gallery.size())
+        return;
+    if (QMessageBox::question(this, tr("Delete shape"),
+                              tr("Delete \"%1\" from gallery?").arg(m_gallery.at(idx).name))
+            != QMessageBox::Yes)
+        return;
+    m_gallery.removeAt(idx);
     rebuildGalleryList();
 }

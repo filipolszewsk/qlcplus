@@ -188,6 +188,8 @@ struct PTTransitionPreset
     int                positionMotionDirection = int(PTPositionMotionDirection::Forward);
     int                positionPanSize = 45;
     int                positionTiltSize = 30;
+    /** 0=Sine, 1=Square, 2=Triangle, 3=Custom (uses positionMotionCurve). */
+    int                positionMotionWaveShape = 0;
     bool               positionMotionCurveEnabled = false;
     QVector<PTCustomCurvePoint> positionMotionCurve;
     QVector<PTPositionPath2DPoint> positionPath2D;

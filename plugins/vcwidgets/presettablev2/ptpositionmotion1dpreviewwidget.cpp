@@ -5,6 +5,7 @@
 #include "ptpositionmotion1dpreviewwidget.h"
 #include "ptpositionfxengine.h"
 
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QtMath>
@@ -14,6 +15,7 @@ PTPositionMotion1DPreviewWidget::PTPositionMotion1DPreviewWidget(QWidget* parent
 {
     setMinimumHeight(90);
     setAutoFillBackground(true);
+    setToolTip(tr("Double-click to edit motion curve"));
     connect(&m_timer, &QTimer::timeout, this, [this]() {
         const double ms = qMax(200.0, double(m_cycleMs));
         m_animPhase01 += double(m_timer.interval()) / ms;
@@ -25,10 +27,7 @@ PTPositionMotion1DPreviewWidget::PTPositionMotion1DPreviewWidget(QWidget* parent
 
 bool PTPositionMotion1DPreviewWidget::is1DMotion(PTPositionMotion motion)
 {
-    return motion == PTPositionMotion::Pan1D
-            || motion == PTPositionMotion::Tilt1D
-            || motion == PTPositionMotion::CustomPan1D
-            || motion == PTPositionMotion::CustomTilt1D;
+    return PTPositionFxEngine::motionIs1D(motion);
 }
 
 void PTPositionMotion1DPreviewWidget::stopAnimation()
@@ -38,9 +37,9 @@ void PTPositionMotion1DPreviewWidget::stopAnimation()
 }
 
 void PTPositionMotion1DPreviewWidget::setMotionPreview(PTPositionMotion motion, qreal panSizeDeg,
-                                                       qreal tiltSizeDeg,
-                                                       const QVector<PhaseMarker>& markers,
-                                                       quint32 cycleMs)
+                                                         qreal tiltSizeDeg,
+                                                         const QVector<PhaseMarker>& markers,
+                                                         quint32 cycleMs)
 {
     m_motion = motion;
     m_usePresetMotion = false;
@@ -48,6 +47,8 @@ void PTPositionMotion1DPreviewWidget::setMotionPreview(PTPositionMotion motion, 
     m_tiltSize = tiltSizeDeg;
     m_markers = markers;
     m_cycleMs = qMax(quint32(200), cycleMs);
+    m_waveParams = PTDimmerWaveParams();
+    m_waveParams.waveWidth = 360;
     stopAnimation();
     if (m_motion != PTPositionMotion::Off)
     {
@@ -58,10 +59,12 @@ void PTPositionMotion1DPreviewWidget::setMotionPreview(PTPositionMotion motion, 
 }
 
 void PTPositionMotion1DPreviewWidget::setMotionPreviewFromPreset(const PTTransitionPreset& preset,
+                                                                 const PTDimmerWaveParams& waveParams,
                                                                  const QVector<PhaseMarker>& markers,
                                                                  quint32 cycleMs)
 {
     m_preset = preset;
+    m_waveParams = waveParams;
     m_motion = PTPositionMotion(preset.positionMotion);
     m_usePresetMotion = true;
     m_panSize = 1.0;
@@ -88,40 +91,44 @@ void PTPositionMotion1DPreviewWidget::clear()
     update();
 }
 
+void PTPositionMotion1DPreviewWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (m_motion != PTPositionMotion::Off)
+        emit motionCurveEditRequested();
+    QWidget::mouseDoubleClickEvent(event);
+}
+
 QRectF PTPositionMotion1DPreviewWidget::plotRect() const
 {
     return rect().adjusted(28, 18, -8, -16);
 }
 
-qreal PTPositionMotion1DPreviewWidget::sampleNormalizedOffset(double phaseRadians) const
+QPointF PTPositionMotion1DPreviewWidget::mapSample(double cycle01, qreal normValue,
+                                                     const QRectF& plot) const
 {
-    qreal panOff = 0;
-    qreal tiltOff = 0;
-    if (m_usePresetMotion)
+    const qreal x = plot.left() + qBound(0.0, cycle01, 1.0) * plot.width();
+    const qreal y = plot.bottom() - (normValue + 1.0) * 0.5 * plot.height();
+    return QPointF(x, y);
+}
+
+qreal PTPositionMotion1DPreviewWidget::sampleAtCycle01(double cycle01) const
+{
+    if (!m_usePresetMotion)
     {
-        PTPositionFxEngine::relativeOffsetForPreset(m_preset, phaseRadians,
-                                                    m_panSize, m_tiltSize, panOff, tiltOff);
-    }
-    else
-    {
+        const double phaseRadians = cycle01 * 2.0 * M_PI;
+        qreal panOff = 0;
+        qreal tiltOff = 0;
         const auto shape = PTPositionFxEngine::shapeFromPositionMotion(m_motion);
         PTPositionFxEngine::relativeOffset(shape, phaseRadians, m_panSize, m_tiltSize,
                                            panOff, tiltOff);
+        const bool useTilt = m_motion == PTPositionMotion::Tilt1D;
+        const qreal value = useTilt ? tiltOff : panOff;
+        const qreal amp = qMax(qreal(0.001), useTilt ? m_tiltSize : m_panSize);
+        return value / amp;
     }
 
-    const bool useTilt = m_motion == PTPositionMotion::Tilt1D
-            || m_motion == PTPositionMotion::CustomTilt1D;
-    const qreal value = useTilt ? tiltOff : panOff;
-    const qreal amp = qMax(qreal(0.001), useTilt ? m_tiltSize : m_panSize);
-    return value / amp;
-}
-
-QPointF PTPositionMotion1DPreviewWidget::mapSample(double phase01, qreal normValue,
-                                                   const QRectF& plot) const
-{
-    const qreal x = plot.left() + qBound(0.0, phase01, 1.0) * plot.width();
-    const qreal y = plot.bottom() - (normValue + 1.0) * 0.5 * plot.height();
-    return QPointF(x, y);
+    const float deg = float(cycle01 * 360.0);
+    return qreal(PTPositionFxEngine::sampleMotionAtCycleDeg(deg, m_preset, m_waveParams));
 }
 
 void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
@@ -142,9 +149,57 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
     const bool useTilt = m_motion == PTPositionMotion::Tilt1D
             || m_motion == PTPositionMotion::CustomTilt1D;
     const QString axisLabel = useTilt ? tr("Tilt") : tr("Pan");
+    QString shapeLabel;
+    if (m_usePresetMotion)
+    {
+        switch (PTPositionFxEngine::effectiveMotionWaveShape(m_preset))
+        {
+            case 1: shapeLabel = tr("Square"); break;
+            case 2: shapeLabel = tr("Triangle"); break;
+            case 3: shapeLabel = tr("Custom"); break;
+            default: shapeLabel = tr("Sine"); break;
+        }
+    }
     p.drawText(QRectF(rect().left(), 2, rect().width(), 14),
                Qt::AlignLeft | Qt::AlignVCenter,
-               tr("%1 offset vs time (unit shape)").arg(axisLabel));
+               m_usePresetMotion
+                       ? tr("%1 offset · %2 · orbit %3°")
+                               .arg(axisLabel, shapeLabel).arg(m_preset.waveWidth)
+                       : tr("%1 offset vs time (unit shape)").arg(axisLabel));
+
+    if (m_usePresetMotion)
+    {
+        const int waveW = qBound(1, m_preset.waveWidth, 360);
+        const qreal packetW = plot.width() * qreal(waveW) / 360.0;
+        if (packetW > 0)
+        {
+            QRectF packetRect(plot.left(), plot.top(), packetW, plot.height());
+            p.fillRect(packetRect, palette().color(QPalette::Highlight).lighter(175));
+
+            if (m_preset.waveShape != 1)
+            {
+                const float fadeIn = float(qBound(0, m_preset.waveFadeIn, 100)) / 100.0f;
+                const float fadeOut = float(qBound(0, m_preset.waveFadeOut, 100)) / 100.0f;
+                p.setPen(QPen(palette().color(QPalette::Mid), 1, Qt::DashLine));
+                if (fadeIn > 0.0f)
+                {
+                    const qreal x = plot.left() + packetW * fadeIn;
+                    p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+                }
+                if (fadeOut > 0.0f)
+                {
+                    const qreal x = plot.left() + packetW - packetW * fadeOut;
+                    p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+                }
+            }
+        }
+        if (waveW < 360)
+        {
+            const qreal holdLeft = plot.left() + plot.width() * qreal(waveW) / 360.0;
+            QRectF holdRect(holdLeft, plot.top(), plot.right() - holdLeft, plot.height());
+            p.fillRect(holdRect, QColor(0, 0, 0, 28));
+        }
+    }
 
     p.setPen(palette().mid().color());
     QFont small = p.font();
@@ -157,9 +212,9 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
     p.drawText(QRectF(rect().left(), plot.bottom() - plot.height() / 2, 24, plot.height() / 2),
                Qt::AlignRight | Qt::AlignBottom, tr("min"));
     p.drawText(QRectF(plot.left(), plot.bottom() + 2, plot.width() / 2, 12),
-               Qt::AlignLeft | Qt::AlignTop, QStringLiteral("0%"));
+               Qt::AlignLeft | Qt::AlignTop, QStringLiteral("0°"));
     p.drawText(QRectF(plot.center().x(), plot.bottom() + 2, plot.width() / 2, 12),
-               Qt::AlignRight | Qt::AlignTop, QStringLiteral("100%"));
+               Qt::AlignRight | Qt::AlignTop, QStringLiteral("360°"));
 
     if (m_motion == PTPositionMotion::Off)
     {
@@ -169,12 +224,11 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
     }
 
     QPainterPath path;
-    for (int i = 0; i <= 128; ++i)
+    for (int i = 0; i <= 256; ++i)
     {
-        const double phase01 = double(i) / 128.0;
-        const double phaseRadians = phase01 * 2.0 * M_PI;
-        const qreal norm = sampleNormalizedOffset(phaseRadians);
-        const QPointF pt = mapSample(phase01, norm, plot);
+        const double cycle01 = double(i) / 256.0;
+        const qreal norm = sampleAtCycle01(cycle01);
+        const QPointF pt = mapSample(cycle01, norm, plot);
         if (i == 0)
             path.moveTo(pt);
         else
@@ -187,9 +241,9 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
 
     for (const PhaseMarker& marker : m_markers)
     {
-        const double phase01 = m_animPhase01 + marker.phaseOffset01;
-        const double wrapped = phase01 - qFloor(phase01);
-        const qreal norm = sampleNormalizedOffset(wrapped * 2.0 * M_PI);
+        const double cycle01 = m_animPhase01 + marker.phaseOffset01;
+        const double wrapped = cycle01 - qFloor(cycle01);
+        const qreal norm = sampleAtCycle01(wrapped);
         const QPointF pt = mapSample(wrapped, norm, plot);
         p.setPen(QPen(marker.color.darker(120), 1));
         p.setBrush(marker.color);

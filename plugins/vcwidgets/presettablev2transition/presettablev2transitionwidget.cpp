@@ -25,6 +25,7 @@
 #include "doc.h"
 
 #include <QDialog>
+#include <QPainter>
 #include <QAbstractScrollArea>
 #include <QHeaderView>
 #include <QSignalBlocker>
@@ -49,8 +50,19 @@
 #include <QAbstractItemView>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QScopedPointer>
 
 #include <algorithm>
+
+static const int kPresetCellValueRole = Qt::UserRole + 20;
+static const int kPresetCellInheritedRole = Qt::UserRole + 21;
+
+struct ScopedBoolFlag
+{
+    bool& flag;
+    explicit ScopedBoolFlag(bool& value) : flag(value) { flag = true; }
+    ~ScopedBoolFlag() { flag = false; }
+};
 
 static const QString KXMLRoot = QStringLiteral("PluginWidget");
 static const QString KXMLPluginId = QStringLiteral("PluginId");
@@ -101,6 +113,7 @@ static const QString KXMLShapeGalleryKind = QStringLiteral("Kind");
 static const QString KXMLShapeGalleryPath2DClosed = QStringLiteral("Path2DClosed");
 static const QString KXMLPresetPositionMotionCurve = QStringLiteral("PositionMotionCurve");
 static const QString KXMLPresetPositionMotionCurveEnabled = QStringLiteral("PositionMotionCurveEnabled");
+static const QString KXMLPresetPositionMotionWaveShape = QStringLiteral("PositionMotionWaveShape");
 static const QString KXMLPresetPositionPath2D = QStringLiteral("PositionPath2D");
 static const QString KXMLPresetPositionPath2DClosed = QStringLiteral("PositionPath2DClosed");
 static const QString KXMLCustomCurveItem = QStringLiteral("CustomCurveItem");
@@ -287,6 +300,118 @@ static void setComboDataIndex(QComboBox* combo, int value)
     }
 }
 
+PresetTableV2TransitionDelegate::PresetTableV2TransitionDelegate(
+        PresetTableV2TransitionWidget* owner, QObject* parent)
+    : QStyledItemDelegate(parent)
+    , m_owner(owner)
+{
+}
+
+QWidget* PresetTableV2TransitionDelegate::createEditor(
+        QWidget* parent, const QStyleOptionViewItem& option,
+        const QModelIndex& index) const
+{
+    if (!m_owner || !index.isValid() || index.column() <= 0)
+        return QStyledItemDelegate::createEditor(parent, option, index);
+    return m_owner->createEditorForColumn(parent, index.column());
+}
+
+void PresetTableV2TransitionDelegate::setEditorData(QWidget* editor,
+                                                    const QModelIndex& index) const
+{
+    const QVariant value = index.data(kPresetCellValueRole);
+    if (auto* combo = qobject_cast<QComboBox*>(editor))
+    {
+        setComboDataIndex(combo, value.toInt());
+        return;
+    }
+    if (auto* spin = qobject_cast<QSpinBox*>(editor))
+    {
+        spin->setValue(qBound(spin->minimum(), value.toInt(), spin->maximum()));
+        return;
+    }
+    QStyledItemDelegate::setEditorData(editor, index);
+}
+
+void PresetTableV2TransitionDelegate::setModelData(QWidget* editor,
+                                                   QAbstractItemModel* model,
+                                                   const QModelIndex& index) const
+{
+    if (!m_owner)
+        return;
+
+    QVariant value;
+    if (auto* combo = qobject_cast<QComboBox*>(editor))
+        value = combo->currentData();
+    else if (auto* spin = qobject_cast<QSpinBox*>(editor))
+        value = spin->value();
+    else
+        value = editor->property("text");
+
+    model->setData(index, value, kPresetCellValueRole);
+    model->setData(index, m_owner->displayTextForColumn(index.column(), value), Qt::DisplayRole);
+}
+
+void PresetTableV2TransitionDelegate::updateEditorGeometry(
+        QWidget* editor, const QStyleOptionViewItem& option,
+        const QModelIndex& /*index*/) const
+{
+    if (editor)
+        editor->setGeometry(option.rect);
+}
+
+void PresetTableV2TransitionDelegate::paint(QPainter* painter,
+                                            const QStyleOptionViewItem& option,
+                                            const QModelIndex& index) const
+{
+    if (!painter || !index.isValid())
+    {
+        QStyledItemDelegate::paint(painter, option, index);
+        return;
+    }
+
+    QStyleOptionViewItem opt(option);
+    initStyleOption(&opt, index);
+
+    const bool selected = opt.state & QStyle::State_Selected;
+    const bool current = opt.state & QStyle::State_HasFocus;
+    const bool inherited = index.data(kPresetCellInheritedRole).toBool();
+
+    painter->save();
+    painter->setClipRect(opt.rect);
+
+    if (selected)
+        painter->fillRect(opt.rect, opt.palette.highlight());
+    else
+        painter->fillRect(opt.rect, opt.backgroundBrush);
+
+    QFont font = opt.font;
+    font.setItalic(inherited);
+    painter->setFont(font);
+
+    QColor textColor;
+    if (selected)
+        textColor = opt.palette.color(QPalette::HighlightedText);
+    else
+        textColor = qvariant_cast<QBrush>(index.data(Qt::ForegroundRole)).color();
+    if (!textColor.isValid())
+        textColor = opt.palette.color(QPalette::Text);
+
+    painter->setPen(textColor);
+    painter->drawText(opt.rect.adjusted(6, 0, -4, 0),
+                      Qt::AlignVCenter | Qt::AlignLeft,
+                      opt.text);
+
+    if (current)
+    {
+        QPen pen(opt.palette.color(QPalette::Highlight), 2);
+        painter->setPen(pen);
+        painter->drawRect(opt.rect.adjusted(1, 1, -2, -2));
+    }
+
+    painter->restore();
+}
+
 static QString transitionCellStyleSheet(const QString& colorRule)
 {
     return QStringLiteral(
@@ -334,7 +459,7 @@ static void styleTransitionEditorWidget(QWidget* widget, bool inherited,
     else
     {
         colorRule = inherited
-                ? QStringLiteral("color: palette(mid);")
+                ? QStringLiteral("color: rgba(220, 220, 220, 155);")
                 : QStringLiteral("color: palette(text);");
         widget->setToolTip(inherited ? QObject::tr("Inherited from parent preset")
                                      : QObject::tr("Override"));
@@ -344,6 +469,45 @@ static void styleTransitionEditorWidget(QWidget* widget, bool inherited,
     else
         colorRule += QStringLiteral(" border: none;");
     widget->setStyleSheet(transitionCellStyleSheet(colorRule));
+}
+
+void PresetTableV2TransitionWidget::setPresetCellValue(QTreeWidgetItem* item, int col,
+                                                       const QVariant& value, bool inherited,
+                                                       bool parentHasOutputOverride,
+                                                       bool selected)
+{
+    if (!item || col <= ColName || col >= ColCount)
+        return;
+
+    QScopedPointer<QSignalBlocker> blocker;
+    if (item->treeWidget())
+        blocker.reset(new QSignalBlocker(item->treeWidget()));
+
+    item->setData(col, kPresetCellValueRole, value);
+    item->setData(col, kPresetCellInheritedRole, inherited);
+    item->setText(col, displayTextForColumn(col, value));
+
+    QFont f = item->font(col);
+    f.setItalic(inherited);
+    f.setBold(false);
+    item->setFont(col, f);
+
+    if (parentHasOutputOverride)
+    {
+        item->setForeground(col, QBrush(kOverrideOrange));
+        item->setToolTip(col, tr("One or more outputs override this parameter"));
+    }
+    else
+    {
+        QColor color = palette().color(QPalette::Text);
+        if (inherited)
+            color.setAlpha(155);
+        item->setForeground(col, QBrush(color));
+        item->setToolTip(col, inherited ? tr("Inherited from parent preset") : tr("Override"));
+    }
+
+    Q_UNUSED(selected)
+    item->setBackground(col, QBrush());
 }
 
 void PresetTableV2TransitionWidget::configureTransitionCombo(QComboBox* combo, int popupMinWidth)
@@ -394,6 +558,7 @@ QString PresetTableV2TransitionWidget::columnTitle(int col)
         case ColSpeedMult:     return QObject::tr("Mult.");
         case ColPositionMotion:  return QObject::tr("Motion");
         case ColPositionMotionDir: return QObject::tr("Motion dir");
+        case ColPositionMotionShape: return QObject::tr("Motion shape");
         case ColPositionPanSize: return QObject::tr("Pan size °");
         case ColPositionTiltSize: return QObject::tr("Tilt size °");
         default:               return QObject::tr("Name");
@@ -419,11 +584,13 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
     {
         table->setColumnHidden(ColPositionMotion, true);
         table->setColumnHidden(ColPositionMotionDir, true);
+        table->setColumnHidden(ColPositionMotionShape, true);
         table->setColumnHidden(ColPositionPanSize, true);
         table->setColumnHidden(ColPositionTiltSize, true);
         for (int col = ColAxis; col < ColCount; ++col)
         {
             if (col == ColDuration || col == ColPositionMotion || col == ColPositionMotionDir
+                    || col == ColPositionMotionShape
                     || col == ColPositionPanSize || col == ColPositionTiltSize)
             {
                 continue;
@@ -450,6 +617,7 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
             table->setColumnHidden(col, !visible.contains(col));
         table->setColumnHidden(ColPositionMotion, true);
         table->setColumnHidden(ColPositionMotionDir, true);
+        table->setColumnHidden(ColPositionMotionShape, true);
         table->setColumnHidden(ColFadeOut, true);
         table->setColumnHidden(ColWaveLevel, true);
         return;
@@ -479,9 +647,14 @@ QString PresetTableV2TransitionWidget::columnTitleForCol(int col) const
         switch (col)
         {
             case ColWaveShape:  return tr("Row morph");
-            case ColFadeIn:     return tr("Row fade in");
-            case ColFadeOut:    return tr("Row fade out");
+            case ColFadeIn:
+                return (activeBankMode() == PTTransitionMode::SweepOnly)
+                        ? tr("Row fade in") : tr("Orbit fade in");
+            case ColFadeOut:
+                return (activeBankMode() == PTTransitionMode::SweepOnly)
+                        ? tr("Row fade out") : tr("Orbit fade out");
             case ColWaveWidth:  return tr("Orbit width °");
+            case ColPositionMotionShape: return tr("Motion shape");
             case ColDuration:   return tr("Cycle ms");
             default:            break;
         }
@@ -499,11 +672,17 @@ QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
         case ColWaveShape:
             return tr("Wave shape for primary↔secondary row blend (not preset crossfade)");
         case ColFadeIn:
-            return tr("Fade-in for primary↔secondary row morph");
+            return (activeBankMode() == PTTransitionMode::SweepOnly)
+                    ? tr("Fade-in for primary↔secondary row morph")
+                    : tr("Amplitude fade-in inside the orbit window");
         case ColFadeOut:
-            return tr("Fade-out for primary↔secondary row morph");
+            return (activeBankMode() == PTTransitionMode::SweepOnly)
+                    ? tr("Fade-out for primary↔secondary row morph")
+                    : tr("Amplitude fade-out inside the orbit window");
         case ColWaveWidth:
             return tr("Active arc of orbit motion within each cycle (degrees)");
+        case ColPositionMotionShape:
+            return tr("Offset curve within the active orbit window (Sine/Square/Triangle/Custom)");
         case ColOffsetStep:
             return tr("Phase spread between fixtures (0 = all in sync)");
         default:
@@ -531,6 +710,7 @@ void PresetTableV2TransitionWidget::applyDefaultColumnWidths(QTreeWidget* table)
     setFixed(ColSpeedMult, 36);
     setFixed(ColPositionMotion, 88);
     setFixed(ColPositionMotionDir, 52);
+    setFixed(ColPositionMotionShape, 72);
     setFixed(ColWaveShape, 72);
     setFixed(ColPropagation, 52);
 }
@@ -563,11 +743,12 @@ PresetTableV2TransitionWidget::columnGroupsForMode(PTTransitionMode mode) const
         else
         {
             add(QStringLiteral("orbit"), tr("Orbit"),
-                { ColPositionMotion, ColPositionMotionDir, ColWaveWidth, ColAxis });
+                { ColPositionMotion, ColPositionMotionDir, ColWaveWidth, ColPositionMotionShape,
+                  ColFadeIn, ColFadeOut, ColAxis });
             add(QStringLiteral("spread"), tr("Spread"),
                 { ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry, ColOffsetStep });
             add(QStringLiteral("morph"), tr("Row morph"),
-                { ColWaveShape, ColFadeIn, ColFadeOut });
+                { ColWaveShape });
             add(QStringLiteral("timing"), tr("Timing"),
                 { ColStartOffset, ColSpeedMult });
         }
@@ -844,6 +1025,121 @@ QComboBox* PresetTableV2TransitionWidget::makeSpeedMultCombo(QWidget* parent)
     return c;
 }
 
+QWidget* PresetTableV2TransitionWidget::createEditorForColumn(QWidget* parent, int col) const
+{
+    QComboBox* combo = nullptr;
+    if (col == ColAxis)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeAxisCombo(parent);
+    else if (col == ColOffsetDir)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeOffsetDirCombo(parent);
+    else if (col == ColWaveShape)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeWaveShapeCombo(parent);
+    else if (col == ColPositionMotion)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePositionMotionCombo(parent);
+    else if (col == ColPositionMotionDir)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePositionMotionDirCombo(parent);
+    else if (col == ColPositionMotionShape)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeWaveShapeCombo(parent);
+    else if (col == ColPropagation)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePropagationCombo(parent);
+    else if (col == ColWingsSymmetry)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeWingsSymmetryCombo(parent);
+    else if (col == ColSpeedMult)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeSpeedMultCombo(parent);
+
+    if (combo)
+    {
+        combo->setFrame(false);
+        combo->installEventFilter(const_cast<PresetTableV2TransitionWidget*>(this));
+        return combo;
+    }
+
+    QSpinBox* spin = new QSpinBox(parent);
+    int minV = 0;
+    int maxV = 360;
+    switch (col)
+    {
+        case ColWings:
+        case ColBlocks:
+            minV = 1; maxV = 64; break;
+        case ColOffsetStep:
+            minV = 0; maxV = 360; break;
+        case ColDuration:
+            minV = 20; maxV = 60000; break;
+        case ColWaveWidth:
+            minV = 1; maxV = 360; break;
+        case ColFadeIn:
+        case ColFadeOut:
+            minV = 0; maxV = 100; break;
+        case ColWaveLevel:
+            minV = 0; maxV = 255; break;
+        case ColStartOffset:
+            minV = 0; maxV = 360; break;
+        case ColPositionPanSize:
+            minV = 0; maxV = 540; break;
+        case ColPositionTiltSize:
+            minV = 0; maxV = 270; break;
+        default:
+            break;
+    }
+    spin->setRange(minV, maxV);
+    spin->setKeyboardTracking(false);
+    spin->setFrame(false);
+    spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    spin->installEventFilter(const_cast<PresetTableV2TransitionWidget*>(this));
+    return spin;
+}
+
+QVariant PresetTableV2TransitionWidget::normalizedColumnValue(int col, const QString& raw) const
+{
+    const QString trimmed = raw.trimmed();
+    if (trimmed.isEmpty())
+        return QVariant();
+
+    auto comboValue = [&](QComboBox* combo) -> QVariant {
+        if (!combo)
+            return QVariant();
+        int match = combo->findText(trimmed, Qt::MatchFixedString);
+        if (match >= 0)
+            return combo->itemData(match);
+        bool ok = false;
+        const int numeric = trimmed.toInt(&ok);
+        if (ok)
+        {
+            for (int i = 0; i < combo->count(); ++i)
+                if (combo->itemData(i).toInt() == numeric)
+                    return combo->itemData(i);
+        }
+        return QVariant();
+    };
+
+    QScopedPointer<QWidget> editor(createEditorForColumn(nullptr, col));
+    if (auto* combo = qobject_cast<QComboBox*>(editor.data()))
+        return comboValue(combo);
+    if (auto* spin = qobject_cast<QSpinBox*>(editor.data()))
+    {
+        bool ok = false;
+        const int value = QString(trimmed).remove(QChar(0x00B0)).remove(QLatin1Char('%')).toInt(&ok);
+        if (ok)
+            return qBound(spin->minimum(), value, spin->maximum());
+    }
+    return QVariant();
+}
+
+QString PresetTableV2TransitionWidget::displayTextForColumn(int col, const QVariant& value) const
+{
+    QScopedPointer<QWidget> editor(createEditorForColumn(nullptr, col));
+    if (auto* combo = qobject_cast<QComboBox*>(editor.data()))
+    {
+        for (int i = 0; i < combo->count(); ++i)
+        {
+            if (combo->itemData(i).toInt() == value.toInt())
+                return combo->itemText(i);
+        }
+    }
+    return value.toString();
+}
+
 QVariant PresetTableV2TransitionWidget::presetColumnValue(const PTTransitionPreset& preset, int col)
 {
     switch (col)
@@ -865,6 +1161,8 @@ QVariant PresetTableV2TransitionWidget::presetColumnValue(const PTTransitionPres
         case ColSpeedMult:     return preset.speedMultiplier;
         case ColPositionMotion:  return preset.positionMotion;
         case ColPositionMotionDir: return preset.positionMotionDirection;
+        case ColPositionMotionShape:
+            return PTPositionFxEngine::effectiveMotionWaveShape(preset);
         case ColPositionPanSize: return preset.positionPanSize;
         case ColPositionTiltSize: return preset.positionTiltSize;
         default:               return QVariant();
@@ -929,6 +1227,7 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
             if (preset.positionMotion == int(PTPositionMotion::CustomPan1D)
                     || preset.positionMotion == int(PTPositionMotion::CustomTilt1D))
             {
+                preset.positionMotionWaveShape = 3;
                 preset.positionMotionCurveEnabled = true;
                 if (preset.positionMotionCurve.size() < 2)
                     preset.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
@@ -939,6 +1238,12 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
                 if (preset.positionPath2D.size() < 2)
                     preset.positionPath2D = PTShapesGallery::defaultMotionPath2D();
             }
+            else if (preset.positionMotion == int(PTPositionMotion::Pan1D)
+                     || preset.positionMotion == int(PTPositionMotion::Tilt1D))
+            {
+                if (preset.positionMotionWaveShape != 3)
+                    preset.positionMotionCurveEnabled = false;
+            }
             else
             {
                 preset.positionMotionCurveEnabled = false;
@@ -947,6 +1252,15 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
         case ColPositionMotionDir:
             preset.positionMotionDirection = value.toInt();
             break;
+        case ColPositionMotionShape:
+        {
+            const int shape = value.toInt();
+            preset.positionMotionWaveShape = shape == 3 ? 3 : qBound(0, shape, 2);
+            preset.positionMotionCurveEnabled = (shape == 3);
+            if (preset.positionMotionCurveEnabled && preset.positionMotionCurve.size() < 2)
+                preset.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
+            break;
+        }
         case ColPositionPanSize:
             preset.positionPanSize = value.toInt();
             break;
@@ -979,6 +1293,7 @@ QString PresetTableV2TransitionWidget::presetColumnXmlName(int col)
         case ColSpeedMult:     return KXMLPresetSpeedMult;
         case ColPositionMotion:  return KXMLPresetPositionMotion;
         case ColPositionMotionDir: return KXMLPresetPositionMotionDir;
+        case ColPositionMotionShape: return KXMLPresetPositionMotionWaveShape;
         case ColPositionPanSize: return KXMLPresetPositionPanSize;
         case ColPositionTiltSize: return KXMLPresetPositionTiltSize;
         default:               return QString();
@@ -1053,6 +1368,9 @@ void PresetTableV2TransitionWidget::buildUi()
     m_removeAction = m_toolbar->addAction(tr("Remove"), this,
                                           &PresetTableV2TransitionWidget::slotRemovePreset);
     m_toolbar->addAction(tr("Duplicate"), this, &PresetTableV2TransitionWidget::slotDuplicatePreset);
+    m_toolbar->addSeparator();
+    m_toolbar->addAction(tr("Edit motion curve"), this,
+                         &PresetTableV2TransitionWidget::slotOpenMotionCurveEditor);
     m_layout->addWidget(m_toolbar);
 
     m_previewRow = new QWidget(this);
@@ -1072,6 +1390,8 @@ void PresetTableV2TransitionWidget::buildUi()
     m_positionPreviewLabel = new QLabel(tr("Position motion"), m_leftPreview);
     m_positionMotionStack = new QStackedWidget(m_leftPreview);
     m_positionMotion1DWidget = new PTPositionMotion1DPreviewWidget(m_positionMotionStack);
+    connect(m_positionMotion1DWidget, &PTPositionMotion1DPreviewWidget::motionCurveEditRequested,
+            this, &PresetTableV2TransitionWidget::slotOpenMotionCurveEditor);
     m_positionPathWidget = new PTPositionPathPreviewWidget(m_positionMotionStack);
     m_positionMotionStack->addWidget(m_positionMotion1DWidget);
     m_positionMotionStack->addWidget(m_positionPathWidget);
@@ -1109,6 +1429,7 @@ void PresetTableV2TransitionWidget::buildUi()
     m_sweepTable = new QTreeWidget(m_bankTabs);
     m_continuousTable = new QTreeWidget(m_bankTabs);
     m_multiFxTable = new QTreeWidget(m_bankTabs);
+    m_transitionDelegate = new PresetTableV2TransitionDelegate(this, this);
     m_sweepNameView = new QTreeView(m_bankTabs);
     m_continuousNameView = new QTreeView(m_bankTabs);
     m_multiFxNameView = new QTreeView(m_bankTabs);
@@ -1117,8 +1438,10 @@ void PresetTableV2TransitionWidget::buildUi()
         table->setColumnCount(ColCount);
         table->header()->setStretchLastSection(true);
         table->setColumnHidden(ColName, true);
-        table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setSelectionBehavior(QAbstractItemView::SelectItems);
         table->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+        table->setItemDelegate(m_transitionDelegate);
         table->setRootIsDecorated(true);
         table->setUniformRowHeights(true);
         table->setAlternatingRowColors(true);
@@ -1389,89 +1712,14 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
     auto makeCell = [&](QTreeWidgetItem* item, int row, int outputIdx, int selectionIdx, int col,
                         const PTTransitionPreset& preset, bool inherited) {
         const QVariant value = presetColumnValue(preset, col);
-        QWidget* editor = nullptr;
-        if (col == ColAxis || col == ColOffsetDir || col == ColWaveShape
-                || col == ColPropagation || col == ColWingsSymmetry || col == ColSpeedMult
-                || col == ColPositionMotion || col == ColPositionMotionDir)
-        {
-            QComboBox* combo = nullptr;
-            if (col == ColAxis)
-                combo = makeAxisCombo(table);
-            else if (col == ColOffsetDir)
-                combo = makeOffsetDirCombo(table);
-            else if (col == ColWaveShape)
-                combo = makeWaveShapeCombo(table);
-            else if (col == ColPositionMotion)
-                combo = makePositionMotionCombo(table);
-            else if (col == ColPositionMotionDir)
-                combo = makePositionMotionDirCombo(table);
-            else if (col == ColPropagation)
-                combo = makePropagationCombo(table);
-            else if (col == ColWingsSymmetry)
-                combo = makeWingsSymmetryCombo(table);
-            else
-                combo = makeSpeedMultCombo(table);
-            setComboIndex(combo, value.toInt());
-            connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-                    [this, mode, row, outputIdx, selectionIdx, col](int) {
-                        slotPresetChanged(mode, row, col, outputIdx, selectionIdx);
-                    });
-            editor = combo;
-        }
-        else
-        {
-            QSpinBox* spin = new QSpinBox(table);
-            int minV = 0;
-            int maxV = 360;
-            switch (col)
-            {
-                case ColWings:
-                case ColBlocks:
-                    minV = 1; maxV = 64; break;
-                case ColOffsetStep:
-                    minV = 0; maxV = 360; break;
-                case ColDuration:
-                    minV = 20; maxV = 60000; break;
-                case ColWaveWidth:
-                    minV = 1; maxV = 360; break;
-                case ColFadeIn:
-                case ColFadeOut:
-                    minV = 0; maxV = 100; break;
-                case ColWaveLevel:
-                    minV = 0; maxV = 255; break;
-                case ColStartOffset:
-                    minV = 0; maxV = 360; break;
-                case ColPositionPanSize:
-                    minV = 0; maxV = 540; break;
-                case ColPositionTiltSize:
-                    minV = 0; maxV = 270; break;
-                default:
-                    break;
-            }
-            spin->setRange(minV, maxV);
-            spin->setKeyboardTracking(false);
-            spin->setFixedHeight(kEfxTreeRowHeight);
-            spin->setValue(value.toInt());
-            connect(spin, &QSpinBox::editingFinished, this,
-                    [this, mode, row, outputIdx, selectionIdx, col]() {
-                        slotPresetChanged(mode, row, col, outputIdx, selectionIdx);
-                    });
-            editor = spin;
-        }
-        if (editor)
-        {
-            editor->setFixedHeight(kEfxTreeRowHeight);
-            editor->installEventFilter(this);
-            const QString tip = columnTooltipForCol(col);
-            if (!tip.isEmpty())
-                editor->setToolTip(tip);
-            if (col == ColWings || col == ColBlocks || col == ColSpeedMult)
-                editor->setMaximumWidth(52);
-            else if (auto* combo = qobject_cast<QComboBox*>(editor))
-                configureTransitionCombo(combo);
-        }
-        styleTransitionEditorWidget(editor, inherited);
-        table->setItemWidget(item, col, editor);
+        Q_UNUSED(row)
+        Q_UNUSED(outputIdx)
+        Q_UNUSED(selectionIdx)
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+        setPresetCellValue(item, col, value, inherited);
+        const QString tip = columnTooltipForCol(col);
+        if (!tip.isEmpty())
+            item->setToolTip(col, tip);
     };
 
     const int outputCount = linkedOutputCount();
@@ -1600,11 +1848,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromItem(PTTransitionMod
 
     for (int col = ColAxis; col < ColCount; ++col)
     {
-        QVariant value;
-        if (auto* combo = qobject_cast<QComboBox*>(table->itemWidget(item, col)))
-            value = combo->currentData();
-        else if (auto* spin = qobject_cast<QSpinBox*>(table->itemWidget(item, col)))
-            value = spin->value();
+        const QVariant value = item->data(col, kPresetCellValueRole);
         if (value.isValid())
             setPresetColumnValue(p, col, value);
     }
@@ -1625,49 +1869,42 @@ void PresetTableV2TransitionWidget::updatePresetRowUiForItem(QTreeWidgetItem* it
 
     const bool sweep = (bankMode == PTTransitionMode::SweepOnly);
 
-    auto tuneSpin = [&](int col, bool enabled, int minV, int maxV, int value) {
-        QSpinBox* s = qobject_cast<QSpinBox*>(table->itemWidget(item, col));
-        if (!s)
-            return;
-        const QSignalBlocker block(s);
-        s->setEnabled(enabled);
-        s->setRange(minV, maxV);
-        s->setValue(qBound(minV, value, maxV));
+    auto tuneValue = [&](int col, bool enabled, int minV, int maxV, int value) {
+        const int bounded = qBound(minV, value, maxV);
+        setPresetCellValue(item, col, bounded,
+                           item->data(col, kPresetCellInheritedRole).toBool());
+        item->setToolTip(col, enabled ? columnTooltipForCol(col) : tr("Fixed by this mode"));
     };
 
-    int waveWidth = 180;
-    int waveLevel = 255;
-    int fadeIn = 25;
-    int fadeOut = 25;
-    if (auto* ww = qobject_cast<QSpinBox*>(table->itemWidget(item, ColWaveWidth)))
-        waveWidth = ww->value();
-    if (auto* wl = qobject_cast<QSpinBox*>(table->itemWidget(item, ColWaveLevel)))
-        waveLevel = wl->value();
-    if (auto* fi = qobject_cast<QSpinBox*>(table->itemWidget(item, ColFadeIn)))
-        fadeIn = fi->value();
-    if (auto* fo = qobject_cast<QSpinBox*>(table->itemWidget(item, ColFadeOut)))
-        fadeOut = fo->value();
+    const int waveWidth = item->data(ColWaveWidth, kPresetCellValueRole).isValid()
+            ? item->data(ColWaveWidth, kPresetCellValueRole).toInt() : 180;
+    const int waveLevel = item->data(ColWaveLevel, kPresetCellValueRole).isValid()
+            ? item->data(ColWaveLevel, kPresetCellValueRole).toInt() : 255;
+    const int fadeIn = item->data(ColFadeIn, kPresetCellValueRole).isValid()
+            ? item->data(ColFadeIn, kPresetCellValueRole).toInt() : 25;
+    const int fadeOut = item->data(ColFadeOut, kPresetCellValueRole).isValid()
+            ? item->data(ColFadeOut, kPresetCellValueRole).toInt() : 25;
 
     if (sweep)
     {
-        tuneSpin(ColWaveWidth, false, 360, 360, 360);
-        tuneSpin(ColWaveLevel, false, 255, 255, 255);
-        tuneSpin(ColFadeIn, true, 0, 50, qMin(fadeIn, 50));
-        tuneSpin(ColFadeOut, true, 0, 50, qMin(fadeOut, 50));
+        tuneValue(ColWaveWidth, false, 360, 360, 360);
+        tuneValue(ColWaveLevel, false, 255, 255, 255);
+        tuneValue(ColFadeIn, true, 0, 50, qMin(fadeIn, 50));
+        tuneValue(ColFadeOut, true, 0, 50, qMin(fadeOut, 50));
     }
     else
     {
-        tuneSpin(ColWaveWidth, true, 1, 360, waveWidth);
-        tuneSpin(ColWaveLevel, true, 0, 255, waveLevel);
-        tuneSpin(ColFadeIn, true, 0, 100, fadeIn);
-        tuneSpin(ColFadeOut, true, 0, 100, fadeOut);
+        tuneValue(ColWaveWidth, true, 1, 360, waveWidth);
+        tuneValue(ColWaveLevel, true, 0, 255, waveLevel);
+        tuneValue(ColFadeIn, true, 0, 100, fadeIn);
+        tuneValue(ColFadeOut, true, 0, 100, fadeOut);
     }
 
     if (linkedTableUsesPositionMode())
     {
-        int motion = int(PTPositionMotion::Off);
-        if (auto* combo = qobject_cast<QComboBox*>(table->itemWidget(item, ColPositionMotion)))
-            motion = combo->currentData().toInt();
+        const int motion = item->data(ColPositionMotion, kPresetCellValueRole).isValid()
+                ? item->data(ColPositionMotion, kPresetCellValueRole).toInt()
+                : int(PTPositionMotion::Off);
         const bool needsPan = motion == int(PTPositionMotion::Pan1D)
                 || motion == int(PTPositionMotion::Circle2D)
                 || motion == int(PTPositionMotion::Line2D)
@@ -1679,14 +1916,12 @@ void PresetTableV2TransitionWidget::updatePresetRowUiForItem(QTreeWidgetItem* it
                 || motion == int(PTPositionMotion::Figure8_2D)
                 || motion == int(PTPositionMotion::CustomTilt1D)
                 || motion == int(PTPositionMotion::Custom2D);
-        int panSize = 45;
-        int tiltSize = 30;
-        if (auto* panSpin = qobject_cast<QSpinBox*>(table->itemWidget(item, ColPositionPanSize)))
-            panSize = panSpin->value();
-        if (auto* tiltSpin = qobject_cast<QSpinBox*>(table->itemWidget(item, ColPositionTiltSize)))
-            tiltSize = tiltSpin->value();
-        tuneSpin(ColPositionPanSize, needsPan, 0, 540, panSize);
-        tuneSpin(ColPositionTiltSize, needsTilt, 0, 270, tiltSize);
+        const int panSize = item->data(ColPositionPanSize, kPresetCellValueRole).isValid()
+                ? item->data(ColPositionPanSize, kPresetCellValueRole).toInt() : 45;
+        const int tiltSize = item->data(ColPositionTiltSize, kPresetCellValueRole).isValid()
+                ? item->data(ColPositionTiltSize, kPresetCellValueRole).toInt() : 30;
+        tuneValue(ColPositionPanSize, needsPan, 0, 540, panSize);
+        tuneValue(ColPositionTiltSize, needsTilt, 0, 270, tiltSize);
     }
 }
 
@@ -1727,9 +1962,8 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
             item = item->child(outputIdx);
         if (item && selectionIdx > 0)
             item = item->child(selectionIdx - 1);
-        QComboBox* combo = table && item
-                ? qobject_cast<QComboBox*>(table->itemWidget(item, ColWaveShape)) : nullptr;
-        if (combo && combo->currentData().toInt() == 3)
+        const int waveShape = item ? item->data(ColWaveShape, kPresetCellValueRole).toInt() : -1;
+        if (item && waveShape == 3)
         {
             const PTTransitionPreset before = selectionIdx > 0
                     ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
@@ -1738,11 +1972,41 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
                        : presets.at(row));
             if (!editCustomCurveForPreset(mode, row, outputIdx, selectionIdx))
             {
-                QSignalBlocker blocker(combo);
-                setComboDataIndex(combo, before.customCurveEnabled ? 3 : before.waveShape);
+                setPresetCellValue(item, ColWaveShape,
+                                   before.customCurveEnabled ? 3 : before.waveShape,
+                                   item->data(ColWaveShape, kPresetCellInheritedRole).toBool());
             }
             updatePresetRowUiForItem(item, mode);
             updateOffsetStepLimitForItem(item, mode);
+            notifyTablePresetCacheRefresh();
+            updateEffectPreview();
+            return;
+        }
+    }
+
+    if (col == ColPositionMotionShape && !m_pastingCells)
+    {
+        QTreeWidget* table = tableForMode(mode);
+        QTreeWidgetItem* item = parentItemForPreset(mode, row);
+        if (item && outputIdx >= 0)
+            item = item->child(outputIdx);
+        if (item && selectionIdx > 0)
+            item = item->child(selectionIdx - 1);
+        const int shape = item ? item->data(ColPositionMotionShape, kPresetCellValueRole).toInt() : -1;
+        if (item && shape == 3)
+        {
+            const PTTransitionPreset before = selectionIdx > 0
+                    ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
+                    : (outputIdx >= 0
+                       ? effectivePresetForOutputNoLive(mode, row, outputIdx)
+                       : presets.at(row));
+            if (!editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, -1))
+            {
+                setPresetCellValue(item, ColPositionMotionShape,
+                                   PTPositionFxEngine::effectiveMotionWaveShape(before),
+                                   item->data(ColPositionMotionShape, kPresetCellInheritedRole).toBool());
+            }
+            updatePresetRowUiForItem(item, mode);
             notifyTablePresetCacheRefresh();
             updateEffectPreview();
             return;
@@ -1757,10 +2021,8 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
             item = item->child(outputIdx);
         if (item && selectionIdx > 0)
             item = item->child(selectionIdx - 1);
-        QComboBox* combo = table && item
-                ? qobject_cast<QComboBox*>(table->itemWidget(item, ColPositionMotion)) : nullptr;
-        const int motion = combo ? combo->currentData().toInt() : -1;
-        if (combo && (motion == int(PTPositionMotion::CustomPan1D)
+        const int motion = item ? item->data(ColPositionMotion, kPresetCellValueRole).toInt() : -1;
+        if (item && (motion == int(PTPositionMotion::CustomPan1D)
                       || motion == int(PTPositionMotion::CustomTilt1D)
                       || motion == int(PTPositionMotion::Custom2D)))
         {
@@ -1771,8 +2033,8 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
                        : presets.at(row));
             if (!editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, motion))
             {
-                QSignalBlocker blocker(combo);
-                setComboDataIndex(combo, before.positionMotion);
+                setPresetCellValue(item, ColPositionMotion, before.positionMotion,
+                                   item->data(ColPositionMotion, kPresetCellInheritedRole).toBool());
             }
             updatePresetRowUiForItem(item, mode);
             notifyTablePresetCacheRefresh();
@@ -1850,7 +2112,7 @@ void PresetTableV2TransitionWidget::slotPresetItemChanged(QTreeWidgetItem* item,
 {
     if (m_rebuildingTable)
         return;
-    if (!item || col != ColName)
+    if (!item)
         return;
 
     QTreeWidget* table = qobject_cast<QTreeWidget*>(sender());
@@ -1865,6 +2127,13 @@ void PresetTableV2TransitionWidget::slotPresetItemChanged(QTreeWidgetItem* item,
     const int row = item->data(0, kItemPresetIndexRole).toInt();
     const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
     const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+    if (col > ColName && col < ColCount)
+    {
+        slotPresetChanged(mode, row, col, outputIdx, selectionIdx);
+        return;
+    }
+    if (col != ColName)
+        return;
     if (outputIdx >= 0 && selectionIdx > 0)
     {
         QVector<QHash<int, PTTransitionOutputLayer>>& overrides = overridesForMode(mode);
@@ -1897,6 +2166,30 @@ void PresetTableV2TransitionWidget::slotOpenCustomCurveEditor()
     const int outputIdx = item ? item->data(0, kItemOutputIndexRole).toInt() : -1;
     const int selectionIdx = item ? item->data(0, kItemSelectionIndexRole).toInt() : -1;
     editCustomCurveForPreset(activeBankMode(), row, outputIdx, selectionIdx);
+}
+
+void PresetTableV2TransitionWidget::slotOpenMotionCurveEditor()
+{
+    QTreeWidget* table = activeTable();
+    if (!table)
+        return;
+    QTreeWidgetItem* item = selectedPresetItem(table);
+    const int row = item ? item->data(0, kItemPresetIndexRole).toInt() : -1;
+    const int outputIdx = item ? item->data(0, kItemOutputIndexRole).toInt() : -1;
+    const int selectionIdx = item ? item->data(0, kItemSelectionIndexRole).toInt() : -1;
+    if (row < 0)
+        return;
+
+    const PTTransitionMode mode = activeBankMode();
+    const PTTransitionPreset preset = selectionIdx > 0
+            ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
+            : (outputIdx >= 0
+               ? effectivePresetForOutputNoLive(mode, row, outputIdx)
+               : presetsForMode(mode).at(row));
+    if (!PTPositionFxEngine::motionIs1D(PTPositionMotion(preset.positionMotion)))
+        return;
+
+    editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, -1);
 }
 
 bool PresetTableV2TransitionWidget::editCustomCurveForPreset(PTTransitionMode mode, int row,
@@ -1968,12 +2261,9 @@ bool PresetTableV2TransitionWidget::editCustomCurveForPreset(PTTransitionMode mo
             item = item->child(outputIdx);
         if (item && selectionIdx > 0)
             item = item->child(selectionIdx - 1);
-        if (auto* combo = item ? qobject_cast<QComboBox*>(
-                table->itemWidget(item, ColWaveShape)) : nullptr)
-        {
-            QSignalBlocker blocker(combo);
-            setComboDataIndex(combo, 3);
-        }
+        if (item)
+            setPresetCellValue(item, ColWaveShape, 3,
+                               item->data(ColWaveShape, kPresetCellInheritedRole).toBool());
     }
     refreshOverrideVisualsForPreset(mode, row);
     notifyTablePresetCacheRefresh();
@@ -1999,33 +2289,47 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
     const PTPositionMotion motion = motionFromUi >= 0
             ? PTPositionMotion(motionFromUi)
             : PTPositionMotion(candidate.positionMotion);
-    if (!PTPositionFxEngine::motionUsesCustomData(motion))
-        return false;
-    candidate.positionMotion = int(motion);
-
     if (motion == PTPositionMotion::Custom2D)
     {
         if (candidate.positionPath2D.size() < 2)
             candidate.positionPath2D = PTShapesGallery::defaultMotionPath2D();
+    }
+    else if (!PTPositionFxEngine::motionIs1D(motion))
+    {
+        return false;
     }
     else if (candidate.positionMotionCurve.size() < 2)
     {
         candidate.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
     }
 
+    if (motionFromUi >= 0)
+        candidate.positionMotion = int(motion);
+
     PTPositionShapeDialog dlg(motion, candidate, m_shapeGallery, this);
     if (dlg.exec() != QDialog::Accepted)
         return false;
 
-    candidate.positionMotionCurveEnabled = true;
     if (motion == PTPositionMotion::Custom2D)
     {
         candidate.positionPath2D = dlg.motionPath2D();
         candidate.positionPath2DClosed = dlg.path2DClosed();
+        candidate.positionMotionCurveEnabled = true;
     }
     else
     {
         candidate.positionMotionCurve = dlg.motionCurve1D();
+        candidate.positionMotionWaveShape = 3;
+        candidate.positionMotionCurveEnabled = true;
+        if (motion == PTPositionMotion::Pan1D || motion == PTPositionMotion::Tilt1D)
+        {
+            // Keep Pan/Tilt 1D enum — shape is Custom via positionMotionWaveShape.
+        }
+        else if (motion == PTPositionMotion::CustomPan1D
+                 || motion == PTPositionMotion::CustomTilt1D)
+        {
+            candidate.positionMotion = int(motion);
+        }
     }
     m_shapeGallery = dlg.gallery();
 
@@ -2047,6 +2351,8 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
             PTTransitionPresetOverride ov = layer.selections[sel].overrides;
             ov.values = candidate;
             ov.columns.insert(ColPositionMotion);
+            if (motion != PTPositionMotion::Custom2D)
+                ov.columns.insert(ColPositionMotionShape);
             layer.selections[sel].overrides = ov;
         }
         else
@@ -2054,6 +2360,8 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
             PTTransitionPresetOverride ov = layer.all;
             ov.values = candidate;
             ov.columns.insert(ColPositionMotion);
+            if (motion != PTPositionMotion::Custom2D)
+                ov.columns.insert(ColPositionMotionShape);
             layer.all = ov;
         }
         overrides[row].insert(outputIdx, layer);
@@ -2072,11 +2380,16 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
             item = item->child(outputIdx);
         if (item && selectionIdx > 0)
             item = item->child(selectionIdx - 1);
-        if (auto* combo = item ? qobject_cast<QComboBox*>(
-                table->itemWidget(item, ColPositionMotion)) : nullptr)
+        if (item)
         {
-            QSignalBlocker blocker(combo);
-            setComboDataIndex(combo, int(motion));
+            setPresetCellValue(item, ColPositionMotion, candidate.positionMotion,
+                               item->data(ColPositionMotion, kPresetCellInheritedRole).toBool());
+            if (motion != PTPositionMotion::Custom2D)
+            {
+                setPresetCellValue(item, ColPositionMotionShape, 3,
+                                   item->data(ColPositionMotionShape,
+                                              kPresetCellInheritedRole).toBool());
+            }
         }
     }
     refreshOverrideVisualsForPreset(mode, row);
@@ -2241,10 +2554,6 @@ void PresetTableV2TransitionWidget::updateOffsetStepLimitForItem(QTreeWidgetItem
     if (!table || !item)
         return;
 
-    QSpinBox* step = qobject_cast<QSpinBox*>(table->itemWidget(item, ColOffsetStep));
-    if (!step)
-        return;
-
     const PTTransitionPreset preset = presetFromItem(mode, item);
     int maxStep = 360;
     int slotCount = 0;
@@ -2255,24 +2564,25 @@ void PresetTableV2TransitionWidget::updateOffsetStepLimitForItem(QTreeWidgetItem
         maxStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
     }
 
-    const QSignalBlocker block(step);
-    step->setMinimum(0);
-    step->setMaximum(maxStep);
-    if (step->value() > maxStep)
-        step->setValue(maxStep);
+    const int current = item->data(ColOffsetStep, kPresetCellValueRole).toInt();
+    if (current > maxStep)
+        setPresetCellValue(item, ColOffsetStep, maxStep,
+                           item->data(ColOffsetStep, kPresetCellInheritedRole).toBool());
     if (preset.offsetStep == 0)
     {
-        step->setToolTip(tr("0 = all fixtures share the same phase"));
+        item->setToolTip(ColOffsetStep, tr("0 = all fixtures share the same phase"));
     }
     else if (slotCount > 0)
     {
-        step->setToolTip(tr("Offset step (max %1° for %2 slots: wings×blocks per wing). 0 = sync.")
+        item->setToolTip(ColOffsetStep,
+                         tr("Offset step (max %1° for %2 slots: wings×blocks per wing). 0 = sync.")
                                  .arg(maxStep)
                                  .arg(slotCount));
     }
     else
     {
-        step->setToolTip(tr("Offset step (link Fixture Group table for max limit). 0 = sync."));
+        item->setToolTip(ColOffsetStep,
+                         tr("Offset step (link Fixture Group table for max limit). 0 = sync."));
     }
 }
 
@@ -2533,10 +2843,10 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                     if (motion1D && m_positionMotion1DWidget)
                     {
                         m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
-                        if (PTPositionFxEngine::motionUsesCustomData(motion))
-                            m_positionMotion1DWidget->setMotionPreviewFromPreset(preset, markers, cycleMs);
-                        else
-                            m_positionMotion1DWidget->setMotionPreview(motion, 1.0, 1.0, markers, cycleMs);
+                        PTDimmerWaveParams waveParams =
+                                PTDimmerWaveEngine::paramsFromPreset(preset, &m_globalSettings);
+                        m_positionMotion1DWidget->setMotionPreviewFromPreset(
+                                preset, waveParams, markers, cycleMs);
                     }
                     else if (m_positionPathWidget)
                     {
@@ -2856,10 +3166,6 @@ void PresetTableV2TransitionWidget::refreshOverrideVisualsForItem(PTTransitionMo
 
     for (int col = ColAxis; col < ColCount; ++col)
     {
-        QWidget* widget = table->itemWidget(item, col);
-        if (!widget)
-            continue;
-
         if (outputIdx < 0)
         {
             bool hasOutputOverride = false;
@@ -2896,7 +3202,8 @@ void PresetTableV2TransitionWidget::refreshOverrideVisualsForItem(PTTransitionMo
             }
             const bool cellSelected = m_selectedCellsByTable.value(table)
                     .contains(PTTransitionCellKey { item, col });
-            styleTransitionEditorWidget(widget, false, hasOutputOverride, cellSelected);
+            setPresetCellValue(item, col, item->data(col, kPresetCellValueRole),
+                               false, hasOutputOverride, cellSelected);
             continue;
         }
 
@@ -2921,20 +3228,12 @@ void PresetTableV2TransitionWidget::refreshOverrideVisualsForItem(PTTransitionMo
                     selectionIdx > 0
                     ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
                     : effectivePresetForOutputNoLive(mode, row, outputIdx), col);
-            if (auto* combo = qobject_cast<QComboBox*>(widget))
-            {
-                QSignalBlocker block(combo);
-                setComboDataIndex(combo, value.toInt());
-            }
-            else if (auto* spin = qobject_cast<QSpinBox*>(widget))
-            {
-                QSignalBlocker block(spin);
-                spin->setValue(qBound(spin->minimum(), value.toInt(), spin->maximum()));
-            }
+            setPresetCellValue(item, col, value, true);
         }
         const bool cellSelected = m_selectedCellsByTable.value(table)
                 .contains(PTTransitionCellKey { item, col });
-        styleTransitionEditorWidget(widget, inherited, false, cellSelected);
+        setPresetCellValue(item, col, item->data(col, kPresetCellValueRole),
+                           inherited, false, cellSelected);
     }
 
     if (selectionIdx > 0)
@@ -3425,11 +3724,7 @@ QVariant PresetTableV2TransitionWidget::editorValue(QTreeWidget* table,
         return QVariant();
     if (col == ColName)
         return item->text(ColName);
-    if (auto* combo = qobject_cast<QComboBox*>(table->itemWidget(item, col)))
-        return combo->currentText();
-    if (auto* spin = qobject_cast<QSpinBox*>(table->itemWidget(item, col)))
-        return spin->value();
-    return QVariant();
+    return item->text(col);
 }
 
 void PresetTableV2TransitionWidget::setEditorValue(QTreeWidget* table,
@@ -3438,39 +3733,11 @@ void PresetTableV2TransitionWidget::setEditorValue(QTreeWidget* table,
 {
     if (!table || !item || col <= ColName || col >= ColCount)
         return;
-    if (auto* combo = qobject_cast<QComboBox*>(table->itemWidget(item, col)))
-    {
-        const QString trimmed = raw.trimmed();
-        int match = combo->findText(trimmed, Qt::MatchFixedString);
-        if (match < 0)
-        {
-            bool ok = false;
-            const int numeric = trimmed.toInt(&ok);
-            if (ok)
-            {
-                for (int i = 0; i < combo->count(); ++i)
-                {
-                    if (combo->itemData(i).toInt() == numeric)
-                    {
-                        match = i;
-                        break;
-                    }
-                }
-            }
-        }
-        if (match >= 0)
-        {
-            QSignalBlocker block(combo);
-            combo->setCurrentIndex(match);
-        }
-    }
-    else if (auto* spin = qobject_cast<QSpinBox*>(table->itemWidget(item, col)))
-    {
-        bool ok = false;
-        const int value = raw.trimmed().remove(QChar(0x00B0)).toInt(&ok);
-        if (ok)
-            spin->setValue(qBound(spin->minimum(), value, spin->maximum()));
-    }
+    const QVariant value = normalizedColumnValue(col, raw);
+    if (!value.isValid())
+        return;
+    setPresetCellValue(item, col, value,
+                       item->data(col, kPresetCellInheritedRole).toBool());
 }
 
 PTTransitionMode PresetTableV2TransitionWidget::modeForTable(QTreeWidget* table) const
@@ -3544,7 +3811,7 @@ bool PresetTableV2TransitionWidget::isClipboardCell(QTreeWidget* table,
 {
     if (!table || !item || col <= ColName || col >= ColCount || table->isColumnHidden(col))
         return false;
-    return table->itemWidget(item, col) != nullptr;
+    return true;
 }
 
 bool PresetTableV2TransitionWidget::sameClipboardContext(QTreeWidgetItem* a,
@@ -3589,6 +3856,27 @@ QList<PTTransitionCellKey> PresetTableV2TransitionWidget::selectedCellsInVisualO
     if (!table)
         return ordered;
 
+    const QModelIndexList indexes = table->selectionModel()
+            ? table->selectionModel()->selectedIndexes() : QModelIndexList();
+    for (const QModelIndex& idx : indexes)
+    {
+        const int col = idx.column();
+        if (col <= ColName || col >= ColCount || table->isColumnHidden(col))
+            continue;
+        if (QTreeWidgetItem* item = table->itemFromIndex(idx))
+            ordered.append(PTTransitionCellKey { item, col });
+    }
+    std::sort(ordered.begin(), ordered.end(), [table](const PTTransitionCellKey& a,
+                                                      const PTTransitionCellKey& b) {
+        const QModelIndex ia = table->indexFromItem(a.item, a.col);
+        const QModelIndex ib = table->indexFromItem(b.item, b.col);
+        if (ia.row() == ib.row())
+            return ia.column() < ib.column();
+        return ia.row() < ib.row();
+    });
+    if (!ordered.isEmpty())
+        return ordered;
+
     const QSet<PTTransitionCellKey> selected = m_selectedCellsByTable.value(table);
     if (selected.isEmpty())
         return ordered;
@@ -3628,53 +3916,11 @@ void PresetTableV2TransitionWidget::activateCellForClipboard(QTreeWidget* table,
     if (!isClipboardCell(table, item, col))
         return;
 
-    const PTTransitionCellKey key { item, col };
-    QSet<PTTransitionCellKey>& selected = m_selectedCellsByTable[table];
-
-    if (mods & Qt::ControlModifier)
-    {
-        if (selected.contains(key))
-            selected.remove(key);
-        else
-            selected.insert(key);
-        m_cellSelectionAnchorByTable.insert(table, key);
-    }
-    else if (mods & Qt::ShiftModifier)
-    {
-        PTTransitionCellKey anchor = m_cellSelectionAnchorByTable.value(table, key);
-        if (!isClipboardCell(table, anchor.item, anchor.col))
-            anchor = key;
-
-        const int rangeCol = anchor.col;
-        const QList<QTreeWidgetItem*> ctxRows = clipboardRowsInContext(table, item);
-        const int ia = ctxRows.indexOf(anchor.item);
-        const int ib = ctxRows.indexOf(item);
-        selected.clear();
-        if (ia >= 0 && ib >= 0)
-        {
-            const int lo = qMin(ia, ib);
-            const int hi = qMax(ia, ib);
-            for (int i = lo; i <= hi; ++i)
-                selected.insert(PTTransitionCellKey { ctxRows.at(i), rangeCol });
-        }
-        else
-        {
-            selected.insert(key);
-        }
-    }
-    else
-    {
-        selected.clear();
-        selected.insert(key);
-        m_cellSelectionAnchorByTable.insert(table, key);
-    }
-
-    if (!(mods & Qt::ShiftModifier))
-        m_cellSelectionAnchorByTable.insert(table, key);
-
-    setFocusColumn(table, item, col);
-    table->setCurrentItem(item, col);
-    updateCellSelectionVisuals(table);
+    Q_UNUSED(item)
+    Q_UNUSED(mods)
+    m_focusColumnByTable.insert(table, col);
+    clearCellSelection(table);
+    updateColumnFocusVisuals(table);
 }
 
 void PresetTableV2TransitionWidget::updateColumnFocusVisuals(QTreeWidget* table)
@@ -3816,6 +4062,85 @@ int PresetTableV2TransitionWidget::clipboardColumnForPaste() const
     return ok ? col : -1;
 }
 
+QTreeWidgetItem* PresetTableV2TransitionWidget::itemForAddress(
+        PTTransitionMode mode, const PTTransitionCellAddress& address) const
+{
+    QTreeWidgetItem* item = parentItemForPreset(mode, address.row);
+    if (item && address.outputIdx >= 0)
+        item = item->child(address.outputIdx);
+    if (item && address.selectionIdx > 0)
+        item = item->child(address.selectionIdx - 1);
+    return item;
+}
+
+void PresetTableV2TransitionWidget::applyPastedCellValue(
+        PTTransitionMode mode, const PTTransitionCellAddress& address,
+        const QString& raw, QSet<int>& touchedRows)
+{
+    if (address.row < 0 || address.col <= ColName || address.col >= ColCount)
+        return;
+
+    const QVariant value = normalizedColumnValue(address.col, raw);
+    if (!value.isValid())
+        return;
+
+    QVector<PTTransitionPreset>& presets = presetsForMode(mode);
+    if (address.row >= presets.size())
+        return;
+
+    QTreeWidgetItem* item = itemForAddress(mode, address);
+    if (!item)
+        return;
+
+    setPresetCellValue(item, address.col, value,
+                       item->data(address.col, kPresetCellInheritedRole).toBool());
+
+    PTTransitionPreset candidate = address.selectionIdx > 0
+            ? effectivePresetForSelectionNoLive(mode, address.row, address.outputIdx,
+                                                address.selectionIdx - 1)
+            : (address.outputIdx >= 0
+               ? effectivePresetForOutputNoLive(mode, address.row, address.outputIdx)
+               : presets.at(address.row));
+    setPresetColumnValue(candidate, address.col, value);
+
+    if (address.outputIdx >= 0)
+    {
+        QVector<QHash<int, PTTransitionOutputLayer>>& allOverrides = overridesForMode(mode);
+        while (allOverrides.size() <= address.row)
+            allOverrides.append(QHash<int, PTTransitionOutputLayer>());
+        PTTransitionOutputLayer layer = allOverrides[address.row].value(address.outputIdx);
+        if (address.selectionIdx > 0)
+        {
+            const int sel = address.selectionIdx - 1;
+            while (layer.selections.size() <= sel)
+            {
+                PTTransitionSelection selection;
+                selection.name = tr("Selection %1").arg(layer.selections.size() + 1);
+                layer.selections.append(selection);
+            }
+            PTTransitionPresetOverride ov = layer.selections[sel].overrides;
+            ov.values = candidate;
+            ov.columns.insert(address.col);
+            layer.selections[sel].overrides = ov;
+        }
+        else
+        {
+            PTTransitionPresetOverride ov = layer.all;
+            ov.values = candidate;
+            ov.columns.insert(address.col);
+            layer.all = ov;
+        }
+        allOverrides[address.row].insert(address.outputIdx, layer);
+        expandedSetForMode(mode).insert(address.row);
+    }
+    else
+    {
+        presets[address.row] = candidate;
+    }
+
+    touchedRows.insert(address.row);
+}
+
 void PresetTableV2TransitionWidget::pasteValueToPresetCell(PTTransitionMode mode,
                                                            QTreeWidget* table,
                                                            QTreeWidgetItem* item, int col,
@@ -3891,6 +4216,12 @@ void PresetTableV2TransitionWidget::pasteCells(QTreeWidget* table)
     if (focusCol <= ColName || focusCol >= ColCount || table->isColumnHidden(focusCol))
         return;
 
+    for (const PTTransitionCellKey& key : cells)
+    {
+        if (key.col != focusCol)
+            return;
+    }
+
     const int clipCol = clipboardColumnForPaste();
     if (clipCol >= 0 && clipCol != focusCol)
         return;
@@ -3909,12 +4240,28 @@ void PresetTableV2TransitionWidget::pasteCells(QTreeWidget* table)
                                          Qt::SkipEmptyParts);
     const bool singleValue = (lines.size() == 1 && !lines.at(0).contains(QLatin1Char('\t')));
 
-    m_pastingCells = true;
+    struct PasteOp
+    {
+        PTTransitionCellAddress address;
+        QString raw;
+    };
+    QVector<PasteOp> ops;
+
+    ScopedBoolFlag pasteGuard(m_pastingCells);
     if (singleValue)
     {
         const QString raw = lines.first().trimmed();
         for (const PTTransitionCellKey& key : cells)
-            pasteValueToPresetCell(mode, table, key.item, key.col, raw);
+        {
+            if (!key.item)
+                continue;
+            PTTransitionCellAddress address;
+            address.row = key.item->data(0, kItemPresetIndexRole).toInt();
+            address.outputIdx = key.item->data(0, kItemOutputIndexRole).toInt();
+            address.selectionIdx = key.item->data(0, kItemSelectionIndexRole).toInt();
+            address.col = key.col;
+            ops.append({ address, raw });
+        }
     }
     else if (cells.size() > 1)
     {
@@ -3922,7 +4269,15 @@ void PresetTableV2TransitionWidget::pasteCells(QTreeWidget* table)
         for (int i = 0; i < count; ++i)
         {
             const QString raw = lines.at(i).section(QLatin1Char('\t'), 0, 0).trimmed();
-            pasteValueToPresetCell(mode, table, cells.at(i).item, cells.at(i).col, raw);
+            QTreeWidgetItem* item = cells.at(i).item;
+            if (!item)
+                continue;
+            PTTransitionCellAddress address;
+            address.row = item->data(0, kItemPresetIndexRole).toInt();
+            address.outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+            address.selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+            address.col = cells.at(i).col;
+            ops.append({ address, raw });
         }
     }
     else
@@ -3933,16 +4288,41 @@ void PresetTableV2TransitionWidget::pasteCells(QTreeWidget* table)
             if (!item)
                 break;
             const QString raw = line.section(QLatin1Char('\t'), 0, 0).trimmed();
-            pasteValueToPresetCell(mode, table, item, focusCol, raw);
+            PTTransitionCellAddress address;
+            address.row = item->data(0, kItemPresetIndexRole).toInt();
+            address.outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+            address.selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+            address.col = focusCol;
+            ops.append({ address, raw });
             item = table->itemBelow(item);
         }
     }
-    m_pastingCells = false;
+
+    QSet<int> touchedRows;
+    for (const PasteOp& op : ops)
+        applyPastedCellValue(mode, op.address, op.raw, touchedRows);
+
+    for (int row : touchedRows)
+        normalizeNoopOverridesForPreset(mode, row);
+
+    for (int row : touchedRows)
+        refreshOverrideVisualsForPreset(mode, row);
+
+    if (!ops.isEmpty())
+    {
+        QTreeWidgetItem* first = itemForAddress(mode, ops.first().address);
+        if (first)
+            table->setCurrentItem(first, ops.first().address.col);
+    }
+
     updateCellSelectionVisuals(table);
 
-    notifyTablePresetCacheRefresh();
-    updateEffectPreview();
-    if (m_doc)
+    if (!ops.isEmpty())
+    {
+        notifyTablePresetCacheRefresh();
+        updateEffectPreview();
+    }
+    if (m_doc && !ops.isEmpty())
         m_doc->setModified();
 }
 
@@ -4035,64 +4415,6 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
                     }
                 }
                 break;
-            }
-        }
-    }
-
-    if (event->type() == QEvent::MouseButtonDblClick)
-    {
-        QWidget* watchedWidget = qobject_cast<QWidget*>(watched);
-        QComboBox* combo = qobject_cast<QComboBox*>(watchedWidget);
-        if (combo)
-        {
-            QTreeWidget* table = nullptr;
-            for (QTreeWidget* candidate : { m_sweepTable, m_continuousTable, m_multiFxTable })
-            {
-                if (candidate && candidate->isAncestorOf(combo))
-                {
-                    table = candidate;
-                    break;
-                }
-            }
-            if (table)
-            {
-                PTTransitionMode mode = PTTransitionMode::SweepOnly;
-                if (table == m_continuousTable)
-                    mode = PTTransitionMode::Continuous;
-                else if (table == m_multiFxTable)
-                    mode = PTTransitionMode::MultiFx;
-
-                QTreeWidgetItemIterator it(table);
-                while (*it)
-                {
-                    for (int col = ColAxis; col < ColCount; ++col)
-                    {
-                        if (table->itemWidget(*it, col) != combo)
-                            continue;
-
-                        const int row = (*it)->data(0, kItemPresetIndexRole).toInt();
-                        const int outputIdx = (*it)->data(0, kItemOutputIndexRole).toInt();
-                        const int selectionIdx = (*it)->data(0, kItemSelectionIndexRole).toInt();
-                        if (col == ColPositionMotion)
-                        {
-                            const int motion = combo->currentData().toInt();
-                            if (PTPositionFxEngine::motionUsesCustomData(
-                                    PTPositionMotion(motion)))
-                            {
-                                editPositionShapeForPreset(mode, row, outputIdx, selectionIdx,
-                                                           motion);
-                                return true;
-                            }
-                        }
-                        else if (col == ColWaveShape && combo->currentData().toInt() == 3)
-                        {
-                            editCustomCurveForPreset(mode, row, outputIdx, selectionIdx);
-                            return true;
-                        }
-                        return false;
-                    }
-                    ++it;
-                }
             }
         }
     }
@@ -4551,6 +4873,8 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
         p.positionPanSize = pattrs.value(KXMLPresetPositionPanSize).toInt();
     if (pattrs.hasAttribute(KXMLPresetPositionTiltSize))
         p.positionTiltSize = pattrs.value(KXMLPresetPositionTiltSize).toInt();
+    if (pattrs.hasAttribute(KXMLPresetPositionMotionWaveShape))
+        p.positionMotionWaveShape = qBound(0, pattrs.value(KXMLPresetPositionMotionWaveShape).toInt(), 3);
     if (pattrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled))
         p.positionMotionCurveEnabled = pattrs.value(KXMLPresetPositionMotionCurveEnabled).toInt() != 0;
     if (pattrs.hasAttribute(KXMLPresetPositionMotionCurve))
@@ -4677,6 +5001,8 @@ void PresetTableV2TransitionWidget::writePresetXml(
     doc->writeAttribute(KXMLPresetSpeedMult, QString::number(p.speedMultiplier));
     doc->writeAttribute(KXMLPresetPositionMotion, QString::number(p.positionMotion));
     doc->writeAttribute(KXMLPresetPositionMotionDir, QString::number(p.positionMotionDirection));
+    doc->writeAttribute(KXMLPresetPositionMotionWaveShape,
+                        QString::number(PTPositionFxEngine::effectiveMotionWaveShape(p)));
     doc->writeAttribute(KXMLPresetPositionPanSize, QString::number(p.positionPanSize));
     doc->writeAttribute(KXMLPresetPositionTiltSize, QString::number(p.positionTiltSize));
     if (p.positionMotionCurveEnabled)

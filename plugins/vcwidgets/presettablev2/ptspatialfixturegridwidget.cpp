@@ -339,13 +339,6 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             p.drawText(cr.adjusted(2, 2, -2, -2), Qt::AlignCenter,
                        QString::number(cell.localOrder));
 
-            if (cellW >= 44 && cellH >= 38)
-            {
-                p.setFont(smallFont);
-                p.setPen(cellMuted);
-                p.drawText(cr.adjusted(3, 0, -3, -3), Qt::AlignBottom | Qt::AlignRight,
-                           QStringLiteral("%1%").arg(int(cell.phaseStart01 * 100.0 + 0.5)));
-            }
             p.setFont(baseFont);
         }
     }

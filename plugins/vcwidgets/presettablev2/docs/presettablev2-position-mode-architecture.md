@@ -303,8 +303,8 @@ Position FX to **relatywna orbita wokół pozycji bazowej** (nie dimmer wave). O
 | Wartość | Nazwa UI | Kształt (`PTPositionFxEngine::Shape`) | Pan | Tilt |
 |---------|----------|--------------------------------------|-----|------|
 | 0 | Off | — | — | — |
-| 1 | Pan 1D | PanOnly | sin(φ) | — |
-| 2 | Tilt 1D | TiltOnly | — | sin(φ) |
+| 1 | Pan 1D | PanOnly | `positionMotionWaveShape` | — |
+| 2 | Tilt 1D | TiltOnly | — | `positionMotionWaveShape` |
 | 3 | Circle 2D | Circle | sin(φ) | cos(φ) |
 | 4 | Line 2D | Line | sin(φ) | sin(φ) |
 | 5 | Figure-8 2D | Figure8 | sin(φ) | sin(2φ) |
@@ -593,6 +593,7 @@ Double-click na slider → reset do 128. Zmiana osi Pan/Tilt → reset slidera.
 | `speedMultiplier` | tak | tak | tak | tak |
 | `stepDelayMs`, `fadeMs` | legacy spatial | legacy | — | — |
 | **`positionMotion`** | — (ukryte w Sweep UI) | tak | tak | tak |
+| **`positionMotionWaveShape`** | — | Sine/Square/Triangle/Custom (1D offset) | tak | tak |
 | **`positionMotionCurve` / `positionPath2D`** | — | Custom Pan/Tilt 1D / Custom 2D | tak | tak |
 | **`positionMotionDirection`** | — | — | FWD/REV/ALT-W/SYM-P | tak |
 | `positionPanSize`, `positionTiltSize` | — | **preview only** | **preview only** | tak |

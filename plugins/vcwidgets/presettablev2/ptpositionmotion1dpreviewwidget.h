@@ -5,6 +5,7 @@
 #pragma once
 
 #include "presettablev2effectengine.h"
+#include "ptdimmerwaveengine.h"
 
 #include <QColor>
 #include <QTimer>
@@ -29,21 +30,27 @@ public:
     void setMotionPreview(PTPositionMotion motion, qreal panSizeDeg, qreal tiltSizeDeg,
                           const QVector<PhaseMarker>& markers, quint32 cycleMs);
     void setMotionPreviewFromPreset(const PTTransitionPreset& preset,
+                                    const PTDimmerWaveParams& waveParams,
                                     const QVector<PhaseMarker>& markers, quint32 cycleMs);
     void clear();
 
+signals:
+    void motionCurveEditRequested();
+
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     QSize sizeHint() const override { return QSize(400, 130); }
 
 private:
     void stopAnimation();
     QRectF plotRect() const;
-    qreal sampleNormalizedOffset(double phaseRadians) const;
-    QPointF mapSample(double phase01, qreal normValue, const QRectF& plot) const;
+    QPointF mapSample(double cycle01, qreal normValue, const QRectF& plot) const;
+    qreal sampleAtCycle01(double cycle01) const;
 
     PTPositionMotion m_motion = PTPositionMotion::Off;
     PTTransitionPreset m_preset;
+    PTDimmerWaveParams m_waveParams;
     bool m_usePresetMotion = false;
     qreal m_panSize = 0;
     qreal m_tiltSize = 0;

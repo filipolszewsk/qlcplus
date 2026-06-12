@@ -7097,16 +7097,8 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                     const qreal amp01 = PTPositionFxEngine::orbitAmplitude01(
                             iterator, waveParams.waveWidth, waveParams, shape);
                     const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * amp01;
-                    if (PTPositionFxEngine::motionUsesCustomData(fxMotion))
-                    {
-                        base = PTPositionFxEngine::applySmartMotionFromPreset(
-                                base, fxi, sf.head.head, fxPreset, orbitPhase, size01);
-                    }
-                    else
-                    {
-                        base = PTPositionFxEngine::applySmartMotion(
-                                base, fxi, sf.head.head, shape, orbitPhase, size01);
-                    }
+                    base = PTPositionFxEngine::applySmartMotionFromPreset(
+                            base, fxi, sf.head.head, fxPreset, orbitPhase, size01);
                 }
             }
 
@@ -7159,16 +7151,8 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                                 iterator, waveParams.waveWidth, waveParams, shape);
                         const qreal blend = qreal(m_multiFxBlend) / 255.0;
                         const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * blend * amp01;
-                        if (PTPositionFxEngine::motionUsesCustomData(mfMotion))
-                        {
-                            base = PTPositionFxEngine::applySmartMotionFromPreset(
-                                    base, fxi, sf.head.head, mfPreset, orbitPhase, size01);
-                        }
-                        else
-                        {
-                            base = PTPositionFxEngine::applySmartMotion(
-                                    base, fxi, sf.head.head, shape, orbitPhase, size01);
-                        }
+                        base = PTPositionFxEngine::applySmartMotionFromPreset(
+                                base, fxi, sf.head.head, mfPreset, orbitPhase, size01);
                     }
                 }
             }

@@ -27,6 +27,13 @@ public:
 
     static Shape shapeFromPositionMotion(PTPositionMotion motion);
     static bool motionUsesCustomData(PTPositionMotion motion);
+    static bool motionIs1D(PTPositionMotion motion);
+    static int effectiveMotionWaveShape(const PTTransitionPreset& preset);
+    /** Bipolar offset -1..+1 for one cycle phase 0..1. */
+    static float sampleMotionOffset01(float phase01, const PTTransitionPreset& preset);
+    /** Effective offset over full 0..360° cycle (0 outside waveWidth window). */
+    static float sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
+                                        const PTDimmerWaveParams& waveParams);
     static void relativeOffset(Shape shape, double phaseRadians,
                                qreal panSizeDeg, qreal tiltSizeDeg,
                                qreal& panOffDeg, qreal& tiltOffDeg);

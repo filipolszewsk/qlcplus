@@ -35,6 +35,7 @@ private:
     int selectedGalleryIndex() const;
     void applyGalleryItem(const PTShapeGalleryItem& item);
     void saveCurrentToGallery();
+    void deleteSelectedGalleryItem();
 
     PTPositionMotion m_motion;
     QListWidget* m_galleryList = nullptr;

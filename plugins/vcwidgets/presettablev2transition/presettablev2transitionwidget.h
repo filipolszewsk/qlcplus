@@ -15,6 +15,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QTabWidget>
+#include <QStyledItemDelegate>
 #include <QHash>
 #include <QMutex>
 #include <QSet>
@@ -28,6 +29,29 @@ class Doc;
 class PresetTableV2ControlIface;
 class PTDimmerWaveCurveWidget;
 class PTSpatialFixtureGridWidget;
+class PresetTableV2TransitionWidget;
+
+class PresetTableV2TransitionDelegate : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+public:
+    explicit PresetTableV2TransitionDelegate(PresetTableV2TransitionWidget* owner,
+                                             QObject* parent = nullptr);
+
+    QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option,
+                          const QModelIndex& index) const override;
+    void setEditorData(QWidget* editor, const QModelIndex& index) const override;
+    void setModelData(QWidget* editor, QAbstractItemModel* model,
+                      const QModelIndex& index) const override;
+    void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
+                              const QModelIndex& index) const override;
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override;
+
+private:
+    PresetTableV2TransitionWidget* m_owner = nullptr;
+};
 
 struct PTTransitionCellKey
 {
@@ -45,11 +69,20 @@ inline size_t qHash(const PTTransitionCellKey& key, size_t seed = 0) noexcept
     return ::qHash(key.col, seed);
 }
 
+struct PTTransitionCellAddress
+{
+    int row = -1;
+    int outputIdx = -1;
+    int selectionIdx = -1;
+    int col = -1;
+};
+
 class PresetTableV2TransitionWidget : public VCWidget,
                                        public PresetTableV2TransitionProviderIface
 {
     Q_OBJECT
     Q_INTERFACES(PresetTableV2TransitionProviderIface)
+    friend class PresetTableV2TransitionDelegate;
 
 public:
     explicit PresetTableV2TransitionWidget(QWidget* parent, Doc* doc);
@@ -114,6 +147,7 @@ private slots:
     void slotColumnHeaderDoubleClicked(int logicalIndex);
     void slotBankTabChanged(int index);
     void slotOpenCustomCurveEditor();
+    void slotOpenMotionCurveEditor();
     void slotPresetContextMenuRequested(const QPoint& pos);
     void slotSelectionLayerActivatedFromGrid(int selectionIndex);
 
@@ -137,6 +171,7 @@ private:
         ColSpeedMult,
         ColPositionMotion,
         ColPositionMotionDir,
+        ColPositionMotionShape,
         ColPositionPanSize,
         ColPositionTiltSize,
         ColCount
@@ -241,6 +276,12 @@ private:
     void applyPositionModeColumnVisibility(QTreeWidget* table, PTTransitionMode mode);
     void applyDefaultColumnWidths(QTreeWidget* table);
     QString columnTooltipForCol(int col) const;
+    QWidget* createEditorForColumn(QWidget* parent, int col) const;
+    QVariant normalizedColumnValue(int col, const QString& raw) const;
+    QString displayTextForColumn(int col, const QVariant& value) const;
+    void setPresetCellValue(QTreeWidgetItem* item, int col, const QVariant& value,
+                            bool inherited, bool parentHasOutputOverride = false,
+                            bool selected = false);
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
@@ -264,6 +305,10 @@ private:
     bool findItemForEditor(QTreeWidget* table, QWidget* editor,
                            QTreeWidgetItem** item, int* col) const;
     int clipboardColumnForPaste() const;
+    QTreeWidgetItem* itemForAddress(PTTransitionMode mode,
+                                    const PTTransitionCellAddress& address) const;
+    void applyPastedCellValue(PTTransitionMode mode, const PTTransitionCellAddress& address,
+                              const QString& raw, QSet<int>& touchedRows);
     void copyCells(QTreeWidget* table);
     void pasteCells(QTreeWidget* table);
     void pasteValueToPresetCell(PTTransitionMode mode, QTreeWidget* table,
@@ -329,6 +374,7 @@ private:
     QTreeWidget* m_sweepTable = nullptr;
     QTreeWidget* m_continuousTable = nullptr;
     QTreeWidget* m_multiFxTable = nullptr;
+    PresetTableV2TransitionDelegate* m_transitionDelegate = nullptr;
     QTreeView* m_sweepNameView = nullptr;
     QTreeView* m_continuousNameView = nullptr;
     QTreeView* m_multiFxNameView = nullptr;

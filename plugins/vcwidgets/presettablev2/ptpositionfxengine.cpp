@@ -109,6 +109,71 @@ bool PTPositionFxEngine::motionUsesCustomData(PTPositionMotion motion)
             || motion == PTPositionMotion::Custom2D;
 }
 
+bool PTPositionFxEngine::motionIs1D(PTPositionMotion motion)
+{
+    return motion == PTPositionMotion::Pan1D
+            || motion == PTPositionMotion::Tilt1D
+            || motion == PTPositionMotion::CustomPan1D
+            || motion == PTPositionMotion::CustomTilt1D;
+}
+
+int PTPositionFxEngine::effectiveMotionWaveShape(const PTTransitionPreset& preset)
+{
+    const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
+    if (motion == PTPositionMotion::CustomPan1D
+            || motion == PTPositionMotion::CustomTilt1D)
+        return 3;
+    if (preset.positionMotionCurveEnabled || preset.positionMotionWaveShape == 3)
+        return 3;
+    return qBound(0, preset.positionMotionWaveShape, 2);
+}
+
+float PTPositionFxEngine::sampleMotionOffset01(float phase01, const PTTransitionPreset& preset)
+{
+    const float t = qBound(0.0f, phase01, 1.0f);
+    const int shape = effectiveMotionWaveShape(preset);
+    if (shape == 3 && preset.positionMotionCurve.size() >= 2)
+    {
+        const float sample = PTDimmerWaveEngine::sampleCustomCurve01(t, preset.positionMotionCurve);
+        return sample * 2.0f - 1.0f;
+    }
+
+    const double phase = double(t) * 2.0 * M_PI;
+    switch (shape)
+    {
+        case 1:
+            return t < 0.5f ? 1.0f : -1.0f;
+        case 2:
+            if (t < 0.5f)
+                return float(t * 4.0 - 1.0);
+            return float(3.0 - t * 4.0);
+        default:
+            return float(qSin(phase));
+    }
+}
+
+float PTPositionFxEngine::sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
+                                                 const PTDimmerWaveParams& waveParams)
+{
+    const int waveWidth = qBound(1, preset.waveWidth, 360);
+    const float deg = cycleDeg - std::floor(cycleDeg / 360.0f) * 360.0f;
+    if (deg > float(waveWidth))
+        return 0.0f;
+
+    const float widthRad = float(waveWidth) / 360.0f * float(M_PI * 2.0);
+    const float iteratorRad = deg / 360.0f * float(M_PI * 2.0);
+    if (iteratorRad >= widthRad)
+        return 0.0f;
+
+    const float phaseInWidth = iteratorRad / widthRad;
+    const float offset = sampleMotionOffset01(phaseInWidth, preset);
+
+    const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
+    const Shape shape = shapeFromPositionMotion(motion);
+    const qreal amp = orbitAmplitude01(iteratorRad, waveWidth, waveParams, shape);
+    return offset * float(amp);
+}
+
 void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
                                         qreal panSizeDeg, qreal tiltSizeDeg,
                                         qreal& panOffDeg, qreal& tiltOffDeg)
@@ -157,32 +222,18 @@ void PTPositionFxEngine::relativeOffsetForPreset(const PTTransitionPreset& prese
 
     switch (motion)
     {
+        case PTPositionMotion::Pan1D:
         case PTPositionMotion::CustomPan1D:
         {
-            const QVector<PTCustomCurvePoint>& curve = preset.positionMotionCurve.size() >= 2
-                    ? preset.positionMotionCurve : QVector<PTCustomCurvePoint>();
-            if (curve.size() < 2)
-            {
-                relativeOffset(Shape::PanOnly, phaseRadians, panSizeDeg, tiltSizeDeg,
-                               panOffDeg, tiltOffDeg);
-                return;
-            }
-            const float sample = PTDimmerWaveEngine::sampleCustomCurve01(float(phase01), curve);
-            panOffDeg = qreal(sample * 2.0 - 1.0) * panSizeDeg;
+            const float off = sampleMotionOffset01(float(phase01), preset);
+            panOffDeg = qreal(off) * panSizeDeg;
             break;
         }
+        case PTPositionMotion::Tilt1D:
         case PTPositionMotion::CustomTilt1D:
         {
-            const QVector<PTCustomCurvePoint>& curve = preset.positionMotionCurve.size() >= 2
-                    ? preset.positionMotionCurve : QVector<PTCustomCurvePoint>();
-            if (curve.size() < 2)
-            {
-                relativeOffset(Shape::TiltOnly, phaseRadians, panSizeDeg, tiltSizeDeg,
-                               panOffDeg, tiltOffDeg);
-                return;
-            }
-            const float sample = PTDimmerWaveEngine::sampleCustomCurve01(float(phase01), curve);
-            tiltOffDeg = qreal(sample * 2.0 - 1.0) * tiltSizeDeg;
+            const float off = sampleMotionOffset01(float(phase01), preset);
+            tiltOffDeg = qreal(off) * tiltSizeDeg;
             break;
         }
         case PTPositionMotion::Custom2D:
@@ -307,12 +358,6 @@ PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionV
         return PTPositionConverter::clampPosition(fxi, head, base);
 
     const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
-    if (!motionUsesCustomData(motion))
-    {
-        return applySmartMotion(base, fxi, head, shapeFromPositionMotion(motion),
-                                phaseRadians, size01);
-    }
-
     const PTPositionValue clampedBase = PTPositionConverter::clampPosition(fxi, head, base);
     const QRectF range = PTPositionConverter::degreesRange(fxi, head);
     const qreal panMin = range.left();
