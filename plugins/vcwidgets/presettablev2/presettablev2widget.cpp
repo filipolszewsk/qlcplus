@@ -7088,17 +7088,22 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                             PTDimmerWaveEngine::offsetInfoForPoint(
                                     sf.point.x(), sf.point.y(), gridSize.width(),
                                     gridSize.height(), waveParams);
-                    orbitPhase = PTPositionFxEngine::applyMotionDirection(
-                            orbitPhase,
-                            PTPositionMotionDirection(fxPreset.positionMotionDirection),
-                            spatialInfo);
                     const PTPositionMotion fxMotion = PTPositionMotion(fxPreset.positionMotion);
-                    const auto shape = PTPositionFxEngine::shapeFromPositionMotion(fxMotion);
-                    const qreal amp01 = PTPositionFxEngine::orbitAmplitude01(
-                            iterator, waveParams.waveWidth, waveParams, shape);
-                    const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * amp01;
+                    const bool fxMotion1D = PTPositionFxEngine::motionIs1D(fxMotion);
+                    double phaseForApply = orbitPhase;
+                    if (!fxMotion1D)
+                    {
+                        phaseForApply = PTPositionFxEngine::applyMotionDirection(
+                                orbitPhase,
+                                PTPositionMotionDirection(fxPreset.positionMotionDirection),
+                                spatialInfo);
+                    }
+                    const qreal size01 = qreal(globalFx.positionSize) / 255.0;
                     base = PTPositionFxEngine::applySmartMotionFromPreset(
-                            base, fxi, sf.head.head, fxPreset, orbitPhase, size01);
+                            base, fxi, sf.head.head, fxPreset, phaseForApply, size01,
+                            fxMotion1D ? iterator : -1.0f,
+                            fxMotion1D ? &waveParams : nullptr,
+                            fxMotion1D ? &spatialInfo : nullptr);
                 }
             }
 
@@ -7141,18 +7146,23 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                                 PTDimmerWaveEngine::offsetInfoForPoint(
                                         sf.point.x(), sf.point.y(), gridSize.width(),
                                         gridSize.height(), waveParams);
-                        orbitPhase = PTPositionFxEngine::applyMotionDirection(
-                                orbitPhase,
-                                PTPositionMotionDirection(mfPreset.positionMotionDirection),
-                                spatialInfo);
                         const PTPositionMotion mfMotion = PTPositionMotion(mfPreset.positionMotion);
-                        const auto shape = PTPositionFxEngine::shapeFromPositionMotion(mfMotion);
-                        const qreal amp01 = PTPositionFxEngine::orbitAmplitude01(
-                                iterator, waveParams.waveWidth, waveParams, shape);
+                        const bool mfMotion1D = PTPositionFxEngine::motionIs1D(mfMotion);
+                        double phaseForApply = orbitPhase;
+                        if (!mfMotion1D)
+                        {
+                            phaseForApply = PTPositionFxEngine::applyMotionDirection(
+                                    orbitPhase,
+                                    PTPositionMotionDirection(mfPreset.positionMotionDirection),
+                                    spatialInfo);
+                        }
                         const qreal blend = qreal(m_multiFxBlend) / 255.0;
-                        const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * blend * amp01;
+                        const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * blend;
                         base = PTPositionFxEngine::applySmartMotionFromPreset(
-                                base, fxi, sf.head.head, mfPreset, orbitPhase, size01);
+                                base, fxi, sf.head.head, mfPreset, phaseForApply, size01,
+                                mfMotion1D ? iterator : -1.0f,
+                                mfMotion1D ? &waveParams : nullptr,
+                                mfMotion1D ? &spatialInfo : nullptr);
                     }
                 }
             }

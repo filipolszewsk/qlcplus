@@ -65,8 +65,8 @@ PTPositionShapeDialog::PTPositionShapeDialog(PTPositionMotion motion,
     params.waveWidth = preset.waveWidth;
     params.waveFadeIn = preset.waveFadeIn;
     params.waveFadeOut = preset.waveFadeOut;
-    params.customCurve = preset.positionMotionCurve.size() >= 2
-            ? preset.positionMotionCurve : PTShapesGallery::defaultMotionCurve1D();
+    params.customCurve = preset.customCurve.size() >= 2
+            ? preset.customCurve : PTShapesGallery::defaultMotionCurve1D();
     m_curve1D->setParams(params);
     m_curve1D->setCustomCurve(params.customCurve);
 

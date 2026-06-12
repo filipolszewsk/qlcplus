@@ -28,9 +28,9 @@ public:
     static Shape shapeFromPositionMotion(PTPositionMotion motion);
     static bool motionUsesCustomData(PTPositionMotion motion);
     static bool motionIs1D(PTPositionMotion motion);
-    static int effectiveMotionWaveShape(const PTTransitionPreset& preset);
-    /** Bipolar offset -1..+1 for one cycle phase 0..1. */
-    static float sampleMotionOffset01(float phase01, const PTTransitionPreset& preset);
+    /** Bipolar offset -1..+1 from shared morph wave packet (waveShape/customCurve/waveWidth/fade). */
+    static float samplePosition1DOffset(float iteratorRad, const PTTransitionPreset& preset,
+                                        const PTDimmerWaveParams& waveParams);
     /** Effective offset over full 0..360° cycle (0 outside waveWidth window). */
     static float sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
                                         const PTDimmerWaveParams& waveParams);
@@ -45,7 +45,10 @@ public:
                                             Shape shape, double phaseRadians, qreal size01);
     static PTPositionValue applySmartMotionFromPreset(const PTPositionValue& base, Fixture* fxi,
                                                       int head, const PTTransitionPreset& preset,
-                                                      double phaseRadians, qreal size01);
+                                                      double phaseRadians, qreal size01,
+                                                      float iteratorRad = -1.0f,
+                                                      const PTDimmerWaveParams* waveParams = nullptr,
+                                                      const PTDimmerWaveOffsetInfo* spatial = nullptr);
 
     /**
      * Map dimmer-wave iterator (rad) into orbit phase when inside waveWidth window.
@@ -55,8 +58,4 @@ public:
 
     static double applyMotionDirection(double phaseRad, PTPositionMotionDirection direction,
                                        const PTDimmerWaveOffsetInfo& spatial);
-
-    /** Fade-in/out envelope for 1D orbit; 1.0 for 2D shapes. */
-    static qreal orbitAmplitude01(float iteratorRad, int waveWidthDeg,
-                                  const PTDimmerWaveParams& waveParams, Shape shape);
 };

@@ -117,29 +117,13 @@ bool PTPositionFxEngine::motionIs1D(PTPositionMotion motion)
             || motion == PTPositionMotion::CustomTilt1D;
 }
 
-int PTPositionFxEngine::effectiveMotionWaveShape(const PTTransitionPreset& preset)
-{
-    const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
-    if (motion == PTPositionMotion::CustomPan1D
-            || motion == PTPositionMotion::CustomTilt1D)
-        return 3;
-    if (preset.positionMotionCurveEnabled || preset.positionMotionWaveShape == 3)
-        return 3;
-    return qBound(0, preset.positionMotionWaveShape, 2);
-}
+namespace {
 
-float PTPositionFxEngine::sampleMotionOffset01(float phase01, const PTTransitionPreset& preset)
+float oscillateBuiltinBipolar(float phase01, int waveShape)
 {
     const float t = qBound(0.0f, phase01, 1.0f);
-    const int shape = effectiveMotionWaveShape(preset);
-    if (shape == 3 && preset.positionMotionCurve.size() >= 2)
-    {
-        const float sample = PTDimmerWaveEngine::sampleCustomCurve01(t, preset.positionMotionCurve);
-        return sample * 2.0f - 1.0f;
-    }
-
     const double phase = double(t) * 2.0 * M_PI;
-    switch (shape)
+    switch (waveShape)
     {
         case 1:
             return t < 0.5f ? 1.0f : -1.0f;
@@ -152,26 +136,64 @@ float PTPositionFxEngine::sampleMotionOffset01(float phase01, const PTTransition
     }
 }
 
-float PTPositionFxEngine::sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
+float envelope01(float phaseInWidth, const PTDimmerWaveParams& waveParams)
+{
+    PTDimmerWaveParams envParams = waveParams;
+    envParams.waveLevel = 255;
+    return PTDimmerWaveEngine::dimmerAtPhaseInWidth(phaseInWidth, envParams);
+}
+
+float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection direction,
+                                 const PTDimmerWaveOffsetInfo& spatial)
+{
+    switch (direction)
+    {
+        case PTPositionMotionDirection::Reverse:
+            return -unitOffset;
+        case PTPositionMotionDirection::AlternateWings:
+            return (spatial.wingIndex % 2 == 1) ? -unitOffset : unitOffset;
+        case PTPositionMotionDirection::SymmetricPairs:
+            return (spatial.localIndex % 2 == 1) ? -unitOffset : unitOffset;
+        default:
+            return unitOffset;
+    }
+}
+
+} // namespace
+
+float PTPositionFxEngine::samplePosition1DOffset(float iteratorRad,
+                                                 const PTTransitionPreset& preset,
                                                  const PTDimmerWaveParams& waveParams)
 {
-    const int waveWidth = qBound(1, preset.waveWidth, 360);
-    const float deg = cycleDeg - std::floor(cycleDeg / 360.0f) * 360.0f;
-    if (deg > float(waveWidth))
-        return 0.0f;
-
-    const float widthRad = float(waveWidth) / 360.0f * float(M_PI * 2.0);
-    const float iteratorRad = deg / 360.0f * float(M_PI * 2.0);
-    if (iteratorRad >= widthRad)
+    const float widthRad = (float(qBound(1, waveParams.waveWidth, 360)) / 360.0f)
+            * float(M_PI * 2.0);
+    if (widthRad <= 0.0f || iteratorRad >= widthRad)
         return 0.0f;
 
     const float phaseInWidth = iteratorRad / widthRad;
-    const float offset = sampleMotionOffset01(phaseInWidth, preset);
 
-    const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
-    const Shape shape = shapeFromPositionMotion(motion);
-    const qreal amp = orbitAmplitude01(iteratorRad, waveWidth, waveParams, shape);
-    return offset * float(amp);
+    if (waveParams.customCurveEnabled && waveParams.customCurve.size() >= 2)
+    {
+        const float unipolar = PTDimmerWaveEngine::calculateDimmerWave(iteratorRad, waveParams);
+        return unipolar * 2.0f - 1.0f;
+    }
+
+    if (preset.position1DBuiltinMode == 1)
+    {
+        const float osc = oscillateBuiltinBipolar(phaseInWidth, waveParams.waveShape);
+        return osc * envelope01(phaseInWidth, waveParams);
+    }
+
+    const float unipolar = PTDimmerWaveEngine::calculateDimmerWave(iteratorRad, waveParams);
+    return unipolar * 2.0f - 1.0f;
+}
+
+float PTPositionFxEngine::sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
+                                                 const PTDimmerWaveParams& waveParams)
+{
+    const float deg = cycleDeg - std::floor(cycleDeg / 360.0f) * 360.0f;
+    const float iteratorRad = deg / 360.0f * float(M_PI * 2.0);
+    return samplePosition1DOffset(iteratorRad, preset, waveParams);
 }
 
 void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
@@ -224,18 +246,9 @@ void PTPositionFxEngine::relativeOffsetForPreset(const PTTransitionPreset& prese
     {
         case PTPositionMotion::Pan1D:
         case PTPositionMotion::CustomPan1D:
-        {
-            const float off = sampleMotionOffset01(float(phase01), preset);
-            panOffDeg = qreal(off) * panSizeDeg;
-            break;
-        }
         case PTPositionMotion::Tilt1D:
         case PTPositionMotion::CustomTilt1D:
-        {
-            const float off = sampleMotionOffset01(float(phase01), preset);
-            tiltOffDeg = qreal(off) * tiltSizeDeg;
             break;
-        }
         case PTPositionMotion::Custom2D:
         {
             const QVector<PTPositionPath2DPoint>& path = preset.positionPath2D.size() >= 2
@@ -288,22 +301,6 @@ double PTPositionFxEngine::applyMotionDirection(double phaseRad,
     }
 }
 
-qreal PTPositionFxEngine::orbitAmplitude01(float iteratorRad, int waveWidthDeg,
-                                           const PTDimmerWaveParams& waveParams, Shape shape)
-{
-    if (shape != Shape::PanOnly && shape != Shape::TiltOnly
-            && shape != Shape::CustomPan1D && shape != Shape::CustomTilt1D)
-        return 1.0;
-
-    const float widthRad = (float(qBound(1, waveWidthDeg, 360)) / 360.0f) * float(M_PI * 2.0);
-    if (widthRad <= 0.0f || iteratorRad >= widthRad)
-        return 0.0;
-
-    PTDimmerWaveParams envParams = waveParams;
-    envParams.waveLevel = 255;
-    return qreal(PTDimmerWaveEngine::dimmerAtPhaseInWidth(iteratorRad / widthRad, envParams));
-}
-
 PTPositionValue PTPositionFxEngine::applySmartMotion(const PTPositionValue& base, Fixture* fxi,
                                                      int head, Shape shape, double phaseRadians,
                                                      qreal size01)
@@ -348,7 +345,10 @@ PTPositionValue PTPositionFxEngine::applySmartMotion(const PTPositionValue& base
 PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionValue& base,
                                                                Fixture* fxi, int head,
                                                                const PTTransitionPreset& preset,
-                                                               double phaseRadians, qreal size01)
+                                                               double phaseRadians, qreal size01,
+                                                               float iteratorRad,
+                                                               const PTDimmerWaveParams* waveParams,
+                                                               const PTDimmerWaveOffsetInfo* spatial)
 {
     if (!base.valid || !fxi)
         return base;
@@ -367,7 +367,23 @@ PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionV
 
     qreal panUnit = 0;
     qreal tiltUnit = 0;
-    relativeOffsetForPreset(preset, phaseRadians, 1.0, 1.0, panUnit, tiltUnit);
+    if (motionIs1D(motion) && waveParams != nullptr && iteratorRad >= 0.0f)
+    {
+        float unit = samplePosition1DOffset(iteratorRad, preset, *waveParams);
+        if (spatial != nullptr)
+        {
+            unit = applyDirectionToUnitOffset(unit,
+                    PTPositionMotionDirection(preset.positionMotionDirection), *spatial);
+        }
+        if (motion == PTPositionMotion::Pan1D || motion == PTPositionMotion::CustomPan1D)
+            panUnit = qreal(unit);
+        else
+            tiltUnit = qreal(unit);
+    }
+    else
+    {
+        relativeOffsetForPreset(preset, phaseRadians, 1.0, 1.0, panUnit, tiltUnit);
+    }
 
     qreal panAmp = 0;
     qreal tiltAmp = 0;

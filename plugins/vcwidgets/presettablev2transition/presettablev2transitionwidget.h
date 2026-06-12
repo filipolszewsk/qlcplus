@@ -171,7 +171,7 @@ private:
         ColSpeedMult,
         ColPositionMotion,
         ColPositionMotionDir,
-        ColPositionMotionShape,
+        ColPosition1DBuiltinMode,
         ColPositionPanSize,
         ColPositionTiltSize,
         ColCount
@@ -320,6 +320,7 @@ private:
     static QComboBox* makeOffsetDirCombo(QWidget* parent);
     static QComboBox* makeWaveShapeCombo(QWidget* parent);
     static QComboBox* makePositionMotionCombo(QWidget* parent);
+    static QComboBox* makePosition1DBuiltinModeCombo(QWidget* parent);
     static QComboBox* makePositionMotionDirCombo(QWidget* parent);
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);

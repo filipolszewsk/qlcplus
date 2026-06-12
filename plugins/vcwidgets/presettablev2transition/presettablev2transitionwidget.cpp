@@ -114,6 +114,38 @@ static const QString KXMLShapeGalleryPath2DClosed = QStringLiteral("Path2DClosed
 static const QString KXMLPresetPositionMotionCurve = QStringLiteral("PositionMotionCurve");
 static const QString KXMLPresetPositionMotionCurveEnabled = QStringLiteral("PositionMotionCurveEnabled");
 static const QString KXMLPresetPositionMotionWaveShape = QStringLiteral("PositionMotionWaveShape");
+static const QString KXMLPresetPosition1DBuiltinMode = QStringLiteral("Position1DBuiltinMode");
+
+static void migrateLegacyPositionMotionFields(PTTransitionPreset& p,
+                                              int legacyMotionWaveShape = -1,
+                                              bool legacyMotionCurveEnabled = false,
+                                              const QVector<PTCustomCurvePoint>& legacyMotionCurve = {})
+{
+    if (legacyMotionCurve.size() >= 2
+            && (legacyMotionCurveEnabled || legacyMotionWaveShape == 3))
+    {
+        if (!p.customCurveEnabled || p.customCurve.size() < 2)
+        {
+            p.customCurve = legacyMotionCurve;
+            p.customCurveEnabled = true;
+        }
+    }
+    else if (legacyMotionWaveShape >= 0 && legacyMotionWaveShape < 3 && !p.customCurveEnabled)
+    {
+        p.waveShape = legacyMotionWaveShape;
+    }
+
+    if (p.positionMotion == int(PTPositionMotion::CustomPan1D))
+    {
+        p.positionMotion = int(PTPositionMotion::Pan1D);
+        p.customCurveEnabled = true;
+    }
+    else if (p.positionMotion == int(PTPositionMotion::CustomTilt1D))
+    {
+        p.positionMotion = int(PTPositionMotion::Tilt1D);
+        p.customCurveEnabled = true;
+    }
+}
 static const QString KXMLPresetPositionPath2D = QStringLiteral("PositionPath2D");
 static const QString KXMLPresetPositionPath2DClosed = QStringLiteral("PositionPath2DClosed");
 static const QString KXMLCustomCurveItem = QStringLiteral("CustomCurveItem");
@@ -558,7 +590,7 @@ QString PresetTableV2TransitionWidget::columnTitle(int col)
         case ColSpeedMult:     return QObject::tr("Mult.");
         case ColPositionMotion:  return QObject::tr("Motion");
         case ColPositionMotionDir: return QObject::tr("Motion dir");
-        case ColPositionMotionShape: return QObject::tr("Motion shape");
+        case ColPosition1DBuiltinMode: return QObject::tr("1D builtin");
         case ColPositionPanSize: return QObject::tr("Pan size °");
         case ColPositionTiltSize: return QObject::tr("Tilt size °");
         default:               return QObject::tr("Name");
@@ -584,13 +616,13 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
     {
         table->setColumnHidden(ColPositionMotion, true);
         table->setColumnHidden(ColPositionMotionDir, true);
-        table->setColumnHidden(ColPositionMotionShape, true);
+        table->setColumnHidden(ColPosition1DBuiltinMode, true);
         table->setColumnHidden(ColPositionPanSize, true);
         table->setColumnHidden(ColPositionTiltSize, true);
         for (int col = ColAxis; col < ColCount; ++col)
         {
             if (col == ColDuration || col == ColPositionMotion || col == ColPositionMotionDir
-                    || col == ColPositionMotionShape
+                    || col == ColPosition1DBuiltinMode
                     || col == ColPositionPanSize || col == ColPositionTiltSize)
             {
                 continue;
@@ -617,7 +649,7 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
             table->setColumnHidden(col, !visible.contains(col));
         table->setColumnHidden(ColPositionMotion, true);
         table->setColumnHidden(ColPositionMotionDir, true);
-        table->setColumnHidden(ColPositionMotionShape, true);
+        table->setColumnHidden(ColPosition1DBuiltinMode, true);
         table->setColumnHidden(ColFadeOut, true);
         table->setColumnHidden(ColWaveLevel, true);
         return;
@@ -646,7 +678,9 @@ QString PresetTableV2TransitionWidget::columnTitleForCol(int col) const
     {
         switch (col)
         {
-            case ColWaveShape:  return tr("Row morph");
+            case ColWaveShape:
+                return (activeBankMode() == PTTransitionMode::SweepOnly)
+                        ? tr("Row morph") : tr("Motion curve");
             case ColFadeIn:
                 return (activeBankMode() == PTTransitionMode::SweepOnly)
                         ? tr("Row fade in") : tr("Orbit fade in");
@@ -654,7 +688,7 @@ QString PresetTableV2TransitionWidget::columnTitleForCol(int col) const
                 return (activeBankMode() == PTTransitionMode::SweepOnly)
                         ? tr("Row fade out") : tr("Orbit fade out");
             case ColWaveWidth:  return tr("Orbit width °");
-            case ColPositionMotionShape: return tr("Motion shape");
+            case ColPosition1DBuiltinMode: return tr("1D builtin");
             case ColDuration:   return tr("Cycle ms");
             default:            break;
         }
@@ -670,7 +704,9 @@ QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
     switch (col)
     {
         case ColWaveShape:
-            return tr("Wave shape for primary↔secondary row blend (not preset crossfade)");
+            return (activeBankMode() == PTTransitionMode::SweepOnly)
+                    ? tr("Wave shape for primary↔secondary row blend (not preset crossfade)")
+                    : tr("Motion curve packet (Sine/Square/Triangle/Custom — same fields as row morph)");
         case ColFadeIn:
             return (activeBankMode() == PTTransitionMode::SweepOnly)
                     ? tr("Fade-in for primary↔secondary row morph")
@@ -681,8 +717,8 @@ QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
                     : tr("Amplitude fade-out inside the orbit window");
         case ColWaveWidth:
             return tr("Active arc of orbit motion within each cycle (degrees)");
-        case ColPositionMotionShape:
-            return tr("Offset curve within the active orbit window (Sine/Square/Triangle/Custom)");
+        case ColPosition1DBuiltinMode:
+            return tr("Builtin 1D: Morph packet (like row morph) or Oscillate within the orbit window");
         case ColOffsetStep:
             return tr("Phase spread between fixtures (0 = all in sync)");
         default:
@@ -710,7 +746,7 @@ void PresetTableV2TransitionWidget::applyDefaultColumnWidths(QTreeWidget* table)
     setFixed(ColSpeedMult, 36);
     setFixed(ColPositionMotion, 88);
     setFixed(ColPositionMotionDir, 52);
-    setFixed(ColPositionMotionShape, 72);
+    setFixed(ColPosition1DBuiltinMode, 72);
     setFixed(ColWaveShape, 72);
     setFixed(ColPropagation, 52);
 }
@@ -743,12 +779,10 @@ PresetTableV2TransitionWidget::columnGroupsForMode(PTTransitionMode mode) const
         else
         {
             add(QStringLiteral("orbit"), tr("Orbit"),
-                { ColPositionMotion, ColPositionMotionDir, ColWaveWidth, ColPositionMotionShape,
-                  ColFadeIn, ColFadeOut, ColAxis });
+                { ColPositionMotion, ColPositionMotionDir, ColWaveWidth, ColWaveShape,
+                  ColFadeIn, ColFadeOut, ColPosition1DBuiltinMode, ColAxis });
             add(QStringLiteral("spread"), tr("Spread"),
                 { ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry, ColOffsetStep });
-            add(QStringLiteral("morph"), tr("Row morph"),
-                { ColWaveShape });
             add(QStringLiteral("timing"), tr("Timing"),
                 { ColStartOffset, ColSpeedMult });
         }
@@ -975,8 +1009,6 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionCombo(QWidget* paren
                    QObject::tr("Diagonal pan+tilt path: both axes use sin(φ) with the same phase."),
                    Qt::ToolTipRole);
     c->addItem(QObject::tr("Figure-8"), int(PTPositionMotion::Figure8_2D));
-    c->addItem(QObject::tr("Custom Pan 1D"), int(PTPositionMotion::CustomPan1D));
-    c->addItem(QObject::tr("Custom Tilt 1D"), int(PTPositionMotion::CustomTilt1D));
     c->addItem(QObject::tr("Custom 2D"), int(PTPositionMotion::Custom2D));
     configureTransitionCombo(c, 120);
     return c;
@@ -990,6 +1022,15 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionDirCombo(QWidget* pa
     c->addItem(QStringLiteral("ALT-W"), int(PTPositionMotionDirection::AlternateWings));
     c->addItem(QStringLiteral("SYM-P"), int(PTPositionMotionDirection::SymmetricPairs));
     configureTransitionCombo(c, 72);
+    return c;
+}
+
+QComboBox* PresetTableV2TransitionWidget::makePosition1DBuiltinModeCombo(QWidget* parent)
+{
+    auto* c = new QComboBox(parent);
+    c->addItem(QObject::tr("Morph packet"), 0);
+    c->addItem(QObject::tr("Oscillate"), 1);
+    configureTransitionCombo(c, 96);
     return c;
 }
 
@@ -1038,8 +1079,8 @@ QWidget* PresetTableV2TransitionWidget::createEditorForColumn(QWidget* parent, i
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePositionMotionCombo(parent);
     else if (col == ColPositionMotionDir)
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePositionMotionDirCombo(parent);
-    else if (col == ColPositionMotionShape)
-        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeWaveShapeCombo(parent);
+    else if (col == ColPosition1DBuiltinMode)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePosition1DBuiltinModeCombo(parent);
     else if (col == ColPropagation)
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePropagationCombo(parent);
     else if (col == ColWingsSymmetry)
@@ -1161,8 +1202,8 @@ QVariant PresetTableV2TransitionWidget::presetColumnValue(const PTTransitionPres
         case ColSpeedMult:     return preset.speedMultiplier;
         case ColPositionMotion:  return preset.positionMotion;
         case ColPositionMotionDir: return preset.positionMotionDirection;
-        case ColPositionMotionShape:
-            return PTPositionFxEngine::effectiveMotionWaveShape(preset);
+        case ColPosition1DBuiltinMode:
+            return preset.position1DBuiltinMode;
         case ColPositionPanSize: return preset.positionPanSize;
         case ColPositionTiltSize: return preset.positionTiltSize;
         default:               return QVariant();
@@ -1224,43 +1265,18 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
             break;
         case ColPositionMotion:
             preset.positionMotion = value.toInt();
-            if (preset.positionMotion == int(PTPositionMotion::CustomPan1D)
-                    || preset.positionMotion == int(PTPositionMotion::CustomTilt1D))
+            if (preset.positionMotion == int(PTPositionMotion::Custom2D)
+                    && preset.positionPath2D.size() < 2)
             {
-                preset.positionMotionWaveShape = 3;
-                preset.positionMotionCurveEnabled = true;
-                if (preset.positionMotionCurve.size() < 2)
-                    preset.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
-            }
-            else if (preset.positionMotion == int(PTPositionMotion::Custom2D))
-            {
-                preset.positionMotionCurveEnabled = true;
-                if (preset.positionPath2D.size() < 2)
-                    preset.positionPath2D = PTShapesGallery::defaultMotionPath2D();
-            }
-            else if (preset.positionMotion == int(PTPositionMotion::Pan1D)
-                     || preset.positionMotion == int(PTPositionMotion::Tilt1D))
-            {
-                if (preset.positionMotionWaveShape != 3)
-                    preset.positionMotionCurveEnabled = false;
-            }
-            else
-            {
-                preset.positionMotionCurveEnabled = false;
+                preset.positionPath2D = PTShapesGallery::defaultMotionPath2D();
             }
             break;
         case ColPositionMotionDir:
             preset.positionMotionDirection = value.toInt();
             break;
-        case ColPositionMotionShape:
-        {
-            const int shape = value.toInt();
-            preset.positionMotionWaveShape = shape == 3 ? 3 : qBound(0, shape, 2);
-            preset.positionMotionCurveEnabled = (shape == 3);
-            if (preset.positionMotionCurveEnabled && preset.positionMotionCurve.size() < 2)
-                preset.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
+        case ColPosition1DBuiltinMode:
+            preset.position1DBuiltinMode = qBound(0, value.toInt(), 1);
             break;
-        }
         case ColPositionPanSize:
             preset.positionPanSize = value.toInt();
             break;
@@ -1293,7 +1309,7 @@ QString PresetTableV2TransitionWidget::presetColumnXmlName(int col)
         case ColSpeedMult:     return KXMLPresetSpeedMult;
         case ColPositionMotion:  return KXMLPresetPositionMotion;
         case ColPositionMotionDir: return KXMLPresetPositionMotionDir;
-        case ColPositionMotionShape: return KXMLPresetPositionMotionWaveShape;
+        case ColPosition1DBuiltinMode: return KXMLPresetPosition1DBuiltinMode;
         case ColPositionPanSize: return KXMLPresetPositionPanSize;
         case ColPositionTiltSize: return KXMLPresetPositionTiltSize;
         default:               return QString();
@@ -1984,35 +2000,6 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
         }
     }
 
-    if (col == ColPositionMotionShape && !m_pastingCells)
-    {
-        QTreeWidget* table = tableForMode(mode);
-        QTreeWidgetItem* item = parentItemForPreset(mode, row);
-        if (item && outputIdx >= 0)
-            item = item->child(outputIdx);
-        if (item && selectionIdx > 0)
-            item = item->child(selectionIdx - 1);
-        const int shape = item ? item->data(ColPositionMotionShape, kPresetCellValueRole).toInt() : -1;
-        if (item && shape == 3)
-        {
-            const PTTransitionPreset before = selectionIdx > 0
-                    ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
-                    : (outputIdx >= 0
-                       ? effectivePresetForOutputNoLive(mode, row, outputIdx)
-                       : presets.at(row));
-            if (!editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, -1))
-            {
-                setPresetCellValue(item, ColPositionMotionShape,
-                                   PTPositionFxEngine::effectiveMotionWaveShape(before),
-                                   item->data(ColPositionMotionShape, kPresetCellInheritedRole).toBool());
-            }
-            updatePresetRowUiForItem(item, mode);
-            notifyTablePresetCacheRefresh();
-            updateEffectPreview();
-            return;
-        }
-    }
-
     if (col == ColPositionMotion && !m_pastingCells)
     {
         QTreeWidget* table = tableForMode(mode);
@@ -2022,9 +2009,7 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
         if (item && selectionIdx > 0)
             item = item->child(selectionIdx - 1);
         const int motion = item ? item->data(ColPositionMotion, kPresetCellValueRole).toInt() : -1;
-        if (item && (motion == int(PTPositionMotion::CustomPan1D)
-                      || motion == int(PTPositionMotion::CustomTilt1D)
-                      || motion == int(PTPositionMotion::Custom2D)))
+        if (item && motion == int(PTPositionMotion::Custom2D))
         {
             const PTTransitionPreset before = selectionIdx > 0
                     ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
@@ -2189,7 +2174,7 @@ void PresetTableV2TransitionWidget::slotOpenMotionCurveEditor()
     if (!PTPositionFxEngine::motionIs1D(PTPositionMotion(preset.positionMotion)))
         return;
 
-    editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, -1);
+    editCustomCurveForPreset(mode, row, outputIdx, selectionIdx);
 }
 
 bool PresetTableV2TransitionWidget::editCustomCurveForPreset(PTTransitionMode mode, int row,
@@ -2289,20 +2274,11 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
     const PTPositionMotion motion = motionFromUi >= 0
             ? PTPositionMotion(motionFromUi)
             : PTPositionMotion(candidate.positionMotion);
-    if (motion == PTPositionMotion::Custom2D)
-    {
-        if (candidate.positionPath2D.size() < 2)
-            candidate.positionPath2D = PTShapesGallery::defaultMotionPath2D();
-    }
-    else if (!PTPositionFxEngine::motionIs1D(motion))
-    {
+    if (motion != PTPositionMotion::Custom2D)
         return false;
-    }
-    else if (candidate.positionMotionCurve.size() < 2)
-    {
-        candidate.positionMotionCurve = PTShapesGallery::defaultMotionCurve1D();
-    }
 
+    if (candidate.positionPath2D.size() < 2)
+        candidate.positionPath2D = PTShapesGallery::defaultMotionPath2D();
     if (motionFromUi >= 0)
         candidate.positionMotion = int(motion);
 
@@ -2310,27 +2286,8 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
     if (dlg.exec() != QDialog::Accepted)
         return false;
 
-    if (motion == PTPositionMotion::Custom2D)
-    {
-        candidate.positionPath2D = dlg.motionPath2D();
-        candidate.positionPath2DClosed = dlg.path2DClosed();
-        candidate.positionMotionCurveEnabled = true;
-    }
-    else
-    {
-        candidate.positionMotionCurve = dlg.motionCurve1D();
-        candidate.positionMotionWaveShape = 3;
-        candidate.positionMotionCurveEnabled = true;
-        if (motion == PTPositionMotion::Pan1D || motion == PTPositionMotion::Tilt1D)
-        {
-            // Keep Pan/Tilt 1D enum — shape is Custom via positionMotionWaveShape.
-        }
-        else if (motion == PTPositionMotion::CustomPan1D
-                 || motion == PTPositionMotion::CustomTilt1D)
-        {
-            candidate.positionMotion = int(motion);
-        }
-    }
+    candidate.positionPath2D = dlg.motionPath2D();
+    candidate.positionPath2DClosed = dlg.path2DClosed();
     m_shapeGallery = dlg.gallery();
 
     if (outputIdx >= 0)
@@ -2351,8 +2308,6 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
             PTTransitionPresetOverride ov = layer.selections[sel].overrides;
             ov.values = candidate;
             ov.columns.insert(ColPositionMotion);
-            if (motion != PTPositionMotion::Custom2D)
-                ov.columns.insert(ColPositionMotionShape);
             layer.selections[sel].overrides = ov;
         }
         else
@@ -2360,8 +2315,6 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
             PTTransitionPresetOverride ov = layer.all;
             ov.values = candidate;
             ov.columns.insert(ColPositionMotion);
-            if (motion != PTPositionMotion::Custom2D)
-                ov.columns.insert(ColPositionMotionShape);
             layer.all = ov;
         }
         overrides[row].insert(outputIdx, layer);
@@ -2384,12 +2337,6 @@ bool PresetTableV2TransitionWidget::editPositionShapeForPreset(PTTransitionMode 
         {
             setPresetCellValue(item, ColPositionMotion, candidate.positionMotion,
                                item->data(ColPositionMotion, kPresetCellInheritedRole).toBool());
-            if (motion != PTPositionMotion::Custom2D)
-            {
-                setPresetCellValue(item, ColPositionMotionShape, 3,
-                                   item->data(ColPositionMotionShape,
-                                              kPresetCellInheritedRole).toBool());
-            }
         }
     }
     refreshOverrideVisualsForPreset(mode, row);
@@ -4873,12 +4820,21 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
         p.positionPanSize = pattrs.value(KXMLPresetPositionPanSize).toInt();
     if (pattrs.hasAttribute(KXMLPresetPositionTiltSize))
         p.positionTiltSize = pattrs.value(KXMLPresetPositionTiltSize).toInt();
-    if (pattrs.hasAttribute(KXMLPresetPositionMotionWaveShape))
-        p.positionMotionWaveShape = qBound(0, pattrs.value(KXMLPresetPositionMotionWaveShape).toInt(), 3);
-    if (pattrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled))
-        p.positionMotionCurveEnabled = pattrs.value(KXMLPresetPositionMotionCurveEnabled).toInt() != 0;
-    if (pattrs.hasAttribute(KXMLPresetPositionMotionCurve))
-        p.positionMotionCurve = parseCustomCurve(pattrs.value(KXMLPresetPositionMotionCurve).toString());
+    if (pattrs.hasAttribute(KXMLPresetPosition1DBuiltinMode))
+        p.position1DBuiltinMode = qBound(0, pattrs.value(KXMLPresetPosition1DBuiltinMode).toInt(), 1);
+  {
+        int legacyMotionWaveShape = -1;
+        const bool legacyMotionCurveEnabled =
+                pattrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled)
+                && pattrs.value(KXMLPresetPositionMotionCurveEnabled).toInt() != 0;
+        QVector<PTCustomCurvePoint> legacyMotionCurve;
+        if (pattrs.hasAttribute(KXMLPresetPositionMotionWaveShape))
+            legacyMotionWaveShape = qBound(0, pattrs.value(KXMLPresetPositionMotionWaveShape).toInt(), 3);
+        if (pattrs.hasAttribute(KXMLPresetPositionMotionCurve))
+            legacyMotionCurve = parseCustomCurve(pattrs.value(KXMLPresetPositionMotionCurve).toString());
+        migrateLegacyPositionMotionFields(p, legacyMotionWaveShape,
+                                          legacyMotionCurveEnabled, legacyMotionCurve);
+    }
     if (pattrs.hasAttribute(KXMLPresetPositionPath2D))
         p.positionPath2D = PTShapesGallery::parsePath2D(pattrs.value(KXMLPresetPositionPath2D).toString());
     if (pattrs.hasAttribute(KXMLPresetPositionPath2DClosed))
@@ -4914,12 +4870,22 @@ void PresetTableV2TransitionWidget::readOutputOverride(PTTransitionPresetOverrid
         ov.values.customCurveEnabled = attrs.value(KXMLPresetCustomCurveEnabled).toInt() != 0;
     if (attrs.hasAttribute(KXMLPresetCustomCurve))
         ov.values.customCurve = parseCustomCurve(attrs.value(KXMLPresetCustomCurve).toString());
-    if (attrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled))
-        ov.values.positionMotionCurveEnabled =
-                attrs.value(KXMLPresetPositionMotionCurveEnabled).toInt() != 0;
-    if (attrs.hasAttribute(KXMLPresetPositionMotionCurve))
-        ov.values.positionMotionCurve =
-                parseCustomCurve(attrs.value(KXMLPresetPositionMotionCurve).toString());
+    if (attrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled)
+            || attrs.hasAttribute(KXMLPresetPositionMotionCurve)
+            || attrs.hasAttribute(KXMLPresetPositionMotionWaveShape))
+    {
+        int legacyMotionWaveShape = -1;
+        if (attrs.hasAttribute(KXMLPresetPositionMotionWaveShape))
+            legacyMotionWaveShape = qBound(0, attrs.value(KXMLPresetPositionMotionWaveShape).toInt(), 3);
+        const bool legacyMotionCurveEnabled =
+                attrs.hasAttribute(KXMLPresetPositionMotionCurveEnabled)
+                && attrs.value(KXMLPresetPositionMotionCurveEnabled).toInt() != 0;
+        QVector<PTCustomCurvePoint> legacyMotionCurve;
+        if (attrs.hasAttribute(KXMLPresetPositionMotionCurve))
+            legacyMotionCurve = parseCustomCurve(attrs.value(KXMLPresetPositionMotionCurve).toString());
+        migrateLegacyPositionMotionFields(ov.values, legacyMotionWaveShape,
+                                          legacyMotionCurveEnabled, legacyMotionCurve);
+    }
     if (attrs.hasAttribute(KXMLPresetPositionPath2D))
         ov.values.positionPath2D =
                 PTShapesGallery::parsePath2D(attrs.value(KXMLPresetPositionPath2D).toString());
@@ -5001,19 +4967,14 @@ void PresetTableV2TransitionWidget::writePresetXml(
     doc->writeAttribute(KXMLPresetSpeedMult, QString::number(p.speedMultiplier));
     doc->writeAttribute(KXMLPresetPositionMotion, QString::number(p.positionMotion));
     doc->writeAttribute(KXMLPresetPositionMotionDir, QString::number(p.positionMotionDirection));
-    doc->writeAttribute(KXMLPresetPositionMotionWaveShape,
-                        QString::number(PTPositionFxEngine::effectiveMotionWaveShape(p)));
+    if (p.position1DBuiltinMode != 0)
+        doc->writeAttribute(KXMLPresetPosition1DBuiltinMode, QString::number(p.position1DBuiltinMode));
     doc->writeAttribute(KXMLPresetPositionPanSize, QString::number(p.positionPanSize));
     doc->writeAttribute(KXMLPresetPositionTiltSize, QString::number(p.positionTiltSize));
-    if (p.positionMotionCurveEnabled)
+    if (!p.positionPath2D.isEmpty())
     {
-        doc->writeAttribute(KXMLPresetPositionMotionCurveEnabled, QStringLiteral("1"));
-        if (!p.positionMotionCurve.isEmpty())
-            doc->writeAttribute(KXMLPresetPositionMotionCurve,
-                                serializeCustomCurve(p.positionMotionCurve));
-        if (!p.positionPath2D.isEmpty())
-            doc->writeAttribute(KXMLPresetPositionPath2D,
-                                PTShapesGallery::serializePath2D(p.positionPath2D));
+        doc->writeAttribute(KXMLPresetPositionPath2D,
+                            PTShapesGallery::serializePath2D(p.positionPath2D));
         doc->writeAttribute(KXMLPresetPositionPath2DClosed,
                             p.positionPath2DClosed ? QStringLiteral("1") : QStringLiteral("0"));
     }

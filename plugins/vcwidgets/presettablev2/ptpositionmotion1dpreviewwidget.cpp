@@ -15,7 +15,7 @@ PTPositionMotion1DPreviewWidget::PTPositionMotion1DPreviewWidget(QWidget* parent
 {
     setMinimumHeight(90);
     setAutoFillBackground(true);
-    setToolTip(tr("Double-click to edit motion curve"));
+    setToolTip(tr("Double-click to edit wave curve (same as row morph)"));
     connect(&m_timer, &QTimer::timeout, this, [this]() {
         const double ms = qMax(200.0, double(m_cycleMs));
         m_animPhase01 += double(m_timer.interval()) / ms;
@@ -152,12 +152,16 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
     QString shapeLabel;
     if (m_usePresetMotion)
     {
-        switch (PTPositionFxEngine::effectiveMotionWaveShape(m_preset))
+        if (m_preset.customCurveEnabled)
+            shapeLabel = tr("Custom");
+        else
         {
-            case 1: shapeLabel = tr("Square"); break;
-            case 2: shapeLabel = tr("Triangle"); break;
-            case 3: shapeLabel = tr("Custom"); break;
-            default: shapeLabel = tr("Sine"); break;
+            switch (m_preset.waveShape)
+            {
+                case 1: shapeLabel = tr("Square"); break;
+                case 2: shapeLabel = tr("Triangle"); break;
+                default: shapeLabel = tr("Sine"); break;
+            }
         }
     }
     p.drawText(QRectF(rect().left(), 2, rect().width(), 14),
