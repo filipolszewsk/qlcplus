@@ -282,6 +282,7 @@ private:
     void setPresetCellValue(QTreeWidgetItem* item, int col, const QVariant& value,
                             bool inherited, bool parentHasOutputOverride = false,
                             bool selected = false);
+    void commitPresetCellEdit(QTreeWidget* table, QTreeWidgetItem* item, int col);
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
@@ -349,6 +350,7 @@ private:
     bool m_crossfadeManualControl = true;
     bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
+    bool m_committingPresetCell = false;
     bool m_pastingCells = false;
 
     mutable QMutex m_liveMutex;

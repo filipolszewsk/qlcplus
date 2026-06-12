@@ -7080,16 +7080,17 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                         serialIdx, serialCount, cycleMs, waveParams.propagation);
                 const float iterator = PTDimmerWaveEngine::iteratorFromElapsed(
                         elapsedMs, cycleMs, waveParams.startOffset, headOffset, timeOffset);
+                const PTDimmerWaveOffsetInfo spatialInfo =
+                        PTDimmerWaveEngine::offsetInfoForPoint(
+                                sf.point.x(), sf.point.y(), gridSize.width(),
+                                gridSize.height(), waveParams);
+                const PTPositionMotion fxMotion = PTPositionMotion(fxPreset.positionMotion);
+                const bool fxMotion1D = PTPositionFxEngine::motionIs1D(fxMotion);
                 double orbitPhase = 0.0;
-                if (PTPositionFxEngine::orbitPhaseFromIterator(iterator, waveParams.waveWidth,
-                                                               orbitPhase))
+                const bool inOrbitWindow = PTPositionFxEngine::orbitPhaseFromIterator(
+                        iterator, waveParams.waveWidth, orbitPhase);
+                if (fxMotion1D || inOrbitWindow)
                 {
-                    const PTDimmerWaveOffsetInfo spatialInfo =
-                            PTDimmerWaveEngine::offsetInfoForPoint(
-                                    sf.point.x(), sf.point.y(), gridSize.width(),
-                                    gridSize.height(), waveParams);
-                    const PTPositionMotion fxMotion = PTPositionMotion(fxPreset.positionMotion);
-                    const bool fxMotion1D = PTPositionFxEngine::motionIs1D(fxMotion);
                     double phaseForApply = orbitPhase;
                     if (!fxMotion1D)
                     {
@@ -7103,7 +7104,8 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                             base, fxi, sf.head.head, fxPreset, phaseForApply, size01,
                             fxMotion1D ? iterator : -1.0f,
                             fxMotion1D ? &waveParams : nullptr,
-                            fxMotion1D ? &spatialInfo : nullptr);
+                            fxMotion1D ? &spatialInfo : nullptr,
+                            fxMotion1D ? headOffset : 0);
                 }
             }
 
@@ -7138,16 +7140,17 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                     const float iterator = PTDimmerWaveEngine::iteratorFromElapsed(
                             m_multiFxElapsedMs[o], mfCycle, waveParams.startOffset,
                             headOffset, timeOffset);
+                    const PTDimmerWaveOffsetInfo spatialInfo =
+                            PTDimmerWaveEngine::offsetInfoForPoint(
+                                    sf.point.x(), sf.point.y(), gridSize.width(),
+                                    gridSize.height(), waveParams);
+                    const PTPositionMotion mfMotion = PTPositionMotion(mfPreset.positionMotion);
+                    const bool mfMotion1D = PTPositionFxEngine::motionIs1D(mfMotion);
                     double orbitPhase = 0.0;
-                    if (PTPositionFxEngine::orbitPhaseFromIterator(iterator, waveParams.waveWidth,
-                                                                   orbitPhase))
+                    const bool inOrbitWindow = PTPositionFxEngine::orbitPhaseFromIterator(
+                            iterator, waveParams.waveWidth, orbitPhase);
+                    if (mfMotion1D || inOrbitWindow)
                     {
-                        const PTDimmerWaveOffsetInfo spatialInfo =
-                                PTDimmerWaveEngine::offsetInfoForPoint(
-                                        sf.point.x(), sf.point.y(), gridSize.width(),
-                                        gridSize.height(), waveParams);
-                        const PTPositionMotion mfMotion = PTPositionMotion(mfPreset.positionMotion);
-                        const bool mfMotion1D = PTPositionFxEngine::motionIs1D(mfMotion);
                         double phaseForApply = orbitPhase;
                         if (!mfMotion1D)
                         {
@@ -7162,7 +7165,8 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                                 base, fxi, sf.head.head, mfPreset, phaseForApply, size01,
                                 mfMotion1D ? iterator : -1.0f,
                                 mfMotion1D ? &waveParams : nullptr,
-                                mfMotion1D ? &spatialInfo : nullptr);
+                                mfMotion1D ? &spatialInfo : nullptr,
+                                mfMotion1D ? headOffset : 0);
                     }
                 }
             }

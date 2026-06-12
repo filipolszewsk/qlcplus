@@ -159,41 +159,151 @@ float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection dir
     }
 }
 
+float normalizeRad(float radians)
+{
+    const float twoPi = float(M_PI * 2.0);
+    float r = radians;
+    while (r < 0.0f)
+        r += twoPi;
+    while (r >= twoPi)
+        r -= twoPi;
+    return r;
+}
+
+/** 1D orbit morph packet: fade out 0% = instant step down at packet end; fade in 0% = instant step up. */
+float sample1DMorphPacketUnipolar01(float phase01, const PTDimmerWaveParams& waveParams)
+{
+    const float maxValue = float(waveParams.waveLevel) / 255.0f;
+    const float phase = qBound(0.0f, phase01, 1.0f);
+
+    const int fadeIn = qBound(0, waveParams.waveFadeIn, 100);
+    const int fadeOut = qBound(0, waveParams.waveFadeOut, 100);
+    const float fadeInZone = float(fadeIn) / 100.0f;
+    const float fadeOutZone = float(fadeOut) / 100.0f;
+    const float sustainZone = qMax(0.0f, 1.0f - fadeInZone - fadeOutZone);
+
+    if (fadeOut == 0 && phase >= 1.0f)
+        return 0.0f;
+
+    if (fadeIn == 0 && phase <= 0.0f)
+        return 0.0f;
+
+    if (waveParams.customCurveEnabled && waveParams.customCurve.size() >= 2)
+    {
+        if (fadeInZone > 0.0f && phase < fadeInZone)
+        {
+            const float fadeProgress = phase / fadeInZone;
+            return PTDimmerWaveEngine::applyWaveShape(fadeProgress, waveParams.waveShape) * maxValue;
+        }
+        if (fadeOutZone > 0.0f && phase >= fadeInZone + sustainZone)
+        {
+            const float fadeProgress = (phase - fadeInZone - sustainZone) / fadeOutZone;
+            return PTDimmerWaveEngine::applyWaveShape(1.0f - fadeProgress, waveParams.waveShape)
+                    * maxValue;
+        }
+        if (sustainZone > 0.0f)
+        {
+            const float localPhase = (phase - fadeInZone) / sustainZone;
+            return PTDimmerWaveEngine::sampleCustomCurve01(localPhase, waveParams.customCurve)
+                    * maxValue;
+        }
+        return PTDimmerWaveEngine::sampleCustomCurve01(phase, waveParams.customCurve) * maxValue;
+    }
+
+    if (waveParams.waveShape == 1)
+        return maxValue;
+
+    if (fadeInZone > 0.0f && phase < fadeInZone)
+    {
+        const float fadeProgress = phase / fadeInZone;
+        return PTDimmerWaveEngine::applyWaveShape(fadeProgress, waveParams.waveShape) * maxValue;
+    }
+
+    if (fadeOutZone > 0.0f && phase >= fadeInZone + sustainZone)
+    {
+        const float fadeProgress = (phase - fadeInZone - sustainZone) / fadeOutZone;
+        return PTDimmerWaveEngine::applyWaveShape(1.0f - fadeProgress, waveParams.waveShape)
+                * maxValue;
+    }
+
+    return maxValue;
+}
+
+float samplePosition1DAtPhase(float phase01, const PTTransitionPreset& preset,
+                            const PTDimmerWaveParams& waveParams)
+{
+    const float phase = qBound(0.0f, phase01, 1.0f);
+
+    if (preset.position1DBuiltinMode == 1)
+    {
+        const float osc = oscillateBuiltinBipolar(phase, waveParams.waveShape);
+        return osc * envelope01(phase, waveParams);
+    }
+
+    const float unipolar = sample1DMorphPacketUnipolar01(phase, waveParams);
+    return unipolar * 2.0f - 1.0f;
+}
+
+float position1DOffsetForCycleProgress(float cycleProgressRad,
+                                       const PTTransitionPreset& preset,
+                                       const PTDimmerWaveParams& waveParams)
+{
+    const float twoPi = float(M_PI * 2.0);
+    const int waveWidth = qBound(1, waveParams.waveWidth, 360);
+    if (waveWidth >= 360)
+        return samplePosition1DAtPhase(cycleProgressRad / twoPi, preset, waveParams);
+
+    const float widthRad = (float(waveWidth) / 360.0f) * twoPi;
+    const float windowStartRad = PTDimmerWaveEngine::convertOffsetDegrees(waveParams.startOffset);
+    const float cycleRad = normalizeRad(cycleProgressRad);
+    const float packetEndRad = windowStartRad + widthRad;
+    const bool packetWraps = packetEndRad >= twoPi;
+    const float packetEndMod = packetWraps ? packetEndRad - twoPi : packetEndRad;
+
+    bool inPacket = false;
+    if (!packetWraps)
+        inPacket = cycleRad >= windowStartRad && cycleRad < packetEndRad;
+    else
+        inPacket = cycleRad >= windowStartRad || cycleRad < packetEndMod;
+
+    if (inPacket)
+    {
+        float rel = cycleRad - windowStartRad;
+        if (rel < 0.0f)
+            rel += twoPi;
+        return samplePosition1DAtPhase(rel / widthRad, preset, waveParams);
+    }
+
+    bool beforePacket = false;
+    if (!packetWraps)
+        beforePacket = cycleRad < windowStartRad;
+    else
+        beforePacket = cycleRad >= packetEndMod && cycleRad < windowStartRad;
+
+    return beforePacket
+            ? samplePosition1DAtPhase(0.0f, preset, waveParams)
+            : samplePosition1DAtPhase(1.0f, preset, waveParams);
+}
+
 } // namespace
 
 float PTPositionFxEngine::samplePosition1DOffset(float iteratorRad,
                                                  const PTTransitionPreset& preset,
-                                                 const PTDimmerWaveParams& waveParams)
+                                                 const PTDimmerWaveParams& waveParams,
+                                                 int headOffsetDeg)
 {
-    const float widthRad = (float(qBound(1, waveParams.waveWidth, 360)) / 360.0f)
-            * float(M_PI * 2.0);
-    if (widthRad <= 0.0f || iteratorRad >= widthRad)
-        return 0.0f;
-
-    const float phaseInWidth = iteratorRad / widthRad;
-
-    if (waveParams.customCurveEnabled && waveParams.customCurve.size() >= 2)
-    {
-        const float unipolar = PTDimmerWaveEngine::calculateDimmerWave(iteratorRad, waveParams);
-        return unipolar * 2.0f - 1.0f;
-    }
-
-    if (preset.position1DBuiltinMode == 1)
-    {
-        const float osc = oscillateBuiltinBipolar(phaseInWidth, waveParams.waveShape);
-        return osc * envelope01(phaseInWidth, waveParams);
-    }
-
-    const float unipolar = PTDimmerWaveEngine::calculateDimmerWave(iteratorRad, waveParams);
-    return unipolar * 2.0f - 1.0f;
+    const float headOffsetRad = PTDimmerWaveEngine::convertOffsetDegrees(headOffsetDeg);
+    const float startOffsetRad = PTDimmerWaveEngine::convertOffsetDegrees(waveParams.startOffset);
+    const float cycleProgressRad = normalizeRad(iteratorRad - headOffsetRad - startOffsetRad);
+    return position1DOffsetForCycleProgress(cycleProgressRad, preset, waveParams);
 }
 
 float PTPositionFxEngine::sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
                                                  const PTDimmerWaveParams& waveParams)
 {
     const float deg = cycleDeg - std::floor(cycleDeg / 360.0f) * 360.0f;
-    const float iteratorRad = deg / 360.0f * float(M_PI * 2.0);
-    return samplePosition1DOffset(iteratorRad, preset, waveParams);
+    const float cycleProgressRad = deg / 360.0f * float(M_PI * 2.0);
+    return position1DOffsetForCycleProgress(cycleProgressRad, preset, waveParams);
 }
 
 void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
@@ -348,7 +458,8 @@ PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionV
                                                                double phaseRadians, qreal size01,
                                                                float iteratorRad,
                                                                const PTDimmerWaveParams* waveParams,
-                                                               const PTDimmerWaveOffsetInfo* spatial)
+                                                               const PTDimmerWaveOffsetInfo* spatial,
+                                                               int headOffsetDeg)
 {
     if (!base.valid || !fxi)
         return base;
@@ -369,7 +480,7 @@ PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionV
     qreal tiltUnit = 0;
     if (motionIs1D(motion) && waveParams != nullptr && iteratorRad >= 0.0f)
     {
-        float unit = samplePosition1DOffset(iteratorRad, preset, *waveParams);
+        float unit = samplePosition1DOffset(iteratorRad, preset, *waveParams, headOffsetDeg);
         if (spatial != nullptr)
         {
             unit = applyDirectionToUnitOffset(unit,

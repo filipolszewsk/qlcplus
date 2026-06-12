@@ -28,10 +28,14 @@ public:
     static Shape shapeFromPositionMotion(PTPositionMotion motion);
     static bool motionUsesCustomData(PTPositionMotion motion);
     static bool motionIs1D(PTPositionMotion motion);
-    /** Bipolar offset -1..+1 from shared morph wave packet (waveShape/customCurve/waveWidth/fade). */
+    /** Bipolar offset -1..+1 from shared morph wave packet (waveShape/customCurve/waveWidth/fade).
+        1D morph: fade out 0% = instant step down at packet end; fade in 0% = instant step up.
+        Outside waveWidth window: hold curve start/end (tilt up: min at idle). headOffsetDeg removes
+        per-fixture propagation offset. */
     static float samplePosition1DOffset(float iteratorRad, const PTTransitionPreset& preset,
-                                        const PTDimmerWaveParams& waveParams);
-    /** Effective offset over full 0..360° cycle (0 outside waveWidth window). */
+                                        const PTDimmerWaveParams& waveParams,
+                                        int headOffsetDeg = 0);
+    /** Effective offset over full 0..360° cycle (hold start/end outside waveWidth window). */
     static float sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,
                                         const PTDimmerWaveParams& waveParams);
     static void relativeOffset(Shape shape, double phaseRadians,
@@ -48,7 +52,8 @@ public:
                                                       double phaseRadians, qreal size01,
                                                       float iteratorRad = -1.0f,
                                                       const PTDimmerWaveParams* waveParams = nullptr,
-                                                      const PTDimmerWaveOffsetInfo* spatial = nullptr);
+                                                      const PTDimmerWaveOffsetInfo* spatial = nullptr,
+                                                      int headOffsetDeg = 0);
 
     /**
      * Map dimmer-wave iterator (rad) into orbit phase when inside waveWidth window.

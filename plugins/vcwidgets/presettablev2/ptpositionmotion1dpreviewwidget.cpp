@@ -174,11 +174,53 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
     if (m_usePresetMotion)
     {
         const int waveW = qBound(1, m_preset.waveWidth, 360);
-        const qreal packetW = plot.width() * qreal(waveW) / 360.0;
+        const int startOff = qBound(0, m_preset.startOffset, 359);
+        const qreal plotW = plot.width();
+        const qreal packetW = plotW * qreal(waveW) / 360.0;
+        const qreal packetLeft = plot.left() + plotW * qreal(startOff) / 360.0;
+        const QColor idleTint(0, 0, 0, 28);
+
+        if (waveW < 360)
+        {
+            if (startOff > 0)
+            {
+                QRectF preIdle(plot.left(), plot.top(), packetLeft - plot.left(), plot.height());
+                if (preIdle.width() > 0)
+                    p.fillRect(preIdle, idleTint);
+            }
+            const qreal packetRight = packetLeft + packetW;
+            if (packetRight < plot.right())
+            {
+                QRectF postIdle(packetRight, plot.top(), plot.right() - packetRight, plot.height());
+                if (postIdle.width() > 0)
+                    p.fillRect(postIdle, idleTint);
+            }
+            if (packetRight > plot.right())
+            {
+                const qreal wrappedW = packetRight - plot.right();
+                const qreal gapW = packetLeft - plot.left();
+                if (gapW > 0)
+                    p.fillRect(QRectF(plot.left(), plot.top(), gapW, plot.height()), idleTint);
+                Q_UNUSED(wrappedW)
+            }
+        }
+
         if (packetW > 0)
         {
-            QRectF packetRect(plot.left(), plot.top(), packetW, plot.height());
-            p.fillRect(packetRect, palette().color(QPalette::Highlight).lighter(175));
+            if (packetLeft + packetW <= plot.right())
+            {
+                p.fillRect(QRectF(packetLeft, plot.top(), packetW, plot.height()),
+                           palette().color(QPalette::Highlight).lighter(175));
+            }
+            else
+            {
+                const qreal firstW = plot.right() - packetLeft;
+                p.fillRect(QRectF(packetLeft, plot.top(), firstW, plot.height()),
+                           palette().color(QPalette::Highlight).lighter(175));
+                const qreal secondW = packetW - firstW;
+                p.fillRect(QRectF(plot.left(), plot.top(), secondW, plot.height()),
+                           palette().color(QPalette::Highlight).lighter(175));
+            }
 
             if (m_preset.waveShape != 1)
             {
@@ -187,21 +229,17 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
                 p.setPen(QPen(palette().color(QPalette::Mid), 1, Qt::DashLine));
                 if (fadeIn > 0.0f)
                 {
-                    const qreal x = plot.left() + packetW * fadeIn;
-                    p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+                    const qreal x = packetLeft + packetW * fadeIn;
+                    if (x <= plot.right())
+                        p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
                 }
                 if (fadeOut > 0.0f)
                 {
-                    const qreal x = plot.left() + packetW - packetW * fadeOut;
-                    p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+                    const qreal x = packetLeft + packetW - packetW * fadeOut;
+                    if (x >= plot.left())
+                        p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
                 }
             }
-        }
-        if (waveW < 360)
-        {
-            const qreal holdLeft = plot.left() + plot.width() * qreal(waveW) / 360.0;
-            QRectF holdRect(holdLeft, plot.top(), plot.right() - holdLeft, plot.height());
-            p.fillRect(holdRect, QColor(0, 0, 0, 28));
         }
     }
 

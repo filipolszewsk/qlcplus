@@ -369,7 +369,7 @@ void PresetTableV2TransitionDelegate::setModelData(QWidget* editor,
                                                    QAbstractItemModel* model,
                                                    const QModelIndex& index) const
 {
-    if (!m_owner)
+    if (!m_owner || !index.isValid())
         return;
 
     QVariant value;
@@ -380,8 +380,19 @@ void PresetTableV2TransitionDelegate::setModelData(QWidget* editor,
     else
         value = editor->property("text");
 
-    model->setData(index, value, kPresetCellValueRole);
-    model->setData(index, m_owner->displayTextForColumn(index.column(), value), Qt::DisplayRole);
+    auto* tree = qobject_cast<QTreeWidget*>(model->parent());
+    if (!tree)
+        return;
+
+    QTreeWidgetItem* item = tree->itemFromIndex(index);
+    const int col = index.column();
+    if (!item || col <= PresetTableV2TransitionWidget::ColName
+            || col >= PresetTableV2TransitionWidget::ColCount)
+        return;
+
+    const bool inherited = item->data(col, kPresetCellInheritedRole).toBool();
+    m_owner->setPresetCellValue(item, col, value, inherited);
+    m_owner->commitPresetCellEdit(tree, item, col);
 }
 
 void PresetTableV2TransitionDelegate::updateEditorGeometry(
@@ -540,6 +551,21 @@ void PresetTableV2TransitionWidget::setPresetCellValue(QTreeWidgetItem* item, in
 
     Q_UNUSED(selected)
     item->setBackground(col, QBrush());
+}
+
+void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
+                                                         QTreeWidgetItem* item, int col)
+{
+    if (m_rebuildingTable || m_committingPresetCell || !item || !table)
+        return;
+
+    ScopedBoolFlag guard(m_committingPresetCell);
+    const PTTransitionMode mode = modeForTable(table);
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+    if (col > ColName && col < ColCount)
+        slotPresetChanged(mode, row, col, outputIdx, selectionIdx);
 }
 
 void PresetTableV2TransitionWidget::configureTransitionCombo(QComboBox* combo, int popupMinWidth)
@@ -1237,7 +1263,7 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
             preset.durationMs = quint32(value.toInt());
             break;
         case ColWaveWidth:
-            preset.waveWidth = value.toInt();
+            preset.waveWidth = qBound(1, value.toInt(), 360);
             break;
         case ColWaveShape:
             preset.customCurveEnabled = value.toInt() == 3;
@@ -1246,10 +1272,10 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
                 preset.customCurve = defaultTransitionCustomCurve();
             break;
         case ColFadeIn:
-            preset.waveFadeIn = value.toInt();
+            preset.waveFadeIn = qBound(0, value.toInt(), 100);
             break;
         case ColFadeOut:
-            preset.waveFadeOut = value.toInt();
+            preset.waveFadeOut = qBound(0, value.toInt(), 100);
             break;
         case ColWaveLevel:
             preset.waveLevel = value.toInt();
@@ -1986,16 +2012,27 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
                     : (outputIdx >= 0
                        ? effectivePresetForOutputNoLive(mode, row, outputIdx)
                        : presets.at(row));
-            if (!editCustomCurveForPreset(mode, row, outputIdx, selectionIdx))
-            {
-                setPresetCellValue(item, ColWaveShape,
-                                   before.customCurveEnabled ? 3 : before.waveShape,
-                                   item->data(ColWaveShape, kPresetCellInheritedRole).toBool());
-            }
-            updatePresetRowUiForItem(item, mode);
-            updateOffsetStepLimitForItem(item, mode);
-            notifyTablePresetCacheRefresh();
-            updateEffectPreview();
+            QTimer::singleShot(0, this, [this, mode, row, outputIdx, selectionIdx, before]() {
+                if (m_rebuildingTable)
+                    return;
+                QTreeWidgetItem* deferredItem = parentItemForPreset(mode, row);
+                if (deferredItem && outputIdx >= 0)
+                    deferredItem = deferredItem->child(outputIdx);
+                if (deferredItem && selectionIdx > 0)
+                    deferredItem = deferredItem->child(selectionIdx - 1);
+                if (!deferredItem)
+                    return;
+                if (!editCustomCurveForPreset(mode, row, outputIdx, selectionIdx))
+                {
+                    setPresetCellValue(deferredItem, ColWaveShape,
+                                       before.customCurveEnabled ? 3 : before.waveShape,
+                                       deferredItem->data(ColWaveShape, kPresetCellInheritedRole).toBool());
+                }
+                updatePresetRowUiForItem(deferredItem, mode);
+                updateOffsetStepLimitForItem(deferredItem, mode);
+                notifyTablePresetCacheRefresh();
+                updateEffectPreview();
+            });
             return;
         }
     }
@@ -2016,14 +2053,25 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
                     : (outputIdx >= 0
                        ? effectivePresetForOutputNoLive(mode, row, outputIdx)
                        : presets.at(row));
-            if (!editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, motion))
-            {
-                setPresetCellValue(item, ColPositionMotion, before.positionMotion,
-                                   item->data(ColPositionMotion, kPresetCellInheritedRole).toBool());
-            }
-            updatePresetRowUiForItem(item, mode);
-            notifyTablePresetCacheRefresh();
-            updateEffectPreview();
+            QTimer::singleShot(0, this, [this, mode, row, outputIdx, selectionIdx, before, motion]() {
+                if (m_rebuildingTable)
+                    return;
+                QTreeWidgetItem* deferredItem = parentItemForPreset(mode, row);
+                if (deferredItem && outputIdx >= 0)
+                    deferredItem = deferredItem->child(outputIdx);
+                if (deferredItem && selectionIdx > 0)
+                    deferredItem = deferredItem->child(selectionIdx - 1);
+                if (!deferredItem)
+                    return;
+                if (!editPositionShapeForPreset(mode, row, outputIdx, selectionIdx, motion))
+                {
+                    setPresetCellValue(deferredItem, ColPositionMotion, before.positionMotion,
+                                       deferredItem->data(ColPositionMotion, kPresetCellInheritedRole).toBool());
+                }
+                updatePresetRowUiForItem(deferredItem, mode);
+                notifyTablePresetCacheRefresh();
+                updateEffectPreview();
+            });
             return;
         }
     }
@@ -2095,7 +2143,7 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
 
 void PresetTableV2TransitionWidget::slotPresetItemChanged(QTreeWidgetItem* item, int col)
 {
-    if (m_rebuildingTable)
+    if (m_rebuildingTable || m_committingPresetCell)
         return;
     if (!item)
         return;
@@ -2634,6 +2682,97 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
         }
     }
 
+    if (showMotion && m_positionMotionStack && item)
+    {
+        QVector<PTPositionMotion1DPreviewWidget::PhaseMarker> markers;
+        QList<PTPositionPathPreviewWidget::OrbitBall> balls;
+
+        if (PresetTableV2ControlIface* tableIface = linkedTable())
+        {
+            const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+            const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+            PTSpatialGridPreview preview;
+            const bool hasPreview = outputIdx >= 0
+                    ? tableIface->spatialGridPreviewForOutput(outputIdx, preset, m_globalSettings, preview)
+                    : tableIface->spatialGridPreview(preset, m_globalSettings, preview);
+            if (hasPreview)
+            {
+                QList<QLCPoint> scopePoints;
+                if (outputIdx < 0)
+                {
+                    scopePoints = tableIface->fixtureGroupPoints();
+                }
+                else if (selectionIdx > 0)
+                {
+                    const auto& overrides = overridesForMode(mode);
+                    if (row >= 0 && row < overrides.size()
+                            && overrides.at(row).contains(outputIdx))
+                    {
+                        const PTTransitionOutputLayer layer = overrides.at(row).value(outputIdx);
+                        const int sel = selectionIdx - 1;
+                        if (sel >= 0 && sel < layer.selections.size())
+                        {
+                            for (const QLCPoint& pt : layer.selections.at(sel).cells)
+                                scopePoints.append(pt);
+                        }
+                    }
+                }
+                else
+                {
+                    scopePoints = tableIface->outputPointsForPresetOverride(outputIdx);
+                }
+
+                int colorIdx = 0;
+                for (const QLCPoint& pt : scopePoints)
+                {
+                    if (!preview.cells.contains(pt))
+                        continue;
+                    PTPositionPathPreviewWidget::OrbitBall ball;
+                    ball.phaseOffset01 = qreal(preview.cells.value(pt).headOffsetDeg) / 360.0;
+                    ball.color = selectionLayerColor(colorIdx++);
+                    balls.append(ball);
+                }
+
+                markers.reserve(balls.size());
+                for (const PTPositionPathPreviewWidget::OrbitBall& ball : balls)
+                {
+                    PTPositionMotion1DPreviewWidget::PhaseMarker marker;
+                    marker.phaseOffset01 = ball.phaseOffset01;
+                    marker.color = ball.color;
+                    markers.append(marker);
+                }
+            }
+        }
+
+        const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
+        if (motion != PTPositionMotion::Off)
+        {
+            if (motion1D && m_positionMotion1DWidget)
+            {
+                m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
+                PTDimmerWaveParams waveParams =
+                        PTDimmerWaveEngine::paramsFromPreset(preset, &m_globalSettings);
+                m_positionMotion1DWidget->setMotionPreviewFromPreset(
+                        preset, waveParams, markers, cycleMs);
+            }
+            else if (m_positionPathWidget)
+            {
+                m_positionMotionStack->setCurrentWidget(m_positionPathWidget);
+                if (PTPositionFxEngine::motionUsesCustomData(motion))
+                    m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
+                else
+                    m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
+            }
+        }
+        else
+        {
+            if (m_positionMotion1DWidget)
+                m_positionMotion1DWidget->clear();
+            if (m_positionPathWidget)
+                m_positionPathWidget->clear();
+        }
+    }
+
     if (!m_spatialGridWidget)
         return;
 
@@ -2735,92 +2874,8 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                 }
             }
 
-            if (showMotion && m_positionMotionStack)
-            {
-                QList<QLCPoint> scopePoints;
-                if (outputIdx < 0)
-                {
-                    scopePoints = tableIface->fixtureGroupPoints();
-                }
-                else if (selectionIdx > 0)
-                {
-                    const auto& overrides = overridesForMode(mode);
-                    if (row >= 0 && row < overrides.size()
-                            && overrides.at(row).contains(outputIdx))
-                    {
-                        const PTTransitionOutputLayer layer = overrides.at(row).value(outputIdx);
-                        const int sel = selectionIdx - 1;
-                        if (sel >= 0 && sel < layer.selections.size())
-                        {
-                            for (const QLCPoint& pt : layer.selections.at(sel).cells)
-                                scopePoints.append(pt);
-                        }
-                    }
-                }
-                else
-                {
-                    scopePoints = tableIface->outputPointsForPresetOverride(outputIdx);
-                }
-
-                QVector<PTPositionPathPreviewWidget::OrbitBall> balls;
-                int colorIdx = 0;
-                for (const QLCPoint& pt : scopePoints)
-                {
-                    if (!preview.cells.contains(pt))
-                        continue;
-                    PTPositionPathPreviewWidget::OrbitBall ball;
-                    ball.phaseOffset01 = qreal(preview.cells.value(pt).headOffsetDeg) / 360.0;
-                    ball.color = selectionLayerColor(colorIdx++);
-                    balls.append(ball);
-                }
-
-                QVector<PTPositionMotion1DPreviewWidget::PhaseMarker> markers;
-                markers.reserve(balls.size());
-                for (const PTPositionPathPreviewWidget::OrbitBall& ball : balls)
-                {
-                    PTPositionMotion1DPreviewWidget::PhaseMarker marker;
-                    marker.phaseOffset01 = ball.phaseOffset01;
-                    marker.color = ball.color;
-                    markers.append(marker);
-                }
-
-                const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
-                if (motion != PTPositionMotion::Off)
-                {
-                    if (motion1D && m_positionMotion1DWidget)
-                    {
-                        m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
-                        PTDimmerWaveParams waveParams =
-                                PTDimmerWaveEngine::paramsFromPreset(preset, &m_globalSettings);
-                        m_positionMotion1DWidget->setMotionPreviewFromPreset(
-                                preset, waveParams, markers, cycleMs);
-                    }
-                    else if (m_positionPathWidget)
-                    {
-                        m_positionMotionStack->setCurrentWidget(m_positionPathWidget);
-                        if (PTPositionFxEngine::motionUsesCustomData(motion))
-                            m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
-                        else
-                            m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
-                    }
-                }
-                else
-                {
-                    if (m_positionMotion1DWidget)
-                        m_positionMotion1DWidget->clear();
-                    if (m_positionPathWidget)
-                        m_positionPathWidget->clear();
-                }
-            }
             return;
         }
-    }
-    if (showMotion && m_positionMotionStack)
-    {
-        if (m_positionMotion1DWidget)
-            m_positionMotion1DWidget->clear();
-        if (m_positionPathWidget)
-            m_positionPathWidget->clear();
     }
     m_spatialGridWidget->setPlaceholderText(
             tr("Link Preset Table v2 in Fixture Group mode to preview spatial order"));
@@ -3169,18 +3224,21 @@ void PresetTableV2TransitionWidget::refreshOverrideVisualsForItem(PTTransitionMo
                 inherited = !layer.all.columns.contains(col);
             }
         }
+        const bool cellSelected = m_selectedCellsByTable.value(table)
+                .contains(PTTransitionCellKey { item, col });
         if (inherited)
         {
             const QVariant value = presetColumnValue(
                     selectionIdx > 0
                     ? effectivePresetForSelectionNoLive(mode, row, outputIdx, selectionIdx - 1)
                     : effectivePresetForOutputNoLive(mode, row, outputIdx), col);
-            setPresetCellValue(item, col, value, true);
+            setPresetCellValue(item, col, value, true, false, cellSelected);
         }
-        const bool cellSelected = m_selectedCellsByTable.value(table)
-                .contains(PTTransitionCellKey { item, col });
-        setPresetCellValue(item, col, item->data(col, kPresetCellValueRole),
-                           inherited, false, cellSelected);
+        else
+        {
+            setPresetCellValue(item, col, item->data(col, kPresetCellValueRole),
+                               false, false, cellSelected);
+        }
     }
 
     if (selectionIdx > 0)
