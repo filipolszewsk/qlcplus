@@ -7,6 +7,9 @@
 
 #include <QPainter>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
+#include <QKeyEvent>
+#include <QMenu>
 
 #include <algorithm>
 
@@ -202,6 +205,8 @@ void PTPositionFixtureGridWidget::toggleSelectionCell(const QLCPoint& pt)
 
 void PTPositionFixtureGridWidget::mousePressEvent(QMouseEvent* event)
 {
+    setFocus(Qt::MouseFocusReason);
+
     if (m_cells.isEmpty() || event->button() != Qt::LeftButton)
     {
         QWidget::mousePressEvent(event);
@@ -230,7 +235,8 @@ void PTPositionFixtureGridWidget::mousePressEvent(QMouseEvent* event)
             m_selectionAnchor = pt;
         selectRectRange(m_selectionAnchor, pt);
     }
-    else if (event->modifiers().testFlag(Qt::ControlModifier))
+    else if (event->modifiers().testFlag(Qt::ControlModifier)
+             || event->modifiers().testFlag(Qt::MetaModifier))
     {
         toggleSelectionCell(pt);
     }
@@ -238,6 +244,81 @@ void PTPositionFixtureGridWidget::mousePressEvent(QMouseEvent* event)
     {
         selectSingleCell(pt);
     }
+}
+
+void PTPositionFixtureGridWidget::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    setFocus(Qt::MouseFocusReason);
+
+    if (m_cells.isEmpty() || event->button() != Qt::LeftButton)
+    {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+
+    const QLCPoint pt = pointAt(event->pos());
+    if (pt.x() < 0 || !isEditableCell(pt))
+    {
+        QWidget::mouseDoubleClickEvent(event);
+        return;
+    }
+
+    if (!m_selectedCells.contains(pt))
+        selectSingleCell(pt);
+
+    emit cellEditRequested(pt);
+}
+
+void PTPositionFixtureGridWidget::keyPressEvent(QKeyEvent* event)
+{
+    if (event->matches(QKeySequence::Copy))
+    {
+        emit copyRequested();
+        event->accept();
+        return;
+    }
+    if (event->matches(QKeySequence::Paste))
+    {
+        emit pasteRequested();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)
+    {
+        emit clearRequested();
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
+}
+
+void PTPositionFixtureGridWidget::contextMenuEvent(QContextMenuEvent* event)
+{
+    if (m_cells.isEmpty())
+    {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+
+    const QLCPoint pt = pointAt(event->pos());
+    if (pt.x() >= 0 && isEditableCell(pt) && !m_selectedCells.contains(pt))
+        selectSingleCell(pt);
+
+    QMenu menu(this);
+    QAction* copyAct = menu.addAction(tr("Copy cells"));
+    QAction* pasteAct = menu.addAction(tr("Paste cells"));
+    QAction* clearAct = menu.addAction(tr("Clear cells"));
+    copyAct->setShortcut(QKeySequence::Copy);
+    pasteAct->setShortcut(QKeySequence::Paste);
+    clearAct->setShortcut(QKeySequence::Delete);
+
+    QAction* chosen = menu.exec(event->globalPos());
+    if (chosen == copyAct)
+        emit copyRequested();
+    else if (chosen == pasteAct)
+        emit pasteRequested();
+    else if (chosen == clearAct)
+        emit clearRequested();
 }
 
 void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)

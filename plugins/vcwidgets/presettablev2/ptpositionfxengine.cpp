@@ -126,7 +126,7 @@ void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
             break;
         case Shape::Line:
             panOffDeg = qreal(s) * panSizeDeg;
-            tiltOffDeg = 0;
+            tiltOffDeg = qreal(s) * tiltSizeDeg;
             break;
         case Shape::PanOnly:
             panOffDeg = qreal(s) * panSizeDeg;

@@ -1,0 +1,54 @@
+/*
+  ptpositionmotion1dpreviewwidget.h — 1D pan/tilt offset vs time preview for Position Mode FX
+*/
+
+#pragma once
+
+#include "presettablev2effectengine.h"
+
+#include <QColor>
+#include <QTimer>
+#include <QVector>
+#include <QWidget>
+
+class PTPositionMotion1DPreviewWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    struct PhaseMarker
+    {
+        qreal phaseOffset01 = 0;
+        QColor color = QColor(80, 160, 255);
+    };
+
+    explicit PTPositionMotion1DPreviewWidget(QWidget* parent = nullptr);
+
+    static bool is1DMotion(PTPositionMotion motion);
+
+    void setMotionPreview(PTPositionMotion motion, qreal panSizeDeg, qreal tiltSizeDeg,
+                          const QVector<PhaseMarker>& markers, quint32 cycleMs);
+    void setMotionPreviewFromPreset(const PTTransitionPreset& preset,
+                                    const QVector<PhaseMarker>& markers, quint32 cycleMs);
+    void clear();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    QSize sizeHint() const override { return QSize(400, 130); }
+
+private:
+    void stopAnimation();
+    QRectF plotRect() const;
+    qreal sampleNormalizedOffset(double phaseRadians) const;
+    QPointF mapSample(double phase01, qreal normValue, const QRectF& plot) const;
+
+    PTPositionMotion m_motion = PTPositionMotion::Off;
+    PTTransitionPreset m_preset;
+    bool m_usePresetMotion = false;
+    qreal m_panSize = 0;
+    qreal m_tiltSize = 0;
+    QVector<PhaseMarker> m_markers;
+    QTimer m_timer;
+    quint32 m_cycleMs = 5000;
+    double m_animPhase01 = 0;
+};

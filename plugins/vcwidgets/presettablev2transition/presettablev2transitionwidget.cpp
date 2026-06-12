@@ -15,6 +15,7 @@
 #include "ptdimmerwaveengine.h"
 #include "ptdimmerwavecurvewidget.h"
 #include "ptpositionpathpreviewwidget.h"
+#include "ptpositionmotion1dpreviewwidget.h"
 #include "ptspatialfixturegridwidget.h"
 #include "ptparammatrixengine.h"
 #include "presettablev2vclookup.h"
@@ -47,6 +48,7 @@
 #include <QTimer>
 #include <QAbstractItemView>
 #include <QSizePolicy>
+#include <QStackedWidget>
 
 #include <algorithm>
 
@@ -779,9 +781,18 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionCombo(QWidget* paren
     auto* c = new QComboBox(parent);
     c->addItem(QObject::tr("Off"), int(PTPositionMotion::Off));
     c->addItem(QObject::tr("Pan 1D"), int(PTPositionMotion::Pan1D));
+    c->setItemData(c->count() - 1,
+                   QObject::tr("Pan oscillates; tilt stays at base. Engine preview: offset vs time."),
+                   Qt::ToolTipRole);
     c->addItem(QObject::tr("Tilt 1D"), int(PTPositionMotion::Tilt1D));
+    c->setItemData(c->count() - 1,
+                   QObject::tr("Tilt oscillates; pan stays at base. Engine preview: offset vs time."),
+                   Qt::ToolTipRole);
     c->addItem(QObject::tr("Circle"), int(PTPositionMotion::Circle2D));
     c->addItem(QObject::tr("Line"), int(PTPositionMotion::Line2D));
+    c->setItemData(c->count() - 1,
+                   QObject::tr("Diagonal pan+tilt path: both axes use sin(φ) with the same phase."),
+                   Qt::ToolTipRole);
     c->addItem(QObject::tr("Figure-8"), int(PTPositionMotion::Figure8_2D));
     c->addItem(QObject::tr("Custom Pan 1D"), int(PTPositionMotion::CustomPan1D));
     c->addItem(QObject::tr("Custom Tilt 1D"), int(PTPositionMotion::CustomTilt1D));
@@ -1049,23 +1060,32 @@ void PresetTableV2TransitionWidget::buildUi()
     previewLayout->setContentsMargins(0, 0, 0, 0);
     previewLayout->setSpacing(6);
 
-    QWidget* leftPreview = new QWidget(m_previewRow);
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftPreview);
+    m_leftPreview = new QWidget(m_previewRow);
+    QVBoxLayout* leftLayout = new QVBoxLayout(m_leftPreview);
     leftLayout->setContentsMargins(0, 0, 0, 0);
     leftLayout->setSpacing(2);
 
-    m_curveLabel = new QLabel(tr("Dimmer wave"), leftPreview);
-    m_curveWidget = new PTDimmerWaveCurveWidget(leftPreview);
+    m_curveLabel = new QLabel(tr("Dimmer wave"), m_leftPreview);
+    m_curveWidget = new PTDimmerWaveCurveWidget(m_leftPreview);
     connect(m_curveWidget, &PTDimmerWaveCurveWidget::customCurveEditRequested,
             this, &PresetTableV2TransitionWidget::slotOpenCustomCurveEditor);
-    m_positionPreviewLabel = new QLabel(tr("Position motion"), leftPreview);
-    m_positionPathWidget = new PTPositionPathPreviewWidget(leftPreview);
+    m_positionPreviewLabel = new QLabel(tr("Position motion"), m_leftPreview);
+    m_positionMotionStack = new QStackedWidget(m_leftPreview);
+    m_positionMotion1DWidget = new PTPositionMotion1DPreviewWidget(m_positionMotionStack);
+    m_positionPathWidget = new PTPositionPathPreviewWidget(m_positionMotionStack);
+    m_positionMotionStack->addWidget(m_positionMotion1DWidget);
+    m_positionMotionStack->addWidget(m_positionPathWidget);
     leftLayout->addWidget(m_curveLabel);
     leftLayout->addWidget(m_curveWidget, 2);
     leftLayout->addWidget(m_positionPreviewLabel);
-    leftLayout->addWidget(m_positionPathWidget, 2);
+    leftLayout->addWidget(m_positionMotionStack, 2);
 
-    m_spatialGridWidget = new PTSpatialFixtureGridWidget(m_previewRow);
+    m_spatialPreviewColumn = new QWidget(m_previewRow);
+    QVBoxLayout* spatialLayout = new QVBoxLayout(m_spatialPreviewColumn);
+    spatialLayout->setContentsMargins(0, 0, 0, 0);
+    spatialLayout->setSpacing(2);
+
+    m_spatialGridWidget = new PTSpatialFixtureGridWidget(m_spatialPreviewColumn);
     m_spatialGridWidget->setToolTip(
             tr("Fixture group: sweep order, head offset (°), phase start. "
                "Orange border = offset step too large; red = duplicate offsets."));
@@ -1073,8 +1093,16 @@ void PresetTableV2TransitionWidget::buildUi()
             this, &PresetTableV2TransitionWidget::applySelectionCellsFromGrid);
     connect(m_spatialGridWidget, &PTSpatialFixtureGridWidget::selectionLayerActivated,
             this, &PresetTableV2TransitionWidget::slotSelectionLayerActivatedFromGrid);
-    previewLayout->addWidget(leftPreview, 3);
-    previewLayout->addWidget(m_spatialGridWidget, 2);
+    m_spatialGridCaption = new QLabel(m_spatialPreviewColumn);
+    m_spatialGridCaption->setWordWrap(true);
+    QFont captionFont = m_spatialGridCaption->font();
+    captionFont.setPointSize(qMax(7, captionFont.pointSize() - 1));
+    m_spatialGridCaption->setFont(captionFont);
+    spatialLayout->addWidget(m_spatialGridWidget, 1);
+    spatialLayout->addWidget(m_spatialGridCaption);
+
+    previewLayout->addWidget(m_leftPreview, 2);
+    previewLayout->addWidget(m_spatialPreviewColumn, 3);
     m_layout->addWidget(m_previewRow);
 
     m_bankTabs = new QTabWidget(this);
@@ -2280,6 +2308,22 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
     const bool showMorph = !positionMode || morphTab;
     const bool showMotion = positionMode && !morphTab;
 
+    if (m_leftPreview)
+        m_leftPreview->setVisible(showMorph || showMotion);
+    if (QHBoxLayout* previewLayout = qobject_cast<QHBoxLayout*>(m_previewRow->layout()))
+    {
+        if (positionMode)
+        {
+            previewLayout->setStretch(0, 2);
+            previewLayout->setStretch(1, 3);
+        }
+        else
+        {
+            previewLayout->setStretch(0, 3);
+            previewLayout->setStretch(1, 2);
+        }
+    }
+
     if (m_curveLabel)
     {
         m_curveLabel->setVisible(showMorph);
@@ -2300,17 +2344,37 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
         }
     }
 
+    const PTPositionMotion motionForPreview = PTPositionMotion(preset.positionMotion);
+    const bool motion1D = PTPositionMotion1DPreviewWidget::is1DMotion(motionForPreview);
+
     if (m_positionPreviewLabel)
     {
         m_positionPreviewLabel->setVisible(showMotion);
         if (showMotion)
-            m_positionPreviewLabel->setText(tr("Position motion"));
+        {
+            if (motion1D)
+            {
+                const bool tiltAxis = motionForPreview == PTPositionMotion::Tilt1D
+                        || motionForPreview == PTPositionMotion::CustomTilt1D;
+                m_positionPreviewLabel->setText(tiltAxis
+                        ? tr("Tilt offset vs time") : tr("Pan offset vs time"));
+            }
+            else
+            {
+                m_positionPreviewLabel->setText(tr("Position motion"));
+            }
+        }
     }
-    if (m_positionPathWidget)
+    if (m_positionMotionStack)
     {
-        m_positionPathWidget->setVisible(showMotion);
+        m_positionMotionStack->setVisible(showMotion);
         if (!showMotion)
-            m_positionPathWidget->clear();
+        {
+            if (m_positionMotion1DWidget)
+                m_positionMotion1DWidget->clear();
+            if (m_positionPathWidget)
+                m_positionPathWidget->clear();
+        }
     }
 
     if (!m_spatialGridWidget)
@@ -2392,7 +2456,29 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                 m_spatialGridWidget->setToolTip(
                         tr("Colored inner borders show custom selections for this preset."));
 
-            if (showMotion && m_positionPathWidget)
+            if (m_spatialGridCaption)
+            {
+                if (positionMode)
+                {
+                    if (selectionIdx > 0)
+                    {
+                        m_spatialGridCaption->setText(
+                                tr("Propagation order (offset°) · click cells to edit this Selection"));
+                    }
+                    else
+                    {
+                        m_spatialGridCaption->setText(
+                                tr("Propagation order (offset°) · colors = custom selections"));
+                    }
+                }
+                else
+                {
+                    m_spatialGridCaption->setText(
+                            tr("Chase order and head offset° · orange/red = offset warnings"));
+                }
+            }
+
+            if (showMotion && m_positionMotionStack)
             {
                 QList<QLCPoint> scopePoints;
                 if (outputIdx < 0)
@@ -2431,26 +2517,58 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                     balls.append(ball);
                 }
 
+                QVector<PTPositionMotion1DPreviewWidget::PhaseMarker> markers;
+                markers.reserve(balls.size());
+                for (const PTPositionPathPreviewWidget::OrbitBall& ball : balls)
+                {
+                    PTPositionMotion1DPreviewWidget::PhaseMarker marker;
+                    marker.phaseOffset01 = ball.phaseOffset01;
+                    marker.color = ball.color;
+                    markers.append(marker);
+                }
+
                 const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
                 if (motion != PTPositionMotion::Off)
                 {
-                    if (PTPositionFxEngine::motionUsesCustomData(motion))
-                        m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
-                    else
-                        m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
+                    if (motion1D && m_positionMotion1DWidget)
+                    {
+                        m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
+                        if (PTPositionFxEngine::motionUsesCustomData(motion))
+                            m_positionMotion1DWidget->setMotionPreviewFromPreset(preset, markers, cycleMs);
+                        else
+                            m_positionMotion1DWidget->setMotionPreview(motion, 1.0, 1.0, markers, cycleMs);
+                    }
+                    else if (m_positionPathWidget)
+                    {
+                        m_positionMotionStack->setCurrentWidget(m_positionPathWidget);
+                        if (PTPositionFxEngine::motionUsesCustomData(motion))
+                            m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
+                        else
+                            m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
+                    }
                 }
                 else
                 {
-                    m_positionPathWidget->clear();
+                    if (m_positionMotion1DWidget)
+                        m_positionMotion1DWidget->clear();
+                    if (m_positionPathWidget)
+                        m_positionPathWidget->clear();
                 }
             }
             return;
         }
     }
-    if (showMotion && m_positionPathWidget)
-        m_positionPathWidget->clear();
+    if (showMotion && m_positionMotionStack)
+    {
+        if (m_positionMotion1DWidget)
+            m_positionMotion1DWidget->clear();
+        if (m_positionPathWidget)
+            m_positionPathWidget->clear();
+    }
     m_spatialGridWidget->setPlaceholderText(
             tr("Link Preset Table v2 in Fixture Group mode to preview spatial order"));
+    if (m_spatialGridCaption)
+        m_spatialGridCaption->clear();
 }
 
 void PresetTableV2TransitionWidget::slotAddPreset()

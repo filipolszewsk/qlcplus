@@ -15,6 +15,9 @@
 #include <QVector>
 #include <QWidget>
 
+class QContextMenuEvent;
+class QKeyEvent;
+
 struct PTPositionGridSelectionLayer
 {
     QString name;
@@ -53,10 +56,17 @@ public:
 
 signals:
     void selectionChanged(const QSet<QLCPoint>& cells, const QList<QLCPoint>& order);
+    void copyRequested();
+    void pasteRequested();
+    void clearRequested();
+    void cellEditRequested(const QLCPoint& point);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
     QSize sizeHint() const override;
 
 private:

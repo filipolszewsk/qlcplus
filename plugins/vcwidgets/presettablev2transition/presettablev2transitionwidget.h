@@ -315,11 +315,16 @@ private:
     QToolBar*     m_toolbar = nullptr;
     QAction*      m_removeAction = nullptr;
     QWidget*                 m_previewRow = nullptr;
+    QWidget*                 m_leftPreview = nullptr;
+    QWidget*                 m_spatialPreviewColumn = nullptr;
     QLabel*                  m_curveLabel = nullptr;
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
     QLabel*                  m_positionPreviewLabel = nullptr;
+    class QStackedWidget*    m_positionMotionStack = nullptr;
+    class PTPositionMotion1DPreviewWidget* m_positionMotion1DWidget = nullptr;
     class PTPositionPathPreviewWidget* m_positionPathWidget = nullptr;
     PTSpatialFixtureGridWidget* m_spatialGridWidget = nullptr;
+    QLabel*                  m_spatialGridCaption = nullptr;
     QTabWidget*   m_bankTabs = nullptr;
     QTreeWidget* m_sweepTable = nullptr;
     QTreeWidget* m_continuousTable = nullptr;

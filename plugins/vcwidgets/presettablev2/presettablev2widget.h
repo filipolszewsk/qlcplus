@@ -346,6 +346,7 @@ private slots:
     void slotFixtureGroupMaskChanged(quint32 groupId);
     void slotPositionGridSelectionChanged(const QSet<QLCPoint>& cells,
                                           const QList<QLCPoint>& order);
+    void slotPositionGridCellEditRequested(const QLCPoint& point);
     void slotPositionPresetTreeChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
     void slotPositionPresetTreeDoubleClicked(QTreeWidgetItem* item, int column);
     void slotPositionXYPadChanged(qreal xNorm, qreal yNorm);
@@ -394,8 +395,14 @@ private:
     void writePositionEditorValue(const PTPositionValue& pos, bool liveUpdateOnly = false);
     void writePositionToCells(const QSet<QLCPoint>& cells, const PTPositionValue& pos,
                               int row, int output, int selection);
+    bool ensurePositionDraftContextForCurrent();
+    void stagePositionValues(const QMap<QLCPoint, PTPositionValue>& values);
     void stagePositionEditorValue(const PTPositionValue& pos);
     void stageFromEditorControls();
+    void copyPositionSelectionToClipboard();
+    void pastePositionClipboardToSelection();
+    void clearPositionSelectionToDraft();
+    void editPositionCell(const QLCPoint& point);
     void updatePositionSpreadChrome();
     void updatePositionSpreadValueLabel(int raw);
     QLCPoint selectionMiddlePoint() const;
@@ -749,7 +756,7 @@ public:
     bool                        m_positionDraftDirty = false;
     bool                        m_positionConfirmDiscardDraft = true;
     bool                        m_positionShowStatusStrip = true;
-    bool                        m_positionShowEditorHints = true;
+    bool                        m_positionShowEditorHints = false;
     int                         m_positionFollowLiveRow = -1;
     int                         m_positionFollowLiveContextOut = -1;
     int                         m_positionLastFollowDrivingOutput = -1;

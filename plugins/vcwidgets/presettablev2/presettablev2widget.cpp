@@ -51,6 +51,9 @@
 #include <QLabel>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QMenu>
 #include <QEvent>
 #include <QKeyEvent>
@@ -909,13 +912,9 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
                                     "Crossfade: Transition sweep preset."));
     posEditorLayout->addWidget(m_positionHintLabel);
 
-    QHBoxLayout* gridPadRow = new QHBoxLayout();
-    gridPadRow->setSpacing(6);
-    gridPadRow->addWidget(m_positionGrid, 3);
-    gridPadRow->addWidget(m_positionXYPad, 2);
-    posEditorLayout->addLayout(gridPadRow, 2);
+    m_positionGrid->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    m_positionXYPad->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 
-    QHBoxLayout* spinRow = new QHBoxLayout();
     m_positionPanSpin = new QDoubleSpinBox(m_positionEditorPanel);
     m_positionPanSpin->setSuffix(QStringLiteral("°"));
     m_positionPanSpin->setDecimals(1);
@@ -924,15 +923,34 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_positionTiltSpin->setSuffix(QStringLiteral("°"));
     m_positionTiltSpin->setDecimals(1);
     m_positionTiltSpin->setRange(-10000, 10000);
-    spinRow->addWidget(new QLabel(tr("Pan"), m_positionEditorPanel));
-    spinRow->addWidget(m_positionPanSpin, 1);
-    spinRow->addWidget(new QLabel(tr("Tilt"), m_positionEditorPanel));
-    spinRow->addWidget(m_positionTiltSpin, 1);
-    posEditorLayout->addLayout(spinRow);
+
+    QWidget* padColumn = new QWidget(m_positionEditorPanel);
+    QVBoxLayout* padColumnLayout = new QVBoxLayout(padColumn);
+    padColumnLayout->setContentsMargins(0, 0, 0, 0);
+    padColumnLayout->setSpacing(4);
+    padColumnLayout->addWidget(m_positionXYPad, 1);
+    QHBoxLayout* panRow = new QHBoxLayout();
+    panRow->addWidget(new QLabel(tr("Pan"), padColumn));
+    panRow->addWidget(m_positionPanSpin, 1);
+    padColumnLayout->addLayout(panRow);
+    QHBoxLayout* tiltRow = new QHBoxLayout();
+    tiltRow->addWidget(new QLabel(tr("Tilt"), padColumn));
+    tiltRow->addWidget(m_positionTiltSpin, 1);
+    padColumnLayout->addLayout(tiltRow);
+
+    QHBoxLayout* gridPadRow = new QHBoxLayout();
+    gridPadRow->setSpacing(6);
+    gridPadRow->addWidget(m_positionGrid, 3);
+    gridPadRow->addWidget(padColumn, 2);
+    posEditorLayout->addLayout(gridPadRow);
 
     m_positionSymmetricSpreadCheck = new QCheckBox(
             tr("Symmetric spread (multi-select)"), m_positionEditorPanel);
     m_positionSymmetricSpreadCheck->setEnabled(false);
+    m_positionSymmetricSpreadCheck->setToolTip(
+            tr("Symmetric spread: encoder center = no spread · "
+               "double-click spread slider = reset center · "
+               "Pan: ends opposite · Tilt: ends equal."));
     posEditorLayout->addWidget(m_positionSymmetricSpreadCheck);
 
     QHBoxLayout* spreadRow = new QHBoxLayout();
@@ -953,31 +971,32 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     posEditorLayout->addLayout(spreadRow);
     m_positionSpreadSlider->installEventFilter(this);
 
-    QHBoxLayout* btnRow = new QHBoxLayout();
+    QHBoxLayout* toolRow = new QHBoxLayout();
     QPushButton* copyBtn = new QPushButton(tr("Copy"), m_positionEditorPanel);
     QPushButton* pasteBtn = new QPushButton(tr("Paste"), m_positionEditorPanel);
     QPushButton* clearBtn = new QPushButton(tr("Clear"), m_positionEditorPanel);
     m_positionCopyLayerBtn = new QPushButton(tr("Copy layer"), m_positionEditorPanel);
     m_positionPasteLayerBtn = new QPushButton(tr("Paste layer"), m_positionEditorPanel);
     m_positionPasteLayerBtn->setEnabled(false);
-    btnRow->addWidget(copyBtn);
-    btnRow->addWidget(pasteBtn);
-    btnRow->addWidget(clearBtn);
-    btnRow->addWidget(m_positionCopyLayerBtn);
-    btnRow->addWidget(m_positionPasteLayerBtn);
-    posEditorLayout->addLayout(btnRow);
-
-    QHBoxLayout* saveRow = new QHBoxLayout();
     m_positionOverwriteBtn = new QPushButton(tr("Overwrite"), m_positionEditorPanel);
     m_positionSaveAsBtn = new QPushButton(tr("Save As"), m_positionEditorPanel);
     m_positionRevertBtn = new QPushButton(tr("Revert"), m_positionEditorPanel);
     m_positionOverwriteBtn->setEnabled(false);
     m_positionSaveAsBtn->setEnabled(false);
     m_positionRevertBtn->setEnabled(false);
-    saveRow->addWidget(m_positionOverwriteBtn);
-    saveRow->addWidget(m_positionSaveAsBtn);
-    saveRow->addWidget(m_positionRevertBtn);
-    posEditorLayout->addLayout(saveRow);
+    toolRow->addWidget(copyBtn);
+    toolRow->addWidget(pasteBtn);
+    toolRow->addWidget(clearBtn);
+    toolRow->addWidget(m_positionCopyLayerBtn);
+    toolRow->addWidget(m_positionPasteLayerBtn);
+    toolRow->addStretch(1);
+    toolRow->addWidget(m_positionOverwriteBtn);
+    toolRow->addWidget(m_positionSaveAsBtn);
+    toolRow->addWidget(m_positionRevertBtn);
+    posEditorLayout->addLayout(toolRow);
+    posEditorLayout->addStretch(1);
+
+    m_positionValueStrip->setMaximumHeight(48);
 
     m_positionSplitter = new QSplitter(Qt::Horizontal, this);
     m_positionSplitter->addWidget(m_positionRowListPanel);
@@ -992,6 +1011,14 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
 
     connect(m_positionGrid, &PTPositionFixtureGridWidget::selectionChanged,
             this, &PresetTableV2Widget::slotPositionGridSelectionChanged);
+    connect(m_positionGrid, &PTPositionFixtureGridWidget::copyRequested,
+            this, &PresetTableV2Widget::copyPositionSelectionToClipboard);
+    connect(m_positionGrid, &PTPositionFixtureGridWidget::pasteRequested,
+            this, &PresetTableV2Widget::pastePositionClipboardToSelection);
+    connect(m_positionGrid, &PTPositionFixtureGridWidget::clearRequested,
+            this, &PresetTableV2Widget::clearPositionSelectionToDraft);
+    connect(m_positionGrid, &PTPositionFixtureGridWidget::cellEditRequested,
+            this, &PresetTableV2Widget::slotPositionGridCellEditRequested);
     connect(m_positionPresetTree, &QTreeWidget::currentItemChanged,
             this, &PresetTableV2Widget::slotPositionPresetTreeChanged);
     connect(m_positionPresetTree, &QTreeWidget::itemDoubleClicked,
@@ -1437,8 +1464,16 @@ void PresetTableV2Widget::slotHeaderSectionResized(int logicalIndex, int /*oldSi
 
 void PresetTableV2Widget::keyPressEvent(QKeyEvent* e)
 {
-    if (e->matches(QKeySequence::Copy))  { slotCopySelection(); e->accept(); return; }
-    if (e->matches(QKeySequence::Paste)) { slotPasteSelection(); e->accept(); return; }
+    if (m_mode == PTMode::Position)
+    {
+        if (e->matches(QKeySequence::Copy))  { copyPositionSelectionToClipboard(); e->accept(); return; }
+        if (e->matches(QKeySequence::Paste)) { pastePositionClipboardToSelection(); e->accept(); return; }
+    }
+    else
+    {
+        if (e->matches(QKeySequence::Copy))  { slotCopySelection(); e->accept(); return; }
+        if (e->matches(QKeySequence::Paste)) { slotPasteSelection(); e->accept(); return; }
+    }
     VCWidget::keyPressEvent(e);
 }
 
@@ -2945,6 +2980,68 @@ void PresetTableV2Widget::writePositionToCells(const QSet<QLCPoint>& cells,
     }
 }
 
+bool PresetTableV2Widget::ensurePositionDraftContextForCurrent()
+{
+    const int row = currentPositionEditRow();
+    if (row < 0)
+        return false;
+
+    if (m_positionDraftDirty
+            && (m_positionDraftCtx.row != row
+                || m_positionDraftCtx.output != m_positionEditOutput
+                || m_positionDraftCtx.selection != m_positionEditSelection))
+    {
+        if (!confirmDiscardPositionDraft())
+            return false;
+    }
+
+    if (!m_positionDraftDirty)
+    {
+        m_positionDraftCtx.row = row;
+        m_positionDraftCtx.output = m_positionEditOutput;
+        m_positionDraftCtx.selection = m_positionEditSelection;
+    }
+    return true;
+}
+
+void PresetTableV2Widget::stagePositionValues(const QMap<QLCPoint, PTPositionValue>& values)
+{
+    if (values.isEmpty() || !ensurePositionDraftContextForCurrent())
+        return;
+
+    const int row = currentPositionEditRow();
+    if (row < 0)
+        return;
+
+    const QSet<QLCPoint> editable = positionEditableCellsForLayer(
+            row, m_positionEditOutput, m_positionEditSelection);
+    bool applied = false;
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+    {
+        if (!editable.contains(it.key()))
+            continue;
+
+        PTPositionValue pos = it.value();
+        if (pos.valid)
+        {
+            Fixture* fxi = fixtureAtPoint(it.key());
+            const GroupHead gh = groupHeadAtPoint(it.key());
+            pos = PTPositionConverter::clampPosition(fxi, gh.head, pos);
+        }
+        m_positionDraftCells.insert(it.key(), pos);
+        applied = true;
+    }
+
+    if (!applied)
+        return;
+
+    m_positionDraftDirty = true;
+    refreshPositionGridCells();
+    updatePositionValueStrip();
+    refreshPositionEditorFromSelection();
+    updatePositionDraftButtons();
+}
+
 void PresetTableV2Widget::applyDraftToRowData(int targetRow, const PTPositionDraftContext& ctx,
                                               const QMap<QLCPoint, PTPositionValue>& cells)
 {
@@ -2962,12 +3059,8 @@ void PresetTableV2Widget::stageFromEditorControls()
     if (row < 0)
         return;
 
-    if (!m_positionDraftDirty)
-    {
-        m_positionDraftCtx.row = row;
-        m_positionDraftCtx.output = m_positionEditOutput;
-        m_positionDraftCtx.selection = m_positionEditSelection;
-    }
+    if (!ensurePositionDraftContextForCurrent())
+        return;
 
     const bool symmetric = m_positionSymmetricSpreadCheck
             && m_positionSymmetricSpreadCheck->isChecked()
@@ -3065,12 +3158,8 @@ void PresetTableV2Widget::stagePositionEditorValue(const PTPositionValue& pos)
     if (row < 0)
         return;
 
-    if (!m_positionDraftDirty)
-    {
-        m_positionDraftCtx.row = row;
-        m_positionDraftCtx.output = m_positionEditOutput;
-        m_positionDraftCtx.selection = m_positionEditSelection;
-    }
+    if (!ensurePositionDraftContextForCurrent())
+        return;
 
     for (const QLCPoint& pt : targets)
         m_positionDraftCells.insert(pt, pos);
@@ -3241,6 +3330,210 @@ void PresetTableV2Widget::slotPositionGridSelectionChanged(const QSet<QLCPoint>&
     updatePositionValueStrip();
 }
 
+void PresetTableV2Widget::copyPositionSelectionToClipboard()
+{
+    if (m_mode != PTMode::Position)
+        return;
+
+    QSet<QLCPoint> cells = m_positionSelectedCells;
+    if (cells.isEmpty())
+        cells = positionTargetCells();
+    if (cells.isEmpty())
+        return;
+
+    int minX = INT_MAX;
+    int maxX = INT_MIN;
+    int minY = INT_MAX;
+    int maxY = INT_MIN;
+    for (const QLCPoint& pt : cells)
+    {
+        minX = qMin(minX, pt.x());
+        maxX = qMax(maxX, pt.x());
+        minY = qMin(minY, pt.y());
+        maxY = qMax(maxY, pt.y());
+    }
+
+    const int row = currentPositionEditRow();
+    QStringList lines;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        for (int y = minY; y <= maxY; ++y)
+        {
+            QStringList parts;
+            for (int x = minX; x <= maxX; ++x)
+            {
+                const QLCPoint pt(x, y);
+                if (!cells.contains(pt))
+                {
+                    parts << QString();
+                    continue;
+                }
+
+                const PTPositionValue pos = positionValueForDisplay(
+                        row, m_positionEditOutput, m_positionEditSelection, pt);
+                parts << (pos.valid ? PTPositionConverter::formatPosition(pos) : QString());
+            }
+            lines << parts.join(QLatin1Char('\t'));
+        }
+    }
+    QApplication::clipboard()->setText(lines.join(QLatin1Char('\n')));
+}
+
+void PresetTableV2Widget::pastePositionClipboardToSelection()
+{
+    if (m_mode != PTMode::Position)
+        return;
+
+    QString text = QApplication::clipboard()->text();
+    if (text.isEmpty())
+        return;
+
+    text.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    text.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    while (text.endsWith(QLatin1Char('\n')))
+        text.chop(1);
+
+    QStringList lines = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    if (lines.isEmpty())
+        return;
+
+    QMap<QLCPoint, PTPositionValue> staged;
+    const bool singleValue = (lines.size() == 1 && !lines.first().contains(QLatin1Char('\t')));
+
+    if (singleValue)
+    {
+        const QString raw = lines.first().trimmed();
+        for (const QLCPoint& pt : positionTargetCells())
+        {
+            PTPositionValue pos;
+            if (!raw.isEmpty())
+            {
+                Fixture* fxi = fixtureAtPoint(pt);
+                const GroupHead gh = groupHeadAtPoint(pt);
+                pos = PTPositionConverter::parsePositionText(raw, fxi, gh.head);
+                if (!pos.valid)
+                    continue;
+            }
+            staged.insert(pt, pos);
+        }
+    }
+    else
+    {
+        QLCPoint anchor = positionReferencePoint();
+        if (anchor.x() < 0)
+            return;
+
+        const QSet<QLCPoint> editable = positionEditableCells();
+        for (int li = 0; li < lines.size(); ++li)
+        {
+            const QStringList cols = lines.at(li).split(QLatin1Char('\t'), Qt::KeepEmptyParts);
+            for (int ci = 0; ci < cols.size(); ++ci)
+            {
+                const QLCPoint pt(anchor.x() + ci, anchor.y() + li);
+                if (!editable.contains(pt))
+                    continue;
+
+                const QString raw = cols.at(ci).trimmed();
+                PTPositionValue pos;
+                if (!raw.isEmpty())
+                {
+                    Fixture* fxi = fixtureAtPoint(pt);
+                    const GroupHead gh = groupHeadAtPoint(pt);
+                    pos = PTPositionConverter::parsePositionText(raw, fxi, gh.head);
+                    if (!pos.valid)
+                        continue;
+                }
+                staged.insert(pt, pos);
+            }
+        }
+    }
+
+    stagePositionValues(staged);
+}
+
+void PresetTableV2Widget::clearPositionSelectionToDraft()
+{
+    if (m_mode != PTMode::Position)
+        return;
+
+    QMap<QLCPoint, PTPositionValue> staged;
+    const PTPositionValue invalid;
+    for (const QLCPoint& pt : positionTargetCells())
+        staged.insert(pt, invalid);
+    stagePositionValues(staged);
+}
+
+void PresetTableV2Widget::editPositionCell(const QLCPoint& point)
+{
+    if (m_mode != PTMode::Position || !positionEditableCells().contains(point))
+        return;
+
+    const int row = currentPositionEditRow();
+    if (row < 0)
+        return;
+
+    Fixture* fxi = fixtureAtPoint(point);
+    const GroupHead gh = groupHeadAtPoint(point);
+    if (!fxi)
+        return;
+
+    PTPositionValue pos;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        pos = positionValueForDisplay(row, m_positionEditOutput,
+                                      m_positionEditSelection, point);
+    }
+    if (!pos.valid)
+        pos = PTPositionConverter::centerPosition(fxi, gh.head);
+
+    const QRectF range = PTPositionConverter::degreesRange(fxi, gh.head);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Edit position"));
+    QFormLayout* form = new QFormLayout(&dlg);
+    QDoubleSpinBox* pan = new QDoubleSpinBox(&dlg);
+    pan->setSuffix(QStringLiteral("°"));
+    pan->setDecimals(1);
+    pan->setRange(range.left(), range.left() + range.width());
+    pan->setValue(pos.panDeg);
+    QDoubleSpinBox* tilt = new QDoubleSpinBox(&dlg);
+    tilt->setSuffix(QStringLiteral("°"));
+    tilt->setDecimals(1);
+    tilt->setRange(range.top(), range.top() + range.height());
+    tilt->setValue(pos.tiltDeg);
+    form->addRow(tr("Pan"), pan);
+    form->addRow(tr("Tilt"), tilt);
+    QDialogButtonBox* buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    PTPositionValue edited;
+    edited.valid = true;
+    edited.panDeg = pan->value();
+    edited.tiltDeg = tilt->value();
+
+    QSet<QLCPoint> targets;
+    if (m_positionSelectedCells.contains(point) && m_positionSelectedCells.size() > 1)
+        targets = positionTargetCells();
+    else
+        targets.insert(point);
+
+    QMap<QLCPoint, PTPositionValue> staged;
+    for (const QLCPoint& pt : targets)
+        staged.insert(pt, edited);
+    stagePositionValues(staged);
+}
+
+void PresetTableV2Widget::slotPositionGridCellEditRequested(const QLCPoint& point)
+{
+    editPositionCell(point);
+}
+
 void PresetTableV2Widget::slotPositionXYPadChanged(qreal xNorm, qreal yNorm)
 {
     if (m_positionEditorSyncing || positionTargetCells().isEmpty())
@@ -3383,42 +3676,22 @@ void PresetTableV2Widget::slotPositionPasteLayer()
     if (row < 0)
         return;
 
-    if (!confirmDiscardPositionDraft())
-        return;
-
-    for (auto it = m_positionLayerClipboard.constBegin();
-         it != m_positionLayerClipboard.constEnd(); ++it)
-    {
-        writePositionToCells({it.key()}, it.value(), row,
-                             m_positionEditOutput, m_positionEditSelection);
-    }
-
-    clearPositionDraft();
-    rebuildPositionPresetTree();
-    refreshPositionGridCells();
-    updatePositionValueStrip();
-    refreshPositionEditorFromSelection();
-    m_doc->setModified();
+    stagePositionValues(m_positionLayerClipboard);
 }
 
 void PresetTableV2Widget::slotPositionCopyCell()
 {
-    m_positionClipboard = readPositionEditorValue();
+    copyPositionSelectionToClipboard();
 }
 
 void PresetTableV2Widget::slotPositionPasteCell()
 {
-    if (!m_positionClipboard.valid || positionTargetCells().isEmpty())
-        return;
-    stagePositionEditorValue(m_positionClipboard);
-    refreshPositionEditorFromSelection();
+    pastePositionClipboardToSelection();
 }
 
 void PresetTableV2Widget::slotPositionClearCell()
 {
-    PTPositionValue pos;
-    stagePositionEditorValue(pos);
-    refreshPositionEditorFromSelection();
+    clearPositionSelectionToDraft();
 }
 
 void PresetTableV2Widget::slotPositionOverwrite()

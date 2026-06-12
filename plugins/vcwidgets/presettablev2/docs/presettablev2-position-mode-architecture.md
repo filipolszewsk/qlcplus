@@ -306,7 +306,7 @@ Position FX to **relatywna orbita wokół pozycji bazowej** (nie dimmer wave). O
 | 1 | Pan 1D | PanOnly | sin(φ) | — |
 | 2 | Tilt 1D | TiltOnly | — | sin(φ) |
 | 3 | Circle 2D | Circle | sin(φ) | cos(φ) |
-| 4 | Line 2D | Line | sin(φ) | 0 |
+| 4 | Line 2D | Line | sin(φ) | sin(φ) |
 | 5 | Figure-8 2D | Figure8 | sin(φ) | sin(2φ) |
 
 **Plik:** `presettablev2effectengine.h` ~78–86, `ptpositionfxengine.cpp`
@@ -641,7 +641,8 @@ Double-click na slider → reset do 128. Zmiana osi Pan/Tilt → reset slidera.
 | `ptpositionfxengine.h/.cpp` | Orbit shapes, smart motion |
 | `ptpositionfixturegridwidget.*` | Siatka edytora |
 | `ptpositionxypadwidget.*` | XY pad |
-| `ptpositionpathpreviewwidget.*` | Podgląd orbity (Transition) |
+| `ptpositionpathpreviewwidget.*` | Podgląd orbity 2D (Circle, Line, Figure-8, Custom 2D) |
+| `ptpositionmotion1dpreviewwidget.*` | Podgląd 1D: offset vs czas (Pan/Tilt 1D, Custom Pan/Tilt 1D) |
 | `ptspatialfixtureplan.*` | `sweepBlend01`, kolejność spatial |
 | `ptdimmerwaveengine.*` | Fala dimmera → faza + continuous blend factor |
 | `ptparammatrixengine.*` | `PTGlobalEffectSettings`, duration |
