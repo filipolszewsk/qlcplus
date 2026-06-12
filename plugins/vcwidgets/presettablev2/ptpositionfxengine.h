@@ -19,16 +19,26 @@ public:
         Line,
         PanOnly,
         TiltOnly,
-        Figure8
+        Figure8,
+        CustomPan1D,
+        CustomTilt1D,
+        Custom2D
     };
 
     static Shape shapeFromPositionMotion(PTPositionMotion motion);
+    static bool motionUsesCustomData(PTPositionMotion motion);
     static void relativeOffset(Shape shape, double phaseRadians,
                                qreal panSizeDeg, qreal tiltSizeDeg,
                                qreal& panOffDeg, qreal& tiltOffDeg);
+    static void relativeOffsetForPreset(const PTTransitionPreset& preset, double phaseRadians,
+                                        qreal panSizeDeg, qreal tiltSizeDeg,
+                                        qreal& panOffDeg, qreal& tiltOffDeg);
     /** Smart compressor: pivot shifts toward axis center only when amplitude would clip. */
     static PTPositionValue applySmartMotion(const PTPositionValue& base, Fixture* fxi, int head,
                                             Shape shape, double phaseRadians, qreal size01);
+    static PTPositionValue applySmartMotionFromPreset(const PTPositionValue& base, Fixture* fxi,
+                                                      int head, const PTTransitionPreset& preset,
+                                                      double phaseRadians, qreal size01);
 
     /**
      * Map dimmer-wave iterator (rad) into orbit phase when inside waveWidth window.

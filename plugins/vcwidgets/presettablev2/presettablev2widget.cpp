@@ -142,6 +142,8 @@ static const QString KXMLWidgetFlashBehavior = QStringLiteral("WidgetFlashBehavi
 static const QString KXMLSelectorStateOutput = QStringLiteral("SelectorStateOutput");
 static const QString KXMLContinuousFxSelectorMode = QStringLiteral("ContinuousFxSelectorMode");
 static const QString KXMLPositionConfirmDiscardDraft = QStringLiteral("PositionConfirmDiscardDraft");
+static const QString KXMLPositionShowStatusStrip = QStringLiteral("PositionShowStatusStrip");
+static const QString KXMLPositionShowEditorHints = QStringLiteral("PositionShowEditorHints");
 static const QString KXMLColWidth        = QStringLiteral("Width");
 static const QString KXMLNameColWidth    = QStringLiteral("NameColWidth");
 
@@ -888,7 +890,7 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     posEditorLayout->setSpacing(6);
 
     m_positionGrid = new PTPositionFixtureGridWidget(m_positionEditorPanel);
-    posEditorLayout->addWidget(m_positionGrid, 2);
+    m_positionXYPad = new PTPositionXYPadWidget(m_positionEditorPanel);
 
     m_positionValueStrip = new QLabel(m_positionEditorPanel);
     m_positionValueStrip->setWordWrap(true);
@@ -907,8 +909,11 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
                                     "Crossfade: Transition sweep preset."));
     posEditorLayout->addWidget(m_positionHintLabel);
 
-    m_positionXYPad = new PTPositionXYPadWidget(m_positionEditorPanel);
-    posEditorLayout->addWidget(m_positionXYPad, 1);
+    QHBoxLayout* gridPadRow = new QHBoxLayout();
+    gridPadRow->setSpacing(6);
+    gridPadRow->addWidget(m_positionGrid, 3);
+    gridPadRow->addWidget(m_positionXYPad, 2);
+    posEditorLayout->addLayout(gridPadRow, 2);
 
     QHBoxLayout* spinRow = new QHBoxLayout();
     m_positionPanSpin = new QDoubleSpinBox(m_positionEditorPanel);
@@ -2092,15 +2097,120 @@ bool PresetTableV2Widget::positionLayerHasOverrides(int row, int output, int sel
     return !layer.selections.at(selection).overrides.isEmpty();
 }
 
+static QColor positionSelectionLayerColor(int selectionIndex)
+{
+    static const QColor colors[] = {
+        QColor(70, 210, 255), QColor(255, 180, 65), QColor(120, 225, 110),
+        QColor(220, 120, 255), QColor(255, 105, 145), QColor(95, 160, 255),
+        QColor(240, 220, 80), QColor(95, 220, 190), QColor(255, 135, 85),
+        QColor(165, 145, 255)
+    };
+    return colors[qAbs(selectionIndex) % (int(sizeof(colors) / sizeof(colors[0])))];
+}
+
+QSet<QLCPoint> PresetTableV2Widget::positionEditableCells() const
+{
+    return positionEditableCellsForLayer(currentPositionEditRow(),
+                                         m_positionEditOutput, m_positionEditSelection);
+}
+
+QSet<QLCPoint> PresetTableV2Widget::positionEditableCellsForLayer(int row, int output,
+                                                                  int selection) const
+{
+    QSet<QLCPoint> result;
+
+    if (output < 0)
+    {
+        for (const QLCPoint& pt : positionTablePoints())
+            result.insert(pt);
+        return result;
+    }
+
+    for (const QLCPoint& pt : outputPointsForPresetOverride(output))
+        result.insert(pt);
+
+    if (selection < 0)
+        return result;
+
+    if (row < 0 || row >= m_positionOverrides.size())
+        return result;
+
+    QMutexLocker lk(&m_stateMutex);
+    const PTPositionOutputLayer layer = m_positionOverrides[row].value(output);
+    if (selection >= layer.selections.size())
+        return result;
+
+    const PTPositionSelectionLayer& selLayer = layer.selections.at(selection);
+    if (!selLayer.cells.isEmpty())
+    {
+        QSet<QLCPoint> filtered;
+        for (const QLCPoint& pt : selLayer.cells)
+        {
+            if (result.contains(pt))
+                filtered.insert(pt);
+        }
+        return filtered;
+    }
+
+    QSet<QLCPoint> occupied;
+    for (int s = 0; s < layer.selections.size(); ++s)
+    {
+        if (s == selection)
+            continue;
+        for (const QLCPoint& pt : layer.selections.at(s).cells)
+            occupied.insert(pt);
+    }
+
+    QSet<QLCPoint> available;
+    for (const QLCPoint& pt : result)
+    {
+        if (!occupied.contains(pt))
+            available.insert(pt);
+    }
+    return available;
+}
+
+void PresetTableV2Widget::prunePositionGridSelection()
+{
+    const QSet<QLCPoint> editable = positionEditableCells();
+    if (m_positionSelectedCells.isEmpty())
+        return;
+
+    QSet<QLCPoint> pruned;
+    QList<QLCPoint> prunedOrder;
+    for (const QLCPoint& pt : m_positionSelectionOrder)
+    {
+        if (editable.contains(pt))
+        {
+            pruned.insert(pt);
+            prunedOrder.append(pt);
+        }
+    }
+    for (const QLCPoint& pt : m_positionSelectedCells)
+    {
+        if (editable.contains(pt) && !prunedOrder.contains(pt))
+            prunedOrder.append(pt);
+        if (editable.contains(pt))
+            pruned.insert(pt);
+    }
+    m_positionSelectedCells = pruned;
+    m_positionSelectionOrder = prunedOrder;
+}
+
 QSet<QLCPoint> PresetTableV2Widget::positionTargetCells() const
 {
+    const QSet<QLCPoint> editable = positionEditableCells();
     if (!m_positionSelectedCells.isEmpty())
-        return m_positionSelectedCells;
-
-    QSet<QLCPoint> all;
-    for (const QLCPoint& pt : positionTablePoints())
-        all.insert(pt);
-    return all;
+    {
+        QSet<QLCPoint> filtered;
+        for (const QLCPoint& pt : m_positionSelectedCells)
+        {
+            if (editable.contains(pt))
+                filtered.insert(pt);
+        }
+        return filtered.isEmpty() ? editable : filtered;
+    }
+    return editable;
 }
 
 QList<QLCPoint> PresetTableV2Widget::positionTargetCellOrder() const
@@ -2388,9 +2498,47 @@ void PresetTableV2Widget::refreshPositionGridCells()
         }
     }
 
+    prunePositionGridSelection();
+
+    const QSet<QLCPoint> editable = positionEditableCells();
+    QVector<PTPositionGridSelectionLayer> foreignLayers;
+    if (m_positionEditOutput >= 0 && row >= 0 && row < m_positionOverrides.size())
+    {
+        QMutexLocker lk(&m_stateMutex);
+        const PTPositionOutputLayer layer = m_positionOverrides[row].value(m_positionEditOutput);
+        for (int s = 0; s < layer.selections.size(); ++s)
+        {
+            if (m_positionEditSelection >= 0 && s == m_positionEditSelection)
+                continue;
+            const PTPositionSelectionLayer& sel = layer.selections.at(s);
+            if (sel.cells.isEmpty())
+                continue;
+            PTPositionGridSelectionLayer gridLayer;
+            gridLayer.name = sel.name;
+            gridLayer.color = positionSelectionLayerColor(s);
+            for (const QLCPoint& pt : sel.cells)
+            {
+                if (editable.contains(pt) || cells.contains(pt))
+                    gridLayer.cells.insert(pt);
+            }
+            if (!gridLayer.cells.isEmpty())
+                foreignLayers.append(gridLayer);
+        }
+    }
+
     m_positionGrid->setGrid(gridSize, cells);
+    m_positionGrid->setEditableCells(editable);
+    m_positionGrid->setForeignSelectionLayers(foreignLayers);
     m_positionGrid->setImplicitAllSelection(m_positionSelectedCells.isEmpty());
     m_positionGrid->setSelectedCells(m_positionSelectedCells, m_positionSelectionOrder);
+}
+
+void PresetTableV2Widget::applyPositionEditorChromeVisibility()
+{
+    if (m_positionValueStrip)
+        m_positionValueStrip->setVisible(m_positionShowStatusStrip);
+    if (m_positionHintLabel)
+        m_positionHintLabel->setVisible(m_positionShowEditorHints);
 }
 
 void PresetTableV2Widget::updatePositionValueStrip()
@@ -2484,6 +2632,7 @@ void PresetTableV2Widget::rebuildPositionEditor()
     rebuildPositionPresetTree();
     refreshPositionGridCells();
     updatePositionValueStrip();
+    applyPositionEditorChromeVisibility();
     refreshPositionEditorFromSelection();
 }
 
@@ -2515,6 +2664,7 @@ void PresetTableV2Widget::slotPositionPresetTreeChanged(QTreeWidgetItem* current
     m_positionEditSelection = ref.selection;
     m_positionSelectedCells.clear();
     m_positionSelectionOrder.clear();
+    prunePositionGridSelection();
     refreshPositionGridCells();
     updatePositionValueStrip();
     refreshPositionEditorFromSelection();
@@ -2754,9 +2904,13 @@ void PresetTableV2Widget::writePositionToCells(const QSet<QLCPoint>& cells,
     if (row < 0 || row >= m_rows.size() || cells.isEmpty())
         return;
 
+    const QSet<QLCPoint> allowed = positionEditableCellsForLayer(row, output, selection);
+
     QMutexLocker lk(&m_stateMutex);
     for (const QLCPoint& pt : cells)
     {
+        if (!allowed.contains(pt))
+            continue;
         if (output < 0)
         {
             if (pos.valid)
@@ -6665,13 +6819,21 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                             orbitPhase,
                             PTPositionMotionDirection(fxPreset.positionMotionDirection),
                             spatialInfo);
-                    const auto shape = PTPositionFxEngine::shapeFromPositionMotion(
-                            PTPositionMotion(fxPreset.positionMotion));
+                    const PTPositionMotion fxMotion = PTPositionMotion(fxPreset.positionMotion);
+                    const auto shape = PTPositionFxEngine::shapeFromPositionMotion(fxMotion);
                     const qreal amp01 = PTPositionFxEngine::orbitAmplitude01(
                             iterator, waveParams.waveWidth, waveParams, shape);
                     const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * amp01;
-                    base = PTPositionFxEngine::applySmartMotion(
-                            base, fxi, sf.head.head, shape, orbitPhase, size01);
+                    if (PTPositionFxEngine::motionUsesCustomData(fxMotion))
+                    {
+                        base = PTPositionFxEngine::applySmartMotionFromPreset(
+                                base, fxi, sf.head.head, fxPreset, orbitPhase, size01);
+                    }
+                    else
+                    {
+                        base = PTPositionFxEngine::applySmartMotion(
+                                base, fxi, sf.head.head, shape, orbitPhase, size01);
+                    }
                 }
             }
 
@@ -6718,14 +6880,22 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                                 orbitPhase,
                                 PTPositionMotionDirection(mfPreset.positionMotionDirection),
                                 spatialInfo);
-                        const auto shape = PTPositionFxEngine::shapeFromPositionMotion(
-                                PTPositionMotion(mfPreset.positionMotion));
+                        const PTPositionMotion mfMotion = PTPositionMotion(mfPreset.positionMotion);
+                        const auto shape = PTPositionFxEngine::shapeFromPositionMotion(mfMotion);
                         const qreal amp01 = PTPositionFxEngine::orbitAmplitude01(
                                 iterator, waveParams.waveWidth, waveParams, shape);
                         const qreal blend = qreal(m_multiFxBlend) / 255.0;
                         const qreal size01 = (qreal(globalFx.positionSize) / 255.0) * blend * amp01;
-                        base = PTPositionFxEngine::applySmartMotion(
-                                base, fxi, sf.head.head, shape, orbitPhase, size01);
+                        if (PTPositionFxEngine::motionUsesCustomData(mfMotion))
+                        {
+                            base = PTPositionFxEngine::applySmartMotionFromPreset(
+                                    base, fxi, sf.head.head, mfPreset, orbitPhase, size01);
+                        }
+                        else
+                        {
+                            base = PTPositionFxEngine::applySmartMotion(
+                                    base, fxi, sf.head.head, shape, orbitPhase, size01);
+                        }
                     }
                 }
             }
@@ -8153,6 +8323,8 @@ void PresetTableV2Widget::editProperties()
     int widgetFlashTimeMultiplierIndex;
     PTWidgetFlashBehavior widgetFlashBehavior;
     bool positionConfirmDiscardDraft;
+    bool positionShowStatusStrip;
+    bool positionShowEditorHints;
     {
         QMutexLocker lk(&m_stateMutex);
         xfEnabled = m_crossfadeEnabled;
@@ -8166,6 +8338,8 @@ void PresetTableV2Widget::editProperties()
         widgetFlashTimeMultiplierIndex = m_widgetFlashTimeMultiplierIndex;
         widgetFlashBehavior = m_widgetFlashBehavior;
         positionConfirmDiscardDraft = m_positionConfirmDiscardDraft;
+        positionShowStatusStrip = m_positionShowStatusStrip;
+        positionShowEditorHints = m_positionShowEditorHints;
     }
     xfSrc = inputSource(PTInputId::kCrossfade);
     multiFxBlendSrc = inputSource(PTInputId::kMultiFxBlend);
@@ -8180,6 +8354,8 @@ void PresetTableV2Widget::editProperties()
                                 widgetFlashBehavior, contFxSelectorMode, page(),
                                 modeCopy, groupIdCopy, spatialCopy, linkedTransitionId,
                                 positionConfirmDiscardDraft,
+                                positionShowStatusStrip,
+                                positionShowEditorHints,
                                 this);
 
     if (dlg.exec() != QDialog::Accepted) return;
@@ -8258,6 +8434,8 @@ void PresetTableV2Widget::editProperties()
         m_widgetFlashTimeMultiplierIndex =
                 qBound(0, dlg.widgetFlashTimeMultiplierIndex(), kWidgetFlashTimeMultiplierMax);
         m_positionConfirmDiscardDraft = dlg.positionConfirmDiscardDraft();
+        m_positionShowStatusStrip = dlg.positionShowStatusStrip();
+        m_positionShowEditorHints = dlg.positionShowEditorHints();
         const PTWidgetFlashBehavior oldWidgetFlashBehavior = m_widgetFlashBehavior;
         m_widgetFlashBehavior = dlg.widgetFlashBehavior();
         if (oldWidgetFlashBehavior != m_widgetFlashBehavior && m_widgetFlashGateActive)
@@ -8341,6 +8519,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     int widgetFlashTimeMultiplierIndexCopy;
     PTWidgetFlashBehavior widgetFlashBehaviorCopy;
     bool positionConfirmDiscardDraftCopy;
+    bool positionShowStatusStripCopy;
+    bool positionShowEditorHintsCopy;
 
     {
         QMutexLocker lk(&m_stateMutex);
@@ -8368,6 +8548,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         widgetFlashTimeMultiplierIndexCopy = m_widgetFlashTimeMultiplierIndex;
         widgetFlashBehaviorCopy = m_widgetFlashBehavior;
         positionConfirmDiscardDraftCopy = m_positionConfirmDiscardDraft;
+        positionShowStatusStripCopy = m_positionShowStatusStrip;
+        positionShowEditorHintsCopy = m_positionShowEditorHints;
     }
 
     {
@@ -8396,6 +8578,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         copy->m_widgetFlashTimeMultiplierIndex = widgetFlashTimeMultiplierIndexCopy;
         copy->m_widgetFlashBehavior        = widgetFlashBehaviorCopy;
         copy->m_positionConfirmDiscardDraft = positionConfirmDiscardDraftCopy;
+        copy->m_positionShowStatusStrip = positionShowStatusStripCopy;
+        copy->m_positionShowEditorHints = positionShowEditorHintsCopy;
         copy->m_widgetFlashGateActive      = false;
         copy->m_widgetFlashGateLastValue   = 0;
         copy->m_widgetStagedFlashToken     = 0;
@@ -8456,6 +8640,8 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
                                               kWidgetFlashTimeMultiplierMax);
     obj["widgetFlashBehavior"] = widgetFlashBehaviorToString(m_widgetFlashBehavior);
     obj["positionConfirmDiscardDraft"] = m_positionConfirmDiscardDraft;
+    obj["positionShowStatusStrip"] = m_positionShowStatusStrip;
+    obj["positionShowEditorHints"] = m_positionShowEditorHints;
     if (!m_multiFxRestartKey.isEmpty())
         obj["multiFxRestartKey"] = m_multiFxRestartKey.toString(QKeySequence::PortableText);
     if (!m_widgetFlashGateKey.isEmpty())
@@ -8580,6 +8766,12 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
             obj["widgetFlashBehavior"].toString());
     m_positionConfirmDiscardDraft = obj.contains(QStringLiteral("positionConfirmDiscardDraft"))
             ? obj["positionConfirmDiscardDraft"].toBool(true)
+            : true;
+    m_positionShowStatusStrip = obj.contains(QStringLiteral("positionShowStatusStrip"))
+            ? obj["positionShowStatusStrip"].toBool(true)
+            : true;
+    m_positionShowEditorHints = obj.contains(QStringLiteral("positionShowEditorHints"))
+            ? obj["positionShowEditorHints"].toBool(true)
             : true;
     m_multiFxRestartKey = stripKeySequence(QKeySequence(obj["multiFxRestartKey"].toString()));
     m_widgetFlashGateKey = stripKeySequence(QKeySequence(obj["widgetFlashGateKey"].toString()));
@@ -8760,6 +8952,16 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
     const bool loadedPositionConfirmDiscardDraft =
             root.attributes().hasAttribute(KXMLPositionConfirmDiscardDraft)
             ? (root.attributes().value(KXMLPositionConfirmDiscardDraft).toString()
+               == QLatin1String("True"))
+            : true;
+    const bool loadedPositionShowStatusStrip =
+            root.attributes().hasAttribute(KXMLPositionShowStatusStrip)
+            ? (root.attributes().value(KXMLPositionShowStatusStrip).toString()
+               == QLatin1String("True"))
+            : true;
+    const bool loadedPositionShowEditorHints =
+            root.attributes().hasAttribute(KXMLPositionShowEditorHints)
+            ? (root.attributes().value(KXMLPositionShowEditorHints).toString()
                == QLatin1String("True"))
             : true;
 
@@ -9108,6 +9310,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                                                 kWidgetFlashTimeMultiplierMax);
         m_widgetFlashBehavior = widgetFlashBehavior;
         m_positionConfirmDiscardDraft = loadedPositionConfirmDiscardDraft;
+        m_positionShowStatusStrip = loadedPositionShowStatusStrip;
+        m_positionShowEditorHints = loadedPositionShowEditorHints;
         m_widgetFlashGateActive = false;
         m_widgetFlashGateLastValue = 0;
         m_widgetStagedFlashToken = 0;
@@ -9166,6 +9370,12 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLPositionConfirmDiscardDraft,
                             m_positionConfirmDiscardDraft ? QLatin1String("True")
                                                           : QLatin1String("False"));
+        doc->writeAttribute(KXMLPositionShowStatusStrip,
+                            m_positionShowStatusStrip ? QLatin1String("True")
+                                                      : QLatin1String("False"));
+        doc->writeAttribute(KXMLPositionShowEditorHints,
+                            m_positionShowEditorHints ? QLatin1String("True")
+                                                      : QLatin1String("False"));
         if (m_nameColWidth > 0)
             doc->writeAttribute(KXMLNameColWidth, QString::number(m_nameColWidth));
 

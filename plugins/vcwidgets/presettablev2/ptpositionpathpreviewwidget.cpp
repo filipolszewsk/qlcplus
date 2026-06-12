@@ -35,8 +35,29 @@ void PTPositionPathPreviewWidget::setOrbitPreview(PTPositionMotion motion, qreal
                                                   quint32 cycleMs)
 {
     m_motion = motion;
+    m_usePresetMotion = false;
     m_panSize = panSizeDeg;
     m_tiltSize = tiltSizeDeg;
+    m_balls = balls;
+    m_cycleMs = qMax(quint32(200), cycleMs);
+    stopAnimation();
+    if (m_motion != PTPositionMotion::Off)
+    {
+        m_timer.setInterval(qMax(16, int(m_cycleMs) / 60));
+        m_timer.start();
+    }
+    update();
+}
+
+void PTPositionPathPreviewWidget::setOrbitPreviewFromPreset(const PTTransitionPreset& preset,
+                                                            const QVector<OrbitBall>& balls,
+                                                            quint32 cycleMs)
+{
+    m_preset = preset;
+    m_motion = PTPositionMotion(preset.positionMotion);
+    m_usePresetMotion = true;
+    m_panSize = 1.0;
+    m_tiltSize = 1.0;
     m_balls = balls;
     m_cycleMs = qMax(quint32(200), cycleMs);
     stopAnimation();
@@ -51,6 +72,7 @@ void PTPositionPathPreviewWidget::setOrbitPreview(PTPositionMotion motion, qreal
 void PTPositionPathPreviewWidget::clear()
 {
     m_motion = PTPositionMotion::Off;
+    m_usePresetMotion = false;
     m_panSize = 0;
     m_tiltSize = 0;
     m_balls.clear();
@@ -99,14 +121,22 @@ void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
     const qreal scale = qMin(plot.width() / (2.0 * maxPan), plot.height() / (2.0 * maxTilt))
             * 0.9;
 
-    const auto shape = PTPositionFxEngine::shapeFromPositionMotion(m_motion);
     QPainterPath path;
     for (int i = 0; i <= 128; ++i)
     {
         const double phase = double(i) / 128.0 * 2.0 * M_PI;
         qreal panOff = 0;
         qreal tiltOff = 0;
-        PTPositionFxEngine::relativeOffset(shape, phase, m_panSize, m_tiltSize, panOff, tiltOff);
+        if (m_usePresetMotion)
+        {
+            PTPositionFxEngine::relativeOffsetForPreset(m_preset, phase,
+                                                        m_panSize, m_tiltSize, panOff, tiltOff);
+        }
+        else
+        {
+            const auto shape = PTPositionFxEngine::shapeFromPositionMotion(m_motion);
+            PTPositionFxEngine::relativeOffset(shape, phase, m_panSize, m_tiltSize, panOff, tiltOff);
+        }
         const QPointF pt = mapRelative(panOff, tiltOff, center, scale);
         if (i == 0)
             path.moveTo(pt);
@@ -126,7 +156,16 @@ void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
         const double phase = (m_animPhase01 + ball.phaseOffset01) * 2.0 * M_PI;
         qreal panOff = 0;
         qreal tiltOff = 0;
-        PTPositionFxEngine::relativeOffset(shape, phase, m_panSize, m_tiltSize, panOff, tiltOff);
+        if (m_usePresetMotion)
+        {
+            PTPositionFxEngine::relativeOffsetForPreset(m_preset, phase,
+                                                        m_panSize, m_tiltSize, panOff, tiltOff);
+        }
+        else
+        {
+            const auto shape = PTPositionFxEngine::shapeFromPositionMotion(m_motion);
+            PTPositionFxEngine::relativeOffset(shape, phase, m_panSize, m_tiltSize, panOff, tiltOff);
+        }
         const QPointF pt = mapRelative(panOff, tiltOff, center, scale);
         p.setPen(QPen(ball.color.darker(120), 1));
         p.setBrush(ball.color);

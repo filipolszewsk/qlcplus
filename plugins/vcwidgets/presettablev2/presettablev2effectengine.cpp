@@ -303,7 +303,7 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     if (liveByColumn.contains(PTEfxCol::InputSpeedMult))
         p.speedMultiplier = qBound(0, int(val(PTEfxCol::InputSpeedMult)) * 5 / 255, 5);
     if (liveByColumn.contains(PTEfxCol::InputPositionMotion))
-        p.positionMotion = int(val(PTEfxCol::InputPositionMotion)) % 6;
+        p.positionMotion = int(val(PTEfxCol::InputPositionMotion)) % 9;
     return p;
 }
 

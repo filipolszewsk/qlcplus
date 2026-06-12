@@ -521,6 +521,8 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    const PTSpatialEffectSettings& spatialEffects,
                                                    quint32 linkedTransitionWidgetId,
                                                    bool positionConfirmDiscardDraft,
+                                                   bool positionShowStatusStrip,
+                                                   bool positionShowEditorHints,
                                                    QWidget* parent)
     : QDialog(parent)
     , m_doc(doc)
@@ -661,6 +663,21 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
             "When enabled, switching presets or layers asks before dropping unsaved edits. "
             "When disabled, unsaved edits are discarded silently."));
     posEditorLayout->addWidget(m_positionConfirmDiscardDraftChk);
+
+    m_positionShowStatusStripChk = new QCheckBox(
+            tr("Show position status strip"), posEditorGrp);
+    m_positionShowStatusStripChk->setChecked(positionShowStatusStrip);
+    m_positionShowStatusStripChk->setToolTip(tr(
+            "Shows the text bar under the fixture grid with layer name, live/staged state "
+            "and fixture positions. Hide for a cleaner layout."));
+    posEditorLayout->addWidget(m_positionShowStatusStripChk);
+
+    m_positionShowEditorHintsChk = new QCheckBox(
+            tr("Show editor hints"), posEditorGrp);
+    m_positionShowEditorHintsChk->setChecked(positionShowEditorHints);
+    m_positionShowEditorHintsChk->setToolTip(tr(
+            "Shows short help text below the status strip (e.g. symmetric spread)."));
+    posEditorLayout->addWidget(m_positionShowEditorHintsChk);
     posEditorLayout->addStretch();
     posTabLayout->addWidget(posEditorGrp);
     posTabLayout->addStretch();
@@ -1145,6 +1162,20 @@ bool PresetTableV2ConfigDialog::positionConfirmDiscardDraft() const
 {
     return m_positionConfirmDiscardDraftChk
             ? m_positionConfirmDiscardDraftChk->isChecked()
+            : true;
+}
+
+bool PresetTableV2ConfigDialog::positionShowStatusStrip() const
+{
+    return m_positionShowStatusStripChk
+            ? m_positionShowStatusStripChk->isChecked()
+            : true;
+}
+
+bool PresetTableV2ConfigDialog::positionShowEditorHints() const
+{
+    return m_positionShowEditorHintsChk
+            ? m_positionShowEditorHintsChk->isChecked()
             : true;
 }
 

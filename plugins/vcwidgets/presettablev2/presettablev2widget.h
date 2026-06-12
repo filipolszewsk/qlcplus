@@ -373,11 +373,15 @@ private:
     QTreeWidgetItem* positionTreeItemForLayer(int row, int output, int selection) const;
     QString positionEditLayerLabel() const;
     bool positionLayerHasOverrides(int row, int output, int selection) const;
+    QSet<QLCPoint> positionEditableCellsForLayer(int row, int output, int selection) const;
+    QSet<QLCPoint> positionEditableCells() const;
     QSet<QLCPoint> positionTargetCells() const;
+    void prunePositionGridSelection();
     QList<QLCPoint> positionTargetCellOrder() const;
     QLCPoint positionReferencePoint() const;
     void refreshPositionGridCells();
     void updatePositionValueStrip();
+    void applyPositionEditorChromeVisibility();
     void refreshPositionEditorFromSelection();
     void initOperatePositionSelection();
     void refreshOperatePositionChrome(int drivingOutput = -1);
@@ -744,6 +748,8 @@ public:
     bool                        m_positionEditorSyncing = false;
     bool                        m_positionDraftDirty = false;
     bool                        m_positionConfirmDiscardDraft = true;
+    bool                        m_positionShowStatusStrip = true;
+    bool                        m_positionShowEditorHints = true;
     int                         m_positionFollowLiveRow = -1;
     int                         m_positionFollowLiveContextOut = -1;
     int                         m_positionLastFollowDrivingOutput = -1;

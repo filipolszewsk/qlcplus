@@ -26,6 +26,8 @@ public:
 
     void setOrbitPreview(PTPositionMotion motion, qreal panSizeDeg, qreal tiltSizeDeg,
                          const QVector<OrbitBall>& balls, quint32 cycleMs);
+    void setOrbitPreviewFromPreset(const PTTransitionPreset& preset,
+                                   const QVector<OrbitBall>& balls, quint32 cycleMs);
     void clear();
 
 protected:
@@ -39,6 +41,8 @@ private:
                         qreal scale) const;
 
     PTPositionMotion m_motion = PTPositionMotion::Off;
+    PTTransitionPreset m_preset;
+    bool m_usePresetMotion = false;
     qreal m_panSize = 0;
     qreal m_tiltSize = 0;
     QVector<OrbitBall> m_balls;

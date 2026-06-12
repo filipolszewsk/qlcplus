@@ -84,7 +84,10 @@ enum class PTPositionMotion : int
     Tilt1D = 2,
     Circle2D = 3,
     Line2D = 4,
-    Figure8_2D = 5
+    Figure8_2D = 5,
+    CustomPan1D = 6,
+    CustomTilt1D = 7,
+    Custom2D = 8
 };
 
 /** Orbit winding / symmetry (Position Mode). */
@@ -117,6 +120,32 @@ struct PTCustomCurveGalleryItem
 {
     QString name;
     QVector<PTCustomCurvePoint> points;
+};
+
+struct PTPositionPath2DPoint
+{
+    double pan01 = 0.0;
+    double tilt01 = 0.0;
+    double leftHandlePan01 = 0.0;
+    double leftHandleTilt01 = 0.0;
+    double rightHandlePan01 = 0.0;
+    double rightHandleTilt01 = 0.0;
+    int segmentMode = PTCustomCurvePoint::Bezier;
+};
+
+enum class PTShapeGalleryKind
+{
+    Curve1D = 0,
+    Path2D = 1
+};
+
+struct PTShapeGalleryItem
+{
+    QString name;
+    PTShapeGalleryKind kind = PTShapeGalleryKind::Curve1D;
+    QVector<PTCustomCurvePoint> curve1D;
+    QVector<PTPositionPath2DPoint> path2D;
+    bool path2DClosed = true;
 };
 
 struct PTPositionValue
@@ -159,6 +188,10 @@ struct PTTransitionPreset
     int                positionMotionDirection = int(PTPositionMotionDirection::Forward);
     int                positionPanSize = 45;
     int                positionTiltSize = 30;
+    bool               positionMotionCurveEnabled = false;
+    QVector<PTCustomCurvePoint> positionMotionCurve;
+    QVector<PTPositionPath2DPoint> positionPath2D;
+    bool               positionPath2DClosed = true;
 };
 
 struct PTSpatialChaseOutput

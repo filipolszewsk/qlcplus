@@ -6,12 +6,21 @@
 
 #include "presettablev2widget.h"
 
+#include <QColor>
 #include <QList>
 #include <QMap>
 #include <QSet>
 #include <QSize>
 #include <QString>
+#include <QVector>
 #include <QWidget>
+
+struct PTPositionGridSelectionLayer
+{
+    QString name;
+    QColor color;
+    QSet<QLCPoint> cells;
+};
 
 struct PTPositionGridCell
 {
@@ -34,6 +43,8 @@ public:
     void setSelectedCells(const QSet<QLCPoint>& cells,
                           const QList<QLCPoint>& order = QList<QLCPoint>());
     void setImplicitAllSelection(bool implicitAll);
+    void setEditableCells(const QSet<QLCPoint>& cells);
+    void setForeignSelectionLayers(const QVector<PTPositionGridSelectionLayer>& layers);
 
     QSet<QLCPoint> selectedCells() const { return m_selectedCells; }
     QList<QLCPoint> selectionOrder() const { return m_selectionOrder; }
@@ -55,6 +66,7 @@ private:
     void selectRectRange(const QLCPoint& from, const QLCPoint& to);
     void toggleSelectionCell(const QLCPoint& pt);
     bool hasAnchor() const;
+    bool isEditableCell(const QLCPoint& pt) const;
     void emitSelectionChanged();
 
     QSize m_gridSize;
@@ -62,6 +74,8 @@ private:
     QSet<QLCPoint> m_selectedCells;
     QList<QLCPoint> m_selectionOrder;
     QLCPoint m_selectionAnchor = QLCPoint(-1, -1);
+    QSet<QLCPoint> m_editableCells;
+    QVector<PTPositionGridSelectionLayer> m_foreignSelectionLayers;
     bool m_implicitAllSelected = false;
     QString m_placeholder;
 };

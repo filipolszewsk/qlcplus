@@ -159,6 +159,8 @@ public:
                                      const PTSpatialEffectSettings& spatialEffects,
                                      quint32 linkedTransitionWidgetId,
                                      bool positionConfirmDiscardDraft,
+                                     bool positionShowStatusStrip = true,
+                                     bool positionShowEditorHints = true,
                                      QWidget* parent = nullptr);
 
     bool spatialEffectsEnabled() const;
@@ -187,6 +189,8 @@ public:
     PTMode   widgetMode()            const;
     quint32  selectedFixtureGroupId() const;
     bool positionConfirmDiscardDraft() const;
+    bool positionShowStatusStrip() const;
+    bool positionShowEditorHints() const;
 
 private slots:
     void slotAddOutput();
@@ -269,5 +273,7 @@ private:
     QComboBox*            m_transitionLinkCombo = nullptr;
 
     QCheckBox*            m_positionConfirmDiscardDraftChk = nullptr;
+    QCheckBox*            m_positionShowStatusStripChk = nullptr;
+    QCheckBox*            m_positionShowEditorHintsChk = nullptr;
 
 };

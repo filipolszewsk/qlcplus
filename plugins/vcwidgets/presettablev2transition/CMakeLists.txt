@@ -29,6 +29,10 @@ add_library(presettablev2transition_vcwidget MODULE
     presettablev2transitionconfigdialog.cpp presettablev2transitionconfigdialog.h
     presettablev2transitioncolumndialog.cpp presettablev2transitioncolumndialog.h
     ptcustomcurvedialog.cpp ptcustomcurvedialog.h
+    ptpositionshapedialog.cpp ptpositionshapedialog.h
+    pttransitioncolumngroupbar.cpp pttransitioncolumngroupbar.h
+    ../presettablev2/ptshapesgallery.cpp ../presettablev2/ptshapesgallery.h
+    ../presettablev2/ptpositionpath2dwidget.cpp ../presettablev2/ptpositionpath2dwidget.h
     ../presettablev2/presettablev2effectengine.cpp ../presettablev2/presettablev2effectengine.h
     ../presettablev2/ptdimmerwaveengine.cpp ../presettablev2/ptdimmerwaveengine.h
     ../presettablev2/ptdimmerwavecurvewidget.cpp ../presettablev2/ptdimmerwavecurvewidget.h

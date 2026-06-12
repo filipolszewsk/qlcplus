@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include <QTreeWidget>
 #include <QTreeView>
+#include <QAction>
 #include <QToolBar>
 #include <QLabel>
 #include <QComboBox>
@@ -21,11 +22,28 @@
 #include "presettablev2transitionprovideriface.h"
 #include "presettablev2effectengine.h"
 #include "ptparammatrixengine.h"
+#include "pttransitioncolumngroupbar.h"
 
 class Doc;
 class PresetTableV2ControlIface;
 class PTDimmerWaveCurveWidget;
 class PTSpatialFixtureGridWidget;
+
+struct PTTransitionCellKey
+{
+    QTreeWidgetItem* item = nullptr;
+    int col = -1;
+    bool operator==(const PTTransitionCellKey& other) const
+    {
+        return item == other.item && col == other.col;
+    }
+};
+
+inline size_t qHash(const PTTransitionCellKey& key, size_t seed = 0) noexcept
+{
+    seed = ::qHash(reinterpret_cast<quintptr>(key.item), seed);
+    return ::qHash(key.col, seed);
+}
 
 class PresetTableV2TransitionWidget : public VCWidget,
                                        public PresetTableV2TransitionProviderIface
@@ -97,6 +115,7 @@ private slots:
     void slotBankTabChanged(int index);
     void slotOpenCustomCurveEditor();
     void slotPresetContextMenuRequested(const QPoint& pos);
+    void slotSelectionLayerActivatedFromGrid(int selectionIndex);
 
 private:
     enum PresetColumn {
@@ -149,6 +168,7 @@ private:
     const QVector<QHash<int, PTTransitionOutputLayer>>& overridesForMode(PTTransitionMode mode) const;
     QTreeWidget* tableForMode(PTTransitionMode mode) const;
     QTreeView* frozenNameViewForMode(PTTransitionMode mode) const;
+    PTTransitionColumnGroupBar* columnGroupBarForMode(PTTransitionMode mode) const;
     QTreeWidget* activeTable() const;
 
     void updateGlobalSummaryLabel();
@@ -165,6 +185,13 @@ private:
     void scheduleDeferredTableLinkRefresh(int attemptsLeft = 6);
     bool editCustomCurveForPreset(PTTransitionMode mode, int row,
                                   int outputIdx = -1, int selectionIdx = -1);
+    bool editPositionShapeForPreset(PTTransitionMode mode, int row,
+                                    int outputIdx = -1, int selectionIdx = -1,
+                                    int motionFromUi = -1);
+    bool removeSelectionAt(PTTransitionMode mode, int row, int outputIdx, int selectionIndex);
+    QVector<PTTransitionColumnGroupBar::Group> columnGroupsForMode(PTTransitionMode mode) const;
+    void applyColumnGroupFilter(QTreeWidget* table, PTTransitionMode mode);
+    void refreshColumnGroupBarForActiveTab();
     void migrateLegacyInputSources();
     void updateEffectPreview();
     int gridSpanForPreset(const PTTransitionPreset& preset) const;
@@ -208,6 +235,8 @@ private:
     void normalizeOverrideStorage();
     void refreshOverrideVisualsForPreset(PTTransitionMode mode, int row);
     void refreshOverrideVisualsForItem(PTTransitionMode mode, QTreeWidgetItem* item);
+    void applySelectionRowVisuals(QTreeWidgetItem* item);
+    void updateRemoveActionLabel();
     void configureFrozenNameView(PTTransitionMode mode);
     void applyPositionModeColumnVisibility(QTreeWidget* table, PTTransitionMode mode);
     void applyDefaultColumnWidths(QTreeWidget* table);
@@ -215,8 +244,30 @@ private:
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
-    void copySelectionToClipboard(QTreeWidget* table) const;
-    void pasteClipboardToSelection(QTreeWidget* table);
+    PTTransitionMode modeForTable(QTreeWidget* table) const;
+    QTreeWidget* tableFromFocusObject(QObject* watched) const;
+    int focusColumn(QTreeWidget* table) const;
+    void setFocusColumn(QTreeWidget* table, QTreeWidgetItem* item, int col);
+    void activateCellForClipboard(QTreeWidget* table, QTreeWidgetItem* item, int col,
+                                  Qt::KeyboardModifiers mods);
+    void showParameterContextMenu(PTTransitionMode mode, QTreeWidget* table,
+                                  QTreeWidgetItem* item, int col, const QPoint& globalPos);
+    bool isClipboardCell(QTreeWidget* table, QTreeWidgetItem* item, int col) const;
+    bool sameClipboardContext(QTreeWidgetItem* a, QTreeWidgetItem* b) const;
+    QList<QTreeWidgetItem*> clipboardRowsInContext(QTreeWidget* table,
+                                                   QTreeWidgetItem* contextItem) const;
+    QList<PTTransitionCellKey> selectedCellsInVisualOrder(QTreeWidget* table) const;
+    void clearCellSelection(QTreeWidget* table);
+    void updateCellSelectionVisuals(QTreeWidget* table);
+    void updateColumnFocusVisuals(QTreeWidget* table);
+    QList<QTreeWidgetItem*> selectedRowsInVisualOrder(QTreeWidget* table) const;
+    bool findItemForEditor(QTreeWidget* table, QWidget* editor,
+                           QTreeWidgetItem** item, int* col) const;
+    int clipboardColumnForPaste() const;
+    void copyCells(QTreeWidget* table);
+    void pasteCells(QTreeWidget* table);
+    void pasteValueToPresetCell(PTTransitionMode mode, QTreeWidget* table,
+                                QTreeWidgetItem* item, int col, const QString& raw);
     QVariant editorValue(QTreeWidget* table, QTreeWidgetItem* item, int col) const;
     void setEditorValue(QTreeWidget* table, QTreeWidgetItem* item, int col, const QString& raw);
 
@@ -228,6 +279,7 @@ private:
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);
     static QComboBox* makeSpeedMultCombo(QWidget* parent);
+    static void configureTransitionCombo(QComboBox* combo, int popupMinWidth = 72);
     static QVariant presetColumnValue(const PTTransitionPreset& preset, int col);
     static void setPresetColumnValue(PTTransitionPreset& preset, int col,
                                      const QVariant& value);
@@ -242,10 +294,16 @@ private:
     QVector<QHash<int, PTTransitionOutputLayer>> m_continuousOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_multiFxOutputOverrides;
     QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
+    QVector<PTShapeGalleryItem> m_shapeGallery;
+    QHash<int, QString> m_columnGroupFilterByMode;
+    QHash<QTreeWidget*, int> m_focusColumnByTable;
+    QHash<QTreeWidget*, PTTransitionCellKey> m_cellSelectionAnchorByTable;
+    QHash<QTreeWidget*, QSet<PTTransitionCellKey>> m_selectedCellsByTable;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
     bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
+    bool m_pastingCells = false;
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
@@ -255,6 +313,7 @@ private:
     QLabel*       m_globalSummaryLabel = nullptr;
     QCheckBox*    m_enableChk = nullptr;
     QToolBar*     m_toolbar = nullptr;
+    QAction*      m_removeAction = nullptr;
     QWidget*                 m_previewRow = nullptr;
     QLabel*                  m_curveLabel = nullptr;
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
@@ -268,6 +327,9 @@ private:
     QTreeView* m_sweepNameView = nullptr;
     QTreeView* m_continuousNameView = nullptr;
     QTreeView* m_multiFxNameView = nullptr;
+    PTTransitionColumnGroupBar* m_sweepColumnGroupBar = nullptr;
+    PTTransitionColumnGroupBar* m_continuousColumnGroupBar = nullptr;
+    PTTransitionColumnGroupBar* m_multiFxColumnGroupBar = nullptr;
     QSet<int> m_sweepExpandedPresets;
     QSet<int> m_continuousExpandedPresets;
     QSet<int> m_multiFxExpandedPresets;

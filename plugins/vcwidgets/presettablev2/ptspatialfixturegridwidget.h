@@ -43,6 +43,8 @@ public:
 
 signals:
     void selectionCellsChanged(const QSet<QLCPoint>& cells);
+    /** Emitted when user clicks a cell belonging to another selection layer (0-based index). */
+    void selectionLayerActivated(int selectionIndex);
     void positionCellClicked(const QLCPoint& point);
 
 protected:

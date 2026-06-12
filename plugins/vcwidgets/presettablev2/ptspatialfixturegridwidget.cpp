@@ -213,6 +213,15 @@ void PTSpatialFixtureGridWidget::mousePressEvent(QMouseEvent* event)
     if (pt.x() < 0 || !m_selectionScopeCells.contains(pt))
         return;
 
+    for (const PTSpatialGridSelectionLayer& layer : m_selectionLayers)
+    {
+        if (layer.cells.contains(pt) && layer.selectionIndex != m_activeSelectionIndex)
+        {
+            emit selectionLayerActivated(layer.selectionIndex);
+            return;
+        }
+    }
+
     if (m_activeSelectionCells.contains(pt))
         m_activeSelectionCells.remove(pt);
     else

@@ -55,6 +55,28 @@ void PTPositionFixtureGridWidget::setImplicitAllSelection(bool implicitAll)
     update();
 }
 
+void PTPositionFixtureGridWidget::setEditableCells(const QSet<QLCPoint>& cells)
+{
+    m_editableCells = cells;
+    update();
+}
+
+void PTPositionFixtureGridWidget::setForeignSelectionLayers(
+        const QVector<PTPositionGridSelectionLayer>& layers)
+{
+    m_foreignSelectionLayers = layers;
+    update();
+}
+
+bool PTPositionFixtureGridWidget::isEditableCell(const QLCPoint& pt) const
+{
+    if (!m_cells.contains(pt))
+        return false;
+    if (m_editableCells.isEmpty())
+        return true;
+    return m_editableCells.contains(pt);
+}
+
 void PTPositionFixtureGridWidget::setSelectedCells(const QSet<QLCPoint>& cells,
                                                    const QList<QLCPoint>& order)
 {
@@ -84,7 +106,7 @@ void PTPositionFixtureGridWidget::emitSelectionChanged()
 
 bool PTPositionFixtureGridWidget::hasAnchor() const
 {
-    return m_selectionAnchor.x() >= 0 && m_cells.contains(m_selectionAnchor);
+    return m_selectionAnchor.x() >= 0 && isEditableCell(m_selectionAnchor);
 }
 
 QRect PTPositionFixtureGridWidget::cellRect(const QLCPoint& pt) const
@@ -119,7 +141,7 @@ QLCPoint PTPositionFixtureGridWidget::pointAt(const QPoint& pos) const
 
 void PTPositionFixtureGridWidget::selectSingleCell(const QLCPoint& pt)
 {
-    if (!m_cells.contains(pt))
+    if (!isEditableCell(pt))
         return;
 
     m_selectedCells.clear();
@@ -132,7 +154,7 @@ void PTPositionFixtureGridWidget::selectSingleCell(const QLCPoint& pt)
 
 void PTPositionFixtureGridWidget::selectRectRange(const QLCPoint& from, const QLCPoint& to)
 {
-    if (!m_cells.contains(from) || !m_cells.contains(to))
+    if (!isEditableCell(from) || !isEditableCell(to))
         return;
 
     const int x0 = qMin(from.x(), to.x());
@@ -147,7 +169,7 @@ void PTPositionFixtureGridWidget::selectRectRange(const QLCPoint& from, const QL
         for (int x = x0; x <= x1; ++x)
         {
             const QLCPoint pt(x, y);
-            if (!m_cells.contains(pt))
+            if (!isEditableCell(pt))
                 continue;
             m_selectedCells.insert(pt);
             m_selectionOrder.append(pt);
@@ -160,7 +182,7 @@ void PTPositionFixtureGridWidget::selectRectRange(const QLCPoint& from, const QL
 
 void PTPositionFixtureGridWidget::toggleSelectionCell(const QLCPoint& pt)
 {
-    if (!m_cells.contains(pt))
+    if (!isEditableCell(pt))
         return;
 
     if (m_selectedCells.contains(pt))
@@ -187,8 +209,10 @@ void PTPositionFixtureGridWidget::mousePressEvent(QMouseEvent* event)
     }
 
     const QLCPoint pt = pointAt(event->pos());
-    if (pt.x() < 0)
+    if (pt.x() < 0 || !isEditableCell(pt))
     {
+        if (pt.x() >= 0)
+            return;
         if (!m_selectedCells.isEmpty())
         {
             m_selectedCells.clear();
@@ -233,6 +257,7 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
     }
 
     const QColor emptyBg = palette().color(QPalette::AlternateBase);
+    const QColor disabledBg = palette().color(QPalette::Mid).lighter(130);
     const QColor storedBg = QColor(50, 120, 70);
     const QColor inheritedBg = QColor(70, 70, 70);
     const QColor selectedBorder = QColor(60, 140, 240);
@@ -244,15 +269,28 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
         if (!cr.isValid())
             continue;
 
+        const bool editable = isEditableCell(it.key());
         QColor fill = emptyBg;
-        if (cell.position.valid)
+        if (!editable)
+            fill = disabledBg;
+        else if (cell.position.valid)
             fill = cell.inherited ? inheritedBg : storedBg;
         p.fillRect(cr, fill);
         p.setPen(QPen(palette().color(QPalette::Mid), 1));
         p.drawRect(cr);
 
-        const bool selected = m_selectedCells.contains(it.key())
-                || (m_implicitAllSelected && m_selectedCells.isEmpty());
+        for (const PTPositionGridSelectionLayer& layer : m_foreignSelectionLayers)
+        {
+            if (!layer.cells.contains(it.key()))
+                continue;
+            p.setPen(QPen(layer.color, 2));
+            p.drawRect(cr.adjusted(3, 3, -3, -3));
+            break;
+        }
+
+        const bool selected = editable
+                && (m_selectedCells.contains(it.key())
+                    || (m_implicitAllSelected && m_selectedCells.isEmpty()));
         if (selected)
         {
             p.setPen(QPen(selectedBorder, 3));

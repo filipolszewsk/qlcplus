@@ -268,7 +268,7 @@ flowchart TD
 | MultiFX | `m_multiFxElapsedMs[o]` | Osobny cykl MultiFX |
 | Crossfade clock | `m_crossfadeClockElapsedMs` | Auto-promote gdy manual control off |
 
-`cycleDurationMsLocked(globalFx, preset)` — długość cyklu z global speed + preset duration/speedMultiplier.
+`cycleDurationMsLocked(globalFx, preset)` — długość cyklu z **global Speed** (min/max ms) × **preset `speedMultiplier`**. Pole `durationMs` w presecie jest ukryte w UI Position; używane tylko gdy MIDI trzyma `InputDuration` live.
 
 Faza per fixture:
 
@@ -580,7 +580,7 @@ Double-click na slider → reset do 128. Zmiana osi Pan/Tilt → reset slidera.
 | `offsetDirection` | tak | — | tak | tak |
 | `offsetStep` | tak | — | tak | tak |
 | `wings`, `blocks`, `wingsSymmetry` | tak | — | tak | tak |
-| `durationMs` | cycle | cycle | cycle | tak |
+| `durationMs` | — (global Speed) | — (global Speed) | — (global Speed) | tylko MIDI live |
 | `waveWidth` | sweep window | dimmer wave | orbit active window | tak |
 | `waveShape` / Morph shape | blend curve | dimmer wave | — | tak |
 | `waveFadeIn` / `waveFadeOut` | tak | tak | 1D orbit envelope (Pan/Tilt) | tak |
@@ -593,6 +593,7 @@ Double-click na slider → reset do 128. Zmiana osi Pan/Tilt → reset slidera.
 | `speedMultiplier` | tak | tak | tak | tak |
 | `stepDelayMs`, `fadeMs` | legacy spatial | legacy | — | — |
 | **`positionMotion`** | — (ukryte w Sweep UI) | tak | tak | tak |
+| **`positionMotionCurve` / `positionPath2D`** | — | Custom Pan/Tilt 1D / Custom 2D | tak | tak |
 | **`positionMotionDirection`** | — | — | FWD/REV/ALT-W/SYM-P | tak |
 | `positionPanSize`, `positionTiltSize` | — | **preview only** | **preview only** | tak |
 
