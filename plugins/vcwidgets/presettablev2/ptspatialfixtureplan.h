@@ -44,6 +44,9 @@ struct PTSpatialGridPreview
     int   blocks = 1;
     int   slotsPerWing = 1;
     int   maxOffsetStep = 360;
+    int   effectiveOffsetStep = 20;
+    PTOffsetStepMode offsetStepMode = PTOffsetStepMode::FixedDegrees;
+    int   offsetCoverage = 100;
     bool  offsetStepOk = true;
     bool  hasOffsetCollisions = false;
 };

@@ -17,6 +17,9 @@ struct PTGlobalEffectSettings
     uchar     speed            = 128;
     quint32   minDurationMs    = 100;
     quint32   maxDurationMs    = 5000;
+    bool      sizeSpeedCeilingEnabled = false;
+    quint32   smallSizeMinDurationMs = 100;
+    int       speedOverdriveKnee = 220;
     int       speedMultiplier  = 1;   /**< 0=0.5x … 5=5.0x */
     int       transitionDirection = 0; /**< 0=All, 1=LR, 2=RL, 3=CenterOut, 4=OutsideIn */
     uchar     intensity        = 255;

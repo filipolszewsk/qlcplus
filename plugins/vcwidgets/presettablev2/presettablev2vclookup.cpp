@@ -1,6 +1,7 @@
 #include "presettablev2vclookup.h"
 #include "presettablev2widget.h"
 #include "presettablev2controliface.h"
+#include "presettablev2transitionprovideriface.h"
 
 #include "virtualconsole.h"
 #include "vcframe.h"
@@ -17,6 +18,37 @@ QList<VCWidget*> PresetTableV2VCLookup::allVcWidgets()
         return result;
 
     return root->findChildren<VCWidget*>(QString(), Qt::FindChildrenRecursively);
+}
+
+PresetTableV2ControlIface* PresetTableV2VCLookup::controlIfaceByVcId(quint32 id)
+{
+    if (id == VCWidget::invalidId())
+        return nullptr;
+
+    for (VCWidget* candidate : allVcWidgets())
+    {
+        if (!candidate || candidate->id() != id)
+            continue;
+        return qobject_cast<PresetTableV2ControlIface*>(candidate);
+    }
+    return nullptr;
+}
+
+PresetTableV2TransitionProviderIface* PresetTableV2VCLookup::transitionProviderByVcId(quint32 id)
+{
+    if (id == VCWidget::invalidId())
+        return nullptr;
+
+    for (VCWidget* candidate : allVcWidgets())
+    {
+        if (!candidate || candidate->id() != id)
+            continue;
+        if (QString::fromLatin1(candidate->metaObject()->className())
+                != QLatin1String(kTransitionClassName))
+            continue;
+        return qobject_cast<PresetTableV2TransitionProviderIface*>(candidate);
+    }
+    return nullptr;
 }
 
 QList<PresetTableV2Widget*> PresetTableV2VCLookup::allTables()

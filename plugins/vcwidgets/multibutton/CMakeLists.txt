@@ -31,6 +31,8 @@ add_library(multibutton_vcwidget MODULE
     multibuttonwidget.cpp multibuttonwidget.h
     multibuttonconfigdialog.cpp multibuttonconfigdialog.h
     mbvalueexpr.cpp mbvalueexpr.h
+    "${QLCPLUS_SRC_DIR}/plugins/vcwidgets/presettablev2/vcplugindiagnostics.cpp"
+    "${QLCPLUS_SRC_DIR}/plugins/vcwidgets/presettablev2/vcplugindiagnostics.h"
 )
 
 target_compile_features(multibutton_vcwidget PRIVATE cxx_std_17)

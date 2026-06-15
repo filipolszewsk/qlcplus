@@ -8,15 +8,22 @@
 
 namespace PTInputId
 {
-static const int kMaxRoutableOutputs = 48;
-static const quint8 kTransSweepBase = 48;
-static const quint8 kTransSecondaryRowBase = 96;
-static const quint8 kTransContinuousBankBase = 144;
-static const quint8 kMultiFxBankBase = 192;
-static const quint8 kCrossfade = 240;
-static const quint8 kMultiFxBlend = 241;
-static const quint8 kMultiFxRestart = 242;
-static const quint8 kWidgetFlashGate = 243;
+static const int kMaxRoutableOutputs = 30;
+static const quint8 kTransSweepBase = 30;
+static const quint8 kTransSecondaryRowBase = 60;
+static const quint8 kTransContinuousBankBase = 90;
+static const quint8 kPositionMotionBankBase = 120;
+static const quint8 kMultiFxBankBase = 150;
+static const quint32 kCrossfade = 240;
+static const quint32 kMultiFxBlend = 241;
+static const quint32 kMultiFxRestart = 242;
+static const quint32 kWidgetFlashGate = 243;
+static const quint32 kPositionBasePan = 244;
+static const quint32 kPositionBaseTilt = 245;
+static const quint32 kPositionSpreadPan = 246;
+static const quint32 kPositionSpreadTilt = 247;
+static const quint32 kPositionSpreadPanEnable = 248;
+static const quint32 kPositionSpreadTiltEnable = 249;
 
 inline quint8 rowSelector(int outputIdx) { return quint8(outputIdx); }
 /** Transition selector (legacy selector_sweep) — bank preset index (0 = instant). */
@@ -27,6 +34,8 @@ inline quint8 transSecondaryRow(int outputIdx) { return quint8(kTransSecondaryRo
 inline quint8 transContinuousBank(int outputIdx) { return quint8(kTransContinuousBankBase + outputIdx); }
 /** MultiFX background bus selector — bank preset index (0 = off). */
 inline quint8 multiFxBank(int outputIdx) { return quint8(kMultiFxBankBase + outputIdx); }
+/** Position-only Continuous Motion selector — bank preset index (0 = off). */
+inline quint8 positionMotionBank(int outputIdx) { return quint8(kPositionMotionBankBase + outputIdx); }
 
 /** @deprecated Use transSweep */
 inline quint8 transPrimary(int outputIdx) { return transSweep(outputIdx); }

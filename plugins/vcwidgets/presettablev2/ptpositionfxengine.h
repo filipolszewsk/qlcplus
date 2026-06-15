@@ -29,9 +29,8 @@ public:
     static bool motionUsesCustomData(PTPositionMotion motion);
     static bool motionIs1D(PTPositionMotion motion);
     /** Bipolar offset -1..+1 from shared morph wave packet (waveShape/customCurve/waveWidth/fade).
-        1D morph: fade out 0% = instant step down at packet end; fade in 0% = instant step up.
-        Outside waveWidth window: hold curve start/end (tilt up: min at idle). headOffsetDeg removes
-        per-fixture propagation offset. */
+        iteratorRad must come from iteratorFromElapsed (includes startOffset + headOffset).
+        Active window matches orbitPhaseFromIterator: [0, waveWidth). Outside: hold curve end. */
     static float samplePosition1DOffset(float iteratorRad, const PTTransitionPreset& preset,
                                         const PTDimmerWaveParams& waveParams,
                                         int headOffsetDeg = 0);

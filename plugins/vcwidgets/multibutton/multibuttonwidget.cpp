@@ -26,6 +26,7 @@
 #include "apputil.h"
 #include "presettablev2multibuttoniface.h"
 #include "virtualconsole.h"
+#include "vcplugindiagnostics.h"
 
 #include <QPainter>
 #include <QPen>
@@ -1328,34 +1329,71 @@ QList<uchar> MultiButtonWidget::resolvedPresetValues(const LevelPreset& preset,
     return out;
 }
 
-PresetTableV2MultiButtonTargetIface* MultiButtonWidget::widgetLinkTarget() const
+VCWidget* MultiButtonWidget::widgetLinkTargetObject() const
 {
     if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
         return nullptr;
+    if (m_widgetTargetObject && m_widgetTargetObjectId == m_widgetTargetId)
+        return m_widgetTargetObject.data();
+
+    m_widgetTargetObject.clear();
+    m_widgetTargetObjectId = VCWidget::invalidId();
+
     VirtualConsole* vc = VirtualConsole::instance();
     if (!vc)
         return nullptr;
-    return qobject_cast<PresetTableV2MultiButtonTargetIface*>(vc->widget(m_widgetTargetId));
+    VCFrame* root = vc->contents();
+    if (!root)
+        return nullptr;
+
+    for (VCWidget* candidate : root->findChildren<VCWidget*>(QString(),
+                                                             Qt::FindChildrenRecursively))
+    {
+        if (!candidate || candidate->id() != m_widgetTargetId)
+            continue;
+
+        m_widgetTargetObject = candidate;
+        m_widgetTargetObjectId = m_widgetTargetId;
+        connect(candidate, &QObject::destroyed, this, [this]() {
+            m_widgetTargetObject.clear();
+            m_widgetTargetObjectId = VCWidget::invalidId();
+        });
+        return candidate;
+    }
+
+    VCPluginDiagnostics::breadcrumbRateLimited(
+            QStringLiteral("multibutton"), id(), caption(),
+            QStringLiteral("multibutton/widget-target-missing/%1").arg(id()),
+            1000,
+            QStringLiteral("widget target missing targetId=%1").arg(m_widgetTargetId));
+    return nullptr;
+}
+
+PresetTableV2MultiButtonTargetIface* MultiButtonWidget::widgetLinkTarget() const
+{
+    VCWidget* target = widgetLinkTargetObject();
+    auto* iface = qobject_cast<PresetTableV2MultiButtonTargetIface*>(target);
+    if (target && !iface)
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("multibutton"), id(), caption(),
+                QStringLiteral("multibutton/widget-target-class-mismatch/%1").arg(id()),
+                1000,
+                QStringLiteral("widget target class mismatch targetId=%1 class=%2")
+                        .arg(m_widgetTargetId)
+                        .arg(QString::fromLatin1(target->metaObject()->className())));
+    }
+    return iface;
 }
 
 PresetTableV2MultiButtonTargetExtrasIface* MultiButtonWidget::widgetLinkTargetExtras() const
 {
-    if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
-        return nullptr;
-    VirtualConsole* vc = VirtualConsole::instance();
-    if (!vc)
-        return nullptr;
-    return qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(vc->widget(m_widgetTargetId));
+    return qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(widgetLinkTargetObject());
 }
 
 PresetTableV2MultiButtonFlashIface* MultiButtonWidget::widgetLinkFlashTarget() const
 {
-    if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
-        return nullptr;
-    VirtualConsole* vc = VirtualConsole::instance();
-    if (!vc)
-        return nullptr;
-    return qobject_cast<PresetTableV2MultiButtonFlashIface*>(vc->widget(m_widgetTargetId));
+    return qobject_cast<PresetTableV2MultiButtonFlashIface*>(widgetLinkTargetObject());
 }
 
 bool MultiButtonWidget::isAllOutputsMode() const
@@ -1476,11 +1514,7 @@ bool MultiButtonWidget::widgetLinkHasImplicitOff() const
             || m_widgetParameter != 0)
         return false;
 
-    VirtualConsole* vc = VirtualConsole::instance();
-    if (!vc)
-        return false;
-
-    return qobject_cast<MultiButtonWidget*>(vc->widget(m_widgetTargetId)) != nullptr;
+    return qobject_cast<MultiButtonWidget*>(widgetLinkTargetObject()) != nullptr;
 }
 
 bool MultiButtonWidget::offSlotAvailable() const
@@ -4803,6 +4837,8 @@ void MultiButtonWidget::editProperties()
     setEntrySelectAutoCommit(dlg.entrySelectAutoCommit());
     setLogPresetChanges(dlg.logPresetChanges());
     m_widgetTargetId = dlg.widgetTargetId();
+    m_widgetTargetObject.clear();
+    m_widgetTargetObjectId = VCWidget::invalidId();
     m_widgetOutputIndex = dlg.widgetOutputIndex();
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = dlg.widgetParameter();
@@ -5129,6 +5165,8 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
     {
         setWidgetMode(src->m_mode);
         m_widgetTargetId = src->m_widgetTargetId;
+        m_widgetTargetObject.clear();
+        m_widgetTargetObjectId = VCWidget::invalidId();
         m_widgetOutputIndex = src->m_widgetOutputIndex;
         m_widgetParameter = src->m_widgetParameter;
         m_widgetLiveInputSource = cloneInputSource(src->m_widgetLiveInputSource);
@@ -5429,7 +5467,9 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     setWidgetMode(stringToMode(obj["widgetMode"].toString()));
     const QJsonObject widgetLink = obj["widgetLink"].toObject();
     m_widgetTargetId = widgetLink["targetWidgetId"].toString(
-            QString::number(VCWidget::invalidId())).toUInt();
+                QString::number(VCWidget::invalidId())).toUInt();
+    m_widgetTargetObject.clear();
+    m_widgetTargetObjectId = VCWidget::invalidId();
     m_widgetOutputIndex = widgetLink["outputIndex"].toInt(0);
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetLink["parameter"].toInt(0));
@@ -6131,6 +6171,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
 
     m_mode = widgetMode;
     m_widgetTargetId = widgetTargetId;
+    m_widgetTargetObject.clear();
+    m_widgetTargetObjectId = VCWidget::invalidId();
     m_widgetOutputIndex = widgetOutputIndex;
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetParameter);

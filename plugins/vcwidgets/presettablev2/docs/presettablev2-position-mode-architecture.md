@@ -583,7 +583,7 @@ Double-click na slider → reset do 128. Zmiana osi Pan/Tilt → reset slidera.
 | `durationMs` | — (global Speed) | — (global Speed) | — (global Speed) | tylko MIDI live |
 | `waveWidth` | sweep window | dimmer wave | orbit active window | tak |
 | `waveShape` / Morph shape | blend curve | dimmer wave | — | tak |
-| `waveFadeIn` / `waveFadeOut` | tak | tak | 1D orbit envelope; **0% fade out = instant step down** at packet end; idle holds curve start/end (not graph center) | tak |
+| `waveFadeIn` / `waveFadeOut` | tak | tak | 1D orbit envelope; **0% fade out = instant step down** at packet end; idle holds curve end (min for tilt up); DMX uses same iterator as dimmer (head offset in iterator) | tak |
 | `waveLevel` | — (ukryte UI) | tak | — | — |
 | `startOffset` | tak | tak | tak | tak |
 | `customCurve` | tak | tak | — | tak |

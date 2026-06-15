@@ -138,7 +138,11 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
     preview.blocks = qMax(1, preset.blocks);
     preview.slotsPerWing = PTDimmerWaveEngine::offsetSlotCountForWing(span, preset);
     preview.maxOffsetStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
-    preview.offsetStepOk = preset.offsetStep == 0
+    preview.effectiveOffsetStep = PTDimmerWaveEngine::effectiveOffsetStepForSpan(span, preset);
+    preview.offsetStepMode = preset.offsetStepMode;
+    preview.offsetCoverage = qBound(0, preset.offsetCoverage, 100);
+    preview.offsetStepOk = preset.offsetStepMode != PTOffsetStepMode::FixedDegrees
+            || preset.offsetStep == 0
             || preset.offsetStep <= preview.maxOffsetStep;
 
     const PTSpatialFixturePlan plan = build(scopePoints, preset, global, gridWidth, gridHeight);

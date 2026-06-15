@@ -15,6 +15,8 @@
 #include "ptpositionconverter.h"
 #include "ptpositionfxengine.h"
 #include "presettablev2transitionprovideriface.h"
+#include "presettablev2vclookup.h"
+#include "vcplugindiagnostics.h"
 #include "presettablev2inputids.h"
 #include "ptefxinputids.h"
 #include "virtualconsole.h"
@@ -97,6 +99,24 @@ int positionSpreadLabelPct(int raw)
     return qRound(qreal(raw - 128) * 100.0 / 128.0);
 }
 
+class ScopedBoolGuard
+{
+public:
+    explicit ScopedBoolGuard(bool& flag)
+        : m_flag(flag)
+    {
+        m_flag = true;
+    }
+
+    ~ScopedBoolGuard()
+    {
+        m_flag = false;
+    }
+
+private:
+    bool& m_flag;
+};
+
 } // namespace
 
 const QColor PresetTableV2Widget::s_outputColors[8] = {
@@ -140,6 +160,12 @@ static const QString KXMLCrossfadeInput  = QStringLiteral("CrossfadeInput");
 static const QString KXMLMultiFxBlendInput = QStringLiteral("MultiFxBlendInput");
 static const QString KXMLMultiFxRestartInput = QStringLiteral("MultiFxRestartInput");
 static const QString KXMLWidgetFlashGateInput = QStringLiteral("WidgetFlashGateInput");
+static const QString KXMLPositionBasePanInput = QStringLiteral("PositionBasePanInput");
+static const QString KXMLPositionBaseTiltInput = QStringLiteral("PositionBaseTiltInput");
+static const QString KXMLPositionSpreadPanInput = QStringLiteral("PositionSpreadPanInput");
+static const QString KXMLPositionSpreadTiltInput = QStringLiteral("PositionSpreadTiltInput");
+static const QString KXMLPositionSpreadPanEnableInput = QStringLiteral("PositionSpreadPanEnableInput");
+static const QString KXMLPositionSpreadTiltEnableInput = QStringLiteral("PositionSpreadTiltEnableInput");
 static const QString KXMLWidgetFlashTimeMultiplier = QStringLiteral("WidgetFlashTimeMultiplier");
 static const QString KXMLWidgetFlashBehavior = QStringLiteral("WidgetFlashBehavior");
 static const QString KXMLSelectorStateOutput = QStringLiteral("SelectorStateOutput");
@@ -157,6 +183,7 @@ static const QString KXMLOutRows        = QStringLiteral("Rows");
 static const QString KXMLOutScope       = QStringLiteral("Scope");
 static const QString KXMLOutSweepPreset = QStringLiteral("SweepPreset");
 static const QString KXMLOutContinuousPreset = QStringLiteral("ContinuousPreset");
+static const QString KXMLOutPositionMotionPreset = QStringLiteral("PositionMotionPreset");
 static const QString KXMLOutMultiFxPreset = QStringLiteral("MultiFxPreset");
 static const QString KXMLOutTransitionPreset = QStringLiteral("TransitionPreset");
 static const QString KXMLOutTransitionSecondary = QStringLiteral("TransitionSecondaryPreset");
@@ -164,6 +191,7 @@ static const QString KXMLOutSecondaryRow = QStringLiteral("SecondaryRow");
 static const QString KXMLOutTransPrimaryInput = QStringLiteral("OutTransPrimaryInput");
 static const QString KXMLOutTransSweepInput = QStringLiteral("OutTransSweepInput");
 static const QString KXMLOutTransContinuousInput = QStringLiteral("OutTransContinuousInput");
+static const QString KXMLOutPositionMotionInput = QStringLiteral("OutPositionMotionInput");
 static const QString KXMLOutTransSecondaryInput = QStringLiteral("OutTransSecondaryInput");
 static const QString KXMLOutMultiFxInput = QStringLiteral("OutMultiFxInput");
 
@@ -507,7 +535,7 @@ void PresetTableV2Delegate::setColumns(const QVector<PTColumn>* columns)
     m_columns = columns;
 }
 
-void PresetTableV2Delegate::setOwner(const PresetTableV2Widget* owner)
+void PresetTableV2Delegate::setOwner(PresetTableV2Widget* owner)
 {
     m_owner = owner;
 }
@@ -653,6 +681,20 @@ void PresetTableV2Delegate::setModelData(QWidget* editor, QAbstractItemModel* mo
         return;
 
     const PTColumn& ptcol = (*m_columns)[valCol];
+    QTableWidget* table = qobject_cast<QTableWidget*>(model->parent());
+    auto commitModelData = [&](auto apply) {
+        if (table)
+        {
+            QSignalBlocker blocker(table);
+            apply();
+        }
+        else
+        {
+            apply();
+        }
+        if (m_owner)
+            m_owner->commitTableCellFromDelegate(index.row(), col);
+    };
 
     // ---- Scaler --------------------------------------------------------
     if (ptcol.type == PTColumn::Scaler)
@@ -660,11 +702,13 @@ void PresetTableV2Delegate::setModelData(QWidget* editor, QAbstractItemModel* mo
         QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
         if (!sb) return;
         int dmx = scalerToDmx(sb->value(), ptcol.scalerMin, ptcol.scalerMax);
-        model->setData(index, dmx, Qt::UserRole);
-        model->setData(index,
-            QString("%1%2").arg(sb->value()).arg(ptcol.scalerSuffix),
-            Qt::DisplayRole);
-        model->setData(index, QVariant(), Qt::DecorationRole);
+        commitModelData([&]() {
+            model->setData(index, dmx, Qt::UserRole);
+            model->setData(index,
+                QString("%1%2").arg(sb->value()).arg(ptcol.scalerSuffix),
+                Qt::DisplayRole);
+            model->setData(index, QVariant(), Qt::DecorationRole);
+        });
         return;
     }
 
@@ -679,10 +723,12 @@ void PresetTableV2Delegate::setModelData(QWidget* editor, QAbstractItemModel* mo
         val = qBound(0, val, 255);
 
         auto lbl = optionLabelFor(ptcol, val);
-        model->setData(index, val, Qt::UserRole);
-        model->setData(index, lbl.first, Qt::DisplayRole);
-        QIcon ico = makeItemIcon(lbl.second);
-        model->setData(index, ico.isNull() ? QVariant() : QVariant(ico), Qt::DecorationRole);
+        commitModelData([&]() {
+            model->setData(index, val, Qt::UserRole);
+            model->setData(index, lbl.first, Qt::DisplayRole);
+            QIcon ico = makeItemIcon(lbl.second);
+            model->setData(index, ico.isNull() ? QVariant() : QVariant(ico), Qt::DecorationRole);
+        });
         return;
     }
 
@@ -702,18 +748,22 @@ void PresetTableV2Delegate::setModelData(QWidget* editor, QAbstractItemModel* mo
             QLCCapability* cap = chan->searchCapability(uchar(val));
             if (cap) display = cap->name();
         }
-        model->setData(index, val, Qt::UserRole);
-        model->setData(index, display, Qt::DisplayRole);
-        model->setData(index, QVariant(), Qt::DecorationRole);
+        commitModelData([&]() {
+            model->setData(index, val, Qt::UserRole);
+            model->setData(index, display, Qt::DisplayRole);
+            model->setData(index, QVariant(), Qt::DecorationRole);
+        });
         return;
     }
 
     // ---- Numeric spinbox -----------------------------------------------
     QSpinBox* sb = qobject_cast<QSpinBox*>(editor);
     if (!sb) return;
-    model->setData(index, sb->value(), Qt::UserRole);
-    model->setData(index, QString::number(sb->value()), Qt::DisplayRole);
-    model->setData(index, QVariant(), Qt::DecorationRole);
+    commitModelData([&]() {
+        model->setData(index, sb->value(), Qt::UserRole);
+        model->setData(index, QString::number(sb->value()), Qt::DisplayRole);
+        model->setData(index, QVariant(), Qt::DecorationRole);
+    });
 }
 
 void PresetTableV2Delegate::updateEditorGeometry(QWidget* editor,
@@ -770,6 +820,7 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     setObjectName(PresetTableV2Widget::staticMetaObject.className());
     setType(VCWidget::UnknownWidget);
     setCaption(tr("Preset Table v2"));
+    VCPluginDiagnostics::install(QStringLiteral("presettablev2"), id(), caption());
     resize(QSize(400, 260));
 
     m_layout = new QVBoxLayout(this);
@@ -906,10 +957,9 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_positionHintLabel = new QLabel(m_positionEditorPanel);
     m_positionHintLabel->setWordWrap(true);
     m_positionHintLabel->setFont(stripFont);
-    m_positionHintLabel->setText(tr("Symmetric spread: encoder center = no spread · "
-                                    "double-click spread = reset center · "
-                                    "Pan: ends opposite · Tilt: ends equal. "
-                                    "Crossfade: Transition sweep preset."));
+    m_positionHintLabel->setText(tr("Base Pan/Tilt sets the center. Spread Pan and Spread Tilt add "
+                                    "independent symmetric offsets from the selected order. "
+                                    "External spread inputs catch at center before moving."));
     posEditorLayout->addWidget(m_positionHintLabel);
 
     m_positionGrid->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -944,32 +994,32 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     gridPadRow->addWidget(padColumn, 2);
     posEditorLayout->addLayout(gridPadRow);
 
-    m_positionSymmetricSpreadCheck = new QCheckBox(
-            tr("Symmetric spread (multi-select)"), m_positionEditorPanel);
-    m_positionSymmetricSpreadCheck->setEnabled(false);
-    m_positionSymmetricSpreadCheck->setToolTip(
-            tr("Symmetric spread: encoder center = no spread · "
-               "double-click spread slider = reset center · "
-               "Pan: ends opposite · Tilt: ends equal."));
-    posEditorLayout->addWidget(m_positionSymmetricSpreadCheck);
-
-    QHBoxLayout* spreadRow = new QHBoxLayout();
-    spreadRow->addWidget(new QLabel(tr("Spread"), m_positionEditorPanel));
-    m_positionSpreadAxisCombo = new QComboBox(m_positionEditorPanel);
-    m_positionSpreadAxisCombo->addItem(tr("Pan"));
-    m_positionSpreadAxisCombo->addItem(tr("Tilt"));
-    m_positionSpreadAxisCombo->setEnabled(false);
-    m_positionSpreadSlider = new QSlider(Qt::Horizontal, m_positionEditorPanel);
-    m_positionSpreadSlider->setRange(0, 255);
-    m_positionSpreadSlider->setValue(128);
-    m_positionSpreadSlider->setEnabled(false);
-    m_positionSpreadValueLabel = new QLabel(QStringLiteral("0%"), m_positionEditorPanel);
-    m_positionSpreadValueLabel->setMinimumWidth(40);
-    spreadRow->addWidget(m_positionSpreadAxisCombo);
-    spreadRow->addWidget(m_positionSpreadSlider, 1);
-    spreadRow->addWidget(m_positionSpreadValueLabel);
-    posEditorLayout->addLayout(spreadRow);
-    m_positionSpreadSlider->installEventFilter(this);
+    auto makeSpreadRow = [this, posEditorLayout](const QString& label,
+                                                 QCheckBox** check,
+                                                 QSlider** slider,
+                                                 QLabel** valueLabel) {
+        QHBoxLayout* row = new QHBoxLayout();
+        *check = new QCheckBox(label, m_positionEditorPanel);
+        (*check)->setEnabled(false);
+        (*check)->setToolTip(tr("Enable symmetric spread for this axis. "
+                                "External input must pass through center before it moves."));
+        *slider = new QSlider(Qt::Horizontal, m_positionEditorPanel);
+        (*slider)->setRange(0, 255);
+        (*slider)->setValue(128);
+        (*slider)->setEnabled(false);
+        (*slider)->setToolTip(tr("Center is no spread. Move left/right for negative/positive spread."));
+        *valueLabel = new QLabel(QStringLiteral("0%"), m_positionEditorPanel);
+        (*valueLabel)->setMinimumWidth(40);
+        row->addWidget(*check);
+        row->addWidget(*slider, 1);
+        row->addWidget(*valueLabel);
+        posEditorLayout->addLayout(row);
+        (*slider)->installEventFilter(this);
+    };
+    makeSpreadRow(tr("Spread Pan"), &m_positionSpreadPanCheck,
+                  &m_positionSpreadPanSlider, &m_positionSpreadPanValueLabel);
+    makeSpreadRow(tr("Spread Tilt"), &m_positionSpreadTiltCheck,
+                  &m_positionSpreadTiltSlider, &m_positionSpreadTiltValueLabel);
 
     QHBoxLayout* toolRow = new QHBoxLayout();
     QPushButton* copyBtn = new QPushButton(tr("Copy"), m_positionEditorPanel);
@@ -1029,12 +1079,14 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
             this, &PresetTableV2Widget::slotPositionPanSpinChanged);
     connect(m_positionTiltSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &PresetTableV2Widget::slotPositionTiltSpinChanged);
-    connect(m_positionSymmetricSpreadCheck, &QCheckBox::toggled,
-            this, &PresetTableV2Widget::slotPositionSymmetricSpreadToggled);
-    connect(m_positionSpreadSlider, &QSlider::valueChanged,
-            this, &PresetTableV2Widget::slotPositionSpreadChanged);
-    connect(m_positionSpreadAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PresetTableV2Widget::slotPositionSpreadAxisChanged);
+    connect(m_positionSpreadPanCheck, &QCheckBox::toggled,
+            this, &PresetTableV2Widget::slotPositionSpreadPanToggled);
+    connect(m_positionSpreadTiltCheck, &QCheckBox::toggled,
+            this, &PresetTableV2Widget::slotPositionSpreadTiltToggled);
+    connect(m_positionSpreadPanSlider, &QSlider::valueChanged,
+            this, &PresetTableV2Widget::slotPositionSpreadPanChanged);
+    connect(m_positionSpreadTiltSlider, &QSlider::valueChanged,
+            this, &PresetTableV2Widget::slotPositionSpreadTiltChanged);
     connect(copyBtn, &QPushButton::clicked, this, &PresetTableV2Widget::slotPositionCopyCell);
     connect(pasteBtn, &QPushButton::clicked, this, &PresetTableV2Widget::slotPositionPasteCell);
     connect(clearBtn, &QPushButton::clicked, this, &PresetTableV2Widget::slotPositionClearCell);
@@ -1113,9 +1165,19 @@ void PresetTableV2Widget::setRows(const QVector<PTRow>& rows)
 
 void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
 {
+    QVector<PTOutput> capped = outs;
+    if (capped.size() > PTInputId::kMaxRoutableOutputs)
+    {
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("output cap applied requested=%1 kept=%2")
+                        .arg(capped.size()).arg(PTInputId::kMaxRoutableOutputs));
+        capped.resize(PTInputId::kMaxRoutableOutputs);
+    }
+
     {
         QMutexLocker lk(&m_stateMutex);
-        m_outputs = outs;
+        m_outputs = capped;
         m_activeRow.resize(m_outputs.size());
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
@@ -1128,6 +1190,8 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedSweepPreset.fill(-1);
         m_stagedContinuousPreset.resize(m_outputs.size());
         m_stagedContinuousPreset.fill(-1);
+        m_stagedPositionMotionPreset.resize(m_outputs.size());
+        m_stagedPositionMotionPreset.fill(-1);
         m_stagedMultiFxPreset.resize(m_outputs.size());
         m_stagedMultiFxPreset.fill(-1);
         m_stagedSecondaryValid.resize(m_outputs.size());
@@ -1136,8 +1200,13 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedSweepValid.fill(false);
         m_stagedContinuousValid.resize(m_outputs.size());
         m_stagedContinuousValid.fill(false);
+        m_stagedPositionMotionValid.resize(m_outputs.size());
+        m_stagedPositionMotionValid.fill(false);
         m_stagedMultiFxValid.resize(m_outputs.size());
         m_stagedMultiFxValid.fill(false);
+        m_livePositionMotionPreset.resize(m_outputs.size());
+        m_positionMotionElapsedMs.resize(m_outputs.size());
+        m_positionMotionLastCycleMs.resize(m_outputs.size());
         m_liveMultiFxPreset.resize(m_outputs.size());
         m_multiFxElapsedMs.resize(m_outputs.size());
         m_multiFxStagedElapsedMs.resize(m_outputs.size());
@@ -1202,11 +1271,13 @@ void PresetTableV2Widget::slotModeChanged(Doc::Mode newMode)
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
+            m_stagedPositionMotionPreset.fill(-1, m_stagedPositionMotionPreset.size());
         if (m_stagedMultiFxPreset.size() > 0)
             m_stagedMultiFxPreset.fill(-1, m_stagedMultiFxPreset.size());
             m_stagedSecondaryValid.fill(false, m_stagedSecondaryValid.size());
             m_stagedSweepValid.fill(false, m_stagedSweepValid.size());
             m_stagedContinuousValid.fill(false, m_stagedContinuousValid.size());
+            m_stagedPositionMotionValid.fill(false, m_stagedPositionMotionValid.size());
         if (m_stagedMultiFxValid.size() > 0)
             m_stagedMultiFxValid.fill(false, m_stagedMultiFxValid.size());
             m_crossfadeGlobalPos = 0;
@@ -1391,15 +1462,22 @@ void PresetTableV2Widget::slotColumnHeaderDoubleClicked(int logicalIndex)
 
 bool PresetTableV2Widget::eventFilter(QObject* obj, QEvent* ev)
 {
-    if (m_positionSpreadSlider && obj == m_positionSpreadSlider
+    if ((obj == m_positionSpreadPanSlider || obj == m_positionSpreadTiltSlider)
             && ev->type() == QEvent::MouseButtonDblClick)
     {
-        QSignalBlocker blocker(m_positionSpreadSlider);
-        m_positionSpreadSlider->setValue(128);
-        updatePositionSpreadValueLabel(128);
-        if (m_positionSymmetricSpreadCheck && m_positionSymmetricSpreadCheck->isChecked()
-                && positionTargetCells().size() >= 2)
+        const bool panAxis = (obj == m_positionSpreadPanSlider);
+        resetPositionSpreadAxis(panAxis);
+        const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+        if (!m_positionEditorSyncing && !m_positionApplyingEditorStage
+                && positionSpreadAxisEnabled(panAxis)
+                && snapshot.row >= 0 && snapshot.targetCells.size() >= 2)
         {
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("spread reset row=%1 output=%2 selection=%3 targets=%4 axis=%5")
+                            .arg(snapshot.row).arg(snapshot.output)
+                            .arg(snapshot.selection).arg(snapshot.targetCells.size())
+                            .arg(panAxis ? QStringLiteral("pan") : QStringLiteral("tilt")));
             stageFromEditorControls();
         }
         return true;
@@ -2234,45 +2312,71 @@ void PresetTableV2Widget::prunePositionGridSelection()
 
 QSet<QLCPoint> PresetTableV2Widget::positionTargetCells() const
 {
-    const QSet<QLCPoint> editable = positionEditableCells();
+    return positionEditSnapshot().targetCells;
+}
+
+PresetTableV2Widget::PTPositionEditSnapshot PresetTableV2Widget::positionEditSnapshot() const
+{
+    PTPositionEditSnapshot snapshot;
+    snapshot.row = currentPositionEditRow();
+    snapshot.output = m_positionEditOutput;
+    snapshot.selection = m_positionEditSelection;
+    snapshot.editableCells = positionEditableCellsForLayer(
+            snapshot.row, snapshot.output, snapshot.selection);
+
     if (!m_positionSelectedCells.isEmpty())
     {
         QSet<QLCPoint> filtered;
         for (const QLCPoint& pt : m_positionSelectedCells)
         {
-            if (editable.contains(pt))
+            if (snapshot.editableCells.contains(pt))
                 filtered.insert(pt);
         }
-        return filtered.isEmpty() ? editable : filtered;
+        snapshot.targetCells = filtered.isEmpty() ? snapshot.editableCells : filtered;
     }
-    return editable;
+    else
+    {
+        snapshot.targetCells = snapshot.editableCells;
+    }
+
+    if (!snapshot.targetCells.isEmpty())
+    {
+        for (const QLCPoint& pt : m_positionSelectionOrder)
+        {
+            if (snapshot.targetCells.contains(pt) && !snapshot.targetOrder.contains(pt))
+                snapshot.targetOrder.append(pt);
+        }
+        for (const QLCPoint& pt : m_positionSelectedCells)
+        {
+            if (snapshot.targetCells.contains(pt) && !snapshot.targetOrder.contains(pt))
+                snapshot.targetOrder.append(pt);
+        }
+        if (snapshot.targetOrder.isEmpty())
+            snapshot.targetOrder = PTPositionFixtureGridWidget::rowMajorOrder(snapshot.targetCells);
+        else
+        {
+            const QList<QLCPoint> rowMajor =
+                    PTPositionFixtureGridWidget::rowMajorOrder(snapshot.targetCells);
+            for (const QLCPoint& pt : rowMajor)
+            {
+                if (!snapshot.targetOrder.contains(pt))
+                    snapshot.targetOrder.append(pt);
+            }
+        }
+    }
+
+    return snapshot;
 }
 
 QList<QLCPoint> PresetTableV2Widget::positionTargetCellOrder() const
 {
-    if (!m_positionSelectedCells.isEmpty() && !m_positionSelectionOrder.isEmpty())
-    {
-        QList<QLCPoint> order;
-        for (const QLCPoint& pt : m_positionSelectionOrder)
-        {
-            if (m_positionSelectedCells.contains(pt))
-                order.append(pt);
-        }
-        for (const QLCPoint& pt : m_positionSelectedCells)
-        {
-            if (!order.contains(pt))
-                order.append(pt);
-        }
-        return order;
-    }
-    if (!m_positionSelectedCells.isEmpty())
-        return PTPositionFixtureGridWidget::rowMajorOrder(m_positionSelectedCells);
-    return PTPositionFixtureGridWidget::rowMajorOrder(positionTargetCells());
+    return positionEditSnapshot().targetOrder;
 }
 
 QLCPoint PresetTableV2Widget::positionReferencePoint() const
 {
-    const QList<QLCPoint> order = positionTargetCellOrder();
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    const QList<QLCPoint> order = snapshot.targetOrder;
     if (order.isEmpty())
         return QLCPoint(-1, -1);
     if (order.size() >= 2 && !m_positionSelectionOrder.isEmpty())
@@ -2771,22 +2875,45 @@ QLCPoint PresetTableV2Widget::selectionGridCenter(const QSet<QLCPoint>& cells,
     return closest;
 }
 
-void PresetTableV2Widget::updatePositionSpreadValueLabel(int raw)
+void PresetTableV2Widget::updatePositionSpreadValueLabel(QLabel* label, int raw)
 {
-    if (!m_positionSpreadValueLabel)
+    if (!label)
         return;
     const int pct = positionSpreadLabelPct(raw);
     if (pct == 0)
-        m_positionSpreadValueLabel->setText(QStringLiteral("0%"));
+        label->setText(QStringLiteral("0%"));
     else if (pct > 0)
-        m_positionSpreadValueLabel->setText(QStringLiteral("+%1%").arg(pct));
+        label->setText(QStringLiteral("+%1%").arg(pct));
     else
-        m_positionSpreadValueLabel->setText(QStringLiteral("%1%").arg(pct));
+        label->setText(QStringLiteral("%1%").arg(pct));
+}
+
+void PresetTableV2Widget::resetPositionSpreadAxis(bool panAxis)
+{
+    QSlider* slider = panAxis ? m_positionSpreadPanSlider : m_positionSpreadTiltSlider;
+    QLabel* label = panAxis ? m_positionSpreadPanValueLabel : m_positionSpreadTiltValueLabel;
+    if (!slider)
+        return;
+    QSignalBlocker blocker(slider);
+    slider->setValue(128);
+    updatePositionSpreadValueLabel(label, 128);
+}
+
+bool PresetTableV2Widget::positionSpreadAxisEnabled(bool panAxis) const
+{
+    QCheckBox* check = panAxis ? m_positionSpreadPanCheck : m_positionSpreadTiltCheck;
+    return check && check->isChecked();
+}
+
+int PresetTableV2Widget::positionSpreadAxisValue(bool panAxis) const
+{
+    QSlider* slider = panAxis ? m_positionSpreadPanSlider : m_positionSpreadTiltSlider;
+    return slider ? slider->value() : 128;
 }
 
 QLCPoint PresetTableV2Widget::selectionMiddlePoint() const
 {
-    const QList<QLCPoint> order = positionTargetCellOrder();
+    const QList<QLCPoint> order = positionEditSnapshot().targetOrder;
     if (order.isEmpty())
         return QLCPoint(-1, -1);
     return order.at(order.size() / 2);
@@ -2794,19 +2921,19 @@ QLCPoint PresetTableV2Widget::selectionMiddlePoint() const
 
 void PresetTableV2Widget::capturePositionSpreadPivotFromSelection()
 {
-    if (positionTargetCells().size() < 2 || !m_positionPanSpin || !m_positionTiltSpin)
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (snapshot.targetCells.size() < 2 || !m_positionPanSpin || !m_positionTiltSpin)
         return;
 
-    const int row = currentPositionEditRow();
     qreal sumPan = 0;
     qreal sumTilt = 0;
     int count = 0;
     {
         QMutexLocker lk(&m_stateMutex);
-        for (const QLCPoint& cellPt : positionTargetCells())
+        for (const QLCPoint& cellPt : snapshot.targetCells)
         {
             const PTPositionValue cellPos = positionValueForDisplay(
-                    row, m_positionEditOutput, m_positionEditSelection, cellPt);
+                    snapshot.row, snapshot.output, snapshot.selection, cellPt);
             if (!cellPos.valid)
                 continue;
             sumPan += cellPos.panDeg;
@@ -2817,7 +2944,9 @@ void PresetTableV2Widget::capturePositionSpreadPivotFromSelection()
     if (count == 0)
         return;
 
-    const QLCPoint pt = selectionMiddlePoint();
+    const QLCPoint pt = snapshot.targetOrder.isEmpty()
+            ? QLCPoint(-1, -1)
+            : snapshot.targetOrder.at(snapshot.targetOrder.size() / 2);
     Fixture* fxi = fixtureAtPoint(pt);
     const GroupHead gh = groupHeadAtPoint(pt);
     if (!fxi)
@@ -2840,14 +2969,14 @@ void PresetTableV2Widget::capturePositionSpreadPivotFromSelection()
 void PresetTableV2Widget::updatePositionSpreadChrome()
 {
     const bool multi = positionTargetCells().size() >= 2;
-    if (m_positionSymmetricSpreadCheck)
-        m_positionSymmetricSpreadCheck->setEnabled(multi);
-    const bool spreadOn = multi && m_positionSymmetricSpreadCheck
-            && m_positionSymmetricSpreadCheck->isChecked();
-    if (m_positionSpreadAxisCombo)
-        m_positionSpreadAxisCombo->setEnabled(spreadOn);
-    if (m_positionSpreadSlider)
-        m_positionSpreadSlider->setEnabled(spreadOn);
+    if (m_positionSpreadPanCheck)
+        m_positionSpreadPanCheck->setEnabled(multi);
+    if (m_positionSpreadTiltCheck)
+        m_positionSpreadTiltCheck->setEnabled(multi);
+    if (m_positionSpreadPanSlider)
+        m_positionSpreadPanSlider->setEnabled(multi && positionSpreadAxisEnabled(true));
+    if (m_positionSpreadTiltSlider)
+        m_positionSpreadTiltSlider->setEnabled(multi && positionSpreadAxisEnabled(false));
 }
 
 void PresetTableV2Widget::refreshPositionEditorFromSelection()
@@ -2867,7 +2996,7 @@ void PresetTableV2Widget::refreshPositionEditorFromSelection()
     }
 
     const bool spreadActive = targets.size() >= 2
-            && m_positionSymmetricSpreadCheck && m_positionSymmetricSpreadCheck->isChecked();
+            && (positionSpreadAxisEnabled(true) || positionSpreadAxisEnabled(false));
     const QLCPoint pt = spreadActive ? selectionMiddlePoint() : positionReferencePoint();
     Fixture* fxi = fixtureAtPoint(pt);
     const GroupHead gh = groupHeadAtPoint(pt);
@@ -2882,9 +3011,6 @@ void PresetTableV2Widget::refreshPositionEditorFromSelection()
     const QRectF r = PTPositionConverter::degreesRange(fxi, gh.head);
     m_positionPanSpin->setRange(r.left(), r.left() + r.width());
     m_positionTiltSpin->setRange(r.top(), r.top() + r.height());
-
-    if (spreadActive)
-        return;
 
     const int row = currentPositionEditRow();
     PTPositionValue pos;
@@ -2919,7 +3045,12 @@ void PresetTableV2Widget::refreshPositionEditorFromSelection()
 PTPositionValue PresetTableV2Widget::readPositionEditorValue() const
 {
     PTPositionValue pos;
-    const QLCPoint pt = positionReferencePoint();
+    const QSet<QLCPoint> targets = positionTargetCells();
+    if (targets.isEmpty())
+        return pos;
+    const bool spreadActive = targets.size() >= 2
+            && (positionSpreadAxisEnabled(true) || positionSpreadAxisEnabled(false));
+    const QLCPoint pt = spreadActive ? selectionMiddlePoint() : positionReferencePoint();
     if (pt.x() < 0)
         return pos;
     Fixture* fxi = fixtureAtPoint(pt);
@@ -3051,41 +3182,52 @@ void PresetTableV2Widget::applyDraftToRowData(int targetRow, const PTPositionDra
 
 void PresetTableV2Widget::stageFromEditorControls()
 {
-    const QSet<QLCPoint> targets = positionTargetCells();
-    if (targets.isEmpty())
+    if (m_positionApplyingEditorStage)
         return;
 
-    const int row = currentPositionEditRow();
-    if (row < 0)
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (!snapshot.isValid())
         return;
 
     if (!ensurePositionDraftContextForCurrent())
         return;
 
-    const bool symmetric = m_positionSymmetricSpreadCheck
-            && m_positionSymmetricSpreadCheck->isChecked()
-            && targets.size() >= 2;
+    ScopedBoolGuard applyingGuard(m_positionApplyingEditorStage);
+    QMap<QLCPoint, PTPositionValue> stagedCells;
 
-    if (symmetric)
+    const bool spreadPan = positionSpreadAxisEnabled(true) && snapshot.targetCells.size() >= 2;
+    const bool spreadTilt = positionSpreadAxisEnabled(false) && snapshot.targetCells.size() >= 2;
+    if (spreadPan || spreadTilt)
     {
-        QList<QLCPoint> order = positionTargetCellOrder();
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("presettablev2/%1/spread-stage/%2/%3/%4")
+                        .arg(id()).arg(snapshot.row).arg(snapshot.output)
+                        .arg(snapshot.selection),
+                250,
+                QStringLiteral("spread stage row=%1 output=%2 selection=%3 targets=%4 pan=%5 tilt=%6")
+                        .arg(snapshot.row).arg(snapshot.output).arg(snapshot.selection)
+                        .arg(snapshot.targetCells.size())
+                        .arg(spreadPan ? positionSpreadAxisValue(true) : 128)
+                        .arg(spreadTilt ? positionSpreadAxisValue(false) : 128));
+    }
 
+    if (spreadPan || spreadTilt)
+    {
         const qreal centerPan = m_positionPanSpin->value();
         const qreal centerTilt = m_positionTiltSpin->value();
-        const int spreadRaw = m_positionSpreadSlider ? m_positionSpreadSlider->value() : 128;
-        const qreal spreadSigned = positionSpreadSigned(spreadRaw);
-        const bool spreadPan = !m_positionSpreadAxisCombo
-                || m_positionSpreadAxisCombo->currentIndex() == 0;
+        const qreal panSpreadSigned = spreadPan ? positionSpreadSigned(positionSpreadAxisValue(true)) : 0.0;
+        const qreal tiltSpreadSigned = spreadTilt ? positionSpreadSigned(positionSpreadAxisValue(false)) : 0.0;
 
-        const int n = order.size();
+        const int n = snapshot.targetOrder.size();
         const qreal centerIdx = (n > 0) ? (n - 1) / 2.0 : 0;
         const qreal maxOff = (n > 1)
                 ? qMax(centerIdx, qreal(n - 1) - centerIdx) : 0;
 
-        for (int i = 0; i < order.size(); ++i)
+        for (int i = 0; i < snapshot.targetOrder.size(); ++i)
         {
-            const QLCPoint& cellPt = order.at(i);
-            if (!targets.contains(cellPt))
+            const QLCPoint& cellPt = snapshot.targetOrder.at(i);
+            if (!snapshot.targetCells.contains(cellPt))
                 continue;
 
             Fixture* fxi = fixtureAtPoint(cellPt);
@@ -3094,11 +3236,22 @@ void PresetTableV2Widget::stageFromEditorControls()
                 continue;
 
             PTPositionValue base;
-            if (m_positionDraftDirty && m_positionDraftCells.contains(cellPt))
-                base = m_positionDraftCells.value(cellPt);
-            else
-                base = positionValueForEditLayer(row, m_positionEditOutput,
-                                                 m_positionEditSelection, cellPt);
+            {
+                QMutexLocker lk(&m_stateMutex);
+                if (m_positionDraftDirty
+                        && m_positionDraftCtx.row == snapshot.row
+                        && m_positionDraftCtx.output == snapshot.output
+                        && m_positionDraftCtx.selection == snapshot.selection
+                        && m_positionDraftCells.contains(cellPt))
+                {
+                    base = m_positionDraftCells.value(cellPt);
+                }
+                else
+                {
+                    base = positionValueForEditLayer(snapshot.row, snapshot.output,
+                                                     snapshot.selection, cellPt);
+                }
+            }
             if (!base.valid)
                 base = PTPositionConverter::centerPosition(fxi, gh.head);
 
@@ -3121,28 +3274,32 @@ void PresetTableV2Widget::stageFromEditorControls()
 
             PTPositionValue pos;
             pos.valid = true;
-            if (spreadPan)
-            {
-                pos.panDeg = centerPan + spreadSigned * panNorm * panAmp;
-                pos.tiltDeg = base.tiltDeg;
-            }
-            else
-            {
-                pos.panDeg = base.panDeg;
-                pos.tiltDeg = centerTilt - spreadSigned * tiltNorm * tiltAmp;
-            }
-            m_positionDraftCells.insert(cellPt,
-                    PTPositionConverter::clampPosition(fxi, gh.head, pos));
+            pos.panDeg = spreadPan
+                    ? centerPan + panSpreadSigned * panNorm * panAmp
+                    : centerPan;
+            pos.tiltDeg = spreadTilt
+                    ? centerTilt - tiltSpreadSigned * tiltNorm * tiltAmp
+                    : centerTilt;
+            stagedCells.insert(cellPt, PTPositionConverter::clampPosition(fxi, gh.head, pos));
         }
     }
     else
     {
         const PTPositionValue pos = readPositionEditorValue();
-        for (const QLCPoint& cellPt : targets)
-            m_positionDraftCells.insert(cellPt, pos);
+        for (const QLCPoint& cellPt : snapshot.targetCells)
+            stagedCells.insert(cellPt, pos);
     }
 
-    m_positionDraftDirty = true;
+    if (stagedCells.isEmpty())
+        return;
+
+    {
+        QMutexLocker lk(&m_stateMutex);
+        for (auto it = stagedCells.constBegin(); it != stagedCells.constEnd(); ++it)
+            m_positionDraftCells.insert(it.key(), it.value());
+        m_positionDraftDirty = true;
+    }
+
     refreshPositionGridCells();
     updatePositionValueStrip();
     updatePositionDraftButtons();
@@ -3601,47 +3758,199 @@ void PresetTableV2Widget::slotPositionTiltSpinChanged(double value)
     stageFromEditorControls();
 }
 
-void PresetTableV2Widget::slotPositionSymmetricSpreadToggled(bool enabled)
+void PresetTableV2Widget::slotPositionSpreadPanToggled(bool enabled)
 {
     updatePositionSpreadChrome();
+    m_positionSpreadPanInputWaitingForCenter = false;
     if (enabled)
     {
         capturePositionSpreadPivotFromSelection();
-        if (m_positionSpreadSlider)
-        {
-            QSignalBlocker blocker(m_positionSpreadSlider);
-            m_positionSpreadSlider->setValue(128);
-            updatePositionSpreadValueLabel(128);
-        }
+        resetPositionSpreadAxis(true);
     }
-    if (m_positionSymmetricSpreadCheck && m_positionSymmetricSpreadCheck->isChecked()
-            && !positionTargetCells().isEmpty())
-        stageFromEditorControls();
-}
-
-void PresetTableV2Widget::slotPositionSpreadChanged(int value)
-{
-    updatePositionSpreadValueLabel(value);
-    if (m_positionEditorSyncing)
-        return;
-    if (m_positionSymmetricSpreadCheck && m_positionSymmetricSpreadCheck->isChecked()
-            && positionTargetCells().size() >= 2)
-        stageFromEditorControls();
-}
-
-void PresetTableV2Widget::slotPositionSpreadAxisChanged(int /*index*/)
-{
-    if (m_positionSpreadSlider)
+    else
     {
-        QSignalBlocker blocker(m_positionSpreadSlider);
-        m_positionSpreadSlider->setValue(128);
-        updatePositionSpreadValueLabel(128);
+        resetPositionSpreadAxis(true);
     }
-    if (m_positionEditorSyncing)
-        return;
-    if (m_positionSymmetricSpreadCheck && m_positionSymmetricSpreadCheck->isChecked()
-            && positionTargetCells().size() >= 2)
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (!m_positionEditorSyncing && !m_positionApplyingEditorStage
+            && snapshot.row >= 0 && snapshot.targetCells.size() >= 2)
+    {
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("spread pan toggle enabled=%1 row=%2 output=%3 selection=%4 targets=%5")
+                        .arg(enabled).arg(snapshot.row).arg(snapshot.output)
+                        .arg(snapshot.selection).arg(snapshot.targetCells.size()));
         stageFromEditorControls();
+    }
+}
+
+void PresetTableV2Widget::slotPositionSpreadTiltToggled(bool enabled)
+{
+    updatePositionSpreadChrome();
+    m_positionSpreadTiltInputWaitingForCenter = false;
+    if (enabled)
+    {
+        capturePositionSpreadPivotFromSelection();
+        resetPositionSpreadAxis(false);
+    }
+    else
+    {
+        resetPositionSpreadAxis(false);
+    }
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (!m_positionEditorSyncing && !m_positionApplyingEditorStage
+            && snapshot.row >= 0 && snapshot.targetCells.size() >= 2)
+    {
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("spread tilt toggle enabled=%1 row=%2 output=%3 selection=%4 targets=%5")
+                        .arg(enabled).arg(snapshot.row).arg(snapshot.output)
+                        .arg(snapshot.selection).arg(snapshot.targetCells.size()));
+        stageFromEditorControls();
+    }
+}
+
+void PresetTableV2Widget::slotPositionSpreadPanChanged(int value)
+{
+    updatePositionSpreadValueLabel(m_positionSpreadPanValueLabel, value);
+    if (m_positionEditorSyncing || m_positionApplyingEditorStage)
+        return;
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (positionSpreadAxisEnabled(true) && snapshot.row >= 0 && snapshot.targetCells.size() >= 2)
+    {
+        stageFromEditorControls();
+    }
+}
+
+void PresetTableV2Widget::slotPositionSpreadTiltChanged(int value)
+{
+    updatePositionSpreadValueLabel(m_positionSpreadTiltValueLabel, value);
+    if (m_positionEditorSyncing || m_positionApplyingEditorStage)
+        return;
+    const PTPositionEditSnapshot snapshot = positionEditSnapshot();
+    if (positionSpreadAxisEnabled(false) && snapshot.row >= 0 && snapshot.targetCells.size() >= 2)
+    {
+        stageFromEditorControls();
+    }
+}
+
+void PresetTableV2Widget::applyPositionBaseInput(bool panAxis, uchar value)
+{
+    if (m_mode != PTMode::Position || !m_positionPanSpin || !m_positionTiltSpin)
+        return;
+
+    const QSet<QLCPoint> targets = positionTargetCells();
+    if (targets.isEmpty())
+        return;
+    const bool spreadActive = targets.size() >= 2
+            && (positionSpreadAxisEnabled(true) || positionSpreadAxisEnabled(false));
+    const QLCPoint pt = spreadActive ? selectionMiddlePoint() : positionReferencePoint();
+    Fixture* fxi = fixtureAtPoint(pt);
+    const GroupHead gh = groupHeadAtPoint(pt);
+    if (!fxi)
+        return;
+
+    const QRectF range = PTPositionConverter::degreesRange(fxi, gh.head);
+    const qreal minV = panAxis ? range.left() : range.top();
+    const qreal maxV = panAxis ? range.left() + range.width() : range.top() + range.height();
+    const qreal degrees = minV + (qreal(value) / 255.0) * (maxV - minV);
+
+    {
+        QSignalBlocker panBlocker(m_positionPanSpin);
+        QSignalBlocker tiltBlocker(m_positionTiltSpin);
+        if (panAxis)
+            m_positionPanSpin->setValue(degrees);
+        else
+            m_positionTiltSpin->setValue(degrees);
+    }
+
+    qreal xNorm = 0.5;
+    qreal yNorm = 0.5;
+    PTPositionConverter::degreesToNormalized(fxi, gh.head,
+                                             m_positionPanSpin->value(),
+                                             m_positionTiltSpin->value(),
+                                             xNorm, yNorm);
+    if (m_positionXYPad)
+    {
+        m_positionEditorSyncing = true;
+        m_positionXYPad->setNormalizedPosition(xNorm, yNorm);
+        m_positionEditorSyncing = false;
+    }
+    stageFromEditorControls();
+}
+
+void PresetTableV2Widget::applyPositionSpreadEnableInput(bool panAxis, uchar value)
+{
+    QCheckBox* check = panAxis ? m_positionSpreadPanCheck : m_positionSpreadTiltCheck;
+    if (m_mode != PTMode::Position || !check)
+        return;
+
+    const bool enable = value > 127;
+    const bool changed = check->isChecked() != enable;
+    {
+        QSignalBlocker blocker(check);
+        check->setChecked(enable);
+    }
+
+    if (panAxis)
+        m_positionSpreadPanInputWaitingForCenter = enable;
+    else
+        m_positionSpreadTiltInputWaitingForCenter = enable;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("spread input enable axis=%1 enabled=%2 waitingForCenter=%3 value=%4")
+                    .arg(panAxis ? QStringLiteral("pan") : QStringLiteral("tilt"))
+                    .arg(enable ? 1 : 0)
+                    .arg(enable ? 1 : 0)
+                    .arg(value));
+    resetPositionSpreadAxis(panAxis);
+    updatePositionSpreadChrome();
+
+    if (!enable || changed)
+        stageFromEditorControls();
+}
+
+void PresetTableV2Widget::applyPositionSpreadValueInput(bool panAxis, uchar value)
+{
+    QCheckBox* check = panAxis ? m_positionSpreadPanCheck : m_positionSpreadTiltCheck;
+    QSlider* slider = panAxis ? m_positionSpreadPanSlider : m_positionSpreadTiltSlider;
+    QLabel* label = panAxis ? m_positionSpreadPanValueLabel : m_positionSpreadTiltValueLabel;
+    bool& waiting = panAxis
+            ? m_positionSpreadPanInputWaitingForCenter
+            : m_positionSpreadTiltInputWaitingForCenter;
+    if (m_mode != PTMode::Position || !check || !slider || !check->isChecked())
+        return;
+
+    static const uchar kCatchMin = 125;
+    static const uchar kCatchMax = 131;
+    if (waiting)
+    {
+        if (value < kCatchMin || value > kCatchMax)
+        {
+            VCPluginDiagnostics::breadcrumbRateLimited(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("presettablev2/%1/spread-catch-ignore/%2")
+                            .arg(id()).arg(panAxis ? QStringLiteral("pan") : QStringLiteral("tilt")),
+                    500,
+                    QStringLiteral("spread input waiting center axis=%1 ignoredValue=%2")
+                            .arg(panAxis ? QStringLiteral("pan") : QStringLiteral("tilt"))
+                            .arg(value));
+            return;
+        }
+        waiting = false;
+        value = 128;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("spread input caught center axis=%1")
+                        .arg(panAxis ? QStringLiteral("pan") : QStringLiteral("tilt")));
+    }
+
+    {
+        QSignalBlocker blocker(slider);
+        slider->setValue(value);
+    }
+    updatePositionSpreadValueLabel(label, value);
+    stageFromEditorControls();
 }
 
 void PresetTableV2Widget::slotPositionCopyLayer()
@@ -3861,48 +4170,100 @@ void PresetTableV2Widget::syncFrozenNameColumnLayout()
 // Cell changed — sync back to m_rows
 // ==========================================================================
 
+void PresetTableV2Widget::commitTableCellFromDelegate(int row, int col)
+{
+    slotCellChanged(row, col);
+}
+
 void PresetTableV2Widget::slotCellChanged(int row, int col)
 {
     if (m_rebuildingTable) return;
-    if (row < 0 || row >= m_rows.size()) return;
 
     QTableWidgetItem* item = m_table->item(row, col);
     if (!item) return;
 
-    QMutexLocker lk(&m_stateMutex);
-
-    if (col == 0)
+    PTMode modeSnapshot = PTMode::Legacy;
     {
-        // refreshRowHighlights uses blockSignals so badge text never reaches here
-        m_rows[row].name = item->text();
-    }
-    else
-    {
-        if (m_mode == PTMode::Position)
-        {
-            const QVector<QLCPoint> points = positionTablePoints();
-            const int pointCol = col - 1;
-            if (pointCol >= 0 && pointCol < points.size())
-            {
-                const QLCPoint pt = points.at(pointCol);
-                Fixture* fxi = fixtureAtPoint(pt);
-                const GroupHead gh = groupHeadAtPoint(pt);
-                const PTPositionValue pos =
-                        PTPositionConverter::parsePositionText(item->text(), fxi, gh.head);
-                const QString text = PTPositionConverter::formatPosition(pos);
-                item->setText(text);
-                item->setData(Qt::UserRole, text);
-                if (pos.valid)
-                    m_rows[row].positions.insert(pt, pos);
-                else
-                    m_rows[row].positions.remove(pt);
-            }
+        QMutexLocker lk(&m_stateMutex);
+        if (row < 0 || row >= m_rows.size())
             return;
-        }
-        int valCol = col - 1;
-        if (valCol < m_rows[row].values.size())
-            m_rows[row].values[valCol] = uchar(item->data(Qt::UserRole).toInt());
+        modeSnapshot = m_mode;
     }
+
+    const QString itemText = item->text();
+    const QVariant itemValue = item->data(Qt::UserRole);
+    QString normalizedPositionText;
+    QLCPoint positionPoint;
+    PTPositionValue parsedPosition;
+    bool hasPositionEdit = false;
+
+    if (col != 0 && modeSnapshot == PTMode::Position)
+    {
+        const QVector<QLCPoint> points = positionTablePoints();
+        const int pointCol = col - 1;
+        if (pointCol >= 0 && pointCol < points.size())
+        {
+            positionPoint = points.at(pointCol);
+            Fixture* fxi = fixtureAtPoint(positionPoint);
+            const GroupHead gh = groupHeadAtPoint(positionPoint);
+            parsedPosition = PTPositionConverter::parsePositionText(itemText, fxi, gh.head);
+            normalizedPositionText = PTPositionConverter::formatPosition(parsedPosition);
+            hasPositionEdit = true;
+        }
+    }
+
+    int activeOutputs = 0;
+    int stagedOutputs = 0;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        if (row < 0 || row >= m_rows.size())
+            return;
+
+        for (int o = 0; o < m_outputs.size(); ++o)
+        {
+            if (o < m_activeRow.size() && m_activeRow[o] == row)
+                ++activeOutputs;
+            if (o < m_stagedRowValid.size() && m_stagedRowValid[o]
+                    && o < m_stagedRow.size() && m_stagedRow[o] == row)
+                ++stagedOutputs;
+        }
+
+        if (col == 0)
+        {
+            // refreshRowHighlights uses blockSignals so badge text never reaches here
+            m_rows[row].name = itemText;
+        }
+        else if (modeSnapshot == PTMode::Position)
+        {
+            if (hasPositionEdit)
+            {
+                if (parsedPosition.valid)
+                    m_rows[row].positions.insert(positionPoint, parsedPosition);
+                else
+                    m_rows[row].positions.remove(positionPoint);
+            }
+        }
+        else
+        {
+            int valCol = col - 1;
+            if (valCol < m_rows[row].values.size())
+                m_rows[row].values[valCol] = uchar(itemValue.toInt());
+        }
+    }
+
+    if (hasPositionEdit)
+    {
+        QSignalBlocker blocker(m_table);
+        item->setText(normalizedPositionText);
+        item->setData(Qt::UserRole, normalizedPositionText);
+    }
+
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("table cell commit mode=%1 row=%2 col=%3 value=\"%4\" activeOutputs=%5 stagedOutputs=%6")
+                    .arg(int(modeSnapshot)).arg(row).arg(col)
+                    .arg(col == 0 ? itemText : itemValue.toString())
+                    .arg(activeOutputs).arg(stagedOutputs));
 }
 
 // ==========================================================================
@@ -3999,19 +4360,46 @@ void PresetTableV2Widget::setLinkedTransitionWidgetId(quint32 id)
 
 void PresetTableV2Widget::refreshTransitionPresetCache()
 {
+    PTTransitionProviderSnapshot snapshot;
+    bool hasSnapshot = false;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        if (m_linkedTransitionWidgetId == VCWidget::invalidId())
+        {
+            m_cachedTransitionWidgetId = m_linkedTransitionWidgetId;
+            m_cachedTransitionSweepCount = 0;
+            m_cachedTransitionContinuousCount = 0;
+            m_cachedTransitionPositionMotionCount = 0;
+            m_cachedTransitionMultiFxCount = 0;
+            m_transitionProviderSnapshot = PTTransitionProviderSnapshot();
+            return;
+        }
+    }
+
+    if (PresetTableV2TransitionProviderIface* provider =
+            PresetTableV2VCLookup::transitionProviderByVcId(linkedTransitionWidgetId()))
+    {
+        snapshot = provider->transitionProviderSnapshot();
+        hasSnapshot = true;
+    }
+
     QMutexLocker lk(&m_stateMutex);
     m_cachedTransitionWidgetId = m_linkedTransitionWidgetId;
-    m_cachedTransitionSweepCount = 0;
-    m_cachedTransitionContinuousCount = 0;
-    m_cachedTransitionMultiFxCount = 0;
-    if (m_linkedTransitionWidgetId == VCWidget::invalidId())
-        return;
-
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
+    if (hasSnapshot)
     {
-        m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
-        m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
-        m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
+        m_transitionProviderSnapshot = snapshot;
+        m_cachedTransitionSweepCount = snapshot.sweepPresets.size();
+        m_cachedTransitionContinuousCount = snapshot.continuousPresets.size();
+        m_cachedTransitionPositionMotionCount = snapshot.positionMotionPresets.size();
+        m_cachedTransitionMultiFxCount = snapshot.multiFxPresets.size();
+    }
+    else
+    {
+        m_cachedTransitionSweepCount = 0;
+        m_cachedTransitionContinuousCount = 0;
+        m_cachedTransitionPositionMotionCount = 0;
+        m_cachedTransitionMultiFxCount = 0;
+        m_transitionProviderSnapshot = PTTransitionProviderSnapshot();
     }
 }
 
@@ -4019,6 +4407,7 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
 {
     m_liveSweepPreset.resize(m_outputs.size());
     m_liveContinuousPreset.resize(m_outputs.size());
+    m_livePositionMotionPreset.resize(m_outputs.size());
     m_liveMultiFxPreset.resize(m_outputs.size());
     m_liveSecondaryRow.resize(m_outputs.size());
     m_stagedRow.resize(m_outputs.size());
@@ -4027,21 +4416,26 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedSecondaryRow.resize(m_outputs.size());
     m_stagedSweepPreset.resize(m_outputs.size());
     m_stagedContinuousPreset.resize(m_outputs.size());
+    m_stagedPositionMotionPreset.resize(m_outputs.size());
     m_stagedMultiFxPreset.resize(m_outputs.size());
     m_stagedRowValid.fill(false);
     m_stagedSecondaryValid.resize(m_outputs.size());
     m_stagedSweepValid.resize(m_outputs.size());
     m_stagedContinuousValid.resize(m_outputs.size());
+    m_stagedPositionMotionValid.resize(m_outputs.size());
     m_stagedMultiFxValid.resize(m_outputs.size());
     m_stagedSecondaryValid.fill(false);
     m_stagedSweepValid.fill(false);
     m_stagedContinuousValid.fill(false);
+    m_stagedPositionMotionValid.fill(false);
     m_stagedMultiFxValid.fill(false);
     ensureMultiButtonRevisionSizeLocked();
     m_continuousElapsedMs.resize(m_outputs.size());
+    m_positionMotionElapsedMs.resize(m_outputs.size());
     m_multiFxElapsedMs.resize(m_outputs.size());
     m_multiFxStagedElapsedMs.resize(m_outputs.size());
     m_continuousLastCycleMs.resize(m_outputs.size());
+    m_positionMotionLastCycleMs.resize(m_outputs.size());
     m_multiFxLastCycleMs.resize(m_outputs.size());
     m_multiFxStagedLastCycleMs.resize(m_outputs.size());
     m_selectionMatrixStateSlots.clear();
@@ -4052,6 +4446,7 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
         const int prevSweep = (o < m_liveSweepPreset.size()) ? m_liveSweepPreset[o] : -1;
         m_liveSweepPreset[o] = m_outputs[o].sweepPresetIndex;
         m_liveContinuousPreset[o] = m_outputs[o].continuousPresetIndex;
+        m_livePositionMotionPreset[o] = m_outputs[o].positionMotionPresetIndex;
         m_liveMultiFxPreset[o] = m_outputs[o].multiFxPresetIndex;
         m_liveSecondaryRow[o] = -1;
         if (m_liveSweepPreset[o] < 0 && m_liveContinuousPreset[o] < 0)
@@ -4083,12 +4478,216 @@ int PresetTableV2Widget::liveContinuousPresetIndexLocked(int outputIdx) const
             ? m_liveContinuousPreset[outputIdx] : m_outputs[outputIdx].continuousPresetIndex;
 }
 
+int PresetTableV2Widget::livePositionMotionPresetIndexLocked(int outputIdx) const
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return -1;
+    return (outputIdx < m_livePositionMotionPreset.size())
+            ? m_livePositionMotionPreset[outputIdx]
+            : m_outputs[outputIdx].positionMotionPresetIndex;
+}
+
 int PresetTableV2Widget::liveMultiFxPresetIndexLocked(int outputIdx) const
 {
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
         return -1;
     return (outputIdx < m_liveMultiFxPreset.size())
             ? m_liveMultiFxPreset[outputIdx] : m_outputs[outputIdx].multiFxPresetIndex;
+}
+
+const QVector<PTTransitionPreset>&
+PresetTableV2Widget::transitionSnapshotPresetsForModeLocked(PTTransitionMode mode) const
+{
+    if (mode == PTTransitionMode::MultiFx)
+        return m_transitionProviderSnapshot.multiFxPresets;
+    if (mode == PTTransitionMode::PositionMotion)
+        return m_transitionProviderSnapshot.positionMotionPresets;
+    if (mode == PTTransitionMode::Continuous)
+        return m_transitionProviderSnapshot.continuousPresets;
+    if (mode == PTTransitionMode::SweepOnly)
+        return m_transitionProviderSnapshot.sweepPresets;
+    static const QVector<PTTransitionPreset> empty;
+    return empty;
+}
+
+const QVector<QHash<int, PTTransitionProviderOutputLayer>>&
+PresetTableV2Widget::transitionSnapshotOverridesForModeLocked(PTTransitionMode mode) const
+{
+    if (mode == PTTransitionMode::MultiFx)
+        return m_transitionProviderSnapshot.multiFxOutputOverrides;
+    if (mode == PTTransitionMode::PositionMotion)
+        return m_transitionProviderSnapshot.positionMotionOutputOverrides;
+    if (mode == PTTransitionMode::Continuous)
+        return m_transitionProviderSnapshot.continuousOutputOverrides;
+    if (mode == PTTransitionMode::SweepOnly)
+        return m_transitionProviderSnapshot.sweepOutputOverrides;
+    static const QVector<QHash<int, PTTransitionProviderOutputLayer>> empty;
+    return empty;
+}
+
+void PresetTableV2Widget::applyTransitionSnapshotOverrideColumnsLocked(
+        PTTransitionPreset& preset,
+        const PTTransitionProviderPresetOverride& ov) const
+{
+    enum SnapshotPresetColumn {
+        SnapshotColName = 0,
+        SnapshotColAxis,
+        SnapshotColOffsetDir,
+        SnapshotColWings,
+        SnapshotColBlocks,
+        SnapshotColWingsSymmetry,
+        SnapshotColOffsetStepMode,
+        SnapshotColOffsetStep,
+        SnapshotColDuration,
+        SnapshotColWaveWidth,
+        SnapshotColWaveShape,
+        SnapshotColFadeIn,
+        SnapshotColFadeOut,
+        SnapshotColWaveLevel,
+        SnapshotColStartOffset,
+        SnapshotColPropagation,
+        SnapshotColSpeedMult,
+        SnapshotColPositionMotion,
+        SnapshotColPositionMotionDir,
+        SnapshotColPosition1DBuiltinMode,
+        SnapshotColPositionPanSize,
+        SnapshotColPositionTiltSize
+    };
+
+    for (int col : ov.columns)
+    {
+        const PTTransitionPreset& v = ov.values;
+        switch (col)
+        {
+            case SnapshotColAxis: preset.axis = v.axis; break;
+            case SnapshotColOffsetDir: preset.offsetDirection = v.offsetDirection; break;
+            case SnapshotColWings: preset.wings = v.wings; break;
+            case SnapshotColBlocks: preset.blocks = v.blocks; break;
+            case SnapshotColWingsSymmetry: preset.wingsSymmetry = v.wingsSymmetry; break;
+            case SnapshotColOffsetStepMode: preset.offsetStepMode = v.offsetStepMode; break;
+            case SnapshotColOffsetStep:
+                preset.offsetStep = v.offsetStep;
+                preset.offsetCoverage = v.offsetCoverage;
+                break;
+            case SnapshotColDuration: preset.durationMs = v.durationMs; break;
+            case SnapshotColWaveWidth: preset.waveWidth = v.waveWidth; break;
+            case SnapshotColWaveShape:
+                preset.customCurveEnabled = v.customCurveEnabled;
+                preset.customCurve = v.customCurve;
+                preset.waveShape = v.waveShape;
+                break;
+            case SnapshotColFadeIn: preset.waveFadeIn = v.waveFadeIn; break;
+            case SnapshotColFadeOut: preset.waveFadeOut = v.waveFadeOut; break;
+            case SnapshotColWaveLevel: preset.waveLevel = v.waveLevel; break;
+            case SnapshotColStartOffset: preset.startOffset = v.startOffset; break;
+            case SnapshotColPropagation: preset.propagation = v.propagation; break;
+            case SnapshotColSpeedMult: preset.speedMultiplier = v.speedMultiplier; break;
+            case SnapshotColPositionMotion: preset.positionMotion = v.positionMotion; break;
+            case SnapshotColPositionMotionDir:
+                preset.positionMotionDirection = v.positionMotionDirection;
+                break;
+            case SnapshotColPosition1DBuiltinMode:
+                preset.position1DBuiltinMode = v.position1DBuiltinMode;
+                break;
+            case SnapshotColPositionPanSize: preset.positionPanSize = v.positionPanSize; break;
+            case SnapshotColPositionTiltSize: preset.positionTiltSize = v.positionTiltSize; break;
+            default: break;
+        }
+    }
+}
+
+int PresetTableV2Widget::transitionSnapshotGridSpanForPresetLocked(
+        const PTTransitionPreset& preset) const
+{
+    if (preset.axis == PTTransitionAxis::Y)
+        return m_transitionProviderSnapshot.spanY;
+    if (preset.axis == PTTransitionAxis::XY)
+        return m_transitionProviderSnapshot.spanXY;
+    return m_transitionProviderSnapshot.spanX;
+}
+
+PTTransitionPreset PresetTableV2Widget::finalizeTransitionSnapshotPresetLocked(
+        PTTransitionMode mode, const PTTransitionPreset& preset) const
+{
+    PTTransitionPreset p = preset;
+    p.playbackMode = (mode == PTTransitionMode::Continuous
+                      || mode == PTTransitionMode::PositionMotion
+                      || mode == PTTransitionMode::MultiFx)
+            ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
+    PTDimmerWaveEngine::clampOffsetStep(p, transitionSnapshotGridSpanForPresetLocked(p));
+    return p;
+}
+
+PTTransitionPreset PresetTableV2Widget::transitionSnapshotPresetLocked(
+        PTTransitionMode mode, int index) const
+{
+    const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
+    if (index < 0 || index >= bank.size())
+        return PTTransitionPreset();
+    return bank.at(index);
+}
+
+PTTransitionPreset PresetTableV2Widget::transitionSnapshotEffectivePresetForOutputLocked(
+        PTTransitionMode mode, int row, int outputIdx, bool applyLive) const
+{
+    PTTransitionPreset p = transitionSnapshotPresetLocked(mode, row);
+    const auto& overrides = transitionSnapshotOverridesForModeLocked(mode);
+    if (outputIdx >= 0 && row >= 0 && row < overrides.size())
+    {
+        const auto& rowOverrides = overrides.at(row);
+        if (rowOverrides.contains(outputIdx))
+            applyTransitionSnapshotOverrideColumnsLocked(p, rowOverrides.value(outputIdx).all);
+    }
+
+    if (applyLive)
+        p = PresetTableV2SpatialEngine::mergePreset(
+                    p, m_transitionProviderSnapshot.liveColumnOverrides);
+    return finalizeTransitionSnapshotPresetLocked(mode, p);
+}
+
+PTTransitionPreset PresetTableV2Widget::transitionSnapshotEffectivePresetForSelectionLocked(
+        PTTransitionMode mode, int row, int outputIdx, int selectionIdx,
+        bool applyLive) const
+{
+    PTTransitionPreset p = transitionSnapshotEffectivePresetForOutputLocked(
+                mode, row, outputIdx, false);
+    const auto& overrides = transitionSnapshotOverridesForModeLocked(mode);
+    if (outputIdx >= 0 && row >= 0 && row < overrides.size())
+    {
+        const auto& rowOverrides = overrides.at(row);
+        if (rowOverrides.contains(outputIdx))
+        {
+            const PTTransitionProviderOutputLayer layer = rowOverrides.value(outputIdx);
+            if (selectionIdx >= 0 && selectionIdx < layer.selections.size())
+                applyTransitionSnapshotOverrideColumnsLocked(
+                            p, layer.selections.at(selectionIdx).overrides);
+        }
+    }
+
+    if (applyLive)
+        p = PresetTableV2SpatialEngine::mergePreset(
+                    p, m_transitionProviderSnapshot.liveColumnOverrides);
+    return finalizeTransitionSnapshotPresetLocked(mode, p);
+}
+
+int PresetTableV2Widget::transitionSnapshotSelectionIndexForPointLocked(
+        PTTransitionMode mode, int row, int outputIdx, const QLCPoint& point) const
+{
+    if (outputIdx < 0)
+        return -1;
+    const auto& overrides = transitionSnapshotOverridesForModeLocked(mode);
+    if (row < 0 || row >= overrides.size())
+        return -1;
+    const auto& rowOverrides = overrides.at(row);
+    if (!rowOverrides.contains(outputIdx))
+        return -1;
+    const PTTransitionProviderOutputLayer layer = rowOverrides.value(outputIdx);
+    for (int i = 0; i < layer.selections.size(); ++i)
+    {
+        if (layer.selections.at(i).cells.contains(point))
+            return i;
+    }
+    return -1;
 }
 
 PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransitionMode mode,
@@ -4104,15 +4703,19 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransiti
         return instant;
     }
 
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
+    const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
+    if (presetIndex < bank.size())
     {
-        if (presetIndex < provider->transitionPresetCount(mode))
+        if (point != nullptr)
         {
-            if (point != nullptr)
-                return provider->effectiveTransitionPresetForPoint(mode, presetIndex,
-                                                                   outputIdx, *point);
-            return provider->effectiveTransitionPresetForOutput(mode, presetIndex, outputIdx);
+            const int selectionIdx = transitionSnapshotSelectionIndexForPointLocked(
+                        mode, presetIndex, outputIdx, *point);
+            if (selectionIdx >= 0)
+                return transitionSnapshotEffectivePresetForSelectionLocked(
+                            mode, presetIndex, outputIdx, selectionIdx, true);
         }
+        return transitionSnapshotEffectivePresetForOutputLocked(
+                    mode, presetIndex, outputIdx, true);
     }
 
     return PresetTableV2SpatialEngine::presetFromLegacySpatial(m_spatialEffects);
@@ -4136,6 +4739,13 @@ PTTransitionPreset PresetTableV2Widget::multiFxPresetForOutputLocked(int outputI
                                          liveMultiFxPresetIndexLocked(outputIdx), outputIdx);
 }
 
+PTTransitionPreset PresetTableV2Widget::positionMotionPresetForOutputLocked(int outputIdx) const
+{
+    return transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
+                                         livePositionMotionPresetIndexLocked(outputIdx),
+                                         outputIdx);
+}
+
 PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outputIdx,
                                                                         uchar xfEffective) const
 {
@@ -4148,6 +4758,21 @@ PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outp
 
     return transitionPresetAtIndexLocked(
             PTTransitionMode::Continuous, m_stagedContinuousPreset[outputIdx], outputIdx);
+}
+
+PTTransitionPreset PresetTableV2Widget::positionMotionPresetForOutputLocked(
+        int outputIdx, uchar xfEffective) const
+{
+    Q_UNUSED(xfEffective);
+    const PTTransitionPreset live = positionMotionPresetForOutputLocked(outputIdx);
+    if (outputIdx < 0 || outputIdx >= m_stagedPositionMotionPreset.size()
+            || outputIdx >= m_stagedPositionMotionValid.size()
+            || !m_stagedPositionMotionValid[outputIdx])
+        return live;
+
+    return transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
+                                         m_stagedPositionMotionPreset[outputIdx],
+                                         outputIdx);
 }
 
 static QVector<uchar> blendRowValues(const QVector<uchar>& live,
@@ -4247,6 +4872,27 @@ bool PresetTableV2Widget::multiFxActiveForOutputLocked(int outputIdx) const
             || hasStagedMultiFxPresetLocked(outputIdx);
 }
 
+bool PresetTableV2Widget::positionMotionEfxActiveForOutputLocked(int outputIdx) const
+{
+    return livePositionMotionPresetIndexLocked(outputIdx) >= 0
+            || hasStagedPositionMotionPresetLocked(outputIdx);
+}
+
+bool PresetTableV2Widget::hasStagedPositionMotionPresetLocked(int outputIdx) const
+{
+    return outputIdx >= 0
+            && outputIdx < m_stagedPositionMotionValid.size()
+            && outputIdx < m_stagedPositionMotionPreset.size()
+            && m_stagedPositionMotionValid[outputIdx];
+}
+
+int PresetTableV2Widget::stagedPositionMotionPresetIndexLocked(int outputIdx) const
+{
+    if (!hasStagedPositionMotionPresetLocked(outputIdx))
+        return -1;
+    return m_stagedPositionMotionPreset[outputIdx];
+}
+
 bool PresetTableV2Widget::hasStagedMultiFxPresetLocked(int outputIdx) const
 {
     return outputIdx >= 0
@@ -4331,6 +4977,10 @@ void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
     sendFeedback(liveContinuous < 0 ? 0 : liveContinuous + 1,
                  PTInputId::transContinuousBank(outputIdx));
 
+    const int livePositionMotion = livePositionMotionPresetIndexLocked(outputIdx);
+    sendFeedback(livePositionMotion < 0 ? 0 : livePositionMotion + 1,
+                 PTInputId::positionMotionBank(outputIdx));
+
     const int liveMultiFx = liveMultiFxPresetIndexLocked(outputIdx);
     sendFeedback(liveMultiFx < 0 ? 0 : liveMultiFx + 1, PTInputId::multiFxBank(outputIdx));
 
@@ -4341,7 +4991,7 @@ void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
 
 bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
 {
-    if (!m_crossfadeEnabled || !continuousEfxActiveForOutputLocked(outputIdx))
+    if (!m_crossfadeEnabled || outputIdx < 0 || outputIdx >= m_outputs.size())
         return false;
     const bool hasStagedContinuous = outputIdx >= 0
             && outputIdx < m_stagedContinuousValid.size()
@@ -4349,6 +4999,11 @@ bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
     const bool hasStagedSecondary = outputIdx >= 0
             && outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx];
+    if (hasStagedContinuous || hasStagedSecondary)
+        return true;
+
+    if (!continuousEfxActiveForOutputLocked(outputIdx))
+        return false;
     return hasStagedContinuous || hasStagedSecondary
             || effectiveSecondaryRowLocked(outputIdx, m_activeRow[outputIdx]) >= 0;
 }
@@ -4405,6 +5060,11 @@ bool PresetTableV2Widget::continuousFxSelectionStagedAnyLocked() const
         if (m_stagedContinuousValid[o])
             return true;
     }
+    for (int o = 0; o < m_stagedPositionMotionValid.size(); ++o)
+    {
+        if (m_stagedPositionMotionValid[o])
+            return true;
+    }
     for (int o = 0; o < m_stagedMultiFxValid.size(); ++o)
     {
         if (m_stagedMultiFxValid[o])
@@ -4422,9 +5082,7 @@ bool PresetTableV2Widget::continuousFxSelectorToStagedLocked() const
 
 bool PresetTableV2Widget::crossfadeManualControlEnabledLocked() const
 {
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-        return provider->crossfadeManualControlEnabled();
-    return true;
+    return m_transitionProviderSnapshot.crossfadeManualControl;
 }
 
 bool PresetTableV2Widget::crossfadeRoutesToStagedLocked() const
@@ -4449,6 +5107,11 @@ bool PresetTableV2Widget::crossfadeHasStagedChangesLocked() const
     for (int o = 0; o < m_stagedContinuousValid.size(); ++o)
     {
         if (m_stagedContinuousValid[o])
+            return true;
+    }
+    for (int o = 0; o < m_stagedPositionMotionValid.size(); ++o)
+    {
+        if (m_stagedPositionMotionValid[o])
             return true;
     }
     for (int o = 0; o < m_stagedMultiFxValid.size(); ++o)
@@ -4793,7 +5456,7 @@ bool PresetTableV2Widget::multiButtonSupportsAllOutputs() const
 
 int PresetTableV2Widget::multiButtonParameterCount() const
 {
-    return 5;
+    return 6;
 }
 
 QString PresetTableV2Widget::multiButtonParameterName(int parameter) const
@@ -4805,8 +5468,10 @@ QString PresetTableV2Widget::multiButtonParameterName(int parameter) const
             return positionMode ? tr("Position transition preset")
                                 : tr("Transition preset");
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
-            return positionMode ? tr("Position FX preset")
+            return positionMode ? tr("Interpolation preset")
                                 : tr("Continuous FX preset");
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return tr("Continuous Motion preset");
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return positionMode ? tr("Position MultiFX preset")
                                 : tr("MultiFX preset");
@@ -4828,6 +5493,8 @@ static PTTransitionMode multiButtonParamToTransitionMode(int parameter)
             return PTTransitionMode::SweepOnly;
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
             return PTTransitionMode::Continuous;
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return PTTransitionMode::PositionMotion;
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return PTTransitionMode::MultiFx;
         default:
@@ -4835,7 +5502,7 @@ static PTTransitionMode multiButtonParamToTransitionMode(int parameter)
     }
 }
 
-static quint8 multiButtonParamToPresetTableInputId(int outputIdx, int parameter)
+static quint32 multiButtonParamToPresetTableInputId(int outputIdx, int parameter)
 {
     switch (parameter)
     {
@@ -4847,6 +5514,8 @@ static quint8 multiButtonParamToPresetTableInputId(int outputIdx, int parameter)
             return PTInputId::transSecondaryRow(outputIdx);
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
             return PTInputId::transContinuousBank(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return PTInputId::positionMotionBank(outputIdx);
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return PTInputId::multiFxBank(outputIdx);
         default:
@@ -4866,9 +5535,7 @@ int PresetTableV2Widget::multiButtonEntryCount(int outputIdx, int parameter) con
     const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
     if (mode == PTTransitionMode::Off)
         return 0;
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-        return provider->transitionPresetCount(mode);
-    return 0;
+    return transitionSnapshotPresetsForModeLocked(mode).size();
 }
 
 QString PresetTableV2Widget::multiButtonEntryName(int outputIdx, int parameter, int index) const
@@ -4888,9 +5555,11 @@ QString PresetTableV2Widget::multiButtonEntryName(int outputIdx, int parameter, 
     const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
     if (mode == PTTransitionMode::Off)
         return QString();
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-        return provider->transitionPresetName(mode, index);
-    return QString();
+    const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
+    if (index < 0 || index >= bank.size())
+        return QString();
+    const QString name = bank.at(index).name;
+    return name.isEmpty() ? tr("Preset %1").arg(index + 1) : name;
 }
 
 int PresetTableV2Widget::multiButtonCurrentIndex(int outputIdx, int parameter) const
@@ -4913,6 +5582,8 @@ int PresetTableV2Widget::multiButtonLiveIndex(int outputIdx, int parameter) cons
             return liveSweepPresetIndexLocked(outputIdx);
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
             return liveContinuousPresetIndexLocked(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return livePositionMotionPresetIndexLocked(outputIdx);
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return liveMultiFxPresetIndexLocked(outputIdx);
         default:
@@ -4931,6 +5602,7 @@ bool PresetTableV2Widget::multiButtonStagingAvailable(int outputIdx, int paramet
         case PresetTableV2MultiButtonTargetIface::PrimaryRow:
         case PresetTableV2MultiButtonTargetIface::SecondaryRow:
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return true;
         default:
@@ -4956,6 +5628,9 @@ bool PresetTableV2Widget::multiButtonOutputControlsParameter(int outputIdx,
     if (outputIdx < 0 || outputIdx >= m_outputs.size())
         return false;
     if (parameter < 0 || parameter >= multiButtonParameterCount())
+        return false;
+    if (parameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset
+            && m_mode != PTMode::Position)
         return false;
     if (m_mode != PTMode::FixtureGroup && m_mode != PTMode::Position)
         return true;
@@ -5018,6 +5693,9 @@ bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
             return outputIdx < m_stagedContinuousValid.size()
                     && m_stagedContinuousValid.at(outputIdx);
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return outputIdx < m_stagedPositionMotionValid.size()
+                    && m_stagedPositionMotionValid.at(outputIdx);
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return outputIdx < m_stagedMultiFxValid.size()
                     && m_stagedMultiFxValid.at(outputIdx);
@@ -5051,6 +5729,12 @@ int PresetTableV2Widget::multiButtonStagedIndex(int outputIdx, int parameter) co
                     && m_stagedContinuousValid[outputIdx])
                 return m_stagedContinuousPreset[outputIdx];
             return -1;
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            if (outputIdx < m_stagedPositionMotionValid.size()
+                    && outputIdx < m_stagedPositionMotionPreset.size()
+                    && m_stagedPositionMotionValid[outputIdx])
+                return m_stagedPositionMotionPreset[outputIdx];
+            return -1;
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             if (outputIdx < m_stagedMultiFxValid.size()
                     && outputIdx < m_stagedMultiFxPreset.size()
@@ -5069,7 +5753,7 @@ QSharedPointer<QLCInputSource> PresetTableV2Widget::multiButtonLiveInputSource(i
         return QSharedPointer<QLCInputSource>();
     if (outputIdx >= m_outputs.size())
         return QSharedPointer<QLCInputSource>();
-    const quint8 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
+    const quint32 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
     if (id == 0 && parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
         return QSharedPointer<QLCInputSource>();
     return inputSource(id);
@@ -5082,7 +5766,7 @@ bool PresetTableV2Widget::multiButtonSetLiveInputSource(int outputIdx, int param
         return false;
     if (outputIdx >= m_outputs.size())
         return false;
-    const quint8 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
+    const quint32 id = multiButtonParamToPresetTableInputId(outputIdx, parameter);
     if (id == 0 && parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
         return false;
     setInputSource(src, id);
@@ -5118,9 +5802,8 @@ bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter
     }
 
     const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
-    PresetTableV2TransitionProviderIface* provider = transitionProviderLocked();
-    if (!provider || mode == PTTransitionMode::Off
-            || index < -1 || index >= provider->transitionPresetCount(mode))
+    if (mode == PTTransitionMode::Off
+            || index < -1 || index >= transitionSnapshotPresetsForModeLocked(mode).size())
         return false;
 
     if (parameter == PresetTableV2MultiButtonTargetIface::TransitionPreset)
@@ -5148,6 +5831,15 @@ bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter
         stageContinuousPresetLocked(outputIdx, index);
         resetCrossfadeClockLocked();
     }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset)
+    {
+        if (!m_crossfadeEnabled)
+            return false;
+        armCrossfadeStagingLocked();
+        materializeContinuousRowsLocked(outputIdx, true);
+        stagePositionMotionPresetLocked(outputIdx, index);
+        resetCrossfadeClockLocked();
+    }
     else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
     {
         if (!m_crossfadeEnabled)
@@ -5160,9 +5852,6 @@ bool PresetTableV2Widget::multiButtonActivateStaged(int outputIdx, int parameter
     else
         return false;
 
-    m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
-    m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
-    m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
     update();
     if (m_doc)
         m_doc->setModified();
@@ -5240,6 +5929,16 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     {
         if (index < -1 || index >= m_rows.size())
             return false;
+        if (continuousFxSelectorToStagedLocked())
+        {
+            armCrossfadeStagingLocked();
+            stageSecondaryRowLocked(outputIdx, index);
+            resetCrossfadeClockLocked();
+            update();
+            if (m_doc)
+                m_doc->setModified();
+            return true;
+        }
         while (m_liveSecondaryRow.size() <= outputIdx)
             m_liveSecondaryRow.append(-1);
         m_liveSecondaryRow[outputIdx] = index;
@@ -5261,9 +5960,8 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     }
 
     const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
-    PresetTableV2TransitionProviderIface* provider = transitionProviderLocked();
-    if (!provider || mode == PTTransitionMode::Off
-            || index < -1 || index >= provider->transitionPresetCount(mode))
+    if (mode == PTTransitionMode::Off
+            || index < -1 || index >= transitionSnapshotPresetsForModeLocked(mode).size())
         return false;
 
     if (parameter == PresetTableV2MultiButtonTargetIface::TransitionPreset)
@@ -5284,6 +5982,17 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     }
     else if (parameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset)
     {
+        if (continuousFxSelectorToStagedLocked())
+        {
+            armCrossfadeStagingLocked();
+            materializeContinuousRowsLocked(outputIdx, true);
+            stageContinuousPresetLocked(outputIdx, index);
+            resetCrossfadeClockLocked();
+            update();
+            if (m_doc)
+                m_doc->setModified();
+            return true;
+        }
         while (m_liveContinuousPreset.size() <= outputIdx)
             m_liveContinuousPreset.append(-1);
         m_liveContinuousPreset[outputIdx] = index;
@@ -5297,8 +6006,44 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
         clearCrossfadeSessionIfNoStaged();
         sendFeedback(index < 0 ? 0 : index + 1, PTInputId::transContinuousBank(outputIdx));
     }
+    else if (parameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset)
+    {
+        if (continuousFxSelectorToStagedLocked())
+        {
+            armCrossfadeStagingLocked();
+            materializeContinuousRowsLocked(outputIdx, true);
+            stagePositionMotionPresetLocked(outputIdx, index);
+            resetCrossfadeClockLocked();
+            update();
+            if (m_doc)
+                m_doc->setModified();
+            return true;
+        }
+        while (m_livePositionMotionPreset.size() <= outputIdx)
+            m_livePositionMotionPreset.append(-1);
+        m_livePositionMotionPreset[outputIdx] = index;
+        if (outputIdx < m_stagedPositionMotionValid.size())
+            m_stagedPositionMotionValid[outputIdx] = false;
+        if (outputIdx < m_stagedPositionMotionPreset.size())
+            m_stagedPositionMotionPreset[outputIdx] = -1;
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
+        clearCrossfadeSessionIfNoStaged();
+        sendFeedback(index < 0 ? 0 : index + 1, PTInputId::positionMotionBank(outputIdx));
+    }
     else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
     {
+        if (continuousFxSelectorToStagedLocked())
+        {
+            armCrossfadeStagingLocked();
+            materializeContinuousRowsLocked(outputIdx, true);
+            stageMultiFxPresetLocked(outputIdx, index);
+            resetCrossfadeClockLocked();
+            update();
+            if (m_doc)
+                m_doc->setModified();
+            return true;
+        }
         while (m_liveMultiFxPreset.size() <= outputIdx)
             m_liveMultiFxPreset.append(-1);
         m_liveMultiFxPreset[outputIdx] = index;
@@ -5314,9 +6059,6 @@ bool PresetTableV2Widget::multiButtonActivate(int outputIdx, int parameter, int 
     else
         return false;
 
-    m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
-    m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
-    m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
     update();
     if (m_doc)
         m_doc->setModified();
@@ -5338,6 +6080,8 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
         m_stagedSweepPreset[outputIdx] = -1;
     if (outputIdx < m_stagedContinuousPreset.size())
         m_stagedContinuousPreset[outputIdx] = -1;
+    if (outputIdx < m_stagedPositionMotionPreset.size())
+        m_stagedPositionMotionPreset[outputIdx] = -1;
     if (outputIdx < m_stagedMultiFxPreset.size())
         m_stagedMultiFxPreset[outputIdx] = -1;
     if (outputIdx < m_stagedSecondaryValid.size())
@@ -5346,6 +6090,8 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
         m_stagedSweepValid[outputIdx] = false;
     if (outputIdx < m_stagedContinuousValid.size())
         m_stagedContinuousValid[outputIdx] = false;
+    if (outputIdx < m_stagedPositionMotionValid.size())
+        m_stagedPositionMotionValid[outputIdx] = false;
     if (outputIdx < m_stagedMultiFxValid.size())
         m_stagedMultiFxValid[outputIdx] = false;
     bumpMultiButtonStateRevisionLocked(
@@ -5356,6 +6102,8 @@ void PresetTableV2Widget::clearStagedLayerLocked(int outputIdx)
             outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
     if (!crossfadeHasStagedChangesLocked())
@@ -5378,6 +6126,10 @@ void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
     {
         m_stagedSecondaryRow[outputIdx] = -1;
         m_stagedSecondaryValid[outputIdx] = false;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("clear staged secondary output=%1 row=%2 live=%3")
+                        .arg(outputIdx).arg(rowIdx).arg(liveRow));
         bumpMultiButtonStateRevisionLocked(
                 outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
         if (!crossfadeHasStagedChangesLocked())
@@ -5387,6 +6139,10 @@ void PresetTableV2Widget::stageSecondaryRowLocked(int outputIdx, int rowIdx)
 
     m_stagedSecondaryRow[outputIdx] = rowIdx;
     m_stagedSecondaryValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage secondary output=%1 row=%2 live=%3")
+                    .arg(outputIdx).arg(rowIdx).arg(liveRow));
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::SecondaryRow);
 }
@@ -5401,6 +6157,11 @@ void PresetTableV2Widget::stageSweepPresetLocked(int outputIdx, int presetIdx)
         m_stagedSweepValid.append(false);
     m_stagedSweepPreset[outputIdx] = presetIdx;
     m_stagedSweepValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage transition output=%1 preset=%2 live=%3")
+                    .arg(outputIdx).arg(presetIdx)
+                    .arg(liveSweepPresetIndexLocked(outputIdx)));
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::TransitionPreset);
 }
@@ -5417,6 +6178,10 @@ void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetI
     {
         m_stagedContinuousPreset[outputIdx] = -1;
         m_stagedContinuousValid[outputIdx] = false;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("clear staged continuous output=%1 preset=%2")
+                        .arg(outputIdx).arg(presetIdx));
         bumpMultiButtonStateRevisionLocked(
                 outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
         if (!crossfadeHasStagedChangesLocked())
@@ -5425,6 +6190,11 @@ void PresetTableV2Widget::stageContinuousPresetLocked(int outputIdx, int presetI
     }
     m_stagedContinuousPreset[outputIdx] = presetIdx;
     m_stagedContinuousValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage continuous output=%1 preset=%2 live=%3")
+                    .arg(outputIdx).arg(presetIdx)
+                    .arg(liveContinuousPresetIndexLocked(outputIdx)));
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
 }
@@ -5441,6 +6211,10 @@ void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
     {
         m_stagedMultiFxPreset[outputIdx] = -1;
         m_stagedMultiFxValid[outputIdx] = false;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("clear staged multifx output=%1 preset=%2")
+                        .arg(outputIdx).arg(presetIdx));
         bumpMultiButtonStateRevisionLocked(
                 outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
         if (!crossfadeHasStagedChangesLocked())
@@ -5449,18 +6223,56 @@ void PresetTableV2Widget::stageMultiFxPresetLocked(int outputIdx, int presetIdx)
     }
     m_stagedMultiFxPreset[outputIdx] = presetIdx;
     m_stagedMultiFxValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage multifx output=%1 preset=%2 live=%3")
+                    .arg(outputIdx).arg(presetIdx)
+                    .arg(liveMultiFxPresetIndexLocked(outputIdx)));
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
+}
+
+void PresetTableV2Widget::stagePositionMotionPresetLocked(int outputIdx, int presetIdx)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return;
+    while (m_stagedPositionMotionPreset.size() <= outputIdx)
+        m_stagedPositionMotionPreset.append(-1);
+    while (m_stagedPositionMotionValid.size() <= outputIdx)
+        m_stagedPositionMotionValid.append(false);
+    if (presetIdx == livePositionMotionPresetIndexLocked(outputIdx))
+    {
+        m_stagedPositionMotionPreset[outputIdx] = -1;
+        m_stagedPositionMotionValid[outputIdx] = false;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("clear staged position motion output=%1 preset=%2")
+                        .arg(outputIdx).arg(presetIdx));
+        bumpMultiButtonStateRevisionLocked(
+                outputIdx, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
+        if (!crossfadeHasStagedChangesLocked())
+            m_crossfadeSessionActive = false;
+        return;
+    }
+    m_stagedPositionMotionPreset[outputIdx] = presetIdx;
+    m_stagedPositionMotionValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage position motion output=%1 preset=%2 live=%3")
+                    .arg(outputIdx).arg(presetIdx)
+                    .arg(livePositionMotionPresetIndexLocked(outputIdx)));
+    bumpMultiButtonStateRevisionLocked(
+            outputIdx, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
 }
 
 void PresetTableV2Widget::ensureMultiButtonRevisionSizeLocked()
 {
     while (m_multiButtonStateRevision.size() < m_outputs.size())
-        m_multiButtonStateRevision.append(QVector<quint64>(5, 0));
+        m_multiButtonStateRevision.append(QVector<quint64>(6, 0));
     while (m_multiButtonStateRevision.size() > m_outputs.size())
         m_multiButtonStateRevision.removeLast();
     for (QVector<quint64>& revisions : m_multiButtonStateRevision)
-        revisions.resize(5);
+        revisions.resize(6);
 }
 
 int PresetTableV2Widget::multiButtonRevisionSlotLocked(int parameter) const
@@ -5477,6 +6289,8 @@ int PresetTableV2Widget::multiButtonRevisionSlotLocked(int parameter) const
             return 3;
         case PresetTableV2MultiButtonTargetIface::SecondaryRow:
             return 4;
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            return 5;
         default:
             return -1;
     }
@@ -5507,6 +6321,10 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
     {
         m_stagedRow[outputIdx] = -1;
         m_stagedRowValid[outputIdx] = false;
+        VCPluginDiagnostics::breadcrumb(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("clear staged primary output=%1 row=%2 live=%3")
+                        .arg(outputIdx).arg(rowIdx).arg(liveRow));
         syncCommittedPlaybackStateLocked(outputIdx, false);
         bumpMultiButtonStateRevisionLocked(
                 outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
@@ -5517,6 +6335,11 @@ void PresetTableV2Widget::stagePrimaryRowLocked(int outputIdx, int rowIdx)
 
     m_stagedRow[outputIdx] = rowIdx;
     m_stagedRowValid[outputIdx] = true;
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("stage primary output=%1 row=%2 live=%3 crossfade=%4")
+                    .arg(outputIdx).arg(rowIdx).arg(liveRow)
+                    .arg(m_crossfadeEnabled ? 1 : 0));
     bumpMultiButtonStateRevisionLocked(
             outputIdx, PresetTableV2MultiButtonTargetIface::PrimaryRow);
 }
@@ -5579,6 +6402,15 @@ void PresetTableV2Widget::syncCommittedPlaybackStateLocked(int outputIdx, bool r
         m_spatialAppliedRow[outputIdx] = m_activeRow[outputIdx];
     if (outputIdx < m_spatialChase.size())
         m_spatialChase[outputIdx] = PTSpatialChaseOutput();
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2"), id(), caption(),
+            QStringLiteral("commit playback output=%1 resetFx=%2 livePrimary=%3 liveTransition=%4 liveContinuous=%5 livePositionMotion=%6 liveMultiFx=%7")
+                    .arg(outputIdx).arg(resetFxPlayback ? 1 : 0)
+                    .arg(outputIdx < m_activeRow.size() ? m_activeRow[outputIdx] : -1)
+                    .arg(liveSweepPresetIndexLocked(outputIdx))
+                    .arg(liveContinuousPresetIndexLocked(outputIdx))
+                    .arg(livePositionMotionPresetIndexLocked(outputIdx))
+                    .arg(liveMultiFxPresetIndexLocked(outputIdx)));
 }
 
 void PresetTableV2Widget::promoteStagedToLiveLocked()
@@ -5600,6 +6432,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
 
         if (o < m_stagedSecondaryValid.size() && m_stagedSecondaryValid[o])
         {
+            const int stagedValue = (o < m_stagedSecondaryRow.size())
+                    ? m_stagedSecondaryRow[o] : -1;
             while (m_liveSecondaryRow.size() <= o)
                 m_liveSecondaryRow.append(-1);
             if (o < m_stagedSecondaryRow.size())
@@ -5612,6 +6446,10 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_outputs[o].secondaryRowIndex = m_liveSecondaryRow[o];
             bumpMultiButtonStateRevisionLocked(
                     o, PresetTableV2MultiButtonTargetIface::SecondaryRow);
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("promote staged secondary output=%1 row=%2")
+                            .arg(o).arg(stagedValue));
             promoted = true;
         }
 
@@ -5622,6 +6460,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
 
         if (o < m_stagedContinuousValid.size() && m_stagedContinuousValid[o])
         {
+            const int stagedValue = (o < m_stagedContinuousPreset.size())
+                    ? m_stagedContinuousPreset[o] : -1;
             if (o < m_liveContinuousPreset.size() && o < m_stagedContinuousPreset.size())
                 m_liveContinuousPreset[o] = m_stagedContinuousPreset[o];
             m_stagedContinuousValid[o] = false;
@@ -5631,6 +6471,31 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_outputs[o].continuousPresetIndex = m_liveContinuousPreset[o];
             bumpMultiButtonStateRevisionLocked(
                     o, PresetTableV2MultiButtonTargetIface::ContinuousPreset);
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("promote staged interpolation output=%1 preset=%2")
+                            .arg(o).arg(stagedValue));
+            promoted = true;
+            promotedFxPreset = true;
+        }
+
+        if (o < m_stagedPositionMotionValid.size() && m_stagedPositionMotionValid[o])
+        {
+            const int stagedValue = (o < m_stagedPositionMotionPreset.size())
+                    ? m_stagedPositionMotionPreset[o] : -1;
+            if (o < m_livePositionMotionPreset.size() && o < m_stagedPositionMotionPreset.size())
+                m_livePositionMotionPreset[o] = m_stagedPositionMotionPreset[o];
+            m_stagedPositionMotionValid[o] = false;
+            if (o < m_stagedPositionMotionPreset.size())
+                m_stagedPositionMotionPreset[o] = -1;
+            if (o < m_outputs.size() && o < m_livePositionMotionPreset.size())
+                m_outputs[o].positionMotionPresetIndex = m_livePositionMotionPreset[o];
+            bumpMultiButtonStateRevisionLocked(
+                    o, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("promote staged position motion output=%1 preset=%2")
+                            .arg(o).arg(stagedValue));
             promoted = true;
             promotedFxPreset = true;
         }
@@ -5684,34 +6549,21 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetForOutputLocked(int outp
 
 PresetTableV2TransitionProviderIface* PresetTableV2Widget::linkedTransitionProvider() const
 {
-    QMutexLocker lk(&m_stateMutex);
-    return transitionProviderLocked();
-}
-
-PresetTableV2TransitionProviderIface* PresetTableV2Widget::transitionProviderLocked() const
-{
-    if (m_linkedTransitionWidgetId == VCWidget::invalidId())
-        return nullptr;
-    VirtualConsole* vc = VirtualConsole::instance();
-    if (!vc)
-        return nullptr;
-    return qobject_cast<PresetTableV2TransitionProviderIface*>(
-            vc->widget(m_linkedTransitionWidgetId));
+    const quint32 linkedId = linkedTransitionWidgetId();
+    return PresetTableV2VCLookup::transitionProviderByVcId(linkedId);
 }
 
 PTGlobalEffectSettings PresetTableV2Widget::globalEffectSettingsLocked() const
 {
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-        return provider->globalEffectSettings();
-    return PTGlobalEffectSettings();
+    return m_transitionProviderSnapshot.globalSettings;
 }
 
 quint32 PresetTableV2Widget::cycleDurationMsLocked(const PTGlobalEffectSettings& global,
                                                    const PTTransitionPreset& preset) const
 {
     bool honorPresetDuration = false;
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-        honorPresetDuration = provider->hasLiveColumnOverride(PTEfxCol::InputDuration);
+    honorPresetDuration =
+            m_transitionProviderSnapshot.liveColumnOverrides.contains(PTEfxCol::InputDuration);
     return PTParamMatrixEngine::effectiveDurationMs(global, preset, honorPresetDuration);
 }
 
@@ -6541,6 +7393,7 @@ bool PresetTableV2Widget::matrixProviderReadyLocked() const
 {
     return m_linkedTransitionWidgetId != VCWidget::invalidId()
             && (m_cachedTransitionSweepCount > 0 || m_cachedTransitionContinuousCount > 0
+                || m_cachedTransitionPositionMotionCount > 0
                 || m_cachedTransitionMultiFxCount > 0);
 }
 
@@ -6552,7 +7405,9 @@ bool PresetTableV2Widget::useMatrixEngineLocked() const
 bool PresetTableV2Widget::efxActiveForOutputLocked(int outputIdx) const
 {
     return sweepEfxActiveForOutputLocked(outputIdx)
-            || continuousEfxActiveForOutputLocked(outputIdx);
+            || continuousEfxActiveForOutputLocked(outputIdx)
+            || positionMotionEfxActiveForOutputLocked(outputIdx)
+            || multiFxActiveForOutputLocked(outputIdx);
 }
 
 PresetTableV2Widget::PTOutputPlaybackState
@@ -6564,6 +7419,7 @@ PresetTableV2Widget::resolveOutputPlaybackStateLocked(int outputIdx, int activeR
     PTOutputPlaybackState state;
     state.transitionOn = sweepEfxActiveForOutputLocked(outputIdx);
     state.continuousFxOn = continuousEfxActiveForOutputLocked(outputIdx);
+    state.positionMotionOn = positionMotionEfxActiveForOutputLocked(outputIdx);
     const bool hasStagedSecondary = outputIdx >= 0
             && outputIdx < m_stagedSecondaryValid.size()
             && m_stagedSecondaryValid[outputIdx]
@@ -6582,7 +7438,9 @@ PresetTableV2Widget::resolveOutputPlaybackStateLocked(int outputIdx, int activeR
             && !state.crossfadeTransition
             && !state.crossfadeContinuous;
     state.matrixForOutput = matrixReady
-            && (spatialOn || m_crossfadeEnabled || state.transitionOn || state.continuousFxOn);
+            && (spatialOn || m_crossfadeEnabled || state.transitionOn
+                || state.continuousFxOn || state.positionMotionOn
+                || multiFxActiveForOutputLocked(outputIdx));
     return state;
 }
 
@@ -6944,6 +7802,10 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
         m_continuousElapsedMs.append(0);
     while (m_continuousLastCycleMs.size() < m_outputs.size())
         m_continuousLastCycleMs.append(0);
+    while (m_positionMotionElapsedMs.size() < m_outputs.size())
+        m_positionMotionElapsedMs.append(0);
+    while (m_positionMotionLastCycleMs.size() < m_outputs.size())
+        m_positionMotionLastCycleMs.append(0);
 
     for (int o = 0; o < m_outputs.size(); ++o)
     {
@@ -6971,35 +7833,52 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 ? resolveOutputPlaybackStateLocked(o, activeRow, hasStaged,
                                                    true, spatialOn)
                 : PTOutputPlaybackState();
-        const bool contOn = playback.continuousFxOn;
+        const bool interpolationOn = playback.continuousFxOn;
+        const bool motionOn = playback.positionMotionOn;
         const bool sweepOn = playback.transitionOn;
         const int secondaryRow = playback.secondaryRow;
         const bool secondaryValid = secondaryRow >= 0 && secondaryRow < m_rows.size();
         const bool multiFxOn = multiFxActiveForOutputLocked(o);
-        const bool blockFxDuringXf = m_crossfadeEnabled && hasStaged;
-        const bool relativeFxOn = spatialOn && !blockFxDuringXf
-                && (contOn || sweepOn || multiFxOn);
+        const bool legacySweepMotionOn = spatialOn && sweepOn && !interpolationOn && !motionOn;
 
-        quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(globalFx, PTTransitionPreset()));
-        if (relativeFxOn)
+        quint32 interpolationCycleMs =
+                qMax(quint32(1), cycleDurationMsLocked(globalFx, PTTransitionPreset()));
+        if (interpolationOn && secondaryValid)
         {
-            PTTransitionPreset cyclePreset = contOn
-                    ? continuousPresetForOutputLocked(o) : transitionPresetForOutputLocked(o);
-            cycleMs = qMax(quint32(1), cycleDurationMsLocked(globalFx, cyclePreset));
-            ensurePhaseStableCycleLocked(m_continuousElapsedMs, m_continuousLastCycleMs, o, cycleMs);
+            const PTTransitionPreset cyclePreset = continuousPresetForOutputLocked(o, xfEffective);
+            interpolationCycleMs = qMax(quint32(1), cycleDurationMsLocked(globalFx, cyclePreset));
+            ensurePhaseStableCycleLocked(m_continuousElapsedMs, m_continuousLastCycleMs,
+                                         o, interpolationCycleMs);
             m_continuousElapsedMs[o] += MasterTimer::tick();
-            if (m_continuousElapsedMs[o] > cycleMs)
+            if (m_continuousElapsedMs[o] > interpolationCycleMs)
                 m_continuousElapsedMs[o] = 0;
         }
-        const quint32 elapsedMs = quint32(o < m_continuousElapsedMs.size()
+        const quint32 interpolationElapsedMs = quint32(o < m_continuousElapsedMs.size()
                 ? m_continuousElapsedMs[o] : 0);
+
+        quint32 motionCycleMs =
+                qMax(quint32(1), cycleDurationMsLocked(globalFx, PTTransitionPreset()));
+        if (motionOn || legacySweepMotionOn)
+        {
+            const PTTransitionPreset cyclePreset = motionOn
+                    ? positionMotionPresetForOutputLocked(o, xfEffective)
+                    : sweepPresetForOutputLocked(o);
+            motionCycleMs = qMax(quint32(1), cycleDurationMsLocked(globalFx, cyclePreset));
+            ensurePhaseStableCycleLocked(m_positionMotionElapsedMs, m_positionMotionLastCycleMs,
+                                         o, motionCycleMs);
+            m_positionMotionElapsedMs[o] += MasterTimer::tick();
+            if (m_positionMotionElapsedMs[o] > motionCycleMs)
+                m_positionMotionElapsedMs[o] = 0;
+        }
+        const quint32 motionElapsedMs = quint32(o < m_positionMotionElapsedMs.size()
+                ? m_positionMotionElapsedMs[o] : 0);
 
         QList<QLCPoint> points;
         for (const PTOutputScopeFixture& sf : scopeFixtures)
             points.append(sf.point);
 
         const bool crossfadeSweep = playback.crossfadeTransition;
-        const PTTransitionPreset sweepPreset = transitionPresetForOutputLocked(o);
+        const PTTransitionPreset sweepPreset = sweepPresetForOutputLocked(o);
         const PTSpatialFixturePlan sweepPlan = PTSpatialFixturePlan::build(
                 points, sweepPreset, globalFx, gridSize.width(), gridSize.height());
         const double xfProgress = crossfadeProgress01Locked(xfEffective);
@@ -7014,17 +7893,56 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
             if ((int)uni >= universes.size())
                 continue;
 
-            PTTransitionPreset fxPreset = contOn
+            const bool hasStagedInterpolation = o < m_stagedContinuousValid.size()
+                    && o < m_stagedContinuousPreset.size()
+                    && m_stagedContinuousValid[o];
+            const int liveInterpolationIdx = liveContinuousPresetIndexLocked(o);
+            const int stagedInterpolationIdx = hasStagedInterpolation
+                    ? m_stagedContinuousPreset[o] : liveInterpolationIdx;
+            PTTransitionPreset liveInterpolationPreset = transitionPresetAtIndexLocked(
+                    PTTransitionMode::Continuous, liveInterpolationIdx, o, &sf.point);
+            if (!liveInterpolationPreset.enabled)
+                liveInterpolationPreset = PTTransitionPreset();
+            PTTransitionPreset stagedInterpolationPreset = hasStagedInterpolation
                     ? transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
-                                                    liveContinuousPresetIndexLocked(o), o, &sf.point)
-                    : transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly,
-                                                    liveSweepPresetIndexLocked(o), o, &sf.point);
-            if (!fxPreset.enabled)
-                fxPreset = PTTransitionPreset();
+                                                    stagedInterpolationIdx, o, &sf.point)
+                    : liveInterpolationPreset;
+            if (!stagedInterpolationPreset.enabled)
+                stagedInterpolationPreset = PTTransitionPreset();
+            PTTransitionPreset interpolationPreset = hasStagedInterpolation
+                    ? stagedInterpolationPreset : liveInterpolationPreset;
+            if (!interpolationPreset.enabled)
+                interpolationPreset = PTTransitionPreset();
 
-            const PTSpatialFixturePlan spatialPlan = PTSpatialFixturePlan::build(
-                    points, fxPreset, globalFx, gridSize.width(), gridSize.height());
-            const int serialCount = qMax(1, spatialPlan.count());
+            const bool hasStagedMotion = o < m_stagedPositionMotionValid.size()
+                    && o < m_stagedPositionMotionPreset.size()
+                    && m_stagedPositionMotionValid[o];
+            const int liveMotionIdx = livePositionMotionPresetIndexLocked(o);
+            const int stagedMotionIdx = hasStagedMotion
+                    ? m_stagedPositionMotionPreset[o] : liveMotionIdx;
+            PTTransitionPreset liveMotionPreset = transitionPresetAtIndexLocked(
+                    PTTransitionMode::PositionMotion, liveMotionIdx, o, &sf.point);
+            if (!liveMotionPreset.enabled)
+                liveMotionPreset = PTTransitionPreset();
+            PTTransitionPreset stagedMotionPreset = hasStagedMotion
+                    ? transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
+                                                    stagedMotionIdx, o, &sf.point)
+                    : liveMotionPreset;
+            if (!stagedMotionPreset.enabled)
+                stagedMotionPreset = PTTransitionPreset();
+            PTTransitionPreset motionPreset = hasStagedMotion
+                    ? stagedMotionPreset : liveMotionPreset;
+            if (!motionPreset.enabled)
+                motionPreset = PTTransitionPreset();
+
+            PTTransitionPreset legacySweepMotionPreset = transitionPresetAtIndexLocked(
+                    PTTransitionMode::SweepOnly, liveSweepPresetIndexLocked(o), o, &sf.point);
+            if (!legacySweepMotionPreset.enabled)
+                legacySweepMotionPreset = PTTransitionPreset();
+            const PTSpatialFixturePlan legacySweepMotionPlan = PTSpatialFixturePlan::build(
+                    points, legacySweepMotionPreset, globalFx,
+                    gridSize.width(), gridSize.height());
+            const int legacySweepMotionSerialCount = qMax(1, legacySweepMotionPlan.count());
 
             const bool positionXfActive = stagedRowValid && m_crossfadeEnabled && hasStaged;
 
@@ -7052,64 +7970,149 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 base = PTPositionConverter::blendPositions(base, staged, blend);
             }
 
-            if (contOn && secondaryValid && !blockFxDuringXf)
-            {
-                const PTPositionValue secondary = effectivePositionValue(secondaryRow, o, sf.point);
-                if (secondary.valid)
-                {
-                    const int serialIdx = spatialPlan.indexByPoint.value(sf.point, 0);
-                    const float dimmer = matrixDimmerAtPoint(sf.point, elapsedMs, cycleMs,
-                                                             fxPreset, globalFx, gridSize,
-                                                             serialIdx, serialCount);
-                    base = PTPositionConverter::blendPositions(base, secondary, double(dimmer));
-                }
-            }
-            else if (relativeFxOn && fxPreset.enabled
-                       && fxPreset.positionMotion != int(PTPositionMotion::Off))
-            {
+            auto applyRelativeMotionTo = [&](const PTPositionValue& input,
+                                             const PTTransitionPreset& motionPreset,
+                                             const PTSpatialFixturePlan& motionPlan,
+                                             int motionSerialCount,
+                                             quint32 motionElapsedMs,
+                                             quint32 motionCycleMs,
+                                             qreal amount) {
+                PTPositionValue moved = input;
                 PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(
-                        fxPreset, &globalFx);
+                        motionPreset, &globalFx);
                 if (globalFx.fxOrientation == 1)
                     waveParams.axis = PTTransitionAxis::Y;
                 waveParams.propagation = PTPropagationMode::Parallel;
                 const int headOffset = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
                         sf.point.x(), sf.point.y(), gridSize.width(), gridSize.height(),
                         waveParams);
-                const int serialIdx = spatialPlan.indexByPoint.value(sf.point, 0);
+                const int serialIdx = motionPlan.indexByPoint.value(sf.point, 0);
                 const quint32 timeOffset = PTDimmerWaveEngine::serialTimeOffsetMs(
-                        serialIdx, serialCount, cycleMs, waveParams.propagation);
+                        serialIdx, motionSerialCount, motionCycleMs, waveParams.propagation);
                 const float iterator = PTDimmerWaveEngine::iteratorFromElapsed(
-                        elapsedMs, cycleMs, waveParams.startOffset, headOffset, timeOffset);
+                        motionElapsedMs, motionCycleMs, waveParams.startOffset,
+                        headOffset, timeOffset);
                 const PTDimmerWaveOffsetInfo spatialInfo =
                         PTDimmerWaveEngine::offsetInfoForPoint(
                                 sf.point.x(), sf.point.y(), gridSize.width(),
                                 gridSize.height(), waveParams);
-                const PTPositionMotion fxMotion = PTPositionMotion(fxPreset.positionMotion);
+                const PTPositionMotion fxMotion = PTPositionMotion(motionPreset.positionMotion);
                 const bool fxMotion1D = PTPositionFxEngine::motionIs1D(fxMotion);
                 double orbitPhase = 0.0;
                 const bool inOrbitWindow = PTPositionFxEngine::orbitPhaseFromIterator(
                         iterator, waveParams.waveWidth, orbitPhase);
-                if (fxMotion1D || inOrbitWindow)
+                if (!fxMotion1D && !inOrbitWindow)
+                    return moved;
+
+                double phaseForApply = orbitPhase;
+                if (!fxMotion1D)
                 {
-                    double phaseForApply = orbitPhase;
-                    if (!fxMotion1D)
-                    {
-                        phaseForApply = PTPositionFxEngine::applyMotionDirection(
-                                orbitPhase,
-                                PTPositionMotionDirection(fxPreset.positionMotionDirection),
-                                spatialInfo);
-                    }
-                    const qreal size01 = qreal(globalFx.positionSize) / 255.0;
-                    base = PTPositionFxEngine::applySmartMotionFromPreset(
-                            base, fxi, sf.head.head, fxPreset, phaseForApply, size01,
-                            fxMotion1D ? iterator : -1.0f,
-                            fxMotion1D ? &waveParams : nullptr,
-                            fxMotion1D ? &spatialInfo : nullptr,
-                            fxMotion1D ? headOffset : 0);
+                    phaseForApply = PTPositionFxEngine::applyMotionDirection(
+                            orbitPhase,
+                            PTPositionMotionDirection(motionPreset.positionMotionDirection),
+                            spatialInfo);
+                }
+                const qreal size01 = (qreal(globalFx.positionSize) / 255.0)
+                        * qBound<qreal>(0.0, amount, 1.0);
+                moved = PTPositionFxEngine::applySmartMotionFromPreset(
+                        moved, fxi, sf.head.head, motionPreset, phaseForApply, size01,
+                        fxMotion1D ? iterator : -1.0f,
+                        fxMotion1D ? &waveParams : nullptr,
+                        fxMotion1D ? &spatialInfo : nullptr,
+                        fxMotion1D ? headOffset : 0);
+                return moved;
+            };
+
+            auto applyInterpolationTo = [&](const PTPositionValue& input,
+                                            int targetSecondaryRow,
+                                            const PTTransitionPreset& preset) {
+                PTPositionValue outPos = input;
+                if (!preset.enabled || targetSecondaryRow < 0
+                        || targetSecondaryRow >= m_rows.size())
+                    return outPos;
+                const PTPositionValue secondary =
+                        effectivePositionValue(targetSecondaryRow, o, sf.point);
+                if (!secondary.valid)
+                    return outPos;
+                const PTSpatialFixturePlan plan = PTSpatialFixturePlan::build(
+                        points, preset, globalFx, gridSize.width(), gridSize.height());
+                const int serialCount = qMax(1, plan.count());
+                const int serialIdx = plan.indexByPoint.value(sf.point, 0);
+                const float dimmer = matrixDimmerAtPoint(
+                        sf.point, interpolationElapsedMs, interpolationCycleMs,
+                        preset, globalFx, gridSize, serialIdx, serialCount);
+                return PTPositionConverter::blendPositions(outPos, secondary, double(dimmer));
+            };
+
+            if (interpolationOn && secondaryValid)
+            {
+                const bool hasStagedSecondary = o < m_stagedSecondaryValid.size()
+                        && o < m_stagedSecondaryRow.size()
+                        && m_stagedSecondaryValid[o];
+                if (hasStagedInterpolation || hasStagedSecondary)
+                {
+                    const int liveSecondary = effectiveSecondaryRowLocked(o, activeRow);
+                    const int stagedSecondary = hasStagedSecondary
+                            ? ((m_stagedSecondaryRow[o] >= 0
+                                && m_stagedSecondaryRow[o] < m_rows.size())
+                               ? m_stagedSecondaryRow[o] : -1)
+                            : liveSecondary;
+                    const PTPositionValue liveOut = applyInterpolationTo(
+                            base, liveSecondary, liveInterpolationPreset);
+                    const PTPositionValue stagedOut = applyInterpolationTo(
+                            base, stagedSecondary, stagedInterpolationPreset);
+                    base = PTPositionConverter::blendPositions(liveOut, stagedOut, xfProgress);
+                }
+                else
+                {
+                    base = applyInterpolationTo(base, secondaryRow, interpolationPreset);
                 }
             }
 
-            if (multiFxOn && !blockFxDuringXf)
+            if (motionOn && (hasStagedMotion
+                    || (motionPreset.enabled
+                        && motionPreset.positionMotion != int(PTPositionMotion::Off))))
+            {
+                if (hasStagedMotion)
+                {
+                    const PTSpatialFixturePlan liveMotionPlan = PTSpatialFixturePlan::build(
+                            points, liveMotionPreset, globalFx,
+                            gridSize.width(), gridSize.height());
+                    const PTSpatialFixturePlan stagedMotionPlan = PTSpatialFixturePlan::build(
+                            points, stagedMotionPreset, globalFx,
+                            gridSize.width(), gridSize.height());
+                    const PTPositionValue liveOut = liveMotionPreset.enabled
+                            ? applyRelativeMotionTo(base, liveMotionPreset, liveMotionPlan,
+                                                    qMax(1, liveMotionPlan.count()),
+                                                    motionElapsedMs, motionCycleMs, 1.0)
+                            : base;
+                    const PTPositionValue stagedOut = stagedMotionPreset.enabled
+                            ? applyRelativeMotionTo(base, stagedMotionPreset, stagedMotionPlan,
+                                                    qMax(1, stagedMotionPlan.count()),
+                                                    motionElapsedMs, motionCycleMs, 1.0)
+                            : base;
+                    base = PTPositionConverter::blendPositions(liveOut, stagedOut, xfProgress);
+                }
+                else
+                {
+                    const PTSpatialFixturePlan motionPlan = PTSpatialFixturePlan::build(
+                            points, motionPreset, globalFx,
+                            gridSize.width(), gridSize.height());
+                    base = applyRelativeMotionTo(base, motionPreset, motionPlan,
+                                                 qMax(1, motionPlan.count()),
+                                                 motionElapsedMs, motionCycleMs, 1.0);
+                }
+            }
+            else if (legacySweepMotionOn && legacySweepMotionPreset.enabled
+                       && legacySweepMotionPreset.positionMotion != int(PTPositionMotion::Off))
+            {
+                base = applyRelativeMotionTo(base, legacySweepMotionPreset,
+                                             legacySweepMotionPlan,
+                                             legacySweepMotionSerialCount,
+                                             motionElapsedMs, motionCycleMs, 1.0);
+            }
+
+            if (multiFxOn)
             {
                 const PTTransitionPreset mfPreset = transitionPresetAtIndexLocked(
                         PTTransitionMode::MultiFx, liveMultiFxPresetIndexLocked(o), o, &sf.point);
@@ -7209,9 +8212,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         const int bucketPresetIndex = (bucketMode == PTTransitionMode::Continuous)
                 ? liveContinuousPresetIndexLocked(outputIdx)
                 : liveSweepPresetIndexLocked(outputIdx);
-        PresetTableV2TransitionProviderIface* provider = transitionProviderLocked();
-        if (provider && bucketPresetIndex >= 0
-                && bucketPresetIndex < provider->transitionPresetCount(bucketMode))
+        if (bucketPresetIndex >= 0
+                && bucketPresetIndex < transitionSnapshotPresetsForModeLocked(bucketMode).size())
         {
             QMap<int, QMap<QLCPoint, GroupHead>> buckets;
             bool hasCustomSelection = false;
@@ -7219,7 +8221,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             {
                 if (!outputScopeAllowsPoint(out.scope, it.key(), out))
                     continue;
-                const int key = provider->transitionSelectionKeyForPoint(
+                const int key = transitionSnapshotSelectionIndexForPointLocked(
                         bucketMode, bucketPresetIndex, outputIdx, it.key());
                 if (key >= 0)
                     hasCustomSelection = true;
@@ -7234,8 +8236,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                         continue;
                     const int selectionKey = bit.key();
                     const PTTransitionPreset bucketPreset =
-                            provider->effectiveTransitionPresetForSelection(
-                                bucketMode, bucketPresetIndex, outputIdx, selectionKey);
+                            transitionSnapshotEffectivePresetForSelectionLocked(
+                                bucketMode, bucketPresetIndex, outputIdx, selectionKey, true);
                     PTTransitionPreset bucketStagedPreset;
                     const PTTransitionPreset* bucketStagedPresetPtr = stagedPresetOverride;
                     if (stagedPresetOverride
@@ -7246,10 +8248,10 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                             && m_stagedContinuousPreset[outputIdx] >= 0)
                     {
                         bucketStagedPreset =
-                                provider->effectiveTransitionPresetForSelection(
+                                transitionSnapshotEffectivePresetForSelectionLocked(
                                     PTTransitionMode::Continuous,
                                     m_stagedContinuousPreset[outputIdx],
-                                    outputIdx, selectionKey);
+                                    outputIdx, selectionKey, true);
                         bucketStagedPresetPtr = &bucketStagedPreset;
                     }
                     const int bucketStateSlot =
@@ -7583,6 +8585,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             const float dimmer = (pointPreset.axis == preset.axis
                     && pointPreset.offsetDirection == preset.offsetDirection
                     && pointPreset.offsetStep == preset.offsetStep
+                    && pointPreset.offsetStepMode == preset.offsetStepMode
+                    && pointPreset.offsetCoverage == preset.offsetCoverage
                     && pointPreset.wings == preset.wings
                     && pointPreset.blocks == preset.blocks
                     && pointPreset.wingsSymmetry == preset.wingsSymmetry
@@ -7599,6 +8603,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 const float stagedDimmer = (pointStagedPreset.axis == stagedPreset.axis
                         && pointStagedPreset.offsetDirection == stagedPreset.offsetDirection
                         && pointStagedPreset.offsetStep == stagedPreset.offsetStep
+                        && pointStagedPreset.offsetStepMode == stagedPreset.offsetStepMode
+                        && pointStagedPreset.offsetCoverage == stagedPreset.offsetCoverage
                         && pointStagedPreset.wings == stagedPreset.wings
                         && pointStagedPreset.blocks == stagedPreset.blocks
                         && pointStagedPreset.wingsSymmetry == stagedPreset.wingsSymmetry
@@ -7802,13 +8808,6 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
         m_matrixState.resize(m_outputs.size());
     if (m_flashInputHeldRow.size() != m_outputs.size())
         m_flashInputHeldRow.fill(-1, m_outputs.size());
-
-    if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-    {
-        m_cachedTransitionSweepCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
-        m_cachedTransitionContinuousCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
-        m_cachedTransitionMultiFxCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
-    }
 
     const bool matrixReady = matrixProviderReadyLocked();
     const PTGlobalEffectSettings globalFx = globalEffectSettingsLocked();
@@ -8203,6 +9202,43 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         return;
     }
 
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionBasePan))
+    {
+        applyPositionBaseInput(true, value);
+        sendFeedback(value, PTInputId::kPositionBasePan);
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionBaseTilt))
+    {
+        applyPositionBaseInput(false, value);
+        sendFeedback(value, PTInputId::kPositionBaseTilt);
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionSpreadPanEnable))
+    {
+        applyPositionSpreadEnableInput(true, value);
+        sendFeedback(value, PTInputId::kPositionSpreadPanEnable);
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionSpreadTiltEnable))
+    {
+        applyPositionSpreadEnableInput(false, value);
+        sendFeedback(value, PTInputId::kPositionSpreadTiltEnable);
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionSpreadPan))
+    {
+        applyPositionSpreadValueInput(true, value);
+        sendFeedback(value, PTInputId::kPositionSpreadPan);
+        return;
+    }
+    if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kPositionSpreadTilt))
+    {
+        applyPositionSpreadValueInput(false, value);
+        sendFeedback(value, PTInputId::kPositionSpreadTilt);
+        return;
+    }
+
     // Global crossfade position
     if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kCrossfade))
     {
@@ -8257,7 +9293,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (o >= PTInputId::kMaxRoutableOutputs)
             break;
 
-        if (checkInputSource(universe, pagedCh, value, sender(), quint8(o)))
+        if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::rowSelector(o)))
         {
             const bool wasFlash = (o < m_flashInputHeldRow.size() && m_flashInputHeldRow[o] >= 0);
             const bool isFlash = (value >= 101);
@@ -8274,6 +9310,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
                             effectIdx = liveSweepPresetIndexLocked(o);
                         else if (continuousEfxActiveForOutputLocked(o))
                             effectIdx = liveContinuousPresetIndexLocked(o);
+                        else if (positionMotionEfxActiveForOutputLocked(o))
+                            effectIdx = livePositionMotionPresetIndexLocked(o);
                         if (o < m_flashInputHeldRow.size())
                             m_flashInputHeldRow[o] = flashRow;
                     }
@@ -8350,21 +9388,14 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
 
     int sweepPresetCount = 0;
     int continuousPresetCount = 0;
+    int positionMotionPresetCount = 0;
     int multiFxPresetCount = 0;
     {
         QMutexLocker lk3(&m_stateMutex);
         sweepPresetCount = m_cachedTransitionSweepCount;
         continuousPresetCount = m_cachedTransitionContinuousCount;
+        positionMotionPresetCount = m_cachedTransitionPositionMotionCount;
         multiFxPresetCount = m_cachedTransitionMultiFxCount;
-        if (sweepPresetCount <= 0 && continuousPresetCount <= 0 && multiFxPresetCount <= 0)
-        {
-            if (PresetTableV2TransitionProviderIface* provider = transitionProviderLocked())
-            {
-                sweepPresetCount = provider->transitionPresetCount(PTTransitionMode::SweepOnly);
-                continuousPresetCount = provider->transitionPresetCount(PTTransitionMode::Continuous);
-                multiFxPresetCount = provider->transitionPresetCount(PTTransitionMode::MultiFx);
-            }
-        }
     }
 
     for (int o = 0; o < numOutputs; ++o)
@@ -8445,6 +9476,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             {
                 armCrossfadeStagingLocked();
                 stageSecondaryRowLocked(o, rowIdx);
+                resetCrossfadeClockLocked();
             }
             else
             {
@@ -8462,6 +9494,45 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             refreshTransitionPresetCache();
             if (!toStaged)
                 sendFeedback(value, PTInputId::transSecondaryRow(o));
+            return;
+        }
+
+        if (checkInputSource(universe, pagedCh, value, sender(),
+                             PTInputId::positionMotionBank(o)))
+        {
+            QMutexLocker lk2(&m_stateMutex);
+            const bool toStaged = !initialSync && continuousFxSelectorToStagedLocked();
+            const int presetIdx = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
+                    value, positionMotionPresetCount);
+            if (toStaged)
+            {
+                armCrossfadeStagingLocked();
+                materializeContinuousRowsLocked(o, true);
+                stagePositionMotionPresetLocked(o, presetIdx);
+                resetCrossfadeClockLocked();
+            }
+            else
+            {
+                while (m_livePositionMotionPreset.size() <= o)
+                    m_livePositionMotionPreset.append(-1);
+                m_livePositionMotionPreset[o] = presetIdx;
+                if (o < m_stagedPositionMotionValid.size())
+                    m_stagedPositionMotionValid[o] = false;
+                if (o < m_stagedPositionMotionPreset.size())
+                    m_stagedPositionMotionPreset[o] = -1;
+                bumpMultiButtonStateRevisionLocked(
+                        o, PresetTableV2MultiButtonTargetIface::PositionMotionPreset);
+                if (!initialSync && o < m_positionMotionElapsedMs.size())
+                {
+                    m_positionMotionElapsedMs[o] = 0;
+                    if (o < m_positionMotionLastCycleMs.size())
+                        m_positionMotionLastCycleMs[o] = 0;
+                }
+            }
+            lk2.unlock();
+            refreshTransitionPresetCache();
+            if (!toStaged)
+                sendFeedback(value, PTInputId::positionMotionBank(o));
             return;
         }
 
@@ -8589,6 +9660,12 @@ void PresetTableV2Widget::editProperties()
     QSharedPointer<QLCInputSource> multiFxBlendSrc;
     QSharedPointer<QLCInputSource> multiFxRestartSrc;
     QSharedPointer<QLCInputSource> widgetFlashGateSrc;
+    QSharedPointer<QLCInputSource> positionBasePanSrc;
+    QSharedPointer<QLCInputSource> positionBaseTiltSrc;
+    QSharedPointer<QLCInputSource> positionSpreadPanSrc;
+    QSharedPointer<QLCInputSource> positionSpreadTiltSrc;
+    QSharedPointer<QLCInputSource> positionSpreadPanEnableSrc;
+    QSharedPointer<QLCInputSource> positionSpreadTiltEnableSrc;
     QKeySequence multiFxRestartKey;
     QKeySequence widgetFlashGateKey;
     int widgetFlashTimeMultiplierIndex;
@@ -8616,6 +9693,12 @@ void PresetTableV2Widget::editProperties()
     multiFxBlendSrc = inputSource(PTInputId::kMultiFxBlend);
     multiFxRestartSrc = inputSource(PTInputId::kMultiFxRestart);
     widgetFlashGateSrc = inputSource(PTInputId::kWidgetFlashGate);
+    positionBasePanSrc = inputSource(PTInputId::kPositionBasePan);
+    positionBaseTiltSrc = inputSource(PTInputId::kPositionBaseTilt);
+    positionSpreadPanSrc = inputSource(PTInputId::kPositionSpreadPan);
+    positionSpreadTiltSrc = inputSource(PTInputId::kPositionSpreadTilt);
+    positionSpreadPanEnableSrc = inputSource(PTInputId::kPositionSpreadPanEnable);
+    positionSpreadTiltEnableSrc = inputSource(PTInputId::kPositionSpreadTiltEnable);
 
     PresetTableV2ConfigDialog dlg(m_doc, colsCopy, outsCopy, srcsCopy,
                                 xfEnabled, syncMultiFxPhase, multiFxSyncOffsetMs,
@@ -8627,6 +9710,12 @@ void PresetTableV2Widget::editProperties()
                                 positionConfirmDiscardDraft,
                                 positionShowStatusStrip,
                                 positionShowEditorHints,
+                                positionBasePanSrc,
+                                positionBaseTiltSrc,
+                                positionSpreadPanSrc,
+                                positionSpreadTiltSrc,
+                                positionSpreadPanEnableSrc,
+                                positionSpreadTiltEnableSrc,
                                 this);
 
     if (dlg.exec() != QDialog::Accepted) return;
@@ -8649,6 +9738,14 @@ void PresetTableV2Widget::editProperties()
                 row.values.resize(newNumCols, 0);
         }
 
+        if (newOuts.size() > PTInputId::kMaxRoutableOutputs)
+        {
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("output cap applied properties requested=%1 kept=%2")
+                            .arg(newOuts.size()).arg(PTInputId::kMaxRoutableOutputs));
+            newOuts.resize(PTInputId::kMaxRoutableOutputs);
+        }
         m_outputs = newOuts;
         m_activeRow.resize(m_outputs.size());
         m_activeRow.fill(-1);
@@ -8684,6 +9781,7 @@ void PresetTableV2Widget::editProperties()
         {
             setInputSource(dlg.transSweepInputSource(o), PTInputId::transSweep(o));
             setInputSource(dlg.transContinuousInputSource(o), PTInputId::transContinuousBank(o));
+            setInputSource(dlg.positionMotionInputSource(o), PTInputId::positionMotionBank(o));
             setInputSource(dlg.multiFxInputSource(o), PTInputId::multiFxBank(o));
             setInputSource(dlg.transSecondaryInputSource(o), PTInputId::transSecondaryRow(o));
         }
@@ -8694,6 +9792,12 @@ void PresetTableV2Widget::editProperties()
     setInputSource(dlg.multiFxBlendInputSource(), PTInputId::kMultiFxBlend);
     setInputSource(dlg.multiFxRestartInputSource(), PTInputId::kMultiFxRestart);
     setInputSource(dlg.widgetFlashGateInputSource(), PTInputId::kWidgetFlashGate);
+    setInputSource(dlg.positionBasePanInputSource(), PTInputId::kPositionBasePan);
+    setInputSource(dlg.positionBaseTiltInputSource(), PTInputId::kPositionBaseTilt);
+    setInputSource(dlg.positionSpreadPanInputSource(), PTInputId::kPositionSpreadPan);
+    setInputSource(dlg.positionSpreadTiltInputSource(), PTInputId::kPositionSpreadTilt);
+    setInputSource(dlg.positionSpreadPanEnableInputSource(), PTInputId::kPositionSpreadPanEnable);
+    setInputSource(dlg.positionSpreadTiltEnableInputSource(), PTInputId::kPositionSpreadTiltEnable);
     {
         QMutexLocker lk(&m_stateMutex);
         m_crossfadeEnabled = dlg.crossfadeEnabled();
@@ -8732,10 +9836,12 @@ void PresetTableV2Widget::editProperties()
             m_stagedSecondaryRow.fill(-1, m_stagedSecondaryRow.size());
             m_stagedSweepPreset.fill(-1, m_stagedSweepPreset.size());
             m_stagedContinuousPreset.fill(-1, m_stagedContinuousPreset.size());
+            m_stagedPositionMotionPreset.fill(-1, m_stagedPositionMotionPreset.size());
             m_stagedMultiFxPreset.fill(-1, m_stagedMultiFxPreset.size());
             m_stagedSecondaryValid.fill(false, m_stagedSecondaryValid.size());
             m_stagedSweepValid.fill(false, m_stagedSweepValid.size());
             m_stagedContinuousValid.fill(false, m_stagedContinuousValid.size());
+            m_stagedPositionMotionValid.fill(false, m_stagedPositionMotionValid.size());
             m_stagedMultiFxValid.fill(false, m_stagedMultiFxValid.size());
             m_crossfadeGlobalPos = 0;
             m_crossfadeStartPos  = 0;
@@ -8823,6 +9929,14 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         positionShowEditorHintsCopy = m_positionShowEditorHints;
     }
 
+    if (outsCopy.size() > PTInputId::kMaxRoutableOutputs)
+    {
+        outsCopy.resize(PTInputId::kMaxRoutableOutputs);
+        activeRowCopy.resize(outsCopy.size());
+        stagedRowCopy.resize(outsCopy.size());
+        stagedRowValidCopy.resize(outsCopy.size());
+    }
+
     {
         QMutexLocker lk2(&copy->m_stateMutex);
         copy->m_columns            = colsCopy;
@@ -8874,6 +9988,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
             {
                 copy->setInputSource(inputSource(PTInputId::transContinuousBank(o)),
                                     PTInputId::transContinuousBank(o));
+                copy->setInputSource(inputSource(PTInputId::positionMotionBank(o)),
+                                     PTInputId::positionMotionBank(o));
                 copy->setInputSource(inputSource(PTInputId::multiFxBank(o)),
                                      PTInputId::multiFxBank(o));
             }
@@ -8885,6 +10001,14 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     copy->setInputSource(inputSource(PTInputId::kMultiFxBlend), PTInputId::kMultiFxBlend);
     copy->setInputSource(inputSource(PTInputId::kMultiFxRestart), PTInputId::kMultiFxRestart);
     copy->setInputSource(inputSource(PTInputId::kWidgetFlashGate), PTInputId::kWidgetFlashGate);
+    copy->setInputSource(inputSource(PTInputId::kPositionBasePan), PTInputId::kPositionBasePan);
+    copy->setInputSource(inputSource(PTInputId::kPositionBaseTilt), PTInputId::kPositionBaseTilt);
+    copy->setInputSource(inputSource(PTInputId::kPositionSpreadPan), PTInputId::kPositionSpreadPan);
+    copy->setInputSource(inputSource(PTInputId::kPositionSpreadTilt), PTInputId::kPositionSpreadTilt);
+    copy->setInputSource(inputSource(PTInputId::kPositionSpreadPanEnable),
+                         PTInputId::kPositionSpreadPanEnable);
+    copy->setInputSource(inputSource(PTInputId::kPositionSpreadTiltEnable),
+                         PTInputId::kPositionSpreadTiltEnable);
 
     copy->rebuildTable();
     return copy;
@@ -9009,6 +10133,7 @@ void PresetTableV2Widget::toClipboardJson(QJsonObject &obj, const Doc *doc) cons
             o["outputScope"] = scopeToString(out.scope);
             o["sweepPresetIndex"] = out.sweepPresetIndex;
             o["continuousPresetIndex"] = out.continuousPresetIndex;
+            o["positionMotionPresetIndex"] = out.positionMotionPresetIndex;
             o["multiFxPresetIndex"] = out.multiFxPresetIndex;
             o["secondaryRowIndex"] = out.secondaryRowIndex;
         }
@@ -9136,6 +10261,8 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_outputs.clear();
     for (const QJsonValue &v : obj["outputs"].toArray())
     {
+        if (m_outputs.size() >= PTInputId::kMaxRoutableOutputs)
+            break;
         QJsonObject o = v.toObject();
         PTOutput out;
         out.name = o["name"].toString();
@@ -9162,6 +10289,7 @@ void PresetTableV2Widget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
             out.scope = scopeFromString(o["outputScope"].toString());
             out.sweepPresetIndex = o["sweepPresetIndex"].toInt(-1);
             out.continuousPresetIndex = o["continuousPresetIndex"].toInt(-1);
+            out.positionMotionPresetIndex = o["positionMotionPresetIndex"].toInt(-1);
             out.multiFxPresetIndex = o["multiFxPresetIndex"].toInt(-1);
             out.secondaryRowIndex = o["secondaryRowIndex"].toInt(-1);
         }
@@ -9464,6 +10592,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                 out.sweepPresetIndex = attrs.value(KXMLOutTransitionPreset).toInt();
             if (attrs.hasAttribute(KXMLOutContinuousPreset))
                 out.continuousPresetIndex = attrs.value(KXMLOutContinuousPreset).toInt();
+            if (attrs.hasAttribute(KXMLOutPositionMotionPreset))
+                out.positionMotionPresetIndex = attrs.value(KXMLOutPositionMotionPreset).toInt();
             if (attrs.hasAttribute(KXMLOutMultiFxPreset))
                 out.multiFxPresetIndex = attrs.value(KXMLOutMultiFxPreset).toInt();
             if (attrs.hasAttribute(KXMLOutSecondaryRow))
@@ -9498,6 +10628,13 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                 {
                     if (idx < PTInputId::kMaxRoutableOutputs)
                         loadXMLSources(root, PTInputId::transContinuousBank(idx));
+                    else
+                        root.skipCurrentElement();
+                }
+                else if (root.name() == KXMLOutPositionMotionInput)
+                {
+                    if (idx < PTInputId::kMaxRoutableOutputs)
+                        loadXMLSources(root, PTInputId::positionMotionBank(idx));
                     else
                         root.skipCurrentElement();
                 }
@@ -9544,6 +10681,30 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
             loadedWidgetFlashGateKey = binding.key;
             setInputSource(binding.source, PTInputId::kWidgetFlashGate);
         }
+        else if (root.name() == KXMLPositionBasePanInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionBasePan);
+        }
+        else if (root.name() == KXMLPositionBaseTiltInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionBaseTilt);
+        }
+        else if (root.name() == KXMLPositionSpreadPanInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionSpreadPan);
+        }
+        else if (root.name() == KXMLPositionSpreadTiltInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionSpreadTilt);
+        }
+        else if (root.name() == KXMLPositionSpreadPanEnableInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionSpreadPanEnable);
+        }
+        else if (root.name() == KXMLPositionSpreadTiltEnableInput)
+        {
+            loadXMLSources(root, PTInputId::kPositionSpreadTiltEnable);
+        }
         else if (root.name() == KXMLSelectorStateOutput)
         {
             root.skipCurrentElement();
@@ -9564,6 +10725,14 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         // Ensure row values are correct size
         for (PTRow& r : m_rows)
             r.values.resize(m_columns.size(), 0);
+        if (outs.size() > PTInputId::kMaxRoutableOutputs)
+        {
+            VCPluginDiagnostics::breadcrumb(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("output cap applied load requested=%1 kept=%2")
+                            .arg(outs.size()).arg(PTInputId::kMaxRoutableOutputs));
+            outs.resize(PTInputId::kMaxRoutableOutputs);
+        }
         m_outputs = outs;
         m_activeRow.resize(m_outputs.size());
         m_activeRow.fill(-1);
@@ -9812,6 +10981,7 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         PTOutputScope scope;
         int           sweepPresetIndex;
         int           continuousPresetIndex;
+        int           positionMotionPresetIndex;
         int           multiFxPresetIndex;
         int           secondaryRowIndex;
     };
@@ -9820,7 +10990,8 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
     for (const PTOutput& out : m_outputs)
         outData.append({out.name, out.fixtureId, out.groupRows, out.scope,
                         out.sweepPresetIndex, out.continuousPresetIndex,
-                        out.multiFxPresetIndex, out.secondaryRowIndex});
+                        out.positionMotionPresetIndex, out.multiFxPresetIndex,
+                        out.secondaryRowIndex});
 
     bool isFGMode = (m_mode == PTMode::FixtureGroup || m_mode == PTMode::Position);
     lk.unlock();
@@ -9842,6 +11013,8 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
                                 QString::number(outData[o].sweepPresetIndex));
             doc->writeAttribute(KXMLOutContinuousPreset,
                                 QString::number(outData[o].continuousPresetIndex));
+            doc->writeAttribute(KXMLOutPositionMotionPreset,
+                                QString::number(outData[o].positionMotionPresetIndex));
             doc->writeAttribute(KXMLOutMultiFxPreset,
                                 QString::number(outData[o].multiFxPresetIndex));
             doc->writeAttribute(KXMLOutSecondaryRow,
@@ -9884,6 +11057,13 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
             {
                 doc->writeStartElement(KXMLOutTransContinuousInput);
                 saveXMLInput(doc, contSrc);
+                doc->writeEndElement();
+            }
+            auto motionSrc = inputSource(PTInputId::positionMotionBank(o));
+            if (!motionSrc.isNull() && motionSrc->isValid())
+            {
+                doc->writeStartElement(KXMLOutPositionMotionInput);
+                saveXMLInput(doc, motionSrc);
                 doc->writeEndElement();
             }
             auto multiFxSrc = inputSource(PTInputId::multiFxBank(o));
@@ -9946,6 +11126,21 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         savePTInputBlock(doc, widgetFlashGateSrc, widgetFlashGateKey);
         doc->writeEndElement();
     }
+
+    auto saveSimpleInput = [&](const QString& tag, quint8 inputId) {
+        auto src = inputSource(inputId);
+        if (src.isNull() || !src->isValid())
+            return;
+        doc->writeStartElement(tag);
+        saveXMLInput(doc, src);
+        doc->writeEndElement();
+    };
+    saveSimpleInput(KXMLPositionBasePanInput, PTInputId::kPositionBasePan);
+    saveSimpleInput(KXMLPositionBaseTiltInput, PTInputId::kPositionBaseTilt);
+    saveSimpleInput(KXMLPositionSpreadPanInput, PTInputId::kPositionSpreadPan);
+    saveSimpleInput(KXMLPositionSpreadTiltInput, PTInputId::kPositionSpreadTilt);
+    saveSimpleInput(KXMLPositionSpreadPanEnableInput, PTInputId::kPositionSpreadPanEnable);
+    saveSimpleInput(KXMLPositionSpreadTiltEnableInput, PTInputId::kPositionSpreadTiltEnable);
 
     doc->writeEndElement();  // PluginWidget
     return true;

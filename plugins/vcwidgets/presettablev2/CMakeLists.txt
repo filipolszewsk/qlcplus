@@ -46,6 +46,7 @@ add_library(presettablev2_vcwidget MODULE
     presettablev2multibuttoniface.h
     presettablev2transitionprovideriface.h
     presettablev2vclookup.cpp presettablev2vclookup.h
+    vcplugindiagnostics.cpp vcplugindiagnostics.h
 )
 
 target_compile_features(presettablev2_vcwidget PRIVATE cxx_std_17)

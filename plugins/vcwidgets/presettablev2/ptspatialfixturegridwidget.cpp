@@ -378,11 +378,30 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
     if (m_positionEditMode)
         legend = tr("green = stored position · grey = inherited · blue = selected");
     else
-        legend = tr("wings %1 · blocks %2 · slots/wing %3 · max step %4°")
+    {
+        QString modeText;
+        switch (m_preview.offsetStepMode)
+        {
+            case PTOffsetStepMode::Off:
+                modeText = tr("Off");
+                break;
+            case PTOffsetStepMode::AutoFit:
+                modeText = tr("Auto Fit");
+                break;
+            case PTOffsetStepMode::CoveragePercent:
+                modeText = tr("Coverage %1%").arg(m_preview.offsetCoverage);
+                break;
+            case PTOffsetStepMode::FixedDegrees:
+                modeText = tr("Fixed");
+                break;
+        }
+        legend = tr("wings %1 · block size %2 · slots/wing %3 · spread %4 (%5°)")
                 .arg(m_preview.wings)
                 .arg(m_preview.blocks)
                 .arg(m_preview.slotsPerWing)
-                .arg(m_preview.maxOffsetStep);
+                .arg(modeText)
+                .arg(m_preview.effectiveOffsetStep);
+    }
     legend += tr("  · fill = offset shade · colored border = output");
     if (!m_selectionLayers.isEmpty())
         legend += tr("  · inner color = custom selection");

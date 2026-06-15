@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 #include <QMessageBox>
 #include <QGroupBox>
+#include <QCheckBox>
 
 PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         PresetTableV2TransitionWidget* widget, QWidget* parent)
@@ -92,6 +93,35 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     m_maxDurationSpin->setValue(int(gs.maxDurationMs));
     globalForm->addRow(tr("Max duration (slow):"), m_maxDurationSpin);
 
+    m_sizeSpeedCeilingChk = new QCheckBox(tr("Enable size-aware speed ceiling"), globalBox);
+    m_sizeSpeedCeilingChk->setChecked(gs.sizeSpeedCeilingEnabled);
+    m_sizeSpeedCeilingChk->setToolTip(
+            tr("Allows the top end of the speed fader to use a faster cycle when Position Size is small."));
+    globalForm->addRow(tr("Size speed ceiling:"), m_sizeSpeedCeilingChk);
+
+    m_smallSizeMinDurationSpin = new QSpinBox(globalBox);
+    m_smallSizeMinDurationSpin->setRange(20, 60000);
+    m_smallSizeMinDurationSpin->setSuffix(tr(" ms"));
+    m_smallSizeMinDurationSpin->setValue(int(gs.smallSizeMinDurationMs));
+    m_smallSizeMinDurationSpin->setToolTip(
+            tr("Fastest cycle allowed at Position Size 0 when speed is above the overdrive knee."));
+    globalForm->addRow(tr("Small-size fastest:"), m_smallSizeMinDurationSpin);
+
+    m_speedOverdriveKneeSlider = new QSlider(Qt::Horizontal, globalBox);
+    m_speedOverdriveKneeSlider->setRange(1, 254);
+    m_speedOverdriveKneeSlider->setValue(qBound(1, gs.speedOverdriveKnee, 254));
+    m_speedOverdriveKneeValueLabel =
+            new QLabel(QString::number(m_speedOverdriveKneeSlider->value()), globalBox);
+    m_speedOverdriveKneeValueLabel->setMinimumWidth(36);
+    auto* kneeRow = new QHBoxLayout;
+    kneeRow->addWidget(m_speedOverdriveKneeSlider, 1);
+    kneeRow->addWidget(m_speedOverdriveKneeValueLabel);
+    globalForm->addRow(tr("Overdrive starts at:"), kneeRow);
+
+    m_effectiveCyclePreviewLabel = new QLabel(globalBox);
+    m_effectiveCyclePreviewLabel->setWordWrap(true);
+    globalForm->addRow(tr("Current cycle:"), m_effectiveCyclePreviewLabel);
+
     root->addWidget(globalBox);
 
     connect(m_speedSlider, &QSlider::valueChanged,
@@ -100,6 +130,21 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
             this, &PresetTableV2TransitionConfigDialog::slotIntensitySliderChanged);
     connect(m_positionSizeSlider, &QSlider::valueChanged,
             this, &PresetTableV2TransitionConfigDialog::slotPositionSizeSliderChanged);
+    connect(m_speedSlider, &QSlider::valueChanged,
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_positionSizeSlider, &QSlider::valueChanged,
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_minDurationSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_maxDurationSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_sizeSpeedCeilingChk, &QCheckBox::toggled,
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_smallSizeMinDurationSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    connect(m_speedOverdriveKneeSlider, &QSlider::valueChanged,
+            this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
+    updateEffectiveCyclePreview();
 
     auto* inputBox = new QGroupBox(tr("External inputs (global)"), this);
     auto* inputForm = new QFormLayout(inputBox);
@@ -162,6 +207,13 @@ void PresetTableV2TransitionConfigDialog::slotPositionSizeSliderChanged(int v)
         m_positionSizeValueLabel->setText(QString::number(v));
 }
 
+void PresetTableV2TransitionConfigDialog::slotTimingControlChanged()
+{
+    if (m_speedOverdriveKneeValueLabel && m_speedOverdriveKneeSlider)
+        m_speedOverdriveKneeValueLabel->setText(QString::number(m_speedOverdriveKneeSlider->value()));
+    updateEffectiveCyclePreview();
+}
+
 void PresetTableV2TransitionConfigDialog::rebuildTableCombo()
 {
     m_tableCombo->clear();
@@ -211,7 +263,33 @@ PTGlobalEffectSettings PresetTableV2TransitionConfigDialog::globalSettings() con
         gs.maxDurationMs = quint32(m_maxDurationSpin->value());
     if (gs.minDurationMs > gs.maxDurationMs)
         qSwap(gs.minDurationMs, gs.maxDurationMs);
+    if (m_sizeSpeedCeilingChk)
+        gs.sizeSpeedCeilingEnabled = m_sizeSpeedCeilingChk->isChecked();
+    if (m_smallSizeMinDurationSpin)
+        gs.smallSizeMinDurationMs = quint32(m_smallSizeMinDurationSpin->value());
+    if (m_speedOverdriveKneeSlider)
+        gs.speedOverdriveKnee = qBound(1, m_speedOverdriveKneeSlider->value(), 254);
     return gs;
+}
+
+void PresetTableV2TransitionConfigDialog::updateEffectiveCyclePreview()
+{
+    if (!m_effectiveCyclePreviewLabel)
+        return;
+
+    PTGlobalEffectSettings gs = globalSettings();
+    PTTransitionPreset preset;
+    const quint32 ms = PTParamMatrixEngine::effectiveDurationMs(gs, preset);
+    const bool active = gs.sizeSpeedCeilingEnabled
+            && int(gs.speed) > qBound(1, gs.speedOverdriveKnee, 254)
+            && gs.positionSize < 255
+            && gs.smallSizeMinDurationMs < qMin(gs.minDurationMs, gs.maxDurationMs);
+    m_effectiveCyclePreviewLabel->setText(
+            tr("%1 ms at speed %2, position size %3%4")
+                    .arg(ms)
+                    .arg(gs.speed)
+                    .arg(gs.positionSize)
+                    .arg(active ? tr(" (overdrive active)") : QString()));
 }
 
 QSharedPointer<QLCInputSource> PresetTableV2TransitionConfigDialog::globalSpeedInputSource() const

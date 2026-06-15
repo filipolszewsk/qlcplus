@@ -14,7 +14,8 @@ public:
         ContinuousPreset = 1,
         MultiFxPreset = 2,
         PrimaryRow = 3,
-        SecondaryRow = 4
+        SecondaryRow = 4,
+        PositionMotionPreset = 5
     };
 
     virtual ~PresetTableV2MultiButtonTargetIface() = default;

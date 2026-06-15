@@ -442,6 +442,7 @@ private:
                                       const QList<Universe*>& universes) const;
     quint8 resolvedPresetChannelValue(const LevelPreset& preset, int channelIndex,
                                       const QList<Universe*>& universes) const;
+    VCWidget* widgetLinkTargetObject() const;
     class PresetTableV2MultiButtonTargetIface* widgetLinkTarget() const;
     class PresetTableV2MultiButtonTargetExtrasIface* widgetLinkTargetExtras() const;
     class PresetTableV2MultiButtonFlashIface* widgetLinkFlashTarget() const;
@@ -491,6 +492,8 @@ private:
     QList<LevelPreset>         m_widgetEntryAppearance;
     int                        m_contextMenuEntryIndex = -2;
     quint32                    m_widgetTargetId = VCWidget::invalidId();
+    mutable QPointer<VCWidget> m_widgetTargetObject;
+    mutable quint32            m_widgetTargetObjectId = VCWidget::invalidId();
     int                        m_widgetOutputIndex = 0;
     int                        m_widgetParameter = 0;
     int                        m_lastResolvedEntryCount = -1;

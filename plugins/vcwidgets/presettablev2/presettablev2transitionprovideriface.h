@@ -5,9 +5,51 @@
 #pragma once
 
 #include <QtPlugin>
+#include <QHash>
+#include <QSet>
 #include "presettablev2effectengine.h"
 #include "ptparammatrixengine.h"
 #include "qlcpoint.h"
+
+struct PTTransitionProviderPresetOverride
+{
+    PTTransitionPreset values;
+    QSet<int> columns;
+};
+
+struct PTTransitionProviderSelection
+{
+    QString name;
+    QVector<QLCPoint> cells;
+    PTTransitionProviderPresetOverride overrides;
+};
+
+struct PTTransitionProviderOutputLayer
+{
+    PTTransitionProviderPresetOverride all;
+    QVector<PTTransitionProviderSelection> selections;
+};
+
+struct PTTransitionProviderSnapshot
+{
+    QVector<PTTransitionPreset> sweepPresets;
+    QVector<PTTransitionPreset> continuousPresets;
+    QVector<PTTransitionPreset> multiFxPresets;
+    QVector<PTTransitionPreset> positionMotionPresets;
+    QVector<QHash<int, PTTransitionProviderOutputLayer>> sweepOutputOverrides;
+    QVector<QHash<int, PTTransitionProviderOutputLayer>> continuousOutputOverrides;
+    QVector<QHash<int, PTTransitionProviderOutputLayer>> multiFxOutputOverrides;
+    QVector<QHash<int, PTTransitionProviderOutputLayer>> positionMotionOutputOverrides;
+    QHash<quint8, uchar> liveColumnOverrides;
+    PTGlobalEffectSettings globalSettings;
+    PTTransitionMode activeMode = PTTransitionMode::SweepOnly;
+    bool enabled = true;
+    bool crossfadeManualControl = true;
+    int spanX = 0;
+    int spanY = 0;
+    int spanXY = 0;
+    quint64 revision = 0;
+};
 
 class PresetTableV2TransitionProviderIface
 {
@@ -64,6 +106,9 @@ public:
 
     /** True when crossfade progress follows table fader; false = global speed/min/max clock. */
     virtual bool crossfadeManualControlEnabled() const = 0;
+
+    /** Immutable copy for DMX/render paths. GUI code may still use the legacy getters. */
+    virtual PTTransitionProviderSnapshot transitionProviderSnapshot() const = 0;
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,

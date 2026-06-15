@@ -12,6 +12,12 @@
 #include <QtMath>
 #include <algorithm>
 
+static double smoothStep01(double x)
+{
+    x = qBound(0.0, x, 1.0);
+    return x * x * (3.0 - 2.0 * x);
+}
+
 double PTParamMatrixEngine::speedMultiplierValue(int index)
 {
     static const double values[] = { 0.5, 1.0, 2.0, 3.0, 4.0, 5.0 };
@@ -43,8 +49,23 @@ quint32 PTParamMatrixEngine::effectiveDurationMs(const PTGlobalEffectSettings& g
     const quint32 minMs = qMin(global.minDurationMs, global.maxDurationMs);
     const quint32 maxMs = qMax(global.minDurationMs, global.maxDurationMs);
     // speed 255 = min (fast), speed 0 = max (slow) — one full 360° phase
-    const double targetMs = double(minMs) + (1.0 - speedProgress) * double(maxMs - minMs);
-    double cycleMs = qMax(20.0, targetMs);
+    const double baseMs = double(minMs) + (1.0 - speedProgress) * double(maxMs - minMs);
+    double cycleMs = qMax(20.0, baseMs);
+    if (global.sizeSpeedCeilingEnabled)
+    {
+        const int knee = qBound(1, global.speedOverdriveKnee, 254);
+        if (int(global.speed) > knee)
+        {
+            const double knee01 = double(knee) / 255.0;
+            const double overdrive01 = smoothStep01((speedProgress - knee01) / (1.0 - knee01));
+            const double sizeUnlock01 = 1.0 - (double(global.positionSize) / 255.0);
+            const double smallMinMs = double(qMax(quint32(20), global.smallSizeMinDurationMs));
+            const double fullMinMs = double(qMax(quint32(20), minMs));
+            const double overdriveMinMs = qMin(fullMinMs,
+                    fullMinMs + (smallMinMs - fullMinMs) * qBound(0.0, sizeUnlock01, 1.0));
+            cycleMs = qMax(20.0, baseMs + (overdriveMinMs - baseMs) * overdrive01);
+        }
+    }
     const double mult = speedMultiplierValue(preset.speedMultiplier);
     if (mult > 0.0)
         cycleMs /= mult;

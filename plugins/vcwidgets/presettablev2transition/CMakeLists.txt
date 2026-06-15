@@ -46,6 +46,7 @@ add_library(presettablev2transition_vcwidget MODULE
     ../presettablev2/presettablev2controliface.h
     ../presettablev2/presettablev2transitionprovideriface.h
     ../presettablev2/presettablev2vclookup.cpp ../presettablev2/presettablev2vclookup.h
+    ../presettablev2/vcplugindiagnostics.cpp ../presettablev2/vcplugindiagnostics.h
     ../presettablev2/ptefxinputids.h
 )
 

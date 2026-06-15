@@ -81,6 +81,7 @@ public:
                                QSharedPointer<QLCInputSource> rowSrc,
                                QSharedPointer<QLCInputSource> transSweepSrc,
                                QSharedPointer<QLCInputSource> transContinuousSrc,
+                               QSharedPointer<QLCInputSource> positionMotionSrc,
                                QSharedPointer<QLCInputSource> multiFxSrc,
                                QSharedPointer<QLCInputSource> transSecondarySrc,
                                FixtureGroup* group,
@@ -93,6 +94,7 @@ public:
     QSharedPointer<QLCInputSource> inputSource() const;
     QSharedPointer<QLCInputSource> transSweepInputSource() const;
     QSharedPointer<QLCInputSource> transContinuousInputSource() const;
+    QSharedPointer<QLCInputSource> positionMotionInputSource() const;
     QSharedPointer<QLCInputSource> multiFxInputSource() const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource() const;
 
@@ -116,11 +118,13 @@ private:
     QList<QCheckBox*>     m_rowCBs;                // one per y-row in the group
     QComboBox*            m_sweepPresetCombo = nullptr;
     QComboBox*            m_continuousPresetCombo = nullptr;
+    QComboBox*            m_positionMotionPresetCombo = nullptr;
     QComboBox*            m_multiFxPresetCombo = nullptr;
     QComboBox*            m_secondaryRowCombo = nullptr;
     InputSelectionWidget* m_inputSel   = nullptr;
     InputSelectionWidget* m_transSweepInputSel = nullptr;
     InputSelectionWidget* m_transContinuousInputSel = nullptr;
+    InputSelectionWidget* m_positionMotionInputSel = nullptr;
     InputSelectionWidget* m_multiFxInputSel = nullptr;
     InputSelectionWidget* m_transSecondaryInputSel = nullptr;
 
@@ -161,6 +165,12 @@ public:
                                      bool positionConfirmDiscardDraft,
                                      bool positionShowStatusStrip = true,
                                      bool positionShowEditorHints = true,
+                                     QSharedPointer<QLCInputSource> positionBasePanSrc = QSharedPointer<QLCInputSource>(),
+                                     QSharedPointer<QLCInputSource> positionBaseTiltSrc = QSharedPointer<QLCInputSource>(),
+                                     QSharedPointer<QLCInputSource> positionSpreadPanSrc = QSharedPointer<QLCInputSource>(),
+                                     QSharedPointer<QLCInputSource> positionSpreadTiltSrc = QSharedPointer<QLCInputSource>(),
+                                     QSharedPointer<QLCInputSource> positionSpreadPanEnableSrc = QSharedPointer<QLCInputSource>(),
+                                     QSharedPointer<QLCInputSource> positionSpreadTiltEnableSrc = QSharedPointer<QLCInputSource>(),
                                      QWidget* parent = nullptr);
 
     bool spatialEffectsEnabled() const;
@@ -171,6 +181,7 @@ public:
     QSharedPointer<QLCInputSource> inputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSweepInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transContinuousInputSource(int outputIdx) const;
+    QSharedPointer<QLCInputSource> positionMotionInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> multiFxInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
@@ -191,6 +202,12 @@ public:
     bool positionConfirmDiscardDraft() const;
     bool positionShowStatusStrip() const;
     bool positionShowEditorHints() const;
+    QSharedPointer<QLCInputSource> positionBasePanInputSource() const;
+    QSharedPointer<QLCInputSource> positionBaseTiltInputSource() const;
+    QSharedPointer<QLCInputSource> positionSpreadPanInputSource() const;
+    QSharedPointer<QLCInputSource> positionSpreadTiltInputSource() const;
+    QSharedPointer<QLCInputSource> positionSpreadPanEnableInputSource() const;
+    QSharedPointer<QLCInputSource> positionSpreadTiltEnableInputSource() const;
 
 private slots:
     void slotAddOutput();
@@ -275,5 +292,11 @@ private:
     QCheckBox*            m_positionConfirmDiscardDraftChk = nullptr;
     QCheckBox*            m_positionShowStatusStripChk = nullptr;
     QCheckBox*            m_positionShowEditorHintsChk = nullptr;
+    InputSelectionWidget* m_positionBasePanInputSel = nullptr;
+    InputSelectionWidget* m_positionBaseTiltInputSel = nullptr;
+    InputSelectionWidget* m_positionSpreadPanInputSel = nullptr;
+    InputSelectionWidget* m_positionSpreadTiltInputSel = nullptr;
+    InputSelectionWidget* m_positionSpreadPanEnableInputSel = nullptr;
+    InputSelectionWidget* m_positionSpreadTiltEnableInputSel = nullptr;
 
 };

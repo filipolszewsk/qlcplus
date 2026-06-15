@@ -178,6 +178,8 @@ struct PTOutput {
     int        continuousPresetIndex = -1;
     /** Default MultiFX background preset; -1 = off. */
     int        multiFxPresetIndex = -1;
+    /** Default Position Continuous Motion preset; -1 = off. Position mode only. */
+    int        positionMotionPresetIndex = -1;
     /** Secondary table row for continuous FX (-1 = off). Overridden by external input when mapped. */
     int        secondaryRowIndex = -1;
 };
@@ -197,7 +199,7 @@ public:
     // Column definitions provided by the widget (pointer, not owned)
     void setColumns(const QVector<PTColumn>* columns);
     // Back-pointer to owner widget (for capability lookup)
-    void setOwner(const PresetTableV2Widget* owner);
+    void setOwner(PresetTableV2Widget* owner);
 
     QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option,
                           const QModelIndex& index) const override;
@@ -213,7 +215,7 @@ public:
 
 private:
     const QVector<PTColumn>*    m_columns = nullptr;
-    const PresetTableV2Widget*    m_owner   = nullptr;
+    PresetTableV2Widget*          m_owner   = nullptr;
 };
 
 // ---------------------------------------------------------------------------
@@ -244,6 +246,7 @@ public:
 
     PTMode   widgetMode()      const { return m_mode; }
     quint32  fixtureGroupId()  const { return m_fixtureGroupId; }
+    void commitTableCellFromDelegate(int row, int col);
 
     void setColumns(const QVector<PTColumn>& cols);
     void setRows(const QVector<PTRow>& rows);
@@ -360,12 +363,25 @@ private slots:
     void slotPositionOverwrite();
     void slotPositionSaveAs();
     void slotPositionRevert();
-    void slotPositionSymmetricSpreadToggled(bool enabled);
-    void slotPositionSpreadChanged(int value);
-    void slotPositionSpreadAxisChanged(int index);
+    void slotPositionSpreadPanToggled(bool enabled);
+    void slotPositionSpreadTiltToggled(bool enabled);
+    void slotPositionSpreadPanChanged(int value);
+    void slotPositionSpreadTiltChanged(int value);
     void slotTableCurrentCellChanged(int row, int col);
 
 private:
+    struct PTPositionEditSnapshot
+    {
+        int row = -1;
+        int output = -1;
+        int selection = -1;
+        QSet<QLCPoint> editableCells;
+        QSet<QLCPoint> targetCells;
+        QList<QLCPoint> targetOrder;
+
+        bool isValid() const { return row >= 0 && !targetCells.isEmpty(); }
+    };
+
     void rebuildTable();
     void updatePositionModeChrome();
     void rebuildPositionEditor();
@@ -376,6 +392,7 @@ private:
     bool positionLayerHasOverrides(int row, int output, int selection) const;
     QSet<QLCPoint> positionEditableCellsForLayer(int row, int output, int selection) const;
     QSet<QLCPoint> positionEditableCells() const;
+    PTPositionEditSnapshot positionEditSnapshot() const;
     QSet<QLCPoint> positionTargetCells() const;
     void prunePositionGridSelection();
     QList<QLCPoint> positionTargetCellOrder() const;
@@ -404,9 +421,15 @@ private:
     void clearPositionSelectionToDraft();
     void editPositionCell(const QLCPoint& point);
     void updatePositionSpreadChrome();
-    void updatePositionSpreadValueLabel(int raw);
+    void updatePositionSpreadValueLabel(QLabel* label, int raw);
     QLCPoint selectionMiddlePoint() const;
     void capturePositionSpreadPivotFromSelection();
+    void resetPositionSpreadAxis(bool panAxis);
+    bool positionSpreadAxisEnabled(bool panAxis) const;
+    int positionSpreadAxisValue(bool panAxis) const;
+    void applyPositionBaseInput(bool panAxis, uchar value);
+    void applyPositionSpreadEnableInput(bool panAxis, uchar value);
+    void applyPositionSpreadValueInput(bool panAxis, uchar value);
     QLCPoint selectionGridCenter(const QSet<QLCPoint>& cells, qreal& cx, qreal& cy) const;
     void clearPositionDraft();
     void flushPositionPromoteUiIfNeeded();
@@ -468,8 +491,24 @@ private:
                                    uchar intensity = 255);
 
     PresetTableV2TransitionProviderIface* linkedTransitionProvider() const;
-    /** Caller must hold m_stateMutex (writeDMX path). */
-    PresetTableV2TransitionProviderIface* transitionProviderLocked() const;
+    const QVector<PTTransitionPreset>& transitionSnapshotPresetsForModeLocked(
+            PTTransitionMode mode) const;
+    const QVector<QHash<int, PTTransitionProviderOutputLayer>>&
+            transitionSnapshotOverridesForModeLocked(PTTransitionMode mode) const;
+    void applyTransitionSnapshotOverrideColumnsLocked(
+            PTTransitionPreset& preset,
+            const PTTransitionProviderPresetOverride& ov) const;
+    int transitionSnapshotGridSpanForPresetLocked(const PTTransitionPreset& preset) const;
+    PTTransitionPreset finalizeTransitionSnapshotPresetLocked(
+            PTTransitionMode mode, const PTTransitionPreset& preset) const;
+    PTTransitionPreset transitionSnapshotPresetLocked(PTTransitionMode mode, int index) const;
+    PTTransitionPreset transitionSnapshotEffectivePresetForOutputLocked(
+            PTTransitionMode mode, int row, int outputIdx, bool applyLive) const;
+    PTTransitionPreset transitionSnapshotEffectivePresetForSelectionLocked(
+            PTTransitionMode mode, int row, int outputIdx, int selectionIdx,
+            bool applyLive) const;
+    int transitionSnapshotSelectionIndexForPointLocked(
+            PTTransitionMode mode, int row, int outputIdx, const QLCPoint& point) const;
     PTGlobalEffectSettings globalEffectSettingsLocked() const;
     quint32 cycleDurationMsLocked(const PTGlobalEffectSettings& global,
                                     const PTTransitionPreset& preset) const;
@@ -490,6 +529,8 @@ private:
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
+    PTTransitionPreset positionMotionPresetForOutputLocked(int outputIdx) const;
+    PTTransitionPreset positionMotionPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
     PTTransitionPreset multiFxPresetForOutputLocked(int outputIdx) const;
     struct PTContinuousLayerState
     {
@@ -509,13 +550,17 @@ private:
                                                                uchar xfEffective) const;
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
+    int livePositionMotionPresetIndexLocked(int outputIdx) const;
     int liveMultiFxPresetIndexLocked(int outputIdx) const;
     int rawLiveSecondaryRowIndexLocked(int outputIdx) const;
     int liveSecondaryRowIndexLocked(int outputIdx) const;
     void sendLiveSelectorFeedbackLocked(int outputIdx);
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
+    bool positionMotionEfxActiveForOutputLocked(int outputIdx) const;
     bool multiFxActiveForOutputLocked(int outputIdx) const;
+    bool hasStagedPositionMotionPresetLocked(int outputIdx) const;
+    int stagedPositionMotionPresetIndexLocked(int outputIdx) const;
     bool hasStagedMultiFxPresetLocked(int outputIdx) const;
     int stagedMultiFxPresetIndexLocked(int outputIdx) const;
     bool hasStagedMultiFxAnyLocked() const;
@@ -542,6 +587,7 @@ private:
     void stageSecondaryRowLocked(int outputIdx, int rowIdx);
     void stageSweepPresetLocked(int outputIdx, int presetIdx);
     void stageContinuousPresetLocked(int outputIdx, int presetIdx);
+    void stagePositionMotionPresetLocked(int outputIdx, int presetIdx);
     void stageMultiFxPresetLocked(int outputIdx, int presetIdx);
     void ensureMultiButtonRevisionSizeLocked();
     int multiButtonRevisionSlotLocked(int parameter) const;
@@ -583,6 +629,7 @@ private:
     {
         bool transitionOn = false;
         bool continuousFxOn = false;
+        bool positionMotionOn = false;
         int secondaryRow = -1;
         bool crossfadeTransition = false;
         bool crossfadeContinuous = false;
@@ -662,10 +709,12 @@ public:
     QVector<int>      m_stagedSecondaryRow;
     QVector<int>      m_stagedSweepPreset;
     QVector<int>      m_stagedContinuousPreset;
+    QVector<int>      m_stagedPositionMotionPreset;
     QVector<int>      m_stagedMultiFxPreset;
     QVector<bool>     m_stagedSecondaryValid;
     QVector<bool>     m_stagedSweepValid;
     QVector<bool>     m_stagedContinuousValid;
+    QVector<bool>     m_stagedPositionMotionValid;
     QVector<bool>     m_stagedMultiFxValid;
     QVector<QVector<quint64>> m_multiButtonStateRevision;
 
@@ -678,15 +727,20 @@ public:
     quint32                     m_cachedTransitionWidgetId = VCWidget::invalidId();
     int                         m_cachedTransitionSweepCount = 0;
     int                         m_cachedTransitionContinuousCount = 0;
+    int                         m_cachedTransitionPositionMotionCount = 0;
     int                         m_cachedTransitionMultiFxCount = 0;
+    PTTransitionProviderSnapshot m_transitionProviderSnapshot;
     QVector<int>                m_liveSweepPreset;
     QVector<int>                m_liveContinuousPreset;
+    QVector<int>                m_livePositionMotionPreset;
     QVector<int>                m_liveMultiFxPreset;
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;
+    QVector<quint32>            m_positionMotionElapsedMs;
     QVector<quint32>            m_multiFxStagedElapsedMs;
     QVector<quint32>            m_continuousLastCycleMs;
+    QVector<quint32>            m_positionMotionLastCycleMs;
     QVector<quint32>            m_multiFxLastCycleMs;
     QVector<quint32>            m_multiFxStagedLastCycleMs;
     QKeySequence                m_multiFxRestartKey;
@@ -735,10 +789,12 @@ public:
     PTPositionXYPadWidget*        m_positionXYPad = nullptr;
     QDoubleSpinBox*               m_positionPanSpin = nullptr;
     QDoubleSpinBox*               m_positionTiltSpin = nullptr;
-    QCheckBox*                    m_positionSymmetricSpreadCheck = nullptr;
-    QComboBox*                    m_positionSpreadAxisCombo = nullptr;
-    QSlider*                      m_positionSpreadSlider = nullptr;
-    QLabel*                       m_positionSpreadValueLabel = nullptr;
+    QCheckBox*                    m_positionSpreadPanCheck = nullptr;
+    QCheckBox*                    m_positionSpreadTiltCheck = nullptr;
+    QSlider*                      m_positionSpreadPanSlider = nullptr;
+    QSlider*                      m_positionSpreadTiltSlider = nullptr;
+    QLabel*                       m_positionSpreadPanValueLabel = nullptr;
+    QLabel*                       m_positionSpreadTiltValueLabel = nullptr;
     QPushButton*                  m_positionOverwriteBtn = nullptr;
     QPushButton*                  m_positionSaveAsBtn = nullptr;
     QPushButton*                  m_positionRevertBtn = nullptr;
@@ -753,6 +809,7 @@ public:
     int                         m_positionEditOutput = -1;
     int                         m_positionEditSelection = -1;
     bool                        m_positionEditorSyncing = false;
+    bool                        m_positionApplyingEditorStage = false;
     bool                        m_positionDraftDirty = false;
     bool                        m_positionConfirmDiscardDraft = true;
     bool                        m_positionShowStatusStrip = true;
@@ -761,6 +818,8 @@ public:
     int                         m_positionFollowLiveContextOut = -1;
     int                         m_positionLastFollowDrivingOutput = -1;
     bool                        m_positionPromoteUiRefresh = false;
+    bool                        m_positionSpreadPanInputWaitingForCenter = true;
+    bool                        m_positionSpreadTiltInputWaitingForCenter = true;
     PTPositionDraftContext      m_positionDraftCtx;
     QMap<QLCPoint, PTPositionValue> m_positionDraftCells;
 

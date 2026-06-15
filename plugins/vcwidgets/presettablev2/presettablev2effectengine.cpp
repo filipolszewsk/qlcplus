@@ -275,10 +275,24 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.blocks = qBound(1, 1 + int(val(PTEfxCol::InputBlocks)) * 63 / 255, 64);
     if (liveByColumn.contains(PTEfxCol::InputWingsSymmetry))
         p.wingsSymmetry = int(val(PTEfxCol::InputWingsSymmetry)) % 3;
+    if (liveByColumn.contains(PTEfxCol::InputOffsetStepMode))
+    {
+        const int v = int(val(PTEfxCol::InputOffsetStepMode)) * 4 / 256;
+        p.offsetStepMode = PTOffsetStepMode(qBound(0, v, int(PTOffsetStepMode::FixedDegrees)));
+    }
     if (liveByColumn.contains(PTEfxCol::InputOffsetStep))
     {
         const int v = int(val(PTEfxCol::InputOffsetStep));
-        p.offsetStep = (v == 0) ? 0 : qBound(1, v * 360 / 255, 360);
+        if (p.offsetStepMode == PTOffsetStepMode::FixedDegrees)
+        {
+            p.offsetStep = (v == 0) ? 0 : qBound(1, v * 360 / 255, 360);
+        }
+        else
+        {
+            p.offsetStepMode = (v == 0)
+                    ? PTOffsetStepMode::Off : PTOffsetStepMode::CoveragePercent;
+            p.offsetCoverage = qBound(0, v * 100 / 255, 100);
+        }
     }
     if (liveByColumn.contains(PTEfxCol::InputDuration))
         p.durationMs = durationMsFromInputByte(val(PTEfxCol::InputDuration));
@@ -304,6 +318,10 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.speedMultiplier = qBound(0, int(val(PTEfxCol::InputSpeedMult)) * 5 / 255, 5);
     if (liveByColumn.contains(PTEfxCol::InputPositionMotion))
         p.positionMotion = int(val(PTEfxCol::InputPositionMotion)) % 9;
+    if (liveByColumn.contains(PTEfxCol::InputPositionMotionDir))
+        p.positionMotionDirection = int(val(PTEfxCol::InputPositionMotionDir)) % 4;
+    if (liveByColumn.contains(PTEfxCol::InputPosition1DBuiltinMode))
+        p.position1DBuiltinMode = int(val(PTEfxCol::InputPosition1DBuiltinMode)) % 2;
     return p;
 }
 

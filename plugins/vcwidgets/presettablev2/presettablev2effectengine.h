@@ -62,6 +62,14 @@ enum class PTOffsetDirection
     Symmetric
 };
 
+enum class PTOffsetStepMode : int
+{
+    Off = 0,
+    AutoFit,
+    CoveragePercent,
+    FixedDegrees
+};
+
 enum class PTPropagationMode
 {
     Parallel = 0,
@@ -73,7 +81,8 @@ enum class PTTransitionMode
     Off = 0,
     SweepOnly,
     Continuous,
-    MultiFx = 3
+    MultiFx = 3,
+    PositionMotion = 4
 };
 
 /** Relative position orbit type (Position Mode only — separate from dimmer waveShape). */
@@ -163,6 +172,8 @@ struct PTTransitionPreset
     PTTransitionAxis   axis = PTTransitionAxis::X;
     PTOffsetDirection  offsetDirection = PTOffsetDirection::LeftToRight;
     int                offsetStep = 20;
+    PTOffsetStepMode   offsetStepMode = PTOffsetStepMode::AutoFit;
+    int                offsetCoverage = 100;
     int                wings = 1;
     int                blocks = 1;
     int                wingsSymmetry = 0; /**< 0=Normal, 1=Alternate, 2=Mirror */

@@ -33,6 +33,8 @@ PTDimmerWaveParams PTDimmerWaveEngine::paramsFromPreset(const PTTransitionPreset
     p.customCurveEnabled = preset.customCurveEnabled;
     p.customCurve = preset.customCurve;
     p.offsetStep = preset.offsetStep;
+    p.offsetStepMode = preset.offsetStepMode;
+    p.offsetCoverage = preset.offsetCoverage;
     p.wings = preset.wings;
     p.blocks = preset.blocks > 0 ? preset.blocks : 1;
     p.wingsSymmetry = preset.wingsSymmetry;
@@ -52,7 +54,7 @@ PTDimmerWaveParams PTDimmerWaveEngine::paramsFromPreset(const PTTransitionPreset
         p.startOffset = (p.startOffset + phaseOffsetDeg) % 360;
 
         const double mult = PTParamMatrixEngine::fxMultiplierValue(global->fxMultiplier);
-        if (p.offsetStep != 0)
+        if (p.offsetStepMode == PTOffsetStepMode::FixedDegrees && p.offsetStep != 0)
             p.offsetStep = qMax(1, int(std::round(double(p.offsetStep) * mult)));
     }
 
@@ -106,9 +108,35 @@ int PTDimmerWaveEngine::maxOffsetStepForGrid(int gridSpanAlongAxis,
     return qMax(1, 360 / (slotsPerWing - 1));
 }
 
+int PTDimmerWaveEngine::effectiveOffsetStepForSpan(int gridSpanAlongAxis,
+                                                   const PTTransitionPreset& preset)
+{
+    const int slotsPerWing = offsetSlotCountForWing(gridSpanAlongAxis, preset);
+    const int scalableMax = slotsPerWing <= 1 ? 0 : qMax(1, 360 / (slotsPerWing - 1));
+    switch (preset.offsetStepMode)
+    {
+        case PTOffsetStepMode::Off:
+            return 0;
+        case PTOffsetStepMode::AutoFit:
+            return scalableMax;
+        case PTOffsetStepMode::CoveragePercent:
+            return qBound(0, int(std::round(double(scalableMax)
+                                            * double(qBound(0, preset.offsetCoverage, 100))
+                                            / 100.0)), scalableMax);
+        case PTOffsetStepMode::FixedDegrees:
+            if (preset.offsetStep == 0)
+                return 0;
+            return qBound(0, preset.offsetStep, maxOffsetStepForGrid(gridSpanAlongAxis, preset));
+    }
+    return 0;
+}
+
 void PTDimmerWaveEngine::clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis)
 {
+    preset.offsetCoverage = qBound(0, preset.offsetCoverage, 100);
     if (gridSpanAlongAxis <= 0)
+        return;
+    if (preset.offsetStepMode != PTOffsetStepMode::FixedDegrees)
         return;
     if (preset.offsetStep == 0)
         return;
@@ -415,15 +443,33 @@ PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, 
     info.localOrder = localIndex + 1;
     info.offsetSlot = index;
     info.slotsPerWing = blocksPerWing;
-    if (params.offsetStep == 0)
+    int step = params.offsetStep;
+    switch (params.offsetStepMode)
+    {
+        case PTOffsetStepMode::Off:
+            step = 0;
+            break;
+        case PTOffsetStepMode::AutoFit:
+            step = blocksPerWing <= 1 ? 0 : qMax(1, 360 / (blocksPerWing - 1));
+            break;
+        case PTOffsetStepMode::CoveragePercent:
+        {
+            const int maxStep = blocksPerWing <= 1 ? 0 : qMax(1, 360 / (blocksPerWing - 1));
+            step = qBound(0, int(std::round(double(maxStep)
+                                            * double(qBound(0, params.offsetCoverage, 100))
+                                            / 100.0)), maxStep);
+            break;
+        }
+        case PTOffsetStepMode::FixedDegrees:
+            if (step < 0)
+                step = evenOffsetStepForSpan(span);
+            break;
+    }
+
+    if (step == 0)
         info.headOffsetDeg = 0;
     else
-    {
-        int step = params.offsetStep;
-        if (step < 0)
-            step = evenOffsetStepForSpan(span);
         info.headOffsetDeg = (step * index) % 360;
-    }
     return info;
 }
 
@@ -435,6 +481,7 @@ int PTDimmerWaveEngine::calculateHeadStartOffset(int col, int row, int gridWidth
     p.axis = axis;
     p.wings = wings;
     p.offsetStep = offsetStep;
+    p.offsetStepMode = PTOffsetStepMode::FixedDegrees;
     p.offsetDirection = direction;
     p.blocks = 1;
     return calculateHeadStartOffsetExtended(col, row, gridWidth, gridHeight, p);

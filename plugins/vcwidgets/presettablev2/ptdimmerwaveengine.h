@@ -20,6 +20,8 @@ struct PTDimmerWaveParams
     int waveLevel = 255;
     int startOffset = 0;
     int offsetStep = 20;
+    PTOffsetStepMode offsetStepMode = PTOffsetStepMode::AutoFit;
+    int offsetCoverage = 100;
     bool customCurveEnabled = false;
     QVector<PTCustomCurvePoint> customCurve;
     int wings = 1;
@@ -62,6 +64,7 @@ public:
     static int effectiveOffsetSlotCount(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static int offsetSlotCountForWing(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static int maxOffsetStepForGrid(int gridSpanAlongAxis, const PTTransitionPreset& preset);
+    static int effectiveOffsetStepForSpan(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static void clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis);
 
     static PTDimmerWaveSpatialSpan spatialSpanForPoint(int col, int row, int gridWidth, int gridHeight,

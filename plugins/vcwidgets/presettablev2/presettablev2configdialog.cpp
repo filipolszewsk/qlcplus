@@ -168,12 +168,7 @@ void OutputEditorRow::updateFixtureLabel()
 
 static PresetTableV2TransitionProviderIface* transitionProviderForWidgetId(quint32 widgetId)
 {
-    if (widgetId == VCWidget::invalidId())
-        return nullptr;
-    VirtualConsole* vc = VirtualConsole::instance();
-    if (!vc)
-        return nullptr;
-    return qobject_cast<PresetTableV2TransitionProviderIface*>(vc->widget(widgetId));
+    return PresetTableV2VCLookup::transitionProviderByVcId(widgetId);
 }
 
 // ==========================================================================
@@ -185,6 +180,7 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
                                        QSharedPointer<QLCInputSource> rowSrc,
                                        QSharedPointer<QLCInputSource> transSweepSrc,
                                        QSharedPointer<QLCInputSource> transContinuousSrc,
+                                       QSharedPointer<QLCInputSource> positionMotionSrc,
                                        QSharedPointer<QLCInputSource> multiFxSrc,
                                        QSharedPointer<QLCInputSource> transSecondarySrc,
                                        FixtureGroup* group,
@@ -230,8 +226,13 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
 
     m_continuousPresetCombo = new QComboBox(this);
     m_continuousPresetCombo->setMinimumWidth(90);
-    m_continuousPresetCombo->setToolTip(tr("Default Continuous FX preset when the Continuous FX selector has no DMX. Off = Instant."));
+    m_continuousPresetCombo->setToolTip(tr("Default Interpolation preset when the Interpolation selector has no DMX. Off = disabled."));
     topLay->addWidget(m_continuousPresetCombo);
+
+    m_positionMotionPresetCombo = new QComboBox(this);
+    m_positionMotionPresetCombo->setMinimumWidth(90);
+    m_positionMotionPresetCombo->setToolTip(tr("Default Continuous Motion preset when the Continuous Motion selector has no DMX. Off = disabled."));
+    topLay->addWidget(m_positionMotionPresetCombo);
 
     m_multiFxPresetCombo = new QComboBox(this);
     m_multiFxPresetCombo->setMinimumWidth(90);
@@ -251,6 +252,9 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     const int ctIdx = m_continuousPresetCombo->findData(output.continuousPresetIndex);
     if (ctIdx >= 0)
         m_continuousPresetCombo->setCurrentIndex(ctIdx);
+    const int pmIdx = m_positionMotionPresetCombo->findData(output.positionMotionPresetIndex);
+    if (pmIdx >= 0)
+        m_positionMotionPresetCombo->setCurrentIndex(pmIdx);
     const int mfIdx = m_multiFxPresetCombo->findData(output.multiFxPresetIndex);
     if (mfIdx >= 0)
         m_multiFxPresetCombo->setCurrentIndex(mfIdx);
@@ -261,6 +265,8 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
     connect(m_sweepPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
     connect(m_continuousPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &FGOutputEditorRow::changed);
+    connect(m_positionMotionPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
     connect(m_multiFxPresetCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &FGOutputEditorRow::changed);
@@ -304,12 +310,19 @@ FGOutputEditorRow::FGOutputEditorRow(Doc* doc,
              tr("Live primary row for snapshots/cuelists. DMX 1–N = table row, 0 = off. 101+ = flash that row."));
     addInput(tr("Transition live selector / snapshot"), m_transSweepInputSel, transSweepSrc,
              tr("Live transition preset for snapshots/cuelists. 0 = instant."));
-    addInput(tr("Continuous FX live selector / snapshot"), m_transContinuousInputSel, transContinuousSrc,
-             tr("Live Continuous FX preset for snapshots/cuelists. 0 = off."));
+    addInput(tr("Interpolation live selector / snapshot"), m_transContinuousInputSel, transContinuousSrc,
+             tr("Live Interpolation preset for snapshots/cuelists. 0 = off."));
+    addInput(tr("Continuous Motion live selector / snapshot"), m_positionMotionInputSel, positionMotionSrc,
+             tr("Live Continuous Motion preset for snapshots/cuelists. 0 = off."));
     addInput(tr("MultiFX live selector / snapshot"), m_multiFxInputSel, multiFxSrc,
              tr("Live MultiFX preset for snapshots/cuelists. MultiFX blend still controls how much is revealed."));
     addInput(tr("Secondary live selector / snapshot"), m_transSecondaryInputSel, transSecondarySrc,
              tr("Live secondary row for snapshots/cuelists. DMX 1 = table row 1, 2 = row 2, 0 = use Secondary combo below."));
+    const bool positionMode = m_ptWidget && m_ptWidget->widgetMode() == PTMode::Position;
+    if (m_positionMotionPresetCombo)
+        m_positionMotionPresetCombo->setVisible(positionMode);
+    if (m_positionMotionInputSel && m_positionMotionInputSel->parentWidget())
+        m_positionMotionInputSel->parentWidget()->setVisible(positionMode);
     rootLay->addLayout(inLay);
 
     rebuildRowCheckboxes();
@@ -360,6 +373,7 @@ void FGOutputEditorRow::rebuildTransitionPresetCombos()
     };
     fillCombo(m_sweepPresetCombo, PTTransitionMode::SweepOnly);
     fillCombo(m_continuousPresetCombo, PTTransitionMode::Continuous);
+    fillCombo(m_positionMotionPresetCombo, PTTransitionMode::PositionMotion);
     fillCombo(m_multiFxPresetCombo, PTTransitionMode::MultiFx);
 }
 
@@ -396,6 +410,8 @@ PTOutput FGOutputEditorRow::output() const
         out.sweepPresetIndex = m_sweepPresetCombo->currentData().toInt();
     if (m_continuousPresetCombo != nullptr)
         out.continuousPresetIndex = m_continuousPresetCombo->currentData().toInt();
+    if (m_positionMotionPresetCombo != nullptr)
+        out.positionMotionPresetIndex = m_positionMotionPresetCombo->currentData().toInt();
     if (m_multiFxPresetCombo != nullptr)
         out.multiFxPresetIndex = m_multiFxPresetCombo->currentData().toInt();
     if (m_secondaryRowCombo != nullptr)
@@ -422,6 +438,12 @@ QSharedPointer<QLCInputSource> FGOutputEditorRow::transSweepInputSource() const
 QSharedPointer<QLCInputSource> FGOutputEditorRow::transContinuousInputSource() const
 {
     return m_transContinuousInputSel ? m_transContinuousInputSel->inputSource()
+                                    : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> FGOutputEditorRow::positionMotionInputSource() const
+{
+    return m_positionMotionInputSel ? m_positionMotionInputSel->inputSource()
                                     : QSharedPointer<QLCInputSource>();
 }
 
@@ -523,6 +545,12 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                                                    bool positionConfirmDiscardDraft,
                                                    bool positionShowStatusStrip,
                                                    bool positionShowEditorHints,
+                                                   QSharedPointer<QLCInputSource> positionBasePanSrc,
+                                                   QSharedPointer<QLCInputSource> positionBaseTiltSrc,
+                                                   QSharedPointer<QLCInputSource> positionSpreadPanSrc,
+                                                   QSharedPointer<QLCInputSource> positionSpreadTiltSrc,
+                                                   QSharedPointer<QLCInputSource> positionSpreadPanEnableSrc,
+                                                   QSharedPointer<QLCInputSource> positionSpreadTiltEnableSrc,
                                                    QWidget* parent)
     : QDialog(parent)
     , m_doc(doc)
@@ -678,6 +706,41 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     m_positionShowEditorHintsChk->setToolTip(tr(
             "Shows short help text below the status strip (e.g. symmetric spread)."));
     posEditorLayout->addWidget(m_positionShowEditorHintsChk);
+
+    auto addPositionInput = [&](const QString& label,
+                                InputSelectionWidget*& selector,
+                                const QSharedPointer<QLCInputSource>& src,
+                                const QString& tip) {
+        QWidget* rowWidget = new QWidget(posEditorGrp);
+        QHBoxLayout* row = new QHBoxLayout(rowWidget);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addWidget(new QLabel(label, rowWidget));
+        selector = new InputSelectionWidget(doc, rowWidget);
+        selector->setKeyInputVisibility(false);
+        selector->setWidgetPage(widgetPage);
+        selector->setInputSource(src);
+        selector->setToolTip(tip);
+        row->addWidget(selector, 1);
+        posEditorLayout->addWidget(rowWidget);
+    };
+    addPositionInput(tr("Base Pan input (0–255):"), m_positionBasePanInputSel,
+                     positionBasePanSrc,
+                     tr("Moves the current position editor base pan for selected fixtures."));
+    addPositionInput(tr("Base Tilt input (0–255):"), m_positionBaseTiltInputSel,
+                     positionBaseTiltSrc,
+                     tr("Moves the current position editor base tilt for selected fixtures."));
+    addPositionInput(tr("Spread Pan input (center catch):"), m_positionSpreadPanInputSel,
+                     positionSpreadPanSrc,
+                     tr("Controls Pan spread after the input passes through center."));
+    addPositionInput(tr("Spread Tilt input (center catch):"), m_positionSpreadTiltInputSel,
+                     positionSpreadTiltSrc,
+                     tr("Controls Tilt spread after the input passes through center."));
+    addPositionInput(tr("Spread Pan enable:"), m_positionSpreadPanEnableInputSel,
+                     positionSpreadPanEnableSrc,
+                     tr("Value > 127 enables Pan spread and arms center catch."));
+    addPositionInput(tr("Spread Tilt enable:"), m_positionSpreadTiltEnableInputSel,
+                     positionSpreadTiltEnableSrc,
+                     tr("Value > 127 enables Tilt spread and arms center catch."));
     posEditorLayout->addStretch();
     posTabLayout->addWidget(posEditorGrp);
     posTabLayout->addStretch();
@@ -932,6 +995,7 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
         {
             QSharedPointer<QLCInputSource> sweepSrc;
             QSharedPointer<QLCInputSource> contSrc;
+            QSharedPointer<QLCInputSource> motionSrc;
             QSharedPointer<QLCInputSource> multiFxSrc;
             QSharedPointer<QLCInputSource> secSrc;
             if (m_ptWidget)
@@ -940,11 +1004,13 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
                 {
                     sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(i));
                     contSrc = m_ptWidget->inputSource(PTInputId::transContinuousBank(i));
+                    motionSrc = m_ptWidget->inputSource(PTInputId::positionMotionBank(i));
                     multiFxSrc = m_ptWidget->inputSource(PTInputId::multiFxBank(i));
                     secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(i));
                 }
             }
             auto* row = new FGOutputEditorRow(m_doc, outputs[i], src, sweepSrc, contSrc,
+                                              motionSrc,
                                               multiFxSrc, secSrc,
                                               grp, m_widgetPage, transitionProvider, m_ptWidget, this);
             m_fgOutputRows.append(row);
@@ -1045,6 +1111,13 @@ QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::transContinuousInputSo
     if (outputIdx < 0 || outputIdx >= m_fgOutputRows.size())
         return QSharedPointer<QLCInputSource>();
     return m_fgOutputRows[outputIdx]->transContinuousInputSource();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionMotionInputSource(int outputIdx) const
+{
+    if (outputIdx < 0 || outputIdx >= m_fgOutputRows.size())
+        return QSharedPointer<QLCInputSource>();
+    return m_fgOutputRows[outputIdx]->positionMotionInputSource();
 }
 
 QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::multiFxInputSource(int outputIdx) const
@@ -1179,6 +1252,44 @@ bool PresetTableV2ConfigDialog::positionShowEditorHints() const
             : true;
 }
 
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionBasePanInputSource() const
+{
+    return m_positionBasePanInputSel ? m_positionBasePanInputSel->inputSource()
+                                     : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionBaseTiltInputSource() const
+{
+    return m_positionBaseTiltInputSel ? m_positionBaseTiltInputSel->inputSource()
+                                      : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionSpreadPanInputSource() const
+{
+    return m_positionSpreadPanInputSel ? m_positionSpreadPanInputSel->inputSource()
+                                       : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionSpreadTiltInputSource() const
+{
+    return m_positionSpreadTiltInputSel ? m_positionSpreadTiltInputSel->inputSource()
+                                        : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionSpreadPanEnableInputSource() const
+{
+    return m_positionSpreadPanEnableInputSel
+            ? m_positionSpreadPanEnableInputSel->inputSource()
+            : QSharedPointer<QLCInputSource>();
+}
+
+QSharedPointer<QLCInputSource> PresetTableV2ConfigDialog::positionSpreadTiltEnableInputSource() const
+{
+    return m_positionSpreadTiltEnableInputSel
+            ? m_positionSpreadTiltEnableInputSel->inputSource()
+            : QSharedPointer<QLCInputSource>();
+}
+
 // ==========================================================================
 // Private helpers
 // ==========================================================================
@@ -1292,6 +1403,16 @@ void PresetTableV2ConfigDialog::slotAddOutput()
 {
     PTOutput out;
     PTMode curMode = widgetMode();
+    const int currentOutputs = (curMode == PTMode::Legacy)
+            ? m_outputRows.size() : m_fgOutputRows.size();
+    if (currentOutputs >= PTInputId::kMaxRoutableOutputs)
+    {
+        QMessageBox::information(
+                this, tr("Output limit"),
+                tr("Preset Table v2 supports up to %1 outputs.")
+                        .arg(PTInputId::kMaxRoutableOutputs));
+        return;
+    }
 
     if (curMode == PTMode::Legacy)
     {
@@ -1323,6 +1444,7 @@ void PresetTableV2ConfigDialog::slotAddOutput()
                                         : VCWidget::invalidId());
         QSharedPointer<QLCInputSource> sweepSrc;
         QSharedPointer<QLCInputSource> contSrc;
+        QSharedPointer<QLCInputSource> motionSrc;
         QSharedPointer<QLCInputSource> multiFxSrc;
         QSharedPointer<QLCInputSource> secSrc;
         const int o = m_fgOutputRows.size();
@@ -1332,12 +1454,13 @@ void PresetTableV2ConfigDialog::slotAddOutput()
             {
                 sweepSrc = m_ptWidget->inputSource(PTInputId::transSweep(o));
                 contSrc = m_ptWidget->inputSource(PTInputId::transContinuousBank(o));
+                motionSrc = m_ptWidget->inputSource(PTInputId::positionMotionBank(o));
                 multiFxSrc = m_ptWidget->inputSource(PTInputId::multiFxBank(o));
                 secSrc = m_ptWidget->inputSource(PTInputId::transSecondaryRow(o));
             }
         }
         auto* row = new FGOutputEditorRow(m_doc, out, QSharedPointer<QLCInputSource>(),
-                                           sweepSrc, contSrc, multiFxSrc, secSrc, grp, m_widgetPage, provider,
+                                           sweepSrc, contSrc, motionSrc, multiFxSrc, secSrc, grp, m_widgetPage, provider,
                                            m_ptWidget, this);
         m_fgOutputRows.append(row);
 

@@ -143,6 +143,18 @@ float envelope01(float phaseInWidth, const PTDimmerWaveParams& waveParams)
     return PTDimmerWaveEngine::dimmerAtPhaseInWidth(phaseInWidth, envParams);
 }
 
+float customCurveBipolar(float phase01, const PTDimmerWaveParams& waveParams)
+{
+    const float sample = PTDimmerWaveEngine::sampleCustomCurve01(
+            qBound(0.0f, phase01, 1.0f), waveParams.customCurve);
+    const float center = 128.0f / 255.0f;
+    const float bipolar = sample <= center
+            ? (sample / center) - 1.0f
+            : (sample - center) / (1.0f - center);
+    const float level = float(qBound(0, waveParams.waveLevel, 255)) / 255.0f;
+    return qBound(-1.0f, bipolar, 1.0f) * level;
+}
+
 float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection direction,
                                  const PTDimmerWaveOffsetInfo& spatial)
 {
@@ -234,6 +246,9 @@ float samplePosition1DAtPhase(float phase01, const PTTransitionPreset& preset,
 {
     const float phase = qBound(0.0f, phase01, 1.0f);
 
+    if (waveParams.customCurveEnabled && waveParams.customCurve.size() >= 2)
+        return customCurveBipolar(phase, waveParams);
+
     if (preset.position1DBuiltinMode == 1)
     {
         const float osc = oscillateBuiltinBipolar(phase, waveParams.waveShape);
@@ -285,6 +300,24 @@ float position1DOffsetForCycleProgress(float cycleProgressRad,
             : samplePosition1DAtPhase(1.0f, preset, waveParams);
 }
 
+/** DMX path: same iterator window as dimmer wave / orbitPhaseFromIterator [0, widthRad). */
+float position1DOffsetForIterator(float iteratorRad,
+                                const PTTransitionPreset& preset,
+                                const PTDimmerWaveParams& waveParams)
+{
+    const float twoPi = float(M_PI * 2.0);
+    const float iter = normalizeRad(iteratorRad);
+    const int waveWidth = qBound(1, waveParams.waveWidth, 360);
+    if (waveWidth >= 360)
+        return samplePosition1DAtPhase(iter / twoPi, preset, waveParams);
+
+    const float widthRad = (float(waveWidth) / 360.0f) * twoPi;
+    if (iter < widthRad)
+        return samplePosition1DAtPhase(iter / widthRad, preset, waveParams);
+
+    return samplePosition1DAtPhase(1.0f, preset, waveParams);
+}
+
 } // namespace
 
 float PTPositionFxEngine::samplePosition1DOffset(float iteratorRad,
@@ -292,10 +325,8 @@ float PTPositionFxEngine::samplePosition1DOffset(float iteratorRad,
                                                  const PTDimmerWaveParams& waveParams,
                                                  int headOffsetDeg)
 {
-    const float headOffsetRad = PTDimmerWaveEngine::convertOffsetDegrees(headOffsetDeg);
-    const float startOffsetRad = PTDimmerWaveEngine::convertOffsetDegrees(waveParams.startOffset);
-    const float cycleProgressRad = normalizeRad(iteratorRad - headOffsetRad - startOffsetRad);
-    return position1DOffsetForCycleProgress(cycleProgressRad, preset, waveParams);
+    Q_UNUSED(headOffsetDeg)
+    return position1DOffsetForIterator(iteratorRad, preset, waveParams);
 }
 
 float PTPositionFxEngine::sampleMotionAtCycleDeg(float cycleDeg, const PTTransitionPreset& preset,

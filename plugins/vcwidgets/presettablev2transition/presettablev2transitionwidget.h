@@ -97,6 +97,7 @@ public:
     const QVector<PTTransitionPreset>& sweepPresets() const { return m_sweepPresets; }
     const QVector<PTTransitionPreset>& continuousPresets() const { return m_continuousPresets; }
     const QVector<PTTransitionPreset>& multiFxPresets() const { return m_multiFxPresets; }
+    const QVector<PTTransitionPreset>& positionMotionPresets() const { return m_positionMotionPresets; }
 
     int transitionPresetCount(PTTransitionMode mode) const override;
     PTTransitionPreset transitionPreset(PTTransitionMode mode, int index) const override;
@@ -114,8 +115,9 @@ public:
                                                              int selectionKey) const override;
     QString transitionPresetName(PTTransitionMode mode, int index) const override;
     PTTransitionMode transitionMode() const override;
-    PTGlobalEffectSettings globalEffectSettings() const override { return m_globalSettings; }
+    PTGlobalEffectSettings globalEffectSettings() const override;
     bool hasLiveColumnOverride(quint8 inputId) const override;
+    ::PTTransitionProviderSnapshot transitionProviderSnapshot() const override;
     void requestFlash(int tableRowIndex, int transitionPresetIndex) override;
     void promoteStagedColumnOverrides() override;
     bool crossfadeManualControlEnabled() const override;
@@ -159,6 +161,7 @@ private:
         ColWings,
         ColBlocks,
         ColWingsSymmetry,
+        ColOffsetStepMode,
         ColOffsetStep,
         ColDuration,
         ColWaveWidth,
@@ -196,6 +199,27 @@ private:
         QVector<PTTransitionSelection> selections;
     };
 
+    struct PTTransitionProviderSnapshot
+    {
+        QVector<PTTransitionPreset> sweepPresets;
+        QVector<PTTransitionPreset> continuousPresets;
+        QVector<PTTransitionPreset> multiFxPresets;
+        QVector<PTTransitionPreset> positionMotionPresets;
+        QVector<QHash<int, PTTransitionOutputLayer>> sweepOutputOverrides;
+        QVector<QHash<int, PTTransitionOutputLayer>> continuousOutputOverrides;
+        QVector<QHash<int, PTTransitionOutputLayer>> multiFxOutputOverrides;
+        QVector<QHash<int, PTTransitionOutputLayer>> positionMotionOutputOverrides;
+        QHash<quint8, uchar> liveColumnOverrides;
+        PTGlobalEffectSettings globalSettings;
+        PTTransitionMode activeMode = PTTransitionMode::SweepOnly;
+        bool enabled = true;
+        bool crossfadeManualControl = true;
+        int spanX = 0;
+        int spanY = 0;
+        int spanXY = 0;
+        quint64 revision = 0;
+    };
+
     PTTransitionMode activeBankMode() const;
     QVector<PTTransitionPreset>& presetsForMode(PTTransitionMode mode);
     const QVector<PTTransitionPreset>& presetsForMode(PTTransitionMode mode) const;
@@ -217,12 +241,45 @@ private:
     void syncActiveBankFromTable();
     void pushSpatialEnabledToTable();
     void notifyTablePresetCacheRefresh();
+    void scheduleDeferredPresetCacheRefreshAndPreview();
     void scheduleDeferredTableLinkRefresh(int attemptsLeft = 6);
+    void publishProviderSnapshot(const QString& reason = QString());
+    PTTransitionProviderSnapshot providerSnapshotCopy() const;
+    const QVector<PTTransitionPreset>& snapshotPresetsForMode(
+            const PTTransitionProviderSnapshot& snapshot, PTTransitionMode mode) const;
+    const QVector<QHash<int, PTTransitionOutputLayer>>& snapshotOverridesForMode(
+            const PTTransitionProviderSnapshot& snapshot, PTTransitionMode mode) const;
+    PTTransitionPreset snapshotTransitionPreset(const PTTransitionProviderSnapshot& snapshot,
+                                                PTTransitionMode mode, int index) const;
+    void applyOverrideColumnsToPreset(PTTransitionPreset& preset,
+                                      const PTTransitionPresetOverride& ov) const;
+    int snapshotGridSpanForPreset(const PTTransitionProviderSnapshot& snapshot,
+                                  const PTTransitionPreset& preset) const;
+    PTTransitionPreset finalizeSnapshotPreset(const PTTransitionProviderSnapshot& snapshot,
+                                              PTTransitionMode mode,
+                                              const PTTransitionPreset& preset) const;
+    PTTransitionPreset snapshotEffectivePresetForOutput(
+            const PTTransitionProviderSnapshot& snapshot, PTTransitionMode mode, int row,
+            int outputIdx, bool applyLive) const;
+    PTTransitionPreset snapshotEffectivePresetForSelection(
+            const PTTransitionProviderSnapshot& snapshot, PTTransitionMode mode, int row,
+            int outputIdx, int selectionIdx, bool applyLive) const;
+    int snapshotSelectionIndexForPoint(const PTTransitionProviderSnapshot& snapshot,
+                                       PTTransitionMode mode, int row, int outputIdx,
+                                       const QLCPoint& point) const;
     bool editCustomCurveForPreset(PTTransitionMode mode, int row,
                                   int outputIdx = -1, int selectionIdx = -1);
+    bool editPositionMotionCurve1DForPreset(PTTransitionMode mode, int row,
+                                            int outputIdx = -1, int selectionIdx = -1);
+    void finishCustomCurveEdit(PTTransitionMode mode, int row,
+                               int outputIdx = -1, int selectionIdx = -1);
+    void refreshCustomCurveVisualsAfterEdit(PTTransitionMode mode, int row,
+                                            int outputIdx, int selectionIdx);
     bool editPositionShapeForPreset(PTTransitionMode mode, int row,
                                     int outputIdx = -1, int selectionIdx = -1,
                                     int motionFromUi = -1);
+    void finishPositionShapeEdit(PTTransitionMode mode, int row,
+                                 int outputIdx = -1, int selectionIdx = -1);
     bool removeSelectionAt(PTTransitionMode mode, int row, int outputIdx, int selectionIndex);
     QVector<PTTransitionColumnGroupBar::Group> columnGroupsForMode(PTTransitionMode mode) const;
     void applyColumnGroupFilter(QTreeWidget* table, PTTransitionMode mode);
@@ -234,6 +291,8 @@ private:
     bool applyGlobalInput(quint8 inputId, uchar value);
     void mapColumnInput(quint8 inputId, const QString& title);
     PTTransitionPreset presetFromItem(PTTransitionMode mode, QTreeWidgetItem* item) const;
+    bool colWaveShapeEditsMotionCurve(PTTransitionMode mode, int row,
+                                      int outputIdx, int selectionIdx) const;
     PTTransitionPreset effectivePresetForOutputNoLive(PTTransitionMode mode, int row,
                                                       int outputIdx) const;
     PTTransitionPreset effectivePresetForSelectionNoLive(PTTransitionMode mode, int row,
@@ -254,6 +313,8 @@ private:
     int linkedOutputCount() const;
     QString linkedOutputName(int outputIdx) const;
     QTreeWidgetItem* parentItemForPreset(PTTransitionMode mode, int row) const;
+    QTreeWidgetItem* itemForPresetAddress(PTTransitionMode mode, int row,
+                                          int outputIdx, int selectionIdx) const;
     QTreeWidgetItem* selectedPresetItem(QTreeWidget* table) const;
     void setColumnOverrideValue(PTTransitionPresetOverride& ov, int col,
                                 const PTTransitionPreset& value);
@@ -273,16 +334,19 @@ private:
     void applySelectionRowVisuals(QTreeWidgetItem* item);
     void updateRemoveActionLabel();
     void configureFrozenNameView(PTTransitionMode mode);
+    void closeActiveTableEditors(QTreeWidget* table);
     void applyPositionModeColumnVisibility(QTreeWidget* table, PTTransitionMode mode);
     void applyDefaultColumnWidths(QTreeWidget* table);
     QString columnTooltipForCol(int col) const;
     QWidget* createEditorForColumn(QWidget* parent, int col) const;
     QVariant normalizedColumnValue(int col, const QString& raw) const;
     QString displayTextForColumn(int col, const QVariant& value) const;
+    QString comboDisplayTextForColumn(int col, const QVariant& value) const;
     void setPresetCellValue(QTreeWidgetItem* item, int col, const QVariant& value,
                             bool inherited, bool parentHasOutputOverride = false,
                             bool selected = false);
-    void commitPresetCellEdit(QTreeWidget* table, QTreeWidgetItem* item, int col);
+    void commitPresetCellEdit(QTreeWidget* table, const PTTransitionCellAddress& address,
+                              const QVariant& value);
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
@@ -319,6 +383,7 @@ private:
 
     static QComboBox* makeAxisCombo(QWidget* parent);
     static QComboBox* makeOffsetDirCombo(QWidget* parent);
+    static QComboBox* makeOffsetStepModeCombo(QWidget* parent);
     static QComboBox* makeWaveShapeCombo(QWidget* parent);
     static QComboBox* makePositionMotionCombo(QWidget* parent);
     static QComboBox* makePosition1DBuiltinModeCombo(QWidget* parent);
@@ -337,9 +402,11 @@ private:
     QVector<PTTransitionPreset> m_sweepPresets;
     QVector<PTTransitionPreset> m_continuousPresets;
     QVector<PTTransitionPreset> m_multiFxPresets;
+    QVector<PTTransitionPreset> m_positionMotionPresets;
     QVector<QHash<int, PTTransitionOutputLayer>> m_sweepOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_continuousOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_multiFxOutputOverrides;
+    QVector<QHash<int, PTTransitionOutputLayer>> m_positionMotionOutputOverrides;
     QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
     QVector<PTShapeGalleryItem> m_shapeGallery;
     QHash<int, QString> m_columnGroupFilterByMode;
@@ -351,10 +418,19 @@ private:
     bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
     bool m_committingPresetCell = false;
+    bool m_committingDelegateEditor = false;
+    bool m_closingTableEditors = false;
+    bool m_deferredTransitionUiRefreshPending = false;
+    bool m_editingCustomCurve = false;
+    bool m_committingCustomDialog = false;
+    bool m_disableLiveLinkedTableLookup = false;
     bool m_pastingCells = false;
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
+    mutable QMutex m_providerSnapshotMutex;
+    PTTransitionProviderSnapshot m_providerSnapshot;
+    quint64 m_providerSnapshotRevision = 0;
 
     QVBoxLayout*  m_layout = nullptr;
     QLabel*       m_linkLabel = nullptr;
@@ -376,15 +452,19 @@ private:
     QTabWidget*   m_bankTabs = nullptr;
     QTreeWidget* m_sweepTable = nullptr;
     QTreeWidget* m_continuousTable = nullptr;
+    QTreeWidget* m_positionMotionTable = nullptr;
     QTreeWidget* m_multiFxTable = nullptr;
     PresetTableV2TransitionDelegate* m_transitionDelegate = nullptr;
     QTreeView* m_sweepNameView = nullptr;
     QTreeView* m_continuousNameView = nullptr;
+    QTreeView* m_positionMotionNameView = nullptr;
     QTreeView* m_multiFxNameView = nullptr;
     PTTransitionColumnGroupBar* m_sweepColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_continuousColumnGroupBar = nullptr;
+    PTTransitionColumnGroupBar* m_positionMotionColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_multiFxColumnGroupBar = nullptr;
     QSet<int> m_sweepExpandedPresets;
     QSet<int> m_continuousExpandedPresets;
+    QSet<int> m_positionMotionExpandedPresets;
     QSet<int> m_multiFxExpandedPresets;
 };

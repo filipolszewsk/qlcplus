@@ -17,6 +17,7 @@ enum Column : quint8
     Wings,
     Blocks,
     WingsSymmetry,
+    OffsetStepMode,
     OffsetStep,
     Duration,
     WaveWidth,
@@ -29,6 +30,7 @@ enum Column : quint8
     SpeedMult,
     PositionMotion,
     PositionMotionDir,
+    Position1DBuiltinMode,
     PositionPanSize,
     PositionTiltSize,
     Count
@@ -57,6 +59,9 @@ enum Input : quint8
     InputPositionMotion = 54,
     InputPositionPanSize = 55,
     InputPositionTiltSize = 56,
+    InputOffsetStepMode = 58,
+    InputPositionMotionDir = 59,
+    InputPosition1DBuiltinMode = 60,
 
     InputGlobalSpeed = 48,
     InputGlobalDirection = 49,
@@ -77,7 +82,10 @@ inline bool isStableInputId(quint8 id)
             || (id >= InputGlobalSpeed && id <= InputGlobalIntensity)
             || id == InputGlobalBlocks
             || id == InputGlobalPositionSize
-            || id == InputCrossfadeManual;
+            || id == InputCrossfadeManual
+            || id == InputOffsetStepMode
+            || id == InputPositionMotionDir
+            || id == InputPosition1DBuiltinMode;
 }
 
 inline quint8 inputIdForColumn(int col)
@@ -89,6 +97,7 @@ inline quint8 inputIdForColumn(int col)
         case Wings:         return InputWings;
         case Blocks:        return InputBlocks;
         case WingsSymmetry: return InputWingsSymmetry;
+        case OffsetStepMode: return InputOffsetStepMode;
         case OffsetStep:    return InputOffsetStep;
         case Duration:      return InputDuration;
         case WaveWidth:     return InputWaveWidth;
@@ -100,6 +109,8 @@ inline quint8 inputIdForColumn(int col)
         case Propagation:   return InputPropagation;
         case SpeedMult:         return InputSpeedMult;
         case PositionMotion:    return InputPositionMotion;
+        case PositionMotionDir: return InputPositionMotionDir;
+        case Position1DBuiltinMode: return InputPosition1DBuiltinMode;
         case PositionPanSize:   return InputPositionPanSize;
         case PositionTiltSize:  return InputPositionTiltSize;
         default:                return 0;

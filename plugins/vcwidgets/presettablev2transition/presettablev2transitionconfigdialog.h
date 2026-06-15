@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QLabel>
@@ -34,9 +35,11 @@ private slots:
     void slotSpeedSliderChanged(int v);
     void slotIntensitySliderChanged(int v);
     void slotPositionSizeSliderChanged(int v);
+    void slotTimingControlChanged();
 
 private:
     void rebuildTableCombo();
+    void updateEffectiveCyclePreview();
 
     PresetTableV2TransitionWidget* m_widget = nullptr;
     QLineEdit*                     m_captionEdit = nullptr;
@@ -49,6 +52,11 @@ private:
     QLabel*                        m_positionSizeValueLabel = nullptr;
     QSpinBox*                      m_minDurationSpin = nullptr;
     QSpinBox*                      m_maxDurationSpin = nullptr;
+    QCheckBox*                     m_sizeSpeedCeilingChk = nullptr;
+    QSpinBox*                      m_smallSizeMinDurationSpin = nullptr;
+    QSlider*                       m_speedOverdriveKneeSlider = nullptr;
+    QLabel*                        m_speedOverdriveKneeValueLabel = nullptr;
+    QLabel*                        m_effectiveCyclePreviewLabel = nullptr;
     InputSelectionWidget*          m_speedInputSel = nullptr;
     InputSelectionWidget*          m_intensityInputSel = nullptr;
     InputSelectionWidget*          m_positionSizeInputSel = nullptr;
