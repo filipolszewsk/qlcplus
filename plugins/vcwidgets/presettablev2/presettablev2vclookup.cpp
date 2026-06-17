@@ -7,6 +7,8 @@
 #include "vcframe.h"
 #include "vcwidget.h"
 
+#include <QObject>
+
 static const char kTransitionClassName[] = "PresetTableV2TransitionWidget";
 
 QList<VCWidget*> PresetTableV2VCLookup::allVcWidgets()
@@ -77,12 +79,18 @@ QString PresetTableV2VCLookup::tableLabel(PresetTableV2Widget* table)
 {
     if (!table)
         return QString();
-    return QStringLiteral("#%1 %2").arg(table->id()).arg(table->caption());
+    const QString caption = table->caption().trimmed().isEmpty()
+            ? QObject::tr("Preset Table v2")
+            : table->caption().trimmed();
+    return QStringLiteral("#%1 %2").arg(table->id()).arg(caption);
 }
 
 QString PresetTableV2VCLookup::vcWidgetLabel(VCWidget* widget)
 {
     if (!widget)
         return QString();
-    return QStringLiteral("#%1 %2").arg(widget->id()).arg(widget->caption());
+    QString caption = widget->caption().trimmed();
+    if (caption.isEmpty())
+        caption = QString::fromLatin1(widget->metaObject()->className());
+    return QStringLiteral("#%1 %2").arg(widget->id()).arg(caption);
 }

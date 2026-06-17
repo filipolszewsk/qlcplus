@@ -82,7 +82,37 @@ enum class PTTransitionMode
     SweepOnly,
     Continuous,
     MultiFx = 3,
-    PositionMotion = 4
+    PositionMotion = 4,
+    Channel1D = 5
+};
+
+enum class PTChannel1DTarget : int
+{
+    Dimmer = 0,
+    AllIntensity,
+    Zoom,
+    Focus,
+    Iris,
+    Prism,
+    GoboIndex,
+    ShutterStrobe,
+    Speed,
+    Color,
+    CustomColumn
+};
+
+enum class PTChannel1DTargetMode : int
+{
+    First = 0,
+    All
+};
+
+enum class PTChannel1DApplyMode : int
+{
+    AbsoluteRange = 0,
+    RelativeAroundBase,
+    MultiplyBase,
+    BumpAdd
 };
 
 /** Relative position orbit type (Position Mode only — separate from dimmer waveShape). */
@@ -203,6 +233,14 @@ struct PTTransitionPreset
     int                position1DBuiltinMode = 0;
     QVector<PTPositionPath2DPoint> positionPath2D;
     bool               positionPath2DClosed = true;
+    /** Fixture Group only: generic 1D channel FX target/value operation. */
+    int                channel1DTarget = int(PTChannel1DTarget::Dimmer);
+    int                channel1DTargetMode = int(PTChannel1DTargetMode::First);
+    int                channel1DApplyMode = int(PTChannel1DApplyMode::MultiplyBase);
+    int                channel1DLow = 0;
+    int                channel1DHigh = 255;
+    int                channel1DAmount = 255;
+    int                channel1DCustomColumn = 0;
 };
 
 struct PTSpatialChaseOutput

@@ -18,7 +18,7 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     : QDialog(parent)
     , m_widget(widget)
 {
-    setWindowTitle(tr("EFX Engine — Properties"));
+    setWindowTitle(tr("Preset Table Engine — Properties"));
     setMinimumWidth(500);
 
     QVBoxLayout* root = new QVBoxLayout(this);
@@ -34,7 +34,7 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     QFormLayout* form = new QFormLayout;
 
     m_captionEdit = new QLineEdit(this);
-    m_captionEdit->setPlaceholderText(tr("e.g. EFX Engine"));
+    m_captionEdit->setPlaceholderText(tr("e.g. Front Wash - Preset Table Engine"));
     if (m_widget)
         m_captionEdit->setText(m_widget->caption());
     form->addRow(tr("Widget name:"), m_captionEdit);

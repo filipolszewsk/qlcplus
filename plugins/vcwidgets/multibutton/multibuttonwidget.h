@@ -446,6 +446,7 @@ private:
     class PresetTableV2MultiButtonTargetIface* widgetLinkTarget() const;
     class PresetTableV2MultiButtonTargetExtrasIface* widgetLinkTargetExtras() const;
     class PresetTableV2MultiButtonFlashIface* widgetLinkFlashTarget() const;
+    QString generatedWidgetLinkDisplayName() const;
     bool isAllOutputsMode() const;
     int  leaderOutputIndex() const;
     int  widgetLinkReadOutputIndex() const;

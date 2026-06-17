@@ -98,6 +98,7 @@ public:
     const QVector<PTTransitionPreset>& continuousPresets() const { return m_continuousPresets; }
     const QVector<PTTransitionPreset>& multiFxPresets() const { return m_multiFxPresets; }
     const QVector<PTTransitionPreset>& positionMotionPresets() const { return m_positionMotionPresets; }
+    const QVector<PTTransitionPreset>& channel1DPresets() const { return m_channel1DPresets; }
 
     int transitionPresetCount(PTTransitionMode mode) const override;
     PTTransitionPreset transitionPreset(PTTransitionMode mode, int index) const override;
@@ -177,6 +178,13 @@ private:
         ColPosition1DBuiltinMode,
         ColPositionPanSize,
         ColPositionTiltSize,
+        ColChannel1DTarget,
+        ColChannel1DTargetMode,
+        ColChannel1DApplyMode,
+        ColChannel1DLow,
+        ColChannel1DHigh,
+        ColChannel1DAmount,
+        ColChannel1DCustomColumn,
         ColCount
     };
 
@@ -205,10 +213,12 @@ private:
         QVector<PTTransitionPreset> continuousPresets;
         QVector<PTTransitionPreset> multiFxPresets;
         QVector<PTTransitionPreset> positionMotionPresets;
+        QVector<PTTransitionPreset> channel1DPresets;
         QVector<QHash<int, PTTransitionOutputLayer>> sweepOutputOverrides;
         QVector<QHash<int, PTTransitionOutputLayer>> continuousOutputOverrides;
         QVector<QHash<int, PTTransitionOutputLayer>> multiFxOutputOverrides;
         QVector<QHash<int, PTTransitionOutputLayer>> positionMotionOutputOverrides;
+        QVector<QHash<int, PTTransitionOutputLayer>> channel1DOutputOverrides;
         QHash<quint8, uchar> liveColumnOverrides;
         PTGlobalEffectSettings globalSettings;
         PTTransitionMode activeMode = PTTransitionMode::SweepOnly;
@@ -388,6 +398,9 @@ private:
     static QComboBox* makePositionMotionCombo(QWidget* parent);
     static QComboBox* makePosition1DBuiltinModeCombo(QWidget* parent);
     static QComboBox* makePositionMotionDirCombo(QWidget* parent);
+    static QComboBox* makeChannel1DTargetCombo(QWidget* parent);
+    static QComboBox* makeChannel1DTargetModeCombo(QWidget* parent);
+    static QComboBox* makeChannel1DApplyModeCombo(QWidget* parent);
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);
     static QComboBox* makeSpeedMultCombo(QWidget* parent);
@@ -403,10 +416,12 @@ private:
     QVector<PTTransitionPreset> m_continuousPresets;
     QVector<PTTransitionPreset> m_multiFxPresets;
     QVector<PTTransitionPreset> m_positionMotionPresets;
+    QVector<PTTransitionPreset> m_channel1DPresets;
     QVector<QHash<int, PTTransitionOutputLayer>> m_sweepOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_continuousOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_multiFxOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_positionMotionOutputOverrides;
+    QVector<QHash<int, PTTransitionOutputLayer>> m_channel1DOutputOverrides;
     QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
     QVector<PTShapeGalleryItem> m_shapeGallery;
     QHash<int, QString> m_columnGroupFilterByMode;
@@ -453,18 +468,22 @@ private:
     QTreeWidget* m_sweepTable = nullptr;
     QTreeWidget* m_continuousTable = nullptr;
     QTreeWidget* m_positionMotionTable = nullptr;
+    QTreeWidget* m_channel1DTable = nullptr;
     QTreeWidget* m_multiFxTable = nullptr;
     PresetTableV2TransitionDelegate* m_transitionDelegate = nullptr;
     QTreeView* m_sweepNameView = nullptr;
     QTreeView* m_continuousNameView = nullptr;
     QTreeView* m_positionMotionNameView = nullptr;
+    QTreeView* m_channel1DNameView = nullptr;
     QTreeView* m_multiFxNameView = nullptr;
     PTTransitionColumnGroupBar* m_sweepColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_continuousColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_positionMotionColumnGroupBar = nullptr;
+    PTTransitionColumnGroupBar* m_channel1DColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_multiFxColumnGroupBar = nullptr;
     QSet<int> m_sweepExpandedPresets;
     QSet<int> m_continuousExpandedPresets;
     QSet<int> m_positionMotionExpandedPresets;
+    QSet<int> m_channel1DExpandedPresets;
     QSet<int> m_multiFxExpandedPresets;
 };

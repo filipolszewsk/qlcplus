@@ -158,7 +158,7 @@ void PTPositionMotion1DPreviewWidget::paintEvent(QPaintEvent* event)
         {
             switch (m_preset.waveShape)
             {
-                case 1: shapeLabel = tr("Square"); break;
+                case 1: shapeLabel = tr("[Legacy] Square"); break;
                 case 2: shapeLabel = tr("Triangle"); break;
                 default: shapeLabel = tr("Sine"); break;
             }

@@ -116,6 +116,7 @@ struct PTColumn {
     QString           name;
     Type              type         = Numeric;
     bool              fade         = true;    // true=interpolate, false=snap at 127
+    bool              useFor1DFx   = false;   // FixtureGroup: explicit 1D Channel FX target
     QVector<PTOption> options;                // used when type == Dropdown
     int               width        = -1;      // persisted pixel width; -1 = Qt default
     QVector<PTColumnTypeBinding> bindings;    // used only in PTMode::FixtureGroup
@@ -180,6 +181,8 @@ struct PTOutput {
     int        multiFxPresetIndex = -1;
     /** Default Position Continuous Motion preset; -1 = off. Position mode only. */
     int        positionMotionPresetIndex = -1;
+    /** Default Fixture Group 1D Channel FX preset; -1 = off. Fixture Group only. */
+    int        channel1DPresetIndex = -1;
     /** Secondary table row for continuous FX (-1 = off). Overridden by external input when mapped. */
     int        secondaryRowIndex = -1;
 };
@@ -531,6 +534,8 @@ private:
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
     PTTransitionPreset positionMotionPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset positionMotionPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
+    PTTransitionPreset channel1DPresetForOutputLocked(int outputIdx) const;
+    PTTransitionPreset channel1DPresetForOutputLocked(int outputIdx, uchar xfEffective) const;
     PTTransitionPreset multiFxPresetForOutputLocked(int outputIdx) const;
     struct PTContinuousLayerState
     {
@@ -551,6 +556,7 @@ private:
     int liveSweepPresetIndexLocked(int outputIdx) const;
     int liveContinuousPresetIndexLocked(int outputIdx) const;
     int livePositionMotionPresetIndexLocked(int outputIdx) const;
+    int liveChannel1DPresetIndexLocked(int outputIdx) const;
     int liveMultiFxPresetIndexLocked(int outputIdx) const;
     int rawLiveSecondaryRowIndexLocked(int outputIdx) const;
     int liveSecondaryRowIndexLocked(int outputIdx) const;
@@ -558,9 +564,12 @@ private:
     bool sweepEfxActiveForOutputLocked(int outputIdx) const;
     bool continuousEfxActiveForOutputLocked(int outputIdx) const;
     bool positionMotionEfxActiveForOutputLocked(int outputIdx) const;
+    bool channel1DEfxActiveForOutputLocked(int outputIdx) const;
     bool multiFxActiveForOutputLocked(int outputIdx) const;
     bool hasStagedPositionMotionPresetLocked(int outputIdx) const;
     int stagedPositionMotionPresetIndexLocked(int outputIdx) const;
+    bool hasStagedChannel1DPresetLocked(int outputIdx) const;
+    int stagedChannel1DPresetIndexLocked(int outputIdx) const;
     bool hasStagedMultiFxPresetLocked(int outputIdx) const;
     int stagedMultiFxPresetIndexLocked(int outputIdx) const;
     bool hasStagedMultiFxAnyLocked() const;
@@ -570,6 +579,7 @@ private:
     int effectiveSecondaryRowLocked(int outputIdx, int activeRow) const;
 
     bool continuousCrossfadeModeLocked(int outputIdx) const;
+    bool channel1DCrossfadeModeLocked(int outputIdx) const;
     bool multiFxCrossfadeModeLocked(int outputIdx) const;
     bool crossfadeSweepModeLocked(int outputIdx, int activeRow, bool hasStaged) const;
     bool continuousCrossfadeActiveAnyLocked() const;
@@ -588,6 +598,7 @@ private:
     void stageSweepPresetLocked(int outputIdx, int presetIdx);
     void stageContinuousPresetLocked(int outputIdx, int presetIdx);
     void stagePositionMotionPresetLocked(int outputIdx, int presetIdx);
+    void stageChannel1DPresetLocked(int outputIdx, int presetIdx);
     void stageMultiFxPresetLocked(int outputIdx, int presetIdx);
     void ensureMultiButtonRevisionSizeLocked();
     int multiButtonRevisionSlotLocked(int parameter) const;
@@ -671,6 +682,11 @@ private:
                             double morphProgress = 0.0,
                             bool useMultiFx = false,
                             int stateSlot = -1);
+    QVector<uchar> applyChannel1DFxToValuesLocked(
+            int outputIdx, const QLCPoint& pt, const QVector<uchar>& baseValues,
+            const PTTransitionPreset& preset, const PTGlobalEffectSettings& global,
+            const QSize& gridSize, const PTSpatialFixturePlan& plan, int serialCount,
+            quint32 elapsedMs, Fixture* fxi) const;
 
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
@@ -710,11 +726,13 @@ public:
     QVector<int>      m_stagedSweepPreset;
     QVector<int>      m_stagedContinuousPreset;
     QVector<int>      m_stagedPositionMotionPreset;
+    QVector<int>      m_stagedChannel1DPreset;
     QVector<int>      m_stagedMultiFxPreset;
     QVector<bool>     m_stagedSecondaryValid;
     QVector<bool>     m_stagedSweepValid;
     QVector<bool>     m_stagedContinuousValid;
     QVector<bool>     m_stagedPositionMotionValid;
+    QVector<bool>     m_stagedChannel1DValid;
     QVector<bool>     m_stagedMultiFxValid;
     QVector<QVector<quint64>> m_multiButtonStateRevision;
 
@@ -728,19 +746,23 @@ public:
     int                         m_cachedTransitionSweepCount = 0;
     int                         m_cachedTransitionContinuousCount = 0;
     int                         m_cachedTransitionPositionMotionCount = 0;
+    int                         m_cachedTransitionChannel1DCount = 0;
     int                         m_cachedTransitionMultiFxCount = 0;
     PTTransitionProviderSnapshot m_transitionProviderSnapshot;
     QVector<int>                m_liveSweepPreset;
     QVector<int>                m_liveContinuousPreset;
     QVector<int>                m_livePositionMotionPreset;
+    QVector<int>                m_liveChannel1DPreset;
     QVector<int>                m_liveMultiFxPreset;
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;
     QVector<quint32>            m_positionMotionElapsedMs;
+    QVector<quint32>            m_channel1DElapsedMs;
     QVector<quint32>            m_multiFxStagedElapsedMs;
     QVector<quint32>            m_continuousLastCycleMs;
     QVector<quint32>            m_positionMotionLastCycleMs;
+    QVector<quint32>            m_channel1DLastCycleMs;
     QVector<quint32>            m_multiFxLastCycleMs;
     QVector<quint32>            m_multiFxStagedLastCycleMs;
     QKeySequence                m_multiFxRestartKey;

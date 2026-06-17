@@ -14,6 +14,7 @@ static const quint8 kTransSecondaryRowBase = 60;
 static const quint8 kTransContinuousBankBase = 90;
 static const quint8 kPositionMotionBankBase = 120;
 static const quint8 kMultiFxBankBase = 150;
+static const quint8 kChannel1DBankBase = 180;
 static const quint32 kCrossfade = 240;
 static const quint32 kMultiFxBlend = 241;
 static const quint32 kMultiFxRestart = 242;
@@ -36,6 +37,8 @@ inline quint8 transContinuousBank(int outputIdx) { return quint8(kTransContinuou
 inline quint8 multiFxBank(int outputIdx) { return quint8(kMultiFxBankBase + outputIdx); }
 /** Position-only Continuous Motion selector — bank preset index (0 = off). */
 inline quint8 positionMotionBank(int outputIdx) { return quint8(kPositionMotionBankBase + outputIdx); }
+/** Fixture Group only 1D Channel FX selector — bank preset index (0 = off). */
+inline quint8 channel1DBank(int outputIdx) { return quint8(kChannel1DBankBase + outputIdx); }
 
 /** @deprecated Use transSweep */
 inline quint8 transPrimary(int outputIdx) { return transSweep(outputIdx); }

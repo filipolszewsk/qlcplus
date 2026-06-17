@@ -1,9 +1,9 @@
 {
   "plugin_id": "org.qlcplus.vcwidgets.presettablev2transition",
-  "name": "EFX Engine",
+  "name": "Preset Table Engine",
   "version": "2.0.0",
   "author": "QLC+ Community",
-  "description": "EFX Engine for Preset Table v2: spatial presets, min/max phase timing, speed, length (no DMX).",
+  "description": "Preset Table Engine for Preset Table v2: spatial presets, min/max phase timing, speed, length (no DMX).",
   "qt_version": "6.8.1",
   "platforms": {
     "macos_arm64": "libpresettablev2transition_vcwidget.dylib",

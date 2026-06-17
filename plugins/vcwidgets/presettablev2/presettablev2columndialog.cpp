@@ -77,6 +77,11 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     QFormLayout* form = new QFormLayout(nameGrp);
     m_nameEdit = new QLineEdit(column.name, nameGrp);
     form->addRow(tr("Name:"), m_nameEdit);
+    m_useFor1DFxChk = new QCheckBox(tr("Use for 1D FX"), nameGrp);
+    m_useFor1DFxChk->setToolTip(tr("1D Channel FX presets affect this Preset Table column."));
+    m_useFor1DFxChk->setChecked(column.useFor1DFx);
+    m_useFor1DFxChk->setVisible(mode == PTMode::FixtureGroup);
+    form->addRow(QString(), m_useFor1DFxChk);
     root->addWidget(nameGrp);
 
     // ---- Fixture Binding (FixtureGroup mode only) -------------------
@@ -376,6 +381,7 @@ PTColumn PresetTableV2ColumnDialog::column() const
 {
     PTColumn col;
     col.name = m_nameEdit->text().trimmed();
+    col.useFor1DFx = m_useFor1DFxChk && m_useFor1DFxChk->isChecked();
     col.type = m_rbDropdown->isChecked() ? PTColumn::Dropdown :
                m_rbScaler->isChecked()   ? PTColumn::Scaler   :
                                            PTColumn::Numeric;

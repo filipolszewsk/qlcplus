@@ -33,6 +33,13 @@ enum Column : quint8
     Position1DBuiltinMode,
     PositionPanSize,
     PositionTiltSize,
+    Channel1DTarget,
+    Channel1DTargetMode,
+    Channel1DApplyMode,
+    Channel1DLow,
+    Channel1DHigh,
+    Channel1DAmount,
+    Channel1DCustomColumn,
     Count
 };
 
@@ -62,6 +69,13 @@ enum Input : quint8
     InputOffsetStepMode = 58,
     InputPositionMotionDir = 59,
     InputPosition1DBuiltinMode = 60,
+    InputChannel1DTarget = 61,
+    InputChannel1DTargetMode = 62,
+    InputChannel1DApplyMode = 63,
+    InputChannel1DLow = 64,
+    InputChannel1DHigh = 65,
+    InputChannel1DAmount = 66,
+    InputChannel1DCustomColumn = 67,
 
     InputGlobalSpeed = 48,
     InputGlobalDirection = 49,
@@ -85,7 +99,8 @@ inline bool isStableInputId(quint8 id)
             || id == InputCrossfadeManual
             || id == InputOffsetStepMode
             || id == InputPositionMotionDir
-            || id == InputPosition1DBuiltinMode;
+            || id == InputPosition1DBuiltinMode
+            || (id >= InputChannel1DTarget && id <= InputChannel1DCustomColumn);
 }
 
 inline quint8 inputIdForColumn(int col)
@@ -113,6 +128,13 @@ inline quint8 inputIdForColumn(int col)
         case Position1DBuiltinMode: return InputPosition1DBuiltinMode;
         case PositionPanSize:   return InputPositionPanSize;
         case PositionTiltSize:  return InputPositionTiltSize;
+        case Channel1DTarget: return InputChannel1DTarget;
+        case Channel1DTargetMode: return InputChannel1DTargetMode;
+        case Channel1DApplyMode: return InputChannel1DApplyMode;
+        case Channel1DLow: return InputChannel1DLow;
+        case Channel1DHigh: return InputChannel1DHigh;
+        case Channel1DAmount: return InputChannel1DAmount;
+        case Channel1DCustomColumn: return InputChannel1DCustomColumn;
         default:                return 0;
     }
 }

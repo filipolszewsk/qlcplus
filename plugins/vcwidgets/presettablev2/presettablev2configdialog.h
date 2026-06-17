@@ -82,6 +82,7 @@ public:
                                QSharedPointer<QLCInputSource> transSweepSrc,
                                QSharedPointer<QLCInputSource> transContinuousSrc,
                                QSharedPointer<QLCInputSource> positionMotionSrc,
+                               QSharedPointer<QLCInputSource> channel1DSrc,
                                QSharedPointer<QLCInputSource> multiFxSrc,
                                QSharedPointer<QLCInputSource> transSecondarySrc,
                                FixtureGroup* group,
@@ -95,6 +96,7 @@ public:
     QSharedPointer<QLCInputSource> transSweepInputSource() const;
     QSharedPointer<QLCInputSource> transContinuousInputSource() const;
     QSharedPointer<QLCInputSource> positionMotionInputSource() const;
+    QSharedPointer<QLCInputSource> channel1DInputSource() const;
     QSharedPointer<QLCInputSource> multiFxInputSource() const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource() const;
 
@@ -119,12 +121,14 @@ private:
     QComboBox*            m_sweepPresetCombo = nullptr;
     QComboBox*            m_continuousPresetCombo = nullptr;
     QComboBox*            m_positionMotionPresetCombo = nullptr;
+    QComboBox*            m_channel1DPresetCombo = nullptr;
     QComboBox*            m_multiFxPresetCombo = nullptr;
     QComboBox*            m_secondaryRowCombo = nullptr;
     InputSelectionWidget* m_inputSel   = nullptr;
     InputSelectionWidget* m_transSweepInputSel = nullptr;
     InputSelectionWidget* m_transContinuousInputSel = nullptr;
     InputSelectionWidget* m_positionMotionInputSel = nullptr;
+    InputSelectionWidget* m_channel1DInputSel = nullptr;
     InputSelectionWidget* m_multiFxInputSel = nullptr;
     InputSelectionWidget* m_transSecondaryInputSel = nullptr;
 
@@ -175,6 +179,7 @@ public:
 
     bool spatialEffectsEnabled() const;
     quint32 linkedTransitionWidgetId() const;
+    QString widgetCaption() const;
 
     QVector<PTColumn> columns() const { return m_columns; }
     QVector<PTOutput>  outputs() const;
@@ -182,6 +187,7 @@ public:
     QSharedPointer<QLCInputSource> transSweepInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transContinuousInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> positionMotionInputSource(int outputIdx) const;
+    QSharedPointer<QLCInputSource> channel1DInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> multiFxInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
@@ -242,6 +248,7 @@ private:
     bool                m_updatingColTable = false;
 
     // Mode selection
+    QLineEdit*  m_captionEdit    = nullptr;
     QComboBox*  m_modeCombo      = nullptr;
     QWidget*    m_groupRow       = nullptr;
     QComboBox*  m_groupCombo     = nullptr;

@@ -36,10 +36,12 @@ struct PTTransitionProviderSnapshot
     QVector<PTTransitionPreset> continuousPresets;
     QVector<PTTransitionPreset> multiFxPresets;
     QVector<PTTransitionPreset> positionMotionPresets;
+    QVector<PTTransitionPreset> channel1DPresets;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> sweepOutputOverrides;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> continuousOutputOverrides;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> multiFxOutputOverrides;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> positionMotionOutputOverrides;
+    QVector<QHash<int, PTTransitionProviderOutputLayer>> channel1DOutputOverrides;
     QHash<quint8, uchar> liveColumnOverrides;
     PTGlobalEffectSettings globalSettings;
     PTTransitionMode activeMode = PTTransitionMode::SweepOnly;

@@ -1396,6 +1396,37 @@ PresetTableV2MultiButtonFlashIface* MultiButtonWidget::widgetLinkFlashTarget() c
     return qobject_cast<PresetTableV2MultiButtonFlashIface*>(widgetLinkTargetObject());
 }
 
+QString MultiButtonWidget::generatedWidgetLinkDisplayName() const
+{
+    if (m_mode != MultiButtonMode::Widget)
+        return QString();
+
+    PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+    VCWidget* targetWidget = widgetLinkTargetObject();
+    if (!target || !targetWidget)
+        return QString();
+
+    const QString tableName = targetWidget->caption().trimmed().isEmpty()
+            ? QString::fromLatin1(targetWidget->metaObject()->className())
+            : targetWidget->caption().trimmed();
+
+    QString outputName;
+    if (m_widgetOutputIndex < 0)
+        outputName = tr("All");
+    else
+        outputName = target->multiButtonOutputName(m_widgetOutputIndex).trimmed();
+    if (outputName.isEmpty())
+        outputName = tr("Output %1").arg(m_widgetOutputIndex + 1);
+
+    QString parameterName = target->multiButtonParameterName(m_widgetParameter).trimmed();
+    if (parameterName.endsWith(tr(" preset")))
+        parameterName.chop(tr(" preset").size());
+    if (parameterName.isEmpty())
+        parameterName = tr("Selector");
+
+    return tr("%1 - %2 - %3").arg(tableName, outputName, parameterName);
+}
+
 bool MultiButtonWidget::isAllOutputsMode() const
 {
     return m_widgetOutputIndex < 0;
@@ -2638,6 +2669,9 @@ QString MultiButtonWidget::targetDisplayName() const
     const QString cap = caption().trimmed();
     if (!cap.isEmpty())
         return cap;
+    const QString generated = generatedWidgetLinkDisplayName();
+    if (!generated.isEmpty())
+        return generated;
     return tr("Multi Button");
 }
 

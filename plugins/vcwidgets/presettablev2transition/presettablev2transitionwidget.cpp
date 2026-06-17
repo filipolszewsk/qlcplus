@@ -72,12 +72,35 @@ static const QString KXMLRoot = QStringLiteral("PluginWidget");
 static const QString KXMLPluginId = QStringLiteral("PluginId");
 static const QString KXMLPluginIdVal = QStringLiteral("org.qlcplus.vcwidgets.presettablev2transition");
 static const QString KXMLTargetTable = QStringLiteral("TargetTableId");
+static const QString KDefaultEngineCaption = QStringLiteral("Preset Table Engine");
+
+static bool isDefaultPresetTableEngineCaption(const QString& caption)
+{
+    const QString c = caption.trimmed();
+    if (c.isEmpty()
+            || c == QStringLiteral("EFX Engine")
+            || c == KDefaultEngineCaption
+            || c == QStringLiteral("Preset Table v2 Transition"))
+        return true;
+    return c.endsWith(QStringLiteral(" - EFX Engine"))
+            || c.endsWith(QStringLiteral(" - Preset Table Engine"));
+}
+
+static QString generatedPresetTableEngineCaption(const QString& tableCaption)
+{
+    const QString tableName = tableCaption.trimmed().isEmpty()
+            ? QStringLiteral("Preset Table v2")
+            : tableCaption.trimmed();
+    return tableName + QStringLiteral(" - Preset Table Engine");
+}
+
 static const QString KXMLTransitionMode = QStringLiteral("TransitionMode");
 static const QString KXMLPreset = QStringLiteral("TransitionPreset");
 static const QString KXMLSweepPresets = QStringLiteral("SweepPresets");
 static const QString KXMLContinuousPresets = QStringLiteral("ContinuousPresets");
 static const QString KXMLMultiFxPresets = QStringLiteral("MultiFxPresets");
 static const QString KXMLPositionMotionPresets = QStringLiteral("PositionMotionPresets");
+static const QString KXMLChannel1DPresets = QStringLiteral("Channel1DFxPresets");
 static const QString KXMLPresetName = QStringLiteral("Name");
 static const QString KXMLPresetAxis = QStringLiteral("Axis");
 static const QString KXMLPresetOffsetDir = QStringLiteral("OffsetDir");
@@ -106,6 +129,13 @@ static const QString KXMLPresetPositionMotion = QStringLiteral("PositionMotion")
 static const QString KXMLPresetPositionMotionDir = QStringLiteral("PositionMotionDir");
 static const QString KXMLPresetPositionPanSize = QStringLiteral("PositionPanSize");
 static const QString KXMLPresetPositionTiltSize = QStringLiteral("PositionTiltSize");
+static const QString KXMLPresetChannel1DTarget = QStringLiteral("Channel1DTarget");
+static const QString KXMLPresetChannel1DTargetMode = QStringLiteral("Channel1DTargetMode");
+static const QString KXMLPresetChannel1DApplyMode = QStringLiteral("Channel1DApplyMode");
+static const QString KXMLPresetChannel1DLow = QStringLiteral("Channel1DLow");
+static const QString KXMLPresetChannel1DHigh = QStringLiteral("Channel1DHigh");
+static const QString KXMLPresetChannel1DAmount = QStringLiteral("Channel1DAmount");
+static const QString KXMLPresetChannel1DCustomColumn = QStringLiteral("Channel1DCustomColumn");
 static const QString KXMLPresetCustomCurveEnabled = QStringLiteral("CustomCurveEnabled");
 static const QString KXMLPresetCustomCurve = QStringLiteral("CustomCurve");
 static const QString KXMLOutputOverride = QStringLiteral("OutputOverride");
@@ -209,8 +239,16 @@ static PTTransitionPreset defaultPreset(int index, PTTransitionMode bankMode)
     p.enabled = true;
     p.playbackMode = (bankMode == PTTransitionMode::Continuous
                       || bankMode == PTTransitionMode::MultiFx
-                      || bankMode == PTTransitionMode::PositionMotion)
+                      || bankMode == PTTransitionMode::PositionMotion
+                      || bankMode == PTTransitionMode::Channel1D)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
+    if (bankMode == PTTransitionMode::Channel1D)
+    {
+        p.name = QObject::tr("1D FX %1").arg(index + 1);
+        p.channel1DTarget = int(PTChannel1DTarget::Dimmer);
+        p.channel1DTargetMode = int(PTChannel1DTargetMode::First);
+        p.channel1DApplyMode = int(PTChannel1DApplyMode::MultiplyBase);
+    }
     PresetTableV2SpatialEngine::applySweepPresetConstraints(p);
     return p;
 }
@@ -374,6 +412,17 @@ static void setComboDataIndex(QComboBox* combo, int value)
     }
 }
 
+static bool isLegacyChannel1DApplyMode(int value)
+{
+    return value == int(PTChannel1DApplyMode::AbsoluteRange)
+            || value == int(PTChannel1DApplyMode::RelativeAroundBase);
+}
+
+static bool isLegacyWaveShape(int value)
+{
+    return value == 1;
+}
+
 PresetTableV2TransitionDelegate::PresetTableV2TransitionDelegate(
         PresetTableV2TransitionWidget* owner, QObject* parent)
     : QStyledItemDelegate(parent)
@@ -396,6 +445,18 @@ void PresetTableV2TransitionDelegate::setEditorData(QWidget* editor,
     const QVariant value = index.data(kPresetCellValueRole);
     if (auto* combo = qobject_cast<QComboBox*>(editor))
     {
+        if (m_owner && index.column() == PresetTableV2TransitionWidget::ColWaveShape
+                && combo->findData(value.toInt()) < 0
+                && isLegacyWaveShape(value.toInt()))
+        {
+            combo->addItem(m_owner->comboDisplayTextForColumn(index.column(), value), value.toInt());
+        }
+        if (m_owner && index.column() == PresetTableV2TransitionWidget::ColChannel1DApplyMode
+                && combo->findData(value.toInt()) < 0
+                && isLegacyChannel1DApplyMode(value.toInt()))
+        {
+            combo->addItem(m_owner->comboDisplayTextForColumn(index.column(), value), value.toInt());
+        }
         setComboDataIndex(combo, value.toInt());
         return;
     }
@@ -810,6 +871,13 @@ QString PresetTableV2TransitionWidget::columnTitle(int col)
         case ColPosition1DBuiltinMode: return QObject::tr("1D builtin");
         case ColPositionPanSize: return QObject::tr("Pan size °");
         case ColPositionTiltSize: return QObject::tr("Tilt size °");
+        case ColChannel1DTarget: return QObject::tr("Target");
+        case ColChannel1DTargetMode: return QObject::tr("Target mode");
+        case ColChannel1DApplyMode: return QObject::tr("Mode");
+        case ColChannel1DLow: return QObject::tr("Range Min");
+        case ColChannel1DHigh: return QObject::tr("Range Max");
+        case ColChannel1DAmount: return QObject::tr("Depth");
+        case ColChannel1DCustomColumn: return QObject::tr("Column");
         default:               return QObject::tr("Name");
     }
 }
@@ -836,11 +904,33 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
         table->setColumnHidden(ColPosition1DBuiltinMode, true);
         table->setColumnHidden(ColPositionPanSize, true);
         table->setColumnHidden(ColPositionTiltSize, true);
+        table->setColumnHidden(ColPropagation, true);
+        if (mode == PTTransitionMode::Channel1D)
+        {
+            const int visibleCols[] = {
+                ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
+                ColOffsetStepMode, ColOffsetStep, ColWaveWidth,
+                ColWaveShape, ColFadeIn, ColFadeOut, ColStartOffset,
+                ColSpeedMult,
+                ColChannel1DApplyMode, ColChannel1DAmount, -1
+            };
+            QSet<int> visible;
+            for (int i = 0; visibleCols[i] >= 0; ++i)
+                visible.insert(visibleCols[i]);
+            for (int col = ColAxis; col < ColCount; ++col)
+                table->setColumnHidden(col, !visible.contains(col));
+            return;
+        }
         for (int col = ColAxis; col < ColCount; ++col)
         {
             if (col == ColDuration || col == ColPositionMotion || col == ColPositionMotionDir
                     || col == ColPosition1DBuiltinMode
-                    || col == ColPositionPanSize || col == ColPositionTiltSize)
+                    || col == ColPositionPanSize || col == ColPositionTiltSize
+                    || col == ColChannel1DTarget || col == ColChannel1DTargetMode
+                    || col == ColChannel1DApplyMode || col == ColChannel1DLow
+                    || col == ColChannel1DHigh || col == ColChannel1DAmount
+                    || col == ColChannel1DCustomColumn
+                    || col == ColPropagation)
             {
                 continue;
             }
@@ -851,6 +941,10 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
 
     table->setColumnHidden(ColPositionPanSize, true);
     table->setColumnHidden(ColPositionTiltSize, true);
+    for (int col : { ColChannel1DTarget, ColChannel1DTargetMode, ColChannel1DApplyMode,
+                     ColChannel1DLow, ColChannel1DHigh, ColChannel1DAmount,
+                     ColChannel1DCustomColumn })
+        table->setColumnHidden(col, true);
 
     if (mode == PTTransitionMode::SweepOnly)
     {
@@ -858,7 +952,7 @@ void PresetTableV2TransitionWidget::applyPositionModeColumnVisibility(QTreeWidge
             ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
             ColOffsetStepMode, ColOffsetStep,
             ColWaveWidth, ColWaveShape, ColFadeIn, ColStartOffset,
-            ColPropagation, ColSpeedMult, -1
+            ColSpeedMult, -1
         };
         QSet<int> visible;
         for (int i = 0; visibleCols[i] >= 0; ++i)
@@ -943,6 +1037,26 @@ QString PresetTableV2TransitionWidget::columnTitleForCol(int col) const
 
 QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
 {
+    if (activeBankMode() == PTTransitionMode::Channel1D)
+    {
+        switch (col)
+        {
+            case ColChannel1DApplyMode:
+                return tr("Dimmer FX stays under the base value; Bump adds above the base value");
+            case ColChannel1DAmount:
+                return tr("Main strength of the 1D effect");
+            case ColChannel1DLow:
+            case ColChannel1DHigh:
+                return tr("Legacy range value used only by old Absolute Range presets");
+            case ColWaveShape:
+                return tr("Shape of the full-scale 1D wave before Depth is applied");
+            case ColWaveWidth:
+                return tr("Active part of the 1D wave within each cycle (degrees)");
+            default:
+                break;
+        }
+    }
+
     if (!linkedTableUsesPositionMode())
         return QString();
 
@@ -951,7 +1065,7 @@ QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
         case ColWaveShape:
             return (activeBankMode() == PTTransitionMode::PositionMotion
                     || activeBankMode() == PTTransitionMode::MultiFx)
-                    ? tr("Motion curve packet (Sine/Square/Triangle/Custom — same fields as row morph)")
+                    ? tr("Motion curve packet (Sine/Triangle/Custom — same fields as row morph)")
                     : tr("Wave shape for primary↔secondary row blend (not preset crossfade)");
         case ColFadeIn:
             return (activeBankMode() == PTTransitionMode::PositionMotion
@@ -1003,6 +1117,13 @@ void PresetTableV2TransitionWidget::applyDefaultColumnWidths(QTreeWidget* table)
     setFixed(ColPosition1DBuiltinMode, 72);
     setFixed(ColWaveShape, 72);
     setFixed(ColPropagation, 52);
+    setFixed(ColChannel1DTarget, 126);
+    setFixed(ColChannel1DTargetMode, 72);
+    setFixed(ColChannel1DApplyMode, 120);
+    setFixed(ColChannel1DLow, 76);
+    setFixed(ColChannel1DHigh, 76);
+    setFixed(ColChannel1DAmount, 60);
+    setFixed(ColChannel1DCustomColumn, 56);
 }
 
 QVector<PTTransitionColumnGroupBar::Group>
@@ -1029,7 +1150,7 @@ PresetTableV2TransitionWidget::columnGroupsForMode(PTTransitionMode mode) const
             add(QStringLiteral("morph"), tr("Row morph"),
                 { ColWaveShape, ColFadeIn, ColFadeOut });
             add(QStringLiteral("timing"), tr("Timing"),
-                { ColSpeedMult, ColPropagation });
+                { ColSpeedMult });
         }
         else if (mode == PTTransitionMode::Continuous)
         {
@@ -1058,10 +1179,24 @@ PresetTableV2TransitionWidget::columnGroupsForMode(PTTransitionMode mode) const
     add(QStringLiteral("spatial"), tr("Spatial"),
         { ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
           ColOffsetStepMode, ColOffsetStep });
-    add(QStringLiteral("wave"), tr("Wave"),
-        { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut, ColWaveLevel, ColStartOffset });
+    if (mode == PTTransitionMode::Channel1D)
+    {
+        add(QStringLiteral("wave"), tr("Wave"),
+            { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut, ColStartOffset });
+    }
+    else
+    {
+        add(QStringLiteral("wave"), tr("Wave"),
+            { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut,
+              ColWaveLevel, ColStartOffset });
+    }
+    if (mode == PTTransitionMode::Channel1D)
+    {
+        add(QStringLiteral("value"), tr("Value"),
+            { ColChannel1DApplyMode, ColChannel1DAmount });
+    }
     add(QStringLiteral("timing"), tr("Timing"),
-        { ColPropagation, ColSpeedMult });
+        { ColSpeedMult });
     return groups;
 }
 
@@ -1114,6 +1249,7 @@ void PresetTableV2TransitionWidget::refreshColumnGroupBarForActiveTab()
 {
     for (PTTransitionMode mode : { PTTransitionMode::SweepOnly,
                                    PTTransitionMode::Continuous,
+                                   PTTransitionMode::Channel1D,
                                    PTTransitionMode::PositionMotion,
                                    PTTransitionMode::MultiFx })
     {
@@ -1135,7 +1271,7 @@ void PresetTableV2TransitionWidget::refreshColumnGroupBarForActiveTab()
 PresetTableV2TransitionWidget::PresetTableV2TransitionWidget(QWidget* parent, Doc* doc)
     : VCWidget(parent, doc)
 {
-    setCaption(tr("EFX Engine"));
+    setCaption(tr("Preset Table Engine"));
     VCPluginDiagnostics::install(QStringLiteral("presettablev2transition"), id(), caption());
     setMinimumSize(480, 280);
     setFrameStyle(KVCFrameStyleSunken);
@@ -1144,6 +1280,8 @@ PresetTableV2TransitionWidget::PresetTableV2TransitionWidget(QWidget* parent, Do
         m_sweepPresets.append(defaultPreset(0, PTTransitionMode::SweepOnly));
     if (m_continuousPresets.isEmpty())
         m_continuousPresets.append(defaultPreset(0, PTTransitionMode::Continuous));
+    if (m_channel1DPresets.isEmpty())
+        m_channel1DPresets.append(defaultPreset(0, PTTransitionMode::Channel1D));
     if (m_positionMotionPresets.isEmpty())
         m_positionMotionPresets.append(defaultPreset(0, PTTransitionMode::PositionMotion));
     if (m_multiFxPresets.isEmpty())
@@ -1165,8 +1303,10 @@ PTTransitionMode PresetTableV2TransitionWidget::activeBankMode() const
     if (m_bankTabs->currentIndex() == 1)
         return PTTransitionMode::Continuous;
     if (m_bankTabs->currentIndex() == 2)
-        return PTTransitionMode::PositionMotion;
+        return PTTransitionMode::Channel1D;
     if (m_bankTabs->currentIndex() == 3)
+        return PTTransitionMode::PositionMotion;
+    if (m_bankTabs->currentIndex() == 4)
         return PTTransitionMode::MultiFx;
     return PTTransitionMode::SweepOnly;
 }
@@ -1177,6 +1317,8 @@ QVector<PTTransitionPreset>& PresetTableV2TransitionWidget::presetsForMode(PTTra
         return m_multiFxPresets;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionPresets;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DPresets;
     return (mode == PTTransitionMode::Continuous) ? m_continuousPresets : m_sweepPresets;
 }
 
@@ -1186,6 +1328,8 @@ const QVector<PTTransitionPreset>& PresetTableV2TransitionWidget::presetsForMode
         return m_multiFxPresets;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionPresets;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DPresets;
     return (mode == PTTransitionMode::Continuous) ? m_continuousPresets : m_sweepPresets;
 }
 
@@ -1196,6 +1340,8 @@ PresetTableV2TransitionWidget::overridesForMode(PTTransitionMode mode)
         return m_multiFxOutputOverrides;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionOutputOverrides;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DOutputOverrides;
     return (mode == PTTransitionMode::Continuous)
             ? m_continuousOutputOverrides : m_sweepOutputOverrides;
 }
@@ -1207,6 +1353,8 @@ PresetTableV2TransitionWidget::overridesForMode(PTTransitionMode mode) const
         return m_multiFxOutputOverrides;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionOutputOverrides;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DOutputOverrides;
     return (mode == PTTransitionMode::Continuous)
             ? m_continuousOutputOverrides : m_sweepOutputOverrides;
 }
@@ -1217,6 +1365,8 @@ QTreeWidget* PresetTableV2TransitionWidget::tableForMode(PTTransitionMode mode) 
         return m_multiFxTable;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionTable;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DTable;
     return (mode == PTTransitionMode::Continuous) ? m_continuousTable : m_sweepTable;
 }
 
@@ -1226,6 +1376,8 @@ QTreeView* PresetTableV2TransitionWidget::frozenNameViewForMode(PTTransitionMode
         return m_multiFxNameView;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionNameView;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DNameView;
     return (mode == PTTransitionMode::Continuous) ? m_continuousNameView : m_sweepNameView;
 }
 
@@ -1236,6 +1388,8 @@ PTTransitionColumnGroupBar* PresetTableV2TransitionWidget::columnGroupBarForMode
         return m_multiFxColumnGroupBar;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionColumnGroupBar;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DColumnGroupBar;
     return (mode == PTTransitionMode::Continuous)
             ? m_continuousColumnGroupBar : m_sweepColumnGroupBar;
 }
@@ -1283,7 +1437,6 @@ QComboBox* PresetTableV2TransitionWidget::makeWaveShapeCombo(QWidget* parent)
 {
     auto* c = new QComboBox(parent);
     c->addItem(QStringLiteral("Sine"), 0);
-    c->addItem(QStringLiteral("Square"), 1);
     c->addItem(QStringLiteral("Triangle"), 2);
     c->addItem(QStringLiteral("Custom"), 3);
     configureTransitionCombo(c, 72);
@@ -1330,6 +1483,42 @@ QComboBox* PresetTableV2TransitionWidget::makePosition1DBuiltinModeCombo(QWidget
     c->addItem(QObject::tr("Morph packet"), 0);
     c->addItem(QObject::tr("Oscillate"), 1);
     configureTransitionCombo(c, 96);
+    return c;
+}
+
+QComboBox* PresetTableV2TransitionWidget::makeChannel1DTargetCombo(QWidget* parent)
+{
+    auto* c = new QComboBox(parent);
+    c->addItem(QObject::tr("Dimmer"), int(PTChannel1DTarget::Dimmer));
+    c->addItem(QObject::tr("All Intensity"), int(PTChannel1DTarget::AllIntensity));
+    c->addItem(QObject::tr("Zoom"), int(PTChannel1DTarget::Zoom));
+    c->addItem(QObject::tr("Focus"), int(PTChannel1DTarget::Focus));
+    c->addItem(QObject::tr("Iris"), int(PTChannel1DTarget::Iris));
+    c->addItem(QObject::tr("Prism"), int(PTChannel1DTarget::Prism));
+    c->addItem(QObject::tr("Gobo Index"), int(PTChannel1DTarget::GoboIndex));
+    c->addItem(QObject::tr("Shutter/Strobe"), int(PTChannel1DTarget::ShutterStrobe));
+    c->addItem(QObject::tr("Speed"), int(PTChannel1DTarget::Speed));
+    c->addItem(QObject::tr("Color Wheel/Macro"), int(PTChannel1DTarget::Color));
+    c->addItem(QObject::tr("Custom Column"), int(PTChannel1DTarget::CustomColumn));
+    configureTransitionCombo(c, 150);
+    return c;
+}
+
+QComboBox* PresetTableV2TransitionWidget::makeChannel1DTargetModeCombo(QWidget* parent)
+{
+    auto* c = new QComboBox(parent);
+    c->addItem(QObject::tr("First"), int(PTChannel1DTargetMode::First));
+    c->addItem(QObject::tr("All"), int(PTChannel1DTargetMode::All));
+    configureTransitionCombo(c, 90);
+    return c;
+}
+
+QComboBox* PresetTableV2TransitionWidget::makeChannel1DApplyModeCombo(QWidget* parent)
+{
+    auto* c = new QComboBox(parent);
+    c->addItem(QObject::tr("Dimmer FX"), int(PTChannel1DApplyMode::MultiplyBase));
+    c->addItem(QObject::tr("Bump"), int(PTChannel1DApplyMode::BumpAdd));
+    configureTransitionCombo(c, 140);
     return c;
 }
 
@@ -1382,6 +1571,12 @@ QWidget* PresetTableV2TransitionWidget::createEditorForColumn(QWidget* parent, i
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePositionMotionDirCombo(parent);
     else if (col == ColPosition1DBuiltinMode)
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePosition1DBuiltinModeCombo(parent);
+    else if (col == ColChannel1DTarget)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeChannel1DTargetCombo(parent);
+    else if (col == ColChannel1DTargetMode)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeChannel1DTargetModeCombo(parent);
+    else if (col == ColChannel1DApplyMode)
+        combo = const_cast<PresetTableV2TransitionWidget*>(this)->makeChannel1DApplyModeCombo(parent);
     else if (col == ColPropagation)
         combo = const_cast<PresetTableV2TransitionWidget*>(this)->makePropagationCombo(parent);
     else if (col == ColWingsSymmetry)
@@ -1421,6 +1616,11 @@ QWidget* PresetTableV2TransitionWidget::createEditorForColumn(QWidget* parent, i
             minV = 0; maxV = 540; break;
         case ColPositionTiltSize:
             minV = 0; maxV = 270; break;
+        case ColChannel1DLow:
+        case ColChannel1DHigh:
+        case ColChannel1DAmount:
+        case ColChannel1DCustomColumn:
+            minV = 0; maxV = 255; break;
         default:
             break;
     }
@@ -1437,6 +1637,38 @@ QVariant PresetTableV2TransitionWidget::normalizedColumnValue(int col, const QSt
     const QString trimmed = raw.trimmed();
     if (trimmed.isEmpty())
         return QVariant();
+
+    if (col == ColChannel1DApplyMode)
+    {
+        const QString normalized = QString(trimmed).remove(QLatin1Char('['))
+                .remove(QLatin1Char(']')).trimmed().toLower();
+        if (normalized == QStringLiteral("dimmer fx")
+                || normalized == QStringLiteral("multiply base"))
+            return int(PTChannel1DApplyMode::MultiplyBase);
+        if (normalized == QStringLiteral("bump")
+                || normalized == QStringLiteral("bump/add"))
+            return int(PTChannel1DApplyMode::BumpAdd);
+        if (normalized == QStringLiteral("legacy absolute range")
+                || normalized == QStringLiteral("absolute range"))
+            return int(PTChannel1DApplyMode::AbsoluteRange);
+        if (normalized == QStringLiteral("legacy relative base")
+                || normalized == QStringLiteral("relative base"))
+            return int(PTChannel1DApplyMode::RelativeAroundBase);
+    }
+    if (col == ColWaveShape)
+    {
+        const QString normalized = QString(trimmed).remove(QLatin1Char('['))
+                .remove(QLatin1Char(']')).trimmed().toLower();
+        if (normalized == QStringLiteral("sine"))
+            return 0;
+        if (normalized == QStringLiteral("legacy square")
+                || normalized == QStringLiteral("square"))
+            return 1;
+        if (normalized == QStringLiteral("triangle"))
+            return 2;
+        if (normalized == QStringLiteral("custom"))
+            return 3;
+    }
 
     auto comboValue = [&](QComboBox* combo) -> QVariant {
         if (!combo)
@@ -1509,7 +1741,7 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
             switch (v)
             {
                 case 0: return QStringLiteral("Sine");
-                case 1: return QStringLiteral("Square");
+                case 1: return tr("[Legacy] Square");
                 case 2: return QStringLiteral("Triangle");
                 case 3: return QStringLiteral("Custom");
             }
@@ -1541,6 +1773,38 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
             {
                 case 0: return tr("Morph packet");
                 case 1: return tr("Oscillate");
+            }
+            break;
+        case ColChannel1DTarget:
+            switch (PTChannel1DTarget(v))
+            {
+                case PTChannel1DTarget::Dimmer: return tr("Dimmer");
+                case PTChannel1DTarget::AllIntensity: return tr("All Intensity");
+                case PTChannel1DTarget::Zoom: return tr("Zoom");
+                case PTChannel1DTarget::Focus: return tr("Focus");
+                case PTChannel1DTarget::Iris: return tr("Iris");
+                case PTChannel1DTarget::Prism: return tr("Prism");
+                case PTChannel1DTarget::GoboIndex: return tr("Gobo Index");
+                case PTChannel1DTarget::ShutterStrobe: return tr("Shutter/Strobe");
+                case PTChannel1DTarget::Speed: return tr("Speed");
+                case PTChannel1DTarget::Color: return tr("Color Wheel/Macro");
+                case PTChannel1DTarget::CustomColumn: return tr("Custom Column");
+            }
+            break;
+        case ColChannel1DTargetMode:
+            switch (PTChannel1DTargetMode(v))
+            {
+                case PTChannel1DTargetMode::First: return tr("First");
+                case PTChannel1DTargetMode::All: return tr("All");
+            }
+            break;
+        case ColChannel1DApplyMode:
+            switch (PTChannel1DApplyMode(v))
+            {
+                case PTChannel1DApplyMode::AbsoluteRange: return tr("[Legacy] Absolute Range");
+                case PTChannel1DApplyMode::RelativeAroundBase: return tr("[Legacy] Relative Base");
+                case PTChannel1DApplyMode::MultiplyBase: return tr("Dimmer FX");
+                case PTChannel1DApplyMode::BumpAdd: return tr("Bump");
             }
             break;
         case ColPropagation:
@@ -1613,6 +1877,13 @@ QVariant PresetTableV2TransitionWidget::presetColumnValue(const PTTransitionPres
             return preset.position1DBuiltinMode;
         case ColPositionPanSize: return preset.positionPanSize;
         case ColPositionTiltSize: return preset.positionTiltSize;
+        case ColChannel1DTarget: return preset.channel1DTarget;
+        case ColChannel1DTargetMode: return preset.channel1DTargetMode;
+        case ColChannel1DApplyMode: return preset.channel1DApplyMode;
+        case ColChannel1DLow: return preset.channel1DLow;
+        case ColChannel1DHigh: return preset.channel1DHigh;
+        case ColChannel1DAmount: return preset.channel1DAmount;
+        case ColChannel1DCustomColumn: return preset.channel1DCustomColumn;
         default:               return QVariant();
     }
 }
@@ -1697,6 +1968,28 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
         case ColPositionTiltSize:
             preset.positionTiltSize = value.toInt();
             break;
+        case ColChannel1DTarget:
+            preset.channel1DTarget = qBound(0, value.toInt(),
+                                            int(PTChannel1DTarget::CustomColumn));
+            break;
+        case ColChannel1DTargetMode:
+            preset.channel1DTargetMode = qBound(0, value.toInt(), int(PTChannel1DTargetMode::All));
+            break;
+        case ColChannel1DApplyMode:
+            preset.channel1DApplyMode = qBound(0, value.toInt(), int(PTChannel1DApplyMode::BumpAdd));
+            break;
+        case ColChannel1DLow:
+            preset.channel1DLow = qBound(0, value.toInt(), 255);
+            break;
+        case ColChannel1DHigh:
+            preset.channel1DHigh = qBound(0, value.toInt(), 255);
+            break;
+        case ColChannel1DAmount:
+            preset.channel1DAmount = qBound(0, value.toInt(), 255);
+            break;
+        case ColChannel1DCustomColumn:
+            preset.channel1DCustomColumn = qBound(0, value.toInt(), 255);
+            break;
         default:
             break;
     }
@@ -1727,6 +2020,13 @@ QString PresetTableV2TransitionWidget::presetColumnXmlName(int col)
         case ColPosition1DBuiltinMode: return KXMLPresetPosition1DBuiltinMode;
         case ColPositionPanSize: return KXMLPresetPositionPanSize;
         case ColPositionTiltSize: return KXMLPresetPositionTiltSize;
+        case ColChannel1DTarget: return KXMLPresetChannel1DTarget;
+        case ColChannel1DTargetMode: return KXMLPresetChannel1DTargetMode;
+        case ColChannel1DApplyMode: return KXMLPresetChannel1DApplyMode;
+        case ColChannel1DLow: return KXMLPresetChannel1DLow;
+        case ColChannel1DHigh: return KXMLPresetChannel1DHigh;
+        case ColChannel1DAmount: return KXMLPresetChannel1DAmount;
+        case ColChannel1DCustomColumn: return KXMLPresetChannel1DCustomColumn;
         default:               return QString();
     }
 }
@@ -1871,14 +2171,16 @@ void PresetTableV2TransitionWidget::buildUi()
     m_sweepTable = new QTreeWidget(m_bankTabs);
     m_continuousTable = new QTreeWidget(m_bankTabs);
     m_positionMotionTable = new QTreeWidget(m_bankTabs);
+    m_channel1DTable = new QTreeWidget(m_bankTabs);
     m_multiFxTable = new QTreeWidget(m_bankTabs);
     m_transitionDelegate = new PresetTableV2TransitionDelegate(this, this);
     m_sweepNameView = new QTreeView(m_bankTabs);
     m_continuousNameView = new QTreeView(m_bankTabs);
     m_positionMotionNameView = new QTreeView(m_bankTabs);
+    m_channel1DNameView = new QTreeView(m_bankTabs);
     m_multiFxNameView = new QTreeView(m_bankTabs);
     for (QTreeWidget* table : { m_sweepTable, m_continuousTable,
-                                m_positionMotionTable, m_multiFxTable })
+                                m_positionMotionTable, m_channel1DTable, m_multiFxTable })
     {
         table->setColumnCount(ColCount);
         table->header()->setStretchLastSection(true);
@@ -1920,6 +2222,8 @@ void PresetTableV2TransitionWidget::buildUi()
                 mode = PTTransitionMode::Continuous;
             else if (table == m_positionMotionTable)
                 mode = PTTransitionMode::PositionMotion;
+            else if (table == m_channel1DTable)
+                mode = PTTransitionMode::Channel1D;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
             if (!item->parent())
@@ -1938,6 +2242,8 @@ void PresetTableV2TransitionWidget::buildUi()
                 mode = PTTransitionMode::Continuous;
             else if (table == m_positionMotionTable)
                 mode = PTTransitionMode::PositionMotion;
+            else if (table == m_channel1DTable)
+                mode = PTTransitionMode::Channel1D;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
             if (!item->parent())
@@ -1990,6 +2296,8 @@ void PresetTableV2TransitionWidget::buildUi()
             m_continuousColumnGroupBar = bar;
         else if (mode == PTTransitionMode::PositionMotion)
             m_positionMotionColumnGroupBar = bar;
+        else if (mode == PTTransitionMode::Channel1D)
+            m_channel1DColumnGroupBar = bar;
         else
             m_multiFxColumnGroupBar = bar;
         return page;
@@ -1999,6 +2307,9 @@ void PresetTableV2TransitionWidget::buildUi()
     m_bankTabs->addTab(makeBankPage(m_continuousNameView, m_continuousTable,
                                      PTTransitionMode::Continuous),
                        tr("Interpolation"));
+    m_bankTabs->addTab(makeBankPage(m_channel1DNameView, m_channel1DTable,
+                                     PTTransitionMode::Channel1D),
+                       tr("1D Channel FX"));
     m_bankTabs->addTab(makeBankPage(m_positionMotionNameView, m_positionMotionTable,
                                      PTTransitionMode::PositionMotion),
                        tr("Continuous Motion"));
@@ -2069,6 +2380,7 @@ void PresetTableV2TransitionWidget::buildUi()
     };
     linkFrozenExpansion(m_sweepNameView, m_sweepTable, PTTransitionMode::SweepOnly);
     linkFrozenExpansion(m_continuousNameView, m_continuousTable, PTTransitionMode::Continuous);
+    linkFrozenExpansion(m_channel1DNameView, m_channel1DTable, PTTransitionMode::Channel1D);
     linkFrozenExpansion(m_positionMotionNameView, m_positionMotionTable,
                         PTTransitionMode::PositionMotion);
     linkFrozenExpansion(m_multiFxNameView, m_multiFxTable, PTTransitionMode::MultiFx);
@@ -2091,6 +2403,7 @@ void PresetTableV2TransitionWidget::rebuildAllPresetTables()
 {
     rebuildPresetTable(PTTransitionMode::SweepOnly);
     rebuildPresetTable(PTTransitionMode::Continuous);
+    rebuildPresetTable(PTTransitionMode::Channel1D);
     rebuildPresetTable(PTTransitionMode::PositionMotion);
     rebuildPresetTable(PTTransitionMode::MultiFx);
 }
@@ -2275,6 +2588,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromItem(PTTransitionMod
     p = presets[row];
     p.playbackMode = (mode == PTTransitionMode::Continuous
                       || mode == PTTransitionMode::PositionMotion
+                      || mode == PTTransitionMode::Channel1D
                       || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
 
@@ -2555,6 +2869,8 @@ void PresetTableV2TransitionWidget::slotPresetItemChanged(QTreeWidgetItem* item,
         mode = PTTransitionMode::Continuous;
     else if (table == m_positionMotionTable)
         mode = PTTransitionMode::PositionMotion;
+    else if (table == m_channel1DTable)
+        mode = PTTransitionMode::Channel1D;
     else if (table == m_multiFxTable)
         mode = PTTransitionMode::MultiFx;
     else if (table != m_sweepTable)
@@ -3077,6 +3393,7 @@ void PresetTableV2TransitionWidget::slotBankTabChanged(int)
     syncBank(PTTransitionMode::SweepOnly, m_sweepTable);
     syncBank(PTTransitionMode::Continuous, m_continuousTable);
     syncBank(PTTransitionMode::PositionMotion, m_positionMotionTable);
+    syncBank(PTTransitionMode::Channel1D, m_channel1DTable);
     syncBank(PTTransitionMode::MultiFx, m_multiFxTable);
 
     notifyTablePresetCacheRefresh();
@@ -3146,7 +3463,7 @@ void PresetTableV2TransitionWidget::migrateLegacyInputSources()
         PTEfxCol::InputStartOffset,
         PTEfxCol::InputPropagation
     };
-    static const quint8 preSpreadModeMap[21] = {
+    static const quint8 preSpreadModeMap[28] = {
         0,
         PTEfxCol::InputAxis,
         PTEfxCol::InputOffsetDir,
@@ -3161,13 +3478,19 @@ void PresetTableV2TransitionWidget::migrateLegacyInputSources()
         PTEfxCol::InputFadeOut,
         PTEfxCol::InputWaveLevel,
         PTEfxCol::InputStartOffset,
-        PTEfxCol::InputPropagation,
         PTEfxCol::InputSpeedMult,
         PTEfxCol::InputPositionMotion,
         PTEfxCol::InputPositionMotionDir,
         PTEfxCol::InputPosition1DBuiltinMode,
         PTEfxCol::InputPositionPanSize,
-        PTEfxCol::InputPositionTiltSize
+        PTEfxCol::InputPositionTiltSize,
+        PTEfxCol::InputChannel1DTarget,
+        PTEfxCol::InputChannel1DTargetMode,
+        PTEfxCol::InputChannel1DApplyMode,
+        PTEfxCol::InputChannel1DLow,
+        PTEfxCol::InputChannel1DHigh,
+        PTEfxCol::InputChannel1DAmount,
+        PTEfxCol::InputChannel1DCustomColumn
     };
 
     const QList<quint8> keys = m_inputs.keys();
@@ -3279,10 +3602,12 @@ PTGlobalEffectSettings PresetTableV2TransitionWidget::globalEffectSettings() con
     out.continuousPresets = snapshot.continuousPresets;
     out.multiFxPresets = snapshot.multiFxPresets;
     out.positionMotionPresets = snapshot.positionMotionPresets;
+    out.channel1DPresets = snapshot.channel1DPresets;
     out.sweepOutputOverrides = sharedOverrides(snapshot.sweepOutputOverrides);
     out.continuousOutputOverrides = sharedOverrides(snapshot.continuousOutputOverrides);
     out.multiFxOutputOverrides = sharedOverrides(snapshot.multiFxOutputOverrides);
     out.positionMotionOutputOverrides = sharedOverrides(snapshot.positionMotionOutputOverrides);
+    out.channel1DOutputOverrides = sharedOverrides(snapshot.channel1DOutputOverrides);
     out.liveColumnOverrides = snapshot.liveColumnOverrides;
     out.globalSettings = snapshot.globalSettings;
     out.activeMode = snapshot.activeMode;
@@ -3653,12 +3978,12 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                     if (selectionIdx > 0)
                     {
                         m_spatialGridCaption->setText(
-                                tr("Propagation order (offset°) · click cells to edit this Selection"));
+                                tr("Spread order (offset°) · click cells to edit this Selection"));
                     }
                     else
                     {
                         m_spatialGridCaption->setText(
-                                tr("Propagation order (offset°) · colors = custom selections"));
+                                tr("Spread order (offset°) · colors = custom selections"));
                     }
                 }
                 else
@@ -3971,6 +4296,7 @@ void PresetTableV2TransitionWidget::normalizeOverrideStorage()
     };
     normalize(m_sweepPresets, m_sweepOutputOverrides);
     normalize(m_continuousPresets, m_continuousOutputOverrides);
+    normalize(m_channel1DPresets, m_channel1DOutputOverrides);
     normalize(m_positionMotionPresets, m_positionMotionOutputOverrides);
     normalize(m_multiFxPresets, m_multiFxOutputOverrides);
 }
@@ -4014,6 +4340,7 @@ void PresetTableV2TransitionWidget::refreshOverrideVisualsForItem(PTTransitionMo
                     ? presetsForMode(mode).at(row) : PTTransitionPreset();
             parent.playbackMode = (mode == PTTransitionMode::Continuous
                                    || mode == PTTransitionMode::PositionMotion
+                                   || mode == PTTransitionMode::Channel1D
                                    || mode == PTTransitionMode::MultiFx)
                     ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
             if (mode == PTTransitionMode::SweepOnly)
@@ -4091,6 +4418,8 @@ QSet<int>& PresetTableV2TransitionWidget::expandedSetForMode(PTTransitionMode mo
         return m_multiFxExpandedPresets;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionExpandedPresets;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DExpandedPresets;
     return (mode == PTTransitionMode::Continuous)
             ? m_continuousExpandedPresets : m_sweepExpandedPresets;
 }
@@ -4101,6 +4430,8 @@ const QSet<int>& PresetTableV2TransitionWidget::expandedSetForMode(PTTransitionM
         return m_multiFxExpandedPresets;
     if (mode == PTTransitionMode::PositionMotion)
         return m_positionMotionExpandedPresets;
+    if (mode == PTTransitionMode::Channel1D)
+        return m_channel1DExpandedPresets;
     return (mode == PTTransitionMode::Continuous)
             ? m_continuousExpandedPresets : m_sweepExpandedPresets;
 }
@@ -4257,6 +4588,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::effectivePresetForOutputNoLive
     }
     p.playbackMode = (mode == PTTransitionMode::Continuous
                       || mode == PTTransitionMode::PositionMotion
+                      || mode == PTTransitionMode::Channel1D
                       || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     if (mode == PTTransitionMode::SweepOnly)
@@ -4291,6 +4623,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::effectivePresetForSelectionNoL
     }
     p.playbackMode = (mode == PTTransitionMode::Continuous
                       || mode == PTTransitionMode::PositionMotion
+                      || mode == PTTransitionMode::Channel1D
                       || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     if (mode == PTTransitionMode::SweepOnly)
@@ -4357,6 +4690,7 @@ void PresetTableV2TransitionWidget::normalizeNoopOverridesForPreset(PTTransition
     PTTransitionPreset parent = presets.at(row);
     parent.playbackMode = (mode == PTTransitionMode::Continuous
                            || mode == PTTransitionMode::PositionMotion
+                           || mode == PTTransitionMode::Channel1D
                            || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     if (mode == PTTransitionMode::SweepOnly)
@@ -4407,6 +4741,8 @@ void PresetTableV2TransitionWidget::normalizeNoopOverrides()
         normalizeNoopOverridesForPreset(PTTransitionMode::SweepOnly, row);
     for (int row = 0; row < m_continuousPresets.size(); ++row)
         normalizeNoopOverridesForPreset(PTTransitionMode::Continuous, row);
+    for (int row = 0; row < m_channel1DPresets.size(); ++row)
+        normalizeNoopOverridesForPreset(PTTransitionMode::Channel1D, row);
     for (int row = 0; row < m_positionMotionPresets.size(); ++row)
         normalizeNoopOverridesForPreset(PTTransitionMode::PositionMotion, row);
     for (int row = 0; row < m_multiFxPresets.size(); ++row)
@@ -4558,6 +4894,8 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
         mode = PTTransitionMode::Continuous;
     else if (table == m_positionMotionTable)
         mode = PTTransitionMode::PositionMotion;
+    else if (table == m_channel1DTable)
+        mode = PTTransitionMode::Channel1D;
     else if (table == m_multiFxTable)
         mode = PTTransitionMode::MultiFx;
     else if (table != m_sweepTable)
@@ -4668,6 +5006,8 @@ PTTransitionMode PresetTableV2TransitionWidget::modeForTable(QTreeWidget* table)
         return PTTransitionMode::Continuous;
     if (table == m_positionMotionTable)
         return PTTransitionMode::PositionMotion;
+    if (table == m_channel1DTable)
+        return PTTransitionMode::Channel1D;
     if (table == m_multiFxTable)
         return PTTransitionMode::MultiFx;
     return PTTransitionMode::SweepOnly;
@@ -4677,7 +5017,8 @@ QTreeWidget* PresetTableV2TransitionWidget::tableFromFocusObject(QObject* watche
 {
     QWidget* watchedWidget = qobject_cast<QWidget*>(watched);
     for (QTreeWidget* candidate : { m_sweepTable, m_continuousTable,
-                                    m_positionMotionTable, m_multiFxTable })
+                                    m_positionMotionTable, m_channel1DTable,
+                                    m_multiFxTable })
     {
         if (!candidate)
             continue;
@@ -4691,6 +5032,7 @@ QTreeWidget* PresetTableV2TransitionWidget::tableFromFocusObject(QObject* watche
     const QVector<QPair<QTreeView*, QTreeWidget*>> frozenViews = {
         { m_sweepNameView, m_sweepTable },
         { m_continuousNameView, m_continuousTable },
+        { m_channel1DNameView, m_channel1DTable },
         { m_positionMotionNameView, m_positionMotionTable },
         { m_multiFxNameView, m_multiFxTable }
     };
@@ -5272,7 +5614,8 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
         if (QWidget* editor = editorWidgetForEvent(watched))
         {
             for (QTreeWidget* table : { m_sweepTable, m_continuousTable,
-                                        m_positionMotionTable, m_multiFxTable })
+                                        m_positionMotionTable, m_channel1DTable,
+                                        m_multiFxTable })
             {
                 if (!table || !table->isAncestorOf(editor))
                     continue;
@@ -5286,7 +5629,8 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
         else if (mouse->button() == Qt::LeftButton)
         {
             for (QTreeWidget* table : { m_sweepTable, m_continuousTable,
-                                        m_positionMotionTable, m_multiFxTable })
+                                        m_positionMotionTable, m_channel1DTable,
+                                        m_multiFxTable })
             {
                 if (!table || watched != table->viewport())
                     continue;
@@ -5304,7 +5648,8 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
         if (QWidget* editor = editorWidgetForEvent(watched))
         {
             for (QTreeWidget* table : { m_sweepTable, m_continuousTable,
-                                        m_positionMotionTable, m_multiFxTable })
+                                        m_positionMotionTable, m_channel1DTable,
+                                        m_multiFxTable })
             {
                 if (!table || !table->isAncestorOf(editor))
                     continue;
@@ -5326,7 +5671,8 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
         if (QWidget* editor = editorWidgetForEvent(watched))
         {
             for (QTreeWidget* table : { m_sweepTable, m_continuousTable,
-                                        m_positionMotionTable, m_multiFxTable })
+                                        m_positionMotionTable, m_channel1DTable,
+                                        m_multiFxTable })
             {
                 if (!table || !table->isAncestorOf(editor))
                     continue;
@@ -5392,10 +5738,12 @@ void PresetTableV2TransitionWidget::publishProviderSnapshot(const QString& reaso
     snapshot.sweepPresets = m_sweepPresets;
     snapshot.continuousPresets = m_continuousPresets;
     snapshot.positionMotionPresets = m_positionMotionPresets;
+    snapshot.channel1DPresets = m_channel1DPresets;
     snapshot.multiFxPresets = m_multiFxPresets;
     snapshot.sweepOutputOverrides = m_sweepOutputOverrides;
     snapshot.continuousOutputOverrides = m_continuousOutputOverrides;
     snapshot.positionMotionOutputOverrides = m_positionMotionOutputOverrides;
+    snapshot.channel1DOutputOverrides = m_channel1DOutputOverrides;
     snapshot.multiFxOutputOverrides = m_multiFxOutputOverrides;
     snapshot.globalSettings = m_globalSettings;
     snapshot.activeMode = activeBankMode();
@@ -5427,11 +5775,12 @@ void PresetTableV2TransitionWidget::publishProviderSnapshot(const QString& reaso
     }
 
     const QString message =
-            QStringLiteral("provider snapshot publish revision=%1 reason=%2 sweep=%3 interpolation=%4 motion=%5 multifx=%6 live=%7")
+            QStringLiteral("provider snapshot publish revision=%1 reason=%2 sweep=%3 interpolation=%4 channel1d=%5 motion=%6 multifx=%7 live=%8")
                     .arg(snapshot.revision)
                     .arg(reason)
                     .arg(snapshot.sweepPresets.size())
                     .arg(snapshot.continuousPresets.size())
+                    .arg(snapshot.channel1DPresets.size())
                     .arg(snapshot.positionMotionPresets.size())
                     .arg(snapshot.multiFxPresets.size())
                     .arg(snapshot.liveColumnOverrides.size());
@@ -5463,6 +5812,8 @@ const QVector<PTTransitionPreset>& PresetTableV2TransitionWidget::snapshotPreset
         return snapshot.multiFxPresets;
     if (mode == PTTransitionMode::PositionMotion)
         return snapshot.positionMotionPresets;
+    if (mode == PTTransitionMode::Channel1D)
+        return snapshot.channel1DPresets;
     if (mode == PTTransitionMode::Continuous)
         return snapshot.continuousPresets;
     if (mode == PTTransitionMode::SweepOnly)
@@ -5479,6 +5830,8 @@ PresetTableV2TransitionWidget::snapshotOverridesForMode(
         return snapshot.multiFxOutputOverrides;
     if (mode == PTTransitionMode::PositionMotion)
         return snapshot.positionMotionOutputOverrides;
+    if (mode == PTTransitionMode::Channel1D)
+        return snapshot.channel1DOutputOverrides;
     if (mode == PTTransitionMode::Continuous)
         return snapshot.continuousOutputOverrides;
     if (mode == PTTransitionMode::SweepOnly)
@@ -5540,6 +5893,7 @@ PTTransitionPreset PresetTableV2TransitionWidget::finalizeSnapshotPreset(
     PTTransitionPreset p = preset;
     p.playbackMode = (mode == PTTransitionMode::Continuous
                       || mode == PTTransitionMode::PositionMotion
+                      || mode == PTTransitionMode::Channel1D
                       || mode == PTTransitionMode::MultiFx)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     PTDimmerWaveEngine::clampOffsetStep(p, snapshotGridSpanForPreset(snapshot, p));
@@ -5712,6 +6066,8 @@ void PresetTableV2TransitionWidget::slotRefreshTableLink()
         }
         QString linkText = tr("Linked: %1").arg(w ? PresetTableV2VCLookup::vcWidgetLabel(w)
                                                     : QString::number(m_targetTableId));
+        if (w && isDefaultPresetTableEngineCaption(caption()))
+            setCaption(generatedPresetTableEngineCaption(w->caption()));
         if (table->tableUsesPositionMode())
         {
             linkText += tr(" — Position Mode: morph uses dimmer wave; orbit uses Motion column");
@@ -5729,8 +6085,12 @@ void PresetTableV2TransitionWidget::slotRefreshTableLink()
             const bool positionMode = table->tableUsesPositionMode();
             m_bankTabs->setTabText(1, positionMode ? tr("Interpolation") : tr("Continuous FX"));
             if (m_bankTabs->count() > 2)
-                m_bankTabs->setTabVisible(2, positionMode);
+                m_bankTabs->setTabVisible(2, !positionMode);
+            if (m_bankTabs->count() > 3)
+                m_bankTabs->setTabVisible(3, positionMode);
             if (!positionMode && activeBankMode() == PTTransitionMode::PositionMotion)
+                m_bankTabs->setCurrentIndex(1);
+            if (positionMode && activeBankMode() == PTTransitionMode::Channel1D)
                 m_bankTabs->setCurrentIndex(1);
         }
         m_linkLabel->setText(linkText);
@@ -5854,13 +6214,19 @@ void PresetTableV2TransitionWidget::slotInputValueChanged(quint32 universe, quin
         PTEfxCol::InputFadeOut,
         PTEfxCol::InputWaveLevel,
         PTEfxCol::InputStartOffset,
-        PTEfxCol::InputPropagation,
         PTEfxCol::InputSpeedMult,
         PTEfxCol::InputPositionMotion,
         PTEfxCol::InputPositionMotionDir,
         PTEfxCol::InputPosition1DBuiltinMode,
         PTEfxCol::InputPositionPanSize,
         PTEfxCol::InputPositionTiltSize,
+        PTEfxCol::InputChannel1DTarget,
+        PTEfxCol::InputChannel1DTargetMode,
+        PTEfxCol::InputChannel1DApplyMode,
+        PTEfxCol::InputChannel1DLow,
+        PTEfxCol::InputChannel1DHigh,
+        PTEfxCol::InputChannel1DAmount,
+        PTEfxCol::InputChannel1DCustomColumn,
         PTEfxCol::InputGlobalSpeed,
         PTEfxCol::InputGlobalIntensity,
         PTEfxCol::InputGlobalPositionSize,
@@ -5899,6 +6265,8 @@ void PresetTableV2TransitionWidget::slotModeChanged(Doc::Mode mode)
         m_continuousTable->setEnabled(enabled);
     if (m_positionMotionTable)
         m_positionMotionTable->setEnabled(enabled);
+    if (m_channel1DTable)
+        m_channel1DTable->setEnabled(enabled);
     if (m_multiFxTable)
         m_multiFxTable->setEnabled(enabled);
     if (m_toolbar)
@@ -5911,6 +6279,8 @@ void PresetTableV2TransitionWidget::slotModeChanged(Doc::Mode mode)
         configureFrozenNameView(PTTransitionMode::Continuous);
     if (m_positionMotionTable)
         configureFrozenNameView(PTTransitionMode::PositionMotion);
+    if (m_channel1DTable)
+        configureFrozenNameView(PTTransitionMode::Channel1D);
     if (m_multiFxTable)
         configureFrozenNameView(PTTransitionMode::MultiFx);
     slotRefreshTableLink();
@@ -5966,10 +6336,12 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     copy->m_sweepPresets = m_sweepPresets;
     copy->m_continuousPresets = m_continuousPresets;
     copy->m_positionMotionPresets = m_positionMotionPresets;
+    copy->m_channel1DPresets = m_channel1DPresets;
     copy->m_multiFxPresets = m_multiFxPresets;
     copy->m_sweepOutputOverrides = m_sweepOutputOverrides;
     copy->m_continuousOutputOverrides = m_continuousOutputOverrides;
     copy->m_positionMotionOutputOverrides = m_positionMotionOutputOverrides;
+    copy->m_channel1DOutputOverrides = m_channel1DOutputOverrides;
     copy->m_multiFxOutputOverrides = m_multiFxOutputOverrides;
     copy->m_customCurveGallery = m_customCurveGallery;
     copy->m_shapeGallery = m_shapeGallery;
@@ -6059,6 +6431,7 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
         const int m = pattrs.value(KXMLPresetPlaybackMode).toInt();
         p.playbackMode = (m == int(PTTransitionMode::Continuous)
                           || m == int(PTTransitionMode::PositionMotion)
+                          || m == int(PTTransitionMode::Channel1D)
                           || m == int(PTTransitionMode::MultiFx))
                 ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     }
@@ -6074,6 +6447,24 @@ bool PresetTableV2TransitionWidget::readPresetAttrs(PTTransitionPreset& p,
         p.positionPanSize = pattrs.value(KXMLPresetPositionPanSize).toInt();
     if (pattrs.hasAttribute(KXMLPresetPositionTiltSize))
         p.positionTiltSize = pattrs.value(KXMLPresetPositionTiltSize).toInt();
+    if (pattrs.hasAttribute(KXMLPresetChannel1DTarget))
+        p.channel1DTarget = qBound(0, pattrs.value(KXMLPresetChannel1DTarget).toInt(),
+                                   int(PTChannel1DTarget::CustomColumn));
+    if (pattrs.hasAttribute(KXMLPresetChannel1DTargetMode))
+        p.channel1DTargetMode = qBound(0, pattrs.value(KXMLPresetChannel1DTargetMode).toInt(),
+                                       int(PTChannel1DTargetMode::All));
+    if (pattrs.hasAttribute(KXMLPresetChannel1DApplyMode))
+        p.channel1DApplyMode = qBound(0, pattrs.value(KXMLPresetChannel1DApplyMode).toInt(),
+                                      int(PTChannel1DApplyMode::BumpAdd));
+    if (pattrs.hasAttribute(KXMLPresetChannel1DLow))
+        p.channel1DLow = qBound(0, pattrs.value(KXMLPresetChannel1DLow).toInt(), 255);
+    if (pattrs.hasAttribute(KXMLPresetChannel1DHigh))
+        p.channel1DHigh = qBound(0, pattrs.value(KXMLPresetChannel1DHigh).toInt(), 255);
+    if (pattrs.hasAttribute(KXMLPresetChannel1DAmount))
+        p.channel1DAmount = qBound(0, pattrs.value(KXMLPresetChannel1DAmount).toInt(), 255);
+    if (pattrs.hasAttribute(KXMLPresetChannel1DCustomColumn))
+        p.channel1DCustomColumn =
+                qBound(0, pattrs.value(KXMLPresetChannel1DCustomColumn).toInt(), 255);
     if (pattrs.hasAttribute(KXMLPresetPosition1DBuiltinMode))
         p.position1DBuiltinMode = qBound(0, pattrs.value(KXMLPresetPosition1DBuiltinMode).toInt(), 1);
   {
@@ -6241,6 +6632,14 @@ void PresetTableV2TransitionWidget::writePresetXml(
         doc->writeAttribute(KXMLPresetPosition1DBuiltinMode, QString::number(p.position1DBuiltinMode));
     doc->writeAttribute(KXMLPresetPositionPanSize, QString::number(p.positionPanSize));
     doc->writeAttribute(KXMLPresetPositionTiltSize, QString::number(p.positionTiltSize));
+    doc->writeAttribute(KXMLPresetChannel1DTarget, QString::number(p.channel1DTarget));
+    doc->writeAttribute(KXMLPresetChannel1DTargetMode, QString::number(p.channel1DTargetMode));
+    doc->writeAttribute(KXMLPresetChannel1DApplyMode, QString::number(p.channel1DApplyMode));
+    doc->writeAttribute(KXMLPresetChannel1DLow, QString::number(p.channel1DLow));
+    doc->writeAttribute(KXMLPresetChannel1DHigh, QString::number(p.channel1DHigh));
+    doc->writeAttribute(KXMLPresetChannel1DAmount, QString::number(p.channel1DAmount));
+    doc->writeAttribute(KXMLPresetChannel1DCustomColumn,
+                        QString::number(p.channel1DCustomColumn));
     if (!p.positionPath2D.isEmpty())
     {
         doc->writeAttribute(KXMLPresetPositionPath2D,
@@ -6273,10 +6672,12 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
 
     m_sweepPresets.clear();
     m_continuousPresets.clear();
+    m_channel1DPresets.clear();
     m_positionMotionPresets.clear();
     m_multiFxPresets.clear();
     m_sweepOutputOverrides.clear();
     m_continuousOutputOverrides.clear();
+    m_channel1DOutputOverrides.clear();
     m_positionMotionOutputOverrides.clear();
     m_multiFxOutputOverrides.clear();
     m_customCurveGallery.clear();
@@ -6291,6 +6692,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
             if (bankHint == PTTransitionMode::Continuous)
                 p.playbackMode = PTTransitionMode::Continuous;
             else if (bankHint == PTTransitionMode::PositionMotion)
+                p.playbackMode = PTTransitionMode::Continuous;
+            else if (bankHint == PTTransitionMode::Channel1D)
                 p.playbackMode = PTTransitionMode::Continuous;
             else if (bankHint == PTTransitionMode::MultiFx)
                 p.playbackMode = PTTransitionMode::Continuous;
@@ -6314,6 +6717,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
             stored.playbackMode = PTTransitionMode::Continuous;
         else if (bankHint == PTTransitionMode::PositionMotion)
             stored.playbackMode = PTTransitionMode::Continuous;
+        else if (bankHint == PTTransitionMode::Channel1D)
+            stored.playbackMode = PTTransitionMode::Continuous;
         else if (bankHint == PTTransitionMode::MultiFx)
             stored.playbackMode = PTTransitionMode::Continuous;
         else if (bankHint == PTTransitionMode::SweepOnly)
@@ -6321,6 +6726,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
 
         if (bankHint == PTTransitionMode::PositionMotion)
             m_positionMotionPresets.append(stored);
+        else if (bankHint == PTTransitionMode::Channel1D)
+            m_channel1DPresets.append(stored);
         else if (bankHint == PTTransitionMode::MultiFx)
             m_multiFxPresets.append(stored);
         else if (stored.playbackMode == PTTransitionMode::Continuous)
@@ -6502,6 +6909,62 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                     }
                     m_continuousPresets.append(p);
                     m_continuousOutputOverrides.append(presetOverrides);
+                }
+                else
+                    root.skipCurrentElement();
+            }
+        }
+        else if (root.name() == KXMLChannel1DPresets)
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLPreset)
+                {
+                    const auto pattrs = root.attributes();
+                    PTTransitionPreset p;
+                    readPresetAttrs(p, pattrs, legacySpeedMult);
+                    finalizePreset(p, PTTransitionMode::Channel1D, pattrs);
+                    QHash<int, PTTransitionOutputLayer> presetOverrides;
+                    while (root.readNextStartElement())
+                    {
+                        if (root.name() == KXMLOutputOverride)
+                        {
+                            const auto attrs = root.attributes();
+                            bool ok = false;
+                            const int outputIdx = attrs.value(KXMLOutputOverrideIndex).toInt(&ok);
+                            if (!ok)
+                                root.skipCurrentElement();
+                            if (!ok)
+                                continue;
+                            if (outputIdx >= 0)
+                            {
+                                PTTransitionOutputLayer layer;
+                                readOutputOverride(layer.all, attrs, p);
+                                while (root.readNextStartElement())
+                                {
+                                    if (root.name() == KXMLSelection)
+                                    {
+                                        PTTransitionSelection selection;
+                                        selection.name =
+                                                root.attributes().value(KXMLSelectionName).toString();
+                                        selection.cells = parseSelectionCells(
+                                                root.attributes().value(KXMLSelectionCells).toString());
+                                        readOutputOverride(selection.overrides, root.attributes(), p);
+                                        layer.selections.append(selection);
+                                    }
+                                    root.skipCurrentElement();
+                                }
+                                if (!layer.all.columns.isEmpty() || !layer.selections.isEmpty())
+                                    presetOverrides.insert(outputIdx, layer);
+                            }
+                            else
+                                root.skipCurrentElement();
+                        }
+                        else
+                            root.skipCurrentElement();
+                    }
+                    m_channel1DPresets.append(p);
+                    m_channel1DOutputOverrides.append(presetOverrides);
                 }
                 else
                     root.skipCurrentElement();
@@ -6709,6 +7172,11 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
         for (int r = 0; r < m_continuousTable->topLevelItemCount(); ++r)
             syncPresetFromTable(PTTransitionMode::Continuous, r);
     }
+    if (m_channel1DTable)
+    {
+        for (int r = 0; r < m_channel1DTable->topLevelItemCount(); ++r)
+            syncPresetFromTable(PTTransitionMode::Channel1D, r);
+    }
     if (m_positionMotionTable)
     {
         for (int r = 0; r < m_positionMotionTable->topLevelItemCount(); ++r)
@@ -6781,6 +7249,14 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
         writePresetXml(doc, m_continuousPresets.at(i),
                        i < m_continuousOutputOverrides.size()
                        ? m_continuousOutputOverrides.at(i)
+                       : QHash<int, PTTransitionOutputLayer>());
+    doc->writeEndElement();
+
+    doc->writeStartElement(KXMLChannel1DPresets);
+    for (int i = 0; i < m_channel1DPresets.size(); ++i)
+        writePresetXml(doc, m_channel1DPresets.at(i),
+                       i < m_channel1DOutputOverrides.size()
+                       ? m_channel1DOutputOverrides.at(i)
                        : QHash<int, PTTransitionOutputLayer>());
     doc->writeEndElement();
 

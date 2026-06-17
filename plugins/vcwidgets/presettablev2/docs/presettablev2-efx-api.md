@@ -225,7 +225,7 @@ W `writeDMXFixtureGroup` (matrix):
 - **0%** = brak strefy fade → ostre przejście (nie „blokuje” outputu).
 - **100%** = cała szerokość pakietu (`waveWidth`) to ta strefa.
 - Implementacja: `PTDimmerWaveEngine::dimmerAtPhaseInWidth` (zgodna z `engine/src/efx.cpp`).
-- **Square** (`waveShape=1`): twardy prostokąt w pakiecie; fade % ignorowane na krawędziach.
+- **Square** (`waveShape=1`): legacy-only; nowe presety używają ostrych `Fade In/Out = 0%` zamiast osobnego trybu square.
 - **Wave width = 0** → dimmer zawsze 0 (to nie bug fade).
 
 Podgląd w EFX Engine (Operate / Design):

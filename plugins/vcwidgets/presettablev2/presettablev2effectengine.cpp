@@ -300,7 +300,7 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.waveWidth = qBound(1, int(val(PTEfxCol::InputWaveWidth)) * 360 / 255, 360);
     if (liveByColumn.contains(PTEfxCol::InputWaveShape))
     {
-        p.waveShape = int(val(PTEfxCol::InputWaveShape)) % 3;
+        p.waveShape = val(PTEfxCol::InputWaveShape) < 128 ? 0 : 2;
         p.customCurveEnabled = false;
     }
     if (liveByColumn.contains(PTEfxCol::InputFadeIn))
@@ -311,9 +311,6 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.waveLevel = int(val(PTEfxCol::InputWaveLevel));
     if (liveByColumn.contains(PTEfxCol::InputStartOffset))
         p.startOffset = int(val(PTEfxCol::InputStartOffset)) * 360 / 255;
-    if (liveByColumn.contains(PTEfxCol::InputPropagation))
-        p.propagation = (int(val(PTEfxCol::InputPropagation)) % 2 == 0)
-                ? PTPropagationMode::Parallel : PTPropagationMode::Serial;
     if (liveByColumn.contains(PTEfxCol::InputSpeedMult))
         p.speedMultiplier = qBound(0, int(val(PTEfxCol::InputSpeedMult)) * 5 / 255, 5);
     if (liveByColumn.contains(PTEfxCol::InputPositionMotion))
@@ -322,6 +319,23 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.positionMotionDirection = int(val(PTEfxCol::InputPositionMotionDir)) % 4;
     if (liveByColumn.contains(PTEfxCol::InputPosition1DBuiltinMode))
         p.position1DBuiltinMode = int(val(PTEfxCol::InputPosition1DBuiltinMode)) % 2;
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DTarget))
+        p.channel1DTarget = qBound(0, int(val(PTEfxCol::InputChannel1DTarget)) * int(PTChannel1DTarget::CustomColumn) / 255,
+                                   int(PTChannel1DTarget::CustomColumn));
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DTargetMode))
+        p.channel1DTargetMode = int(val(PTEfxCol::InputChannel1DTargetMode)) < 128
+                ? int(PTChannel1DTargetMode::First) : int(PTChannel1DTargetMode::All);
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DApplyMode))
+        p.channel1DApplyMode = qBound(0, int(val(PTEfxCol::InputChannel1DApplyMode)) * int(PTChannel1DApplyMode::BumpAdd) / 255,
+                                      int(PTChannel1DApplyMode::BumpAdd));
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DLow))
+        p.channel1DLow = int(val(PTEfxCol::InputChannel1DLow));
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DHigh))
+        p.channel1DHigh = int(val(PTEfxCol::InputChannel1DHigh));
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DAmount))
+        p.channel1DAmount = int(val(PTEfxCol::InputChannel1DAmount));
+    if (liveByColumn.contains(PTEfxCol::InputChannel1DCustomColumn))
+        p.channel1DCustomColumn = int(val(PTEfxCol::InputChannel1DCustomColumn));
     return p;
 }
 
