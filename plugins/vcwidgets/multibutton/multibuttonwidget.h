@@ -477,6 +477,10 @@ private:
     int  widgetActionReadOutputIndex(const MultiButtonWidgetActionTarget& action) const;
     bool widgetActionUsesInternalStaging(const MultiButtonWidgetActionTarget& action) const;
     bool widgetActionSetUsesInternalStaging() const;
+    void invalidateWidgetActionCache() const;
+    bool widgetActionCacheStillFresh() const;
+    void rebuildWidgetActionCache() const;
+    QList<MultiButtonWidgetActionTarget> buildEffectiveWidgetActionsUncached() const;
     bool activateWidgetAction(const MultiButtonWidgetActionTarget& action, int idx,
                               bool staged) const;
     bool activateWidgetActions(int idx, bool staged, bool forceSingleLeader = false,
@@ -537,6 +541,12 @@ private:
     MultiButtonWidgetActionMode m_widgetActionMode = MultiButtonWidgetActionMode::SingleTarget;
     QList<MultiButtonWidgetActionTarget> m_widgetActionTargets;
     mutable QHash<quint32, QPointer<VCWidget>> m_widgetActionTargetCache;
+    mutable bool m_effectiveWidgetActionCacheValid = false;
+    mutable QElapsedTimer m_effectiveWidgetActionCacheTimer;
+    mutable QList<MultiButtonWidgetActionTarget> m_effectiveWidgetActionCache;
+    mutable MultiButtonWidgetActionTarget m_effectiveWidgetActionLeaderCache;
+    mutable bool m_effectiveWidgetActionStagingCache = false;
+    mutable quint64 m_effectiveWidgetActionLeaderRevision = 0;
     mutable bool m_widgetActionActivationGuard = false;
     int                        m_widgetOutputIndex = 0;
     int                        m_widgetParameter = 0;

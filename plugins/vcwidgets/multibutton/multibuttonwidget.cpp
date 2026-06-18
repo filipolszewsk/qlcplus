@@ -75,6 +75,7 @@ static const QString KXMLTargetListName    = QStringLiteral("TargetListName");
 static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
 static const int kWidgetBusPublishSuppressMs = 250;
+static const int kWidgetActionCacheMaxAgeMs = 250;
 static const QColor KDefaultTileBackground(58, 58, 58);
 
 static QString widgetBusPolicyToString(MultiButtonWidgetBusPolicy policy)
@@ -361,6 +362,7 @@ void MultiButtonWidget::setWidgetMode(MultiButtonMode mode)
     m_monitorNoMatchCount = 0;
     m_widgetTargetStateRevision = 0;
     m_lastResolvedEntryCount = -1;
+    invalidateWidgetActionCache();
     m_visualOnly   = false;
     updateDmxRegistration();
     updateChannelMonitorTimerState();
@@ -415,6 +417,7 @@ void MultiButtonWidget::setWidgetActionMode(MultiButtonWidgetActionMode mode)
     if (m_widgetActionMode == mode)
         return;
     m_widgetActionMode = mode;
+    invalidateWidgetActionCache();
     m_lastResolvedEntryCount = -1;
     syncWidgetLinkLiveStagedState();
     recalcLayoutSize();
@@ -1385,7 +1388,8 @@ bool MultiButtonWidget::widgetActionLooksValid(
             && action.widgetId != id();
 }
 
-QList<MultiButtonWidgetActionTarget> MultiButtonWidget::effectiveWidgetActions() const
+QList<MultiButtonWidgetActionTarget>
+MultiButtonWidget::buildEffectiveWidgetActionsUncached() const
 {
     QList<MultiButtonWidgetActionTarget> actions;
     if (widgetMultiTargetActive())
@@ -1447,15 +1451,88 @@ QList<MultiButtonWidgetActionTarget> MultiButtonWidget::effectiveWidgetActions()
     return actions;
 }
 
+void MultiButtonWidget::invalidateWidgetActionCache() const
+{
+    m_effectiveWidgetActionCacheValid = false;
+    m_effectiveWidgetActionCache.clear();
+    m_effectiveWidgetActionLeaderCache = MultiButtonWidgetActionTarget();
+    m_effectiveWidgetActionStagingCache = false;
+    m_effectiveWidgetActionLeaderRevision = 0;
+    m_effectiveWidgetActionCacheTimer.invalidate();
+}
+
+bool MultiButtonWidget::widgetActionCacheStillFresh() const
+{
+    if (!m_effectiveWidgetActionCacheValid)
+        return false;
+    if (!m_effectiveWidgetActionCacheTimer.isValid()
+            || m_effectiveWidgetActionCacheTimer.elapsed() > kWidgetActionCacheMaxAgeMs)
+        return false;
+
+    if (m_effectiveWidgetActionLeaderCache.widgetId == VCWidget::invalidId())
+        return true;
+    if (m_effectiveWidgetActionLeaderRevision == 0)
+        return true;
+
+    PresetTableV2MultiButtonTargetIface* target =
+            widgetActionTarget(m_effectiveWidgetActionLeaderCache);
+    if (!target)
+        return false;
+
+    const quint64 revision = target->multiButtonStateRevision(
+                widgetActionReadOutputIndex(m_effectiveWidgetActionLeaderCache),
+                m_effectiveWidgetActionLeaderCache.parameter);
+    return revision == m_effectiveWidgetActionLeaderRevision;
+}
+
+void MultiButtonWidget::rebuildWidgetActionCache() const
+{
+    m_effectiveWidgetActionCache = buildEffectiveWidgetActionsUncached();
+    m_effectiveWidgetActionLeaderCache = m_effectiveWidgetActionCache.isEmpty()
+            ? MultiButtonWidgetActionTarget()
+            : m_effectiveWidgetActionCache.first();
+    m_effectiveWidgetActionStagingCache = false;
+    m_effectiveWidgetActionLeaderRevision = 0;
+
+    for (const MultiButtonWidgetActionTarget& action : m_effectiveWidgetActionCache)
+    {
+        if (widgetActionUsesInternalStaging(action))
+            m_effectiveWidgetActionStagingCache = true;
+    }
+
+    if (m_effectiveWidgetActionLeaderCache.widgetId != VCWidget::invalidId())
+    {
+        if (PresetTableV2MultiButtonTargetIface* target =
+                widgetActionTarget(m_effectiveWidgetActionLeaderCache))
+        {
+            m_effectiveWidgetActionLeaderRevision = target->multiButtonStateRevision(
+                        widgetActionReadOutputIndex(m_effectiveWidgetActionLeaderCache),
+                        m_effectiveWidgetActionLeaderCache.parameter);
+        }
+    }
+
+    m_effectiveWidgetActionCacheValid = true;
+    m_effectiveWidgetActionCacheTimer.restart();
+}
+
+QList<MultiButtonWidgetActionTarget> MultiButtonWidget::effectiveWidgetActions() const
+{
+    if (!widgetActionCacheStillFresh())
+        rebuildWidgetActionCache();
+    return m_effectiveWidgetActionCache;
+}
+
 MultiButtonWidgetActionTarget MultiButtonWidget::leaderWidgetAction() const
 {
-    const QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
-    return actions.isEmpty() ? MultiButtonWidgetActionTarget() : actions.first();
+    if (!widgetActionCacheStillFresh())
+        rebuildWidgetActionCache();
+    return m_effectiveWidgetActionLeaderCache;
 }
 
 void MultiButtonWidget::clearWidgetActionTargetCache() const
 {
     m_widgetActionTargetCache.clear();
+    invalidateWidgetActionCache();
 }
 
 VCWidget* MultiButtonWidget::widgetActionTargetObject(
@@ -1469,6 +1546,7 @@ VCWidget* MultiButtonWidget::widgetActionTargetObject(
         if (m_widgetActionTargetCache.value(action.widgetId))
             return m_widgetActionTargetCache.value(action.widgetId).data();
         m_widgetActionTargetCache.remove(action.widgetId);
+        invalidateWidgetActionCache();
     }
 
     VirtualConsole* vc = VirtualConsole::instance();
@@ -1486,6 +1564,7 @@ VCWidget* MultiButtonWidget::widgetActionTargetObject(
         m_widgetActionTargetCache.insert(action.widgetId, candidate);
         connect(candidate, &QObject::destroyed, this, [this, targetId = action.widgetId]() {
             m_widgetActionTargetCache.remove(targetId);
+            invalidateWidgetActionCache();
             VCPluginDiagnostics::breadcrumbRateLimited(
                     QStringLiteral("multibutton"), id(), caption(),
                     QStringLiteral("multibutton/action-target-destroyed/%1/%2")
@@ -1551,13 +1630,9 @@ bool MultiButtonWidget::widgetActionSetUsesInternalStaging() const
     if (m_mode != MultiButtonMode::Widget)
         return false;
 
-    const QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
-    for (const MultiButtonWidgetActionTarget& action : actions)
-    {
-        if (widgetActionUsesInternalStaging(action))
-            return true;
-    }
-    return false;
+    if (!widgetActionCacheStillFresh())
+        rebuildWidgetActionCache();
+    return m_effectiveWidgetActionStagingCache;
 }
 
 bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget& action,
