@@ -951,7 +951,7 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
 
     if (offSlotAvailable() && globalSlot == total - 1)
     {
-        if (stagingActive() || widgetLinkUsesInternalStaging())
+        if (stagingActive() || widgetActionSetUsesInternalStaging())
             stageEntry(-1);
         else
             activate(-1);
@@ -960,7 +960,7 @@ void MultiButtonWidget::activateFromGlobalSlot(int globalSlot)
 
     if (globalSlot < entryCount())
     {
-        if (stagingActive() || widgetLinkUsesInternalStaging())
+        if (stagingActive() || widgetActionSetUsesInternalStaging())
             stageEntry(globalSlot);
         else
             activate(globalSlot);
@@ -1546,6 +1546,20 @@ bool MultiButtonWidget::widgetActionUsesInternalStaging(
                                                    action.parameter);
 }
 
+bool MultiButtonWidget::widgetActionSetUsesInternalStaging() const
+{
+    if (m_mode != MultiButtonMode::Widget)
+        return false;
+
+    const QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
+    for (const MultiButtonWidgetActionTarget& action : actions)
+    {
+        if (widgetActionUsesInternalStaging(action))
+            return true;
+    }
+    return false;
+}
+
 bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget& action,
                                              int idx, bool staged) const
 {
@@ -1589,8 +1603,13 @@ bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget
 }
 
 bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
-                                              bool forceSingleLeader) const
+                                              bool forceSingleLeader,
+                                              bool* anyStagedAction,
+                                              const QString& source) const
 {
+    if (anyStagedAction)
+        *anyStagedAction = false;
+
     if (m_widgetActionActivationGuard)
     {
         VCPluginDiagnostics::breadcrumbRateLimited(
@@ -1607,6 +1626,7 @@ bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
             : effectiveWidgetActions();
     bool leaderOk = false;
     bool anyOk = false;
+    bool anyStagedOk = false;
     for (int i = 0; i < actions.size(); ++i)
     {
         const MultiButtonWidgetActionTarget& action = actions.at(i);
@@ -1614,6 +1634,7 @@ bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
         const bool actionStaged = staged && stagingAvailable;
         const bool ok = activateWidgetAction(action, idx, actionStaged);
         anyOk = anyOk || ok;
+        anyStagedOk = anyStagedOk || (ok && actionStaged);
         if (i == 0)
             leaderOk = ok;
         if (ok)
@@ -1623,14 +1644,17 @@ bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
                     QStringLiteral("multibutton/action-activate/%1/%2/%3")
                             .arg(id()).arg(action.widgetId).arg(action.parameter),
                     250,
-                    QStringLiteral("action activate targetId=%1 output=%2 parameter=%3 index=%4 staged=%5 stagingAvailable=%6")
+                    QStringLiteral("action activate targetId=%1 output=%2 parameter=%3 index=%4 staged=%5 stagingAvailable=%6 source=%7")
                             .arg(action.widgetId).arg(action.outputIndex)
                             .arg(action.parameter).arg(idx)
                             .arg(actionStaged ? 1 : 0)
-                            .arg(stagingAvailable ? 1 : 0));
+                            .arg(stagingAvailable ? 1 : 0)
+                            .arg(source.isEmpty() ? QStringLiteral("action") : source));
         }
     }
     m_widgetActionActivationGuard = false;
+    if (anyStagedAction)
+        *anyStagedAction = anyStagedOk;
     return leaderOk || anyOk;
 }
 
@@ -2074,7 +2098,8 @@ void MultiButtonWidget::applyWidgetRecallInput(uchar value)
         return;
 
     const int idx = value == 0 ? -1 : int(value) - 1;
-    const bool ok = activateWidgetActions(idx, true);
+    const bool ok = activateWidgetActions(idx, true, false, nullptr,
+                                          QStringLiteral("recall"));
     if (!ok)
         return;
 
@@ -2947,14 +2972,15 @@ void MultiButtonWidget::cycleNext()
         qDebug().nospace() << "MultiButton id=" << id() << " cycleNext";
 
     int total = entryCount() + (offSlotAvailable() ? 1 : 0);
-    if (widgetLinkUsesInternalStaging())
+    const bool actionSetUsesInternalStaging = widgetActionSetUsesInternalStaging();
+    if (actionSetUsesInternalStaging)
         syncWidgetLinkLiveStagedState();
 
-    int base = widgetLinkUsesInternalStaging() && hasLocalStagedSelection()
+    int base = actionSetUsesInternalStaging && hasLocalStagedSelection()
             ? m_stagedIndex : m_currentIndex;
     if (m_layout == MultiButtonLayout::Single
             && m_monitorChannelValues
-            && !widgetLinkUsesInternalStaging()
+            && !actionSetUsesInternalStaging
             && !stagingActive()
             && m_monitorDisplayIndex >= 0)
     {
@@ -2964,12 +2990,12 @@ void MultiButtonWidget::cycleNext()
 
     if (offSlotAvailable() && next == entryCount())
     {
-        if (widgetLinkUsesInternalStaging() || stagingActive())
+        if (actionSetUsesInternalStaging || stagingActive())
             stageEntry(-1);
         else
             activate(-1);
     }
-    else if (widgetLinkUsesInternalStaging() || stagingActive())
+    else if (actionSetUsesInternalStaging || stagingActive())
         stageEntry(next, m_layout == MultiButtonLayout::Single);
     else
     {
@@ -3286,8 +3312,6 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
 
     const bool allowPerActionStaging = (m_mode == MultiButtonMode::Widget)
             && !m_widgetLiveActivationOverride;
-    const bool widgetInternalStage = allowPerActionStaging
-            && widgetLinkUsesInternalStaging();
     if (!allowPerActionStaging && !m_visualOnly && idx == m_currentIndex) return;
 
     if (m_logPresetChanges)
@@ -3302,7 +3326,10 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     {
         if (m_mode == MultiButtonMode::Widget)
         {
-            const bool ok = activateWidgetActions(-1, allowPerActionStaging);
+            bool anyStagedAction = false;
+            const bool ok = activateWidgetActions(-1, allowPerActionStaging, false,
+                                                  &anyStagedAction,
+                                                  QStringLiteral("click"));
             if (ok)
             {
                 syncWidgetLinkLiveStagedState();
@@ -3331,7 +3358,10 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     }
     else if (m_mode == MultiButtonMode::Widget)
     {
-        const bool ok = activateWidgetActions(idx, allowPerActionStaging);
+        bool anyStagedAction = false;
+        const bool ok = activateWidgetActions(idx, allowPerActionStaging, false,
+                                              &anyStagedAction,
+                                              QStringLiteral("click"));
         if (!ok)
         {
             m_currentIndex = -1;
@@ -3340,7 +3370,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
             update();
             return;
         }
-        if (widgetInternalStage)
+        if (anyStagedAction)
         {
             syncWidgetLinkLiveStagedState();
             if (m_widgetBusPolicy == MultiButtonWidgetBusPolicy::SharedBus)
@@ -3384,7 +3414,8 @@ void MultiButtonWidget::activateAutomationLive(int idx)
         const bool previousOverride = m_widgetLiveActivationOverride;
         m_widgetLiveActivationOverride = true;
 
-        const bool ok = activateWidgetActions(idx, false);
+        const bool ok = activateWidgetActions(idx, false, false, nullptr,
+                                              QStringLiteral("automation"));
         if (ok)
         {
             syncWidgetLinkLiveStagedState();
@@ -3465,16 +3496,17 @@ void MultiButtonWidget::stageEntry(int idx, bool allowFlashEntry)
     if (m_widgetFlashHoldIndex >= 0)
         endWidgetFlashHold();
 
-    if (!stagingActive() && !widgetLinkUsesInternalStaging())
+    const bool actionSetUsesInternalStaging = widgetActionSetUsesInternalStaging();
+    if (!stagingActive() && !actionSetUsesInternalStaging)
         return;
     if (idx < -1 || idx >= entryCount())
         return;
     if (!allowFlashEntry && idx >= 0 && entryIsFlash(idx))
         return;
 
-    if (widgetLinkUsesInternalStaging())
+    if (actionSetUsesInternalStaging)
     {
-        if (!activateWidgetActions(idx, true))
+        if (!activateWidgetActions(idx, true, false, nullptr, QStringLiteral("commit")))
             return;
     }
     m_stagedIndex = idx;
@@ -3495,7 +3527,7 @@ void MultiButtonWidget::commitStaged()
     if (!stagingActive())
         return;
 
-    if (widgetLinkUsesInternalStaging())
+    if (widgetActionSetUsesInternalStaging())
     {
         update();
         return;
@@ -3522,7 +3554,7 @@ void MultiButtonWidget::commitStaged()
 void MultiButtonWidget::clearStagedOnExternalMonitorChange(int matchIdx)
 {
     Q_UNUSED(matchIdx);
-    if ((!stagingActive() && !widgetLinkUsesInternalStaging()) || !hasLocalStagedSelection())
+    if ((!stagingActive() && !widgetActionSetUsesInternalStaging()) || !hasLocalStagedSelection())
         return;
     clearLocalStagedSelection();
 }
@@ -3685,7 +3717,7 @@ void MultiButtonWidget::slotCheckChannelValues()
 
     m_monitorMatchIndex = matchIdx;
     m_lastMonitorMatchIdx = matchIdx;
-    if (!stagingActive() && !widgetLinkUsesInternalStaging())
+    if (!stagingActive() && !widgetActionSetUsesInternalStaging())
     {
         if (matchIdx >= 0 || m_monitorNoMatchCount >= noMatchGraceCount)
             m_monitorDisplayIndex = matchIdx;
@@ -3828,7 +3860,7 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
                 const int hit = spreadHitTest(e->pos());
                 if (!m_longFired && hit == m_pressTileIndex && hit != -2)
                 {
-                    if (stagingActive() || widgetLinkUsesInternalStaging())
+                    if (stagingActive() || widgetActionSetUsesInternalStaging())
                     {
                         if (hit < 0)
                             stageEntry(-1);
@@ -4049,7 +4081,7 @@ int MultiButtonWidget::displayedEntryIndex() const
         return m_flashHoldIndex;
     if (m_entrySelectPreviewActive)
         return m_entrySelectPreviewIndex;
-    if ((stagingActive() || widgetLinkUsesInternalStaging()) && hasLocalStagedSelection())
+    if ((stagingActive() || widgetActionSetUsesInternalStaging()) && hasLocalStagedSelection())
         return m_stagedIndex;
     if (m_layout == MultiButtonLayout::Single
             && m_monitorChannelValues
@@ -4102,6 +4134,27 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
                 && target->multiButtonHasStagedIndex(outputIdx, parameter);
         stagedIdx = stagedValid
                 ? target->multiButtonStagedIndex(outputIdx, parameter) : -1;
+    }
+
+    if (!stagedValid && widgetActionSetUsesInternalStaging())
+    {
+        const QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
+        for (const MultiButtonWidgetActionTarget& action : actions)
+        {
+            PresetTableV2MultiButtonTargetIface* actionTarget = widgetActionTarget(action);
+            if (!actionTarget)
+                continue;
+            const int actionOutputIdx = widgetActionReadOutputIndex(action);
+            if (!actionTarget->multiButtonStagingAvailable(actionOutputIdx, action.parameter)
+                    || !actionTarget->multiButtonHasStagedIndex(actionOutputIdx, action.parameter))
+                continue;
+
+            stagedValid = true;
+            stagedIdx = actionTarget->multiButtonStagedIndex(actionOutputIdx, action.parameter);
+            stateRevision = actionTarget->multiButtonStateRevision(actionOutputIdx,
+                                                                   action.parameter);
+            break;
+        }
     }
 
     const int prevLive = m_currentIndex;
@@ -4163,7 +4216,7 @@ int MultiButtonWidget::monitorHighlightIndex() const
         return -1;
 
     // Staging: orange = bus match (external/internal), green = m_stagedIndex; DMX = m_currentIndex
-    if (stagingActive() || widgetLinkUsesInternalStaging())
+    if (stagingActive() || widgetActionSetUsesInternalStaging())
     {
         if (m_monitorMatchIndex >= 0)
             return m_monitorMatchIndex;
@@ -4189,7 +4242,7 @@ int MultiButtonWidget::stagedHighlightIndex() const
 
 bool MultiButtonWidget::stagedHighlightValid() const
 {
-    if (!stagingActive() && !widgetLinkUsesInternalStaging())
+    if (!stagingActive() && !widgetActionSetUsesInternalStaging())
         return false;
 
     if (widgetLinkUsesInternalStaging())
@@ -4239,7 +4292,7 @@ void MultiButtonWidget::commitEntrySelectPreview()
     const int idx = m_entrySelectPreviewIndex;
     m_entrySelectPreviewIndex = -1;
 
-    if (stagingActive() || widgetLinkUsesInternalStaging())
+    if (stagingActive() || widgetActionSetUsesInternalStaging())
     {
         stageEntry(idx, m_layout == MultiButtonLayout::Single);
         return;
@@ -4261,7 +4314,7 @@ void MultiButtonWidget::destroyEntrySelectOverlay()
 
 void MultiButtonWidget::applyEntryPick(int idx)
 {
-    if (stagingActive() || widgetLinkUsesInternalStaging())
+    if (stagingActive() || widgetActionSetUsesInternalStaging())
     {
         stageEntry(idx, m_layout == MultiButtonLayout::Single);
         return;
@@ -4788,7 +4841,7 @@ void MultiButtonWidget::handleEntrySelectInput(uchar value)
     m_entrySelectDebounceSlot = slot;
     m_entrySelectDebounceTime.restart();
 
-    if (stagingActive() || widgetLinkUsesInternalStaging())
+    if (stagingActive() || widgetActionSetUsesInternalStaging())
     {
         if (value == 0)
             return;
@@ -4911,7 +4964,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             {
                 if (opInput && value > 0)
                 {
-                    if (stagingActive() || widgetLinkUsesInternalStaging())
+                    if (stagingActive() || widgetActionSetUsesInternalStaging())
                         stageEntry(m_spreadPageIndex * spp + slot);
                     else
                         activateFromGlobalSlot(m_spreadPageIndex * spp + slot);
@@ -4959,7 +5012,7 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             }
             else if (opInput && matchedValue && (!exactValue || !wasMatched))
             {
-                if (stagingActive() || widgetLinkUsesInternalStaging())
+                if (stagingActive() || widgetActionSetUsesInternalStaging())
                     stageEntry(i);
                 else
                     activate(i);

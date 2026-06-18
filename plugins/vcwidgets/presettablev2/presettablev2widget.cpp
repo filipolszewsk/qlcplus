@@ -5994,6 +5994,63 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransiti
     return legacy;
 }
 
+static PTTransitionPreset disabledTransitionPreset(const QString& name = QStringLiteral("Off"))
+{
+    PTTransitionPreset preset;
+    preset.name = name;
+    preset.enabled = false;
+    preset.positionMotion = int(PTPositionMotion::Off);
+    return preset;
+}
+
+PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexStrictLocked(
+        PTTransitionMode mode, int presetIndex, int outputIdx, const QLCPoint* point) const
+{
+    if (presetIndex < 0)
+        return disabledTransitionPreset();
+
+    const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
+    if (presetIndex >= bank.size())
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("presettablev2/strict-bank-index/%1/%2/%3/%4")
+                        .arg(id()).arg(outputIdx).arg(int(mode)).arg(presetIndex),
+                1000,
+                QStringLiteral("strict bank index invalid mode=%1 output=%2 index=%3 count=%4")
+                        .arg(int(mode)).arg(outputIdx).arg(presetIndex).arg(bank.size()));
+        return disabledTransitionPreset();
+    }
+
+    PTTransitionPreset preset;
+    if (point != nullptr)
+    {
+        const int selectionIdx = transitionSnapshotSelectionIndexForPointLocked(
+                    mode, presetIndex, outputIdx, *point);
+        if (selectionIdx >= 0)
+        {
+            preset = transitionSnapshotEffectivePresetForSelectionLocked(
+                        mode, presetIndex, outputIdx, selectionIdx, true);
+            if (mode == PTTransitionMode::SweepOnly)
+                preset = PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset);
+            return preset;
+        }
+    }
+
+    preset = transitionSnapshotEffectivePresetForOutputLocked(
+                mode, presetIndex, outputIdx, true);
+    if (mode == PTTransitionMode::SweepOnly)
+        preset = PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset);
+    return preset;
+}
+
+bool PresetTableV2Widget::transitionPresetIndexValidLocked(PTTransitionMode mode,
+                                                           int presetIndex) const
+{
+    const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
+    return presetIndex >= 0 && presetIndex < bank.size();
+}
+
 PTTransitionPreset PresetTableV2Widget::sweepPresetForOutputLocked(int outputIdx) const
 {
     return transitionPresetAtIndexLocked(PTTransitionMode::SweepOnly,
@@ -6002,28 +6059,30 @@ PTTransitionPreset PresetTableV2Widget::sweepPresetForOutputLocked(int outputIdx
 
 PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outputIdx) const
 {
-    return transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
-                                         liveContinuousPresetIndexLocked(outputIdx), outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::Continuous,
+                                               liveContinuousPresetIndexLocked(outputIdx),
+                                               outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::multiFxPresetForOutputLocked(int outputIdx) const
 {
-    return transitionPresetAtIndexLocked(PTTransitionMode::MultiFx,
-                                         liveMultiFxPresetIndexLocked(outputIdx), outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx,
+                                               liveMultiFxPresetIndexLocked(outputIdx),
+                                               outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::positionMotionPresetForOutputLocked(int outputIdx) const
 {
-    return transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
-                                         livePositionMotionPresetIndexLocked(outputIdx),
-                                         outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::PositionMotion,
+                                               livePositionMotionPresetIndexLocked(outputIdx),
+                                               outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::channel1DPresetForOutputLocked(int outputIdx) const
 {
-    return transitionPresetAtIndexLocked(PTTransitionMode::Channel1D,
-                                         liveChannel1DPresetIndexLocked(outputIdx),
-                                         outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D,
+                                               liveChannel1DPresetIndexLocked(outputIdx),
+                                               outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outputIdx,
@@ -6036,7 +6095,7 @@ PTTransitionPreset PresetTableV2Widget::continuousPresetForOutputLocked(int outp
             || !m_stagedContinuousValid[outputIdx])
         return live;
 
-    return transitionPresetAtIndexLocked(
+    return transitionPresetAtIndexStrictLocked(
             PTTransitionMode::Continuous, m_stagedContinuousPreset[outputIdx], outputIdx);
 }
 
@@ -6050,9 +6109,9 @@ PTTransitionPreset PresetTableV2Widget::positionMotionPresetForOutputLocked(
             || !m_stagedPositionMotionValid[outputIdx])
         return live;
 
-    return transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
-                                         m_stagedPositionMotionPreset[outputIdx],
-                                         outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::PositionMotion,
+                                               m_stagedPositionMotionPreset[outputIdx],
+                                               outputIdx);
 }
 
 PTTransitionPreset PresetTableV2Widget::channel1DPresetForOutputLocked(
@@ -6065,9 +6124,9 @@ PTTransitionPreset PresetTableV2Widget::channel1DPresetForOutputLocked(
             || !m_stagedChannel1DValid[outputIdx])
         return live;
 
-    return transitionPresetAtIndexLocked(PTTransitionMode::Channel1D,
-                                         m_stagedChannel1DPreset[outputIdx],
-                                         outputIdx);
+    return transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D,
+                                               m_stagedChannel1DPreset[outputIdx],
+                                               outputIdx);
 }
 
 static QVector<uchar> blendRowValues(const QVector<uchar>& live,
@@ -6157,29 +6216,54 @@ bool PresetTableV2Widget::sweepEfxActiveForOutputLocked(int outputIdx) const
 
 bool PresetTableV2Widget::continuousEfxActiveForOutputLocked(int outputIdx) const
 {
-    if (liveContinuousPresetIndexLocked(outputIdx) >= 0)
+    if (transitionPresetIndexValidLocked(PTTransitionMode::Continuous,
+                                         liveContinuousPresetIndexLocked(outputIdx)))
         return true;
-    return outputIdx >= 0 && outputIdx < m_stagedContinuousValid.size()
-            && m_stagedContinuousValid[outputIdx];
+    return outputIdx >= 0
+            && outputIdx < m_stagedContinuousValid.size()
+            && outputIdx < m_stagedContinuousPreset.size()
+            && m_stagedContinuousValid[outputIdx]
+            && transitionPresetIndexValidLocked(PTTransitionMode::Continuous,
+                                                m_stagedContinuousPreset[outputIdx]);
 }
 
 bool PresetTableV2Widget::multiFxActiveForOutputLocked(int outputIdx) const
 {
-    return liveMultiFxPresetIndexLocked(outputIdx) >= 0
-            || hasStagedMultiFxPresetLocked(outputIdx);
+    if (transitionPresetIndexValidLocked(PTTransitionMode::MultiFx,
+                                         liveMultiFxPresetIndexLocked(outputIdx)))
+        return true;
+    return outputIdx >= 0
+            && outputIdx < m_stagedMultiFxValid.size()
+            && outputIdx < m_stagedMultiFxPreset.size()
+            && m_stagedMultiFxValid[outputIdx]
+            && transitionPresetIndexValidLocked(PTTransitionMode::MultiFx,
+                                                m_stagedMultiFxPreset[outputIdx]);
 }
 
 bool PresetTableV2Widget::positionMotionEfxActiveForOutputLocked(int outputIdx) const
 {
-    return livePositionMotionPresetIndexLocked(outputIdx) >= 0
-            || hasStagedPositionMotionPresetLocked(outputIdx);
+    if (transitionPresetIndexValidLocked(PTTransitionMode::PositionMotion,
+                                         livePositionMotionPresetIndexLocked(outputIdx)))
+        return true;
+    return outputIdx >= 0
+            && outputIdx < m_stagedPositionMotionValid.size()
+            && outputIdx < m_stagedPositionMotionPreset.size()
+            && m_stagedPositionMotionValid[outputIdx]
+            && transitionPresetIndexValidLocked(PTTransitionMode::PositionMotion,
+                                                m_stagedPositionMotionPreset[outputIdx]);
 }
 
 bool PresetTableV2Widget::channel1DEfxActiveForOutputLocked(int outputIdx) const
 {
     return m_mode == PTMode::FixtureGroup
-            && (liveChannel1DPresetIndexLocked(outputIdx) >= 0
-                || hasStagedChannel1DPresetLocked(outputIdx));
+            && (transitionPresetIndexValidLocked(PTTransitionMode::Channel1D,
+                                                 liveChannel1DPresetIndexLocked(outputIdx))
+                || (outputIdx >= 0
+                    && outputIdx < m_stagedChannel1DValid.size()
+                    && outputIdx < m_stagedChannel1DPreset.size()
+                    && m_stagedChannel1DValid[outputIdx]
+                    && transitionPresetIndexValidLocked(PTTransitionMode::Channel1D,
+                                                        m_stagedChannel1DPreset[outputIdx])));
 }
 
 bool PresetTableV2Widget::hasStagedPositionMotionPresetLocked(int outputIdx) const
@@ -8782,14 +8866,15 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
     const int stagedChannel1DIdx = stagedChannel1DPresetIndexLocked(outputIdx);
     const bool hasStagedChannel1D = hasStagedChannel1DPresetLocked(outputIdx);
     const PTTransitionPreset stagedChannel1DPreset = hasStagedChannel1D
-            ? transitionPresetAtIndexLocked(PTTransitionMode::Channel1D, stagedChannel1DIdx,
-                                            outputIdx)
+            ? transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D,
+                                                  stagedChannel1DIdx, outputIdx)
             : channel1DPreset;
     const PTTransitionPreset multiFxPreset = multiFxPresetForOutputLocked(outputIdx);
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
     const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
-            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, outputIdx)
+            ? transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx,
+                                                  stagedMultiFxIdx, outputIdx)
             : multiFxPreset;
     const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
             && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
@@ -9696,20 +9781,14 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
             const int liveInterpolationIdx = liveContinuousPresetIndexLocked(o);
             const int stagedInterpolationIdx = hasStagedInterpolation
                     ? m_stagedContinuousPreset[o] : liveInterpolationIdx;
-            PTTransitionPreset liveInterpolationPreset = transitionPresetAtIndexLocked(
+            PTTransitionPreset liveInterpolationPreset = transitionPresetAtIndexStrictLocked(
                     PTTransitionMode::Continuous, liveInterpolationIdx, o, &sf.point);
-            if (!liveInterpolationPreset.enabled)
-                liveInterpolationPreset = PTTransitionPreset();
             PTTransitionPreset stagedInterpolationPreset = hasStagedInterpolation
-                    ? transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
-                                                    stagedInterpolationIdx, o, &sf.point)
+                    ? transitionPresetAtIndexStrictLocked(PTTransitionMode::Continuous,
+                                                          stagedInterpolationIdx, o, &sf.point)
                     : liveInterpolationPreset;
-            if (!stagedInterpolationPreset.enabled)
-                stagedInterpolationPreset = PTTransitionPreset();
             PTTransitionPreset interpolationPreset = hasStagedInterpolation
                     ? stagedInterpolationPreset : liveInterpolationPreset;
-            if (!interpolationPreset.enabled)
-                interpolationPreset = PTTransitionPreset();
 
             const bool hasStagedMotion = o < m_stagedPositionMotionValid.size()
                     && o < m_stagedPositionMotionPreset.size()
@@ -9717,13 +9796,13 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
             const int liveMotionIdx = livePositionMotionPresetIndexLocked(o);
             const int stagedMotionIdx = hasStagedMotion
                     ? m_stagedPositionMotionPreset[o] : liveMotionIdx;
-            PTTransitionPreset liveMotionPreset = transitionPresetAtIndexLocked(
+            PTTransitionPreset liveMotionPreset = transitionPresetAtIndexStrictLocked(
                     PTTransitionMode::PositionMotion, liveMotionIdx, o, &sf.point);
             if (!liveMotionPreset.enabled)
                 liveMotionPreset = PTTransitionPreset();
             PTTransitionPreset stagedMotionPreset = hasStagedMotion
-                    ? transitionPresetAtIndexLocked(PTTransitionMode::PositionMotion,
-                                                    stagedMotionIdx, o, &sf.point)
+                    ? transitionPresetAtIndexStrictLocked(PTTransitionMode::PositionMotion,
+                                                          stagedMotionIdx, o, &sf.point)
                     : liveMotionPreset;
             if (!stagedMotionPreset.enabled)
                 stagedMotionPreset = PTTransitionPreset();
@@ -9911,7 +9990,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
 
             if (multiFxOn)
             {
-                const PTTransitionPreset mfPreset = transitionPresetAtIndexLocked(
+                const PTTransitionPreset mfPreset = transitionPresetAtIndexStrictLocked(
                         PTTransitionMode::MultiFx, liveMultiFxPresetIndexLocked(o), o, &sf.point);
                 if (mfPreset.enabled
                         && mfPreset.positionMotion != int(PTPositionMotion::Off))
@@ -10137,8 +10216,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const int stagedChannel1DIdx = stagedChannel1DPresetIndexLocked(outputIdx);
     const bool hasStagedChannel1D = hasStagedChannel1DPresetLocked(outputIdx);
     const PTTransitionPreset stagedChannel1DPreset = hasStagedChannel1D
-            ? transitionPresetAtIndexLocked(PTTransitionMode::Channel1D, stagedChannel1DIdx,
-                                            outputIdx)
+            ? transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D,
+                                                  stagedChannel1DIdx, outputIdx)
             : channel1DPreset;
     const bool mixChannel1D = m_mode == PTMode::FixtureGroup
             && (channel1DPreset.enabled || stagedChannel1DPreset.enabled);
@@ -10146,7 +10225,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
     const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(outputIdx);
     const bool hasStagedMultiFx = hasStagedMultiFxPresetLocked(outputIdx);
     const PTTransitionPreset stagedMultiFxPreset = hasStagedMultiFx
-            ? transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, outputIdx)
+            ? transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx,
+                                                  stagedMultiFxIdx, outputIdx)
             : multiFxPreset;
     const bool mixMultiFx = useMultiFx && m_multiFxBlend > 0
             && (multiFxPreset.enabled || stagedMultiFxPreset.enabled);
@@ -10280,28 +10360,28 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 && outputIdx < m_stagedContinuousPreset.size()
                 && m_stagedContinuousValid[outputIdx]
                 && m_stagedContinuousPreset[outputIdx] >= 0)
-            return transitionPresetAtIndexLocked(PTTransitionMode::Continuous,
-                                                m_stagedContinuousPreset[outputIdx],
-                                                outputIdx, &pt);
+            return transitionPresetAtIndexStrictLocked(PTTransitionMode::Continuous,
+                                                       m_stagedContinuousPreset[outputIdx],
+                                                       outputIdx, &pt);
         return stagedPreset;
     };
     auto multiFxPresetForPoint = [&](const QLCPoint& pt, bool staged) -> PTTransitionPreset {
         if (staged && hasStagedMultiFx && stagedMultiFxIdx >= 0)
-            return transitionPresetAtIndexLocked(PTTransitionMode::MultiFx,
-                                                stagedMultiFxIdx, outputIdx, &pt);
+            return transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx,
+                                                       stagedMultiFxIdx, outputIdx, &pt);
         const int idx = liveMultiFxPresetIndexLocked(outputIdx);
         if (idx < 0)
             return multiFxPreset;
-        return transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, idx, outputIdx, &pt);
+        return transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx, idx, outputIdx, &pt);
     };
     auto channel1DPresetForPoint = [&](const QLCPoint& pt, bool staged) -> PTTransitionPreset {
         if (staged && hasStagedChannel1D && stagedChannel1DIdx >= 0)
-            return transitionPresetAtIndexLocked(PTTransitionMode::Channel1D,
-                                                stagedChannel1DIdx, outputIdx, &pt);
+            return transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D,
+                                                       stagedChannel1DIdx, outputIdx, &pt);
         const int idx = liveChannel1DPresetIndexLocked(outputIdx);
         if (idx < 0)
             return channel1DPreset;
-        return transitionPresetAtIndexLocked(PTTransitionMode::Channel1D, idx, outputIdx, &pt);
+        return transitionPresetAtIndexStrictLocked(PTTransitionMode::Channel1D, idx, outputIdx, &pt);
     };
     auto applySweepBlend = [&](const QVector<uchar>& fromRow, const QVector<uchar>& toRow,
                                float blend) -> QVector<uchar> {
@@ -11031,7 +11111,8 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
             if (hasStagedMultiFxPresetLocked(o))
             {
                 const PTTransitionPreset stagedPreset =
-                        transitionPresetAtIndexLocked(PTTransitionMode::MultiFx, stagedMultiFxIdx, o);
+                        transitionPresetAtIndexStrictLocked(PTTransitionMode::MultiFx,
+                                                            stagedMultiFxIdx, o);
                 const quint32 stagedCycleMs = qMax(quint32(1),
                         cycleDurationMsLocked(global, stagedPreset));
                 ensurePhaseStableCycleLocked(m_multiFxStagedElapsedMs, m_multiFxStagedLastCycleMs,

@@ -476,9 +476,12 @@ private:
     bool widgetActionUsesAllOutputs(const MultiButtonWidgetActionTarget& action) const;
     int  widgetActionReadOutputIndex(const MultiButtonWidgetActionTarget& action) const;
     bool widgetActionUsesInternalStaging(const MultiButtonWidgetActionTarget& action) const;
+    bool widgetActionSetUsesInternalStaging() const;
     bool activateWidgetAction(const MultiButtonWidgetActionTarget& action, int idx,
                               bool staged) const;
-    bool activateWidgetActions(int idx, bool staged, bool forceSingleLeader = false) const;
+    bool activateWidgetActions(int idx, bool staged, bool forceSingleLeader = false,
+                               bool* anyStagedAction = nullptr,
+                               const QString& source = QString()) const;
     int  widgetEntryCountForAction(const MultiButtonWidgetActionTarget& action) const;
     QString widgetEntryNameForAction(const MultiButtonWidgetActionTarget& action,
                                      int idx) const;

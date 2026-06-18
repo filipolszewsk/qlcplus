@@ -601,6 +601,11 @@ private:
     PTTransitionPreset transitionPresetAtIndexLocked(PTTransitionMode mode, int presetIndex,
                                                      int outputIdx = -1,
                                                      const QLCPoint* point = nullptr) const;
+    PTTransitionPreset transitionPresetAtIndexStrictLocked(PTTransitionMode mode,
+                                                           int presetIndex,
+                                                           int outputIdx = -1,
+                                                           const QLCPoint* point = nullptr) const;
+    bool transitionPresetIndexValidLocked(PTTransitionMode mode, int presetIndex) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx, uchar xfEffective) const;

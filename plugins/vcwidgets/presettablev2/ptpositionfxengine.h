@@ -15,6 +15,7 @@ class PTPositionFxEngine
 public:
     enum class Shape
     {
+        None = -1,
         Circle = 0,
         Line,
         PanOnly,

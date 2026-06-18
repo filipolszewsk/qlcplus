@@ -23,7 +23,8 @@ bool shapeUsesTilt(PTPositionFxEngine::Shape shape)
 
 bool shapeUsesPan(PTPositionFxEngine::Shape shape)
 {
-    return shape != PTPositionFxEngine::Shape::TiltOnly
+    return shape != PTPositionFxEngine::Shape::None
+            && shape != PTPositionFxEngine::Shape::TiltOnly
             && shape != PTPositionFxEngine::Shape::CustomTilt1D;
 }
 
@@ -98,7 +99,7 @@ PTPositionFxEngine::Shape PTPositionFxEngine::shapeFromPositionMotion(PTPosition
         case PTPositionMotion::CustomPan1D: return Shape::CustomPan1D;
         case PTPositionMotion::CustomTilt1D: return Shape::CustomTilt1D;
         case PTPositionMotion::Custom2D:  return Shape::Custom2D;
-        default:                          return Shape::Circle;
+        default:                          return Shape::None;
     }
 }
 
@@ -348,6 +349,8 @@ void PTPositionFxEngine::relativeOffset(Shape shape, double phaseRadians,
 
     switch (shape)
     {
+        case Shape::None:
+            break;
         case Shape::Circle:
             panOffDeg = qreal(s) * panSizeDeg;
             tiltOffDeg = qreal(c) * tiltSizeDeg;
@@ -395,11 +398,7 @@ void PTPositionFxEngine::relativeOffsetForPreset(const PTTransitionPreset& prese
             const QVector<PTPositionPath2DPoint>& path = preset.positionPath2D.size() >= 2
                     ? preset.positionPath2D : QVector<PTPositionPath2DPoint>();
             if (path.size() < 2)
-            {
-                relativeOffset(Shape::Circle, phaseRadians, panSizeDeg, tiltSizeDeg,
-                               panOffDeg, tiltOffDeg);
                 return;
-            }
             const QPointF unit = samplePath2D01(phase01, path, preset.positionPath2DClosed);
             panOffDeg = unit.x() * panSizeDeg;
             tiltOffDeg = unit.y() * tiltSizeDeg;
@@ -452,6 +451,8 @@ PTPositionValue PTPositionFxEngine::applySmartMotion(const PTPositionValue& base
     size01 = qBound(0.0, size01, 1.0);
     if (size01 <= 0)
         return PTPositionConverter::clampPosition(fxi, head, base);
+    if (shape == Shape::None)
+        return PTPositionConverter::clampPosition(fxi, head, base);
 
     const PTPositionValue clampedBase = PTPositionConverter::clampPosition(fxi, head, base);
     const QRectF range = PTPositionConverter::degreesRange(fxi, head);
@@ -501,6 +502,8 @@ PTPositionValue PTPositionFxEngine::applySmartMotionFromPreset(const PTPositionV
 
     const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
     const PTPositionValue clampedBase = PTPositionConverter::clampPosition(fxi, head, base);
+    if (motion == PTPositionMotion::Off)
+        return clampedBase;
     const QRectF range = PTPositionConverter::degreesRange(fxi, head);
     const qreal panMin = range.left();
     const qreal panMax = range.left() + range.width();

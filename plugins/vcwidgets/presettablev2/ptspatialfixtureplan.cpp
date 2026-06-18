@@ -64,20 +64,15 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
         PTSpatialFixtureEntry e;
         e.pt = pt;
         e.serialIndex = i;
-        const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
-                pt.x(), pt.y(), gridWidth, gridHeight, waveParams, offsetPolicy);
         if (sweepMode)
         {
-            const bool pairedSweep = effectivePreset.offsetDirection == PTOffsetDirection::CenterToSides
-                    || effectivePreset.offsetDirection == PTOffsetDirection::SidesToCenter
-                    || effectivePreset.offsetDirection == PTOffsetDirection::Symmetric;
-            e.phaseStart01 = pairedSweep
-                    ? qBound(0.0, info.phaseStart01, 1.0)
-                    : (count <= 1 ? 0.0 : double(i) / double(count - 1));
+            e.phaseStart01 = count <= 1 ? 0.0 : double(i) / double(count);
             e.headOffsetDeg = int(std::round(e.phaseStart01 * 360.0));
         }
         else
         {
+            const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
+                    pt.x(), pt.y(), gridWidth, gridHeight, waveParams, offsetPolicy);
             e.headOffsetDeg = info.headOffsetDeg;
             e.phaseStart01 = qBound(0.0, info.phaseStart01, 1.0);
         }
@@ -178,6 +173,13 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
             || effectivePreset.offsetStep <= preview.maxOffsetStep;
 
     const PTSpatialFixturePlan plan = build(scopePoints, effectivePreset, global, gridWidth, gridHeight);
+    if (sweepMode)
+    {
+        const int count = plan.count();
+        preview.maxOffsetStep = count <= 1 ? 0 : qMax(1, 360 / count);
+        preview.effectiveOffsetStep = preview.maxOffsetStep;
+        preview.offsetStepOk = true;
+    }
     const quint32 cycleMs = qMax(quint32(1),
                                  PTParamMatrixEngine::effectiveDurationMs(global, effectivePreset));
 
@@ -212,7 +214,7 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
                 cell.wingIndex = info.wingIndex;
                 cell.localIndex = info.localIndex;
                 cell.blockIndex = info.blockIndex;
-                cell.localOrder = info.localOrder;
+                cell.localOrder = sweepMode ? e->serialIndex + 1 : info.localOrder;
                 cell.offsetSlot = info.offsetSlot;
                 cell.headOffsetDeg = sweepMode
                         ? qBound(0, int(std::round(e->phaseStart01 * 360.0)), 360)
