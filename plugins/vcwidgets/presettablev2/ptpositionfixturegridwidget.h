@@ -30,6 +30,8 @@ struct PTPositionGridCell
     QLCPoint        point;
     QString         label;
     PTPositionValue position;
+    QString         valueText;
+    bool            valueValid = false;
     bool            inherited = false;
 };
 

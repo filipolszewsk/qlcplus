@@ -58,6 +58,20 @@ enum class MultiButtonWidgetBusPolicy
     HoldOverride
 };
 
+enum class MultiButtonWidgetActionMode
+{
+    SingleTarget = 0,
+    MultiTarget
+};
+
+struct MultiButtonWidgetActionTarget
+{
+    bool    enabled = true;
+    quint32 widgetId = VCWidget::invalidId();
+    int     outputIndex = 0;
+    int     parameter = 0;
+};
+
 struct SpreadTileInfo
 {
     int   index = -1;   // entry index, or -1 for OFF tile
@@ -183,6 +197,11 @@ public:
 
     bool stageBeforeCommit() const { return m_stageBeforeCommit; }
     void setStageBeforeCommit(bool enable);
+
+    MultiButtonWidgetActionMode widgetActionMode() const { return m_widgetActionMode; }
+    void setWidgetActionMode(MultiButtonWidgetActionMode mode);
+    QList<MultiButtonWidgetActionTarget> widgetActionTargets() const { return m_widgetActionTargets; }
+    void setWidgetActionTargets(const QList<MultiButtonWidgetActionTarget>& targets);
 
     static void alignLevelPresetArrays(LevelPreset& preset, int bindingCount);
 
@@ -447,6 +466,23 @@ private:
     class PresetTableV2MultiButtonTargetExtrasIface* widgetLinkTargetExtras() const;
     class PresetTableV2MultiButtonFlashIface* widgetLinkFlashTarget() const;
     QString generatedWidgetLinkDisplayName() const;
+    bool widgetMultiTargetActive() const;
+    QList<MultiButtonWidgetActionTarget> effectiveWidgetActions() const;
+    MultiButtonWidgetActionTarget leaderWidgetAction() const;
+    bool widgetActionLooksValid(const MultiButtonWidgetActionTarget& action) const;
+    VCWidget* widgetActionTargetObject(const MultiButtonWidgetActionTarget& action) const;
+    class PresetTableV2MultiButtonTargetIface* widgetActionTarget(
+            const MultiButtonWidgetActionTarget& action) const;
+    bool widgetActionUsesAllOutputs(const MultiButtonWidgetActionTarget& action) const;
+    int  widgetActionReadOutputIndex(const MultiButtonWidgetActionTarget& action) const;
+    bool widgetActionUsesInternalStaging(const MultiButtonWidgetActionTarget& action) const;
+    bool activateWidgetAction(const MultiButtonWidgetActionTarget& action, int idx,
+                              bool staged) const;
+    bool activateWidgetActions(int idx, bool staged, bool forceSingleLeader = false) const;
+    int  widgetEntryCountForAction(const MultiButtonWidgetActionTarget& action) const;
+    QString widgetEntryNameForAction(const MultiButtonWidgetActionTarget& action,
+                                     int idx) const;
+    void clearWidgetActionTargetCache() const;
     bool isAllOutputsMode() const;
     int  leaderOutputIndex() const;
     int  widgetLinkReadOutputIndex() const;
@@ -495,6 +531,10 @@ private:
     quint32                    m_widgetTargetId = VCWidget::invalidId();
     mutable QPointer<VCWidget> m_widgetTargetObject;
     mutable quint32            m_widgetTargetObjectId = VCWidget::invalidId();
+    MultiButtonWidgetActionMode m_widgetActionMode = MultiButtonWidgetActionMode::SingleTarget;
+    QList<MultiButtonWidgetActionTarget> m_widgetActionTargets;
+    mutable QHash<quint32, QPointer<VCWidget>> m_widgetActionTargetCache;
+    mutable bool m_widgetActionActivationGuard = false;
     int                        m_widgetOutputIndex = 0;
     int                        m_widgetParameter = 0;
     int                        m_lastResolvedEntryCount = -1;

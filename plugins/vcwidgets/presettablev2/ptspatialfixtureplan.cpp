@@ -9,6 +9,7 @@
 
 #include <QtMath>
 #include <QSet>
+#include <cmath>
 
 const PTSpatialFixtureEntry* PTSpatialFixturePlan::entryFor(const QLCPoint& pt) const
 {
@@ -41,12 +42,18 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
     if (scopePoints.isEmpty())
         return plan;
 
+    const bool sweepMode = preset.playbackMode == PTTransitionMode::SweepOnly;
+    const PTTransitionPreset effectivePreset = sweepMode
+            ? PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset) : preset;
+    const PTDimmerWaveEngine::OffsetDistributionPolicy offsetPolicy = sweepMode
+            ? PTDimmerWaveEngine::OffsetDistributionPolicy::NonWrappingSweep
+            : PTDimmerWaveEngine::OffsetDistributionPolicy::CyclicNoDuplicate;
     const QList<QLCPoint> chaseOrder = PresetTableV2SpatialEngine::buildChaseOrder(
-            scopePoints, preset, gridWidth, gridHeight, &global);
+            scopePoints, effectivePreset, gridWidth, gridHeight, &global);
     const int count = qMax(1, chaseOrder.size());
-    const double width01 = windowWidth01(preset);
+    const double width01 = windowWidth01(effectivePreset);
 
-    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, &global);
+    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(effectivePreset, &global);
     if (global.fxOrientation == 1)
         waveParams.axis = PTTransitionAxis::Y;
 
@@ -57,11 +64,25 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
         PTSpatialFixtureEntry e;
         e.pt = pt;
         e.serialIndex = i;
-        e.headOffsetDeg = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
-                pt.x(), pt.y(), gridWidth, gridHeight, waveParams);
-        e.phaseStart01 = qBound(0.0, double(e.headOffsetDeg) / 360.0, 1.0);
+        const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
+                pt.x(), pt.y(), gridWidth, gridHeight, waveParams, offsetPolicy);
+        if (sweepMode)
+        {
+            const bool pairedSweep = effectivePreset.offsetDirection == PTOffsetDirection::CenterToSides
+                    || effectivePreset.offsetDirection == PTOffsetDirection::SidesToCenter
+                    || effectivePreset.offsetDirection == PTOffsetDirection::Symmetric;
+            e.phaseStart01 = pairedSweep
+                    ? qBound(0.0, info.phaseStart01, 1.0)
+                    : (count <= 1 ? 0.0 : double(i) / double(count - 1));
+            e.headOffsetDeg = int(std::round(e.phaseStart01 * 360.0));
+        }
+        else
+        {
+            e.headOffsetDeg = info.headOffsetDeg;
+            e.phaseStart01 = qBound(0.0, info.phaseStart01, 1.0);
+        }
 
-        if (preset.propagation == PTPropagationMode::Serial && count > 1)
+        if (!sweepMode && effectivePreset.propagation == PTPropagationMode::Serial && count > 1)
         {
             const double serialSpread = double(i) / double(count - 1) * qMax(0.0, 1.0 - width01);
             e.phaseStart01 = qMin(1.0, e.phaseStart01 + serialSpread);
@@ -94,11 +115,14 @@ float PTSpatialFixturePlan::sweepBlend01(double globalProgress,
     if (globalProgress >= 1.0)
         return 1.0f;
 
-    if (PTParamMatrixEngine::sweepInstantForOffset(preset.offsetDirection))
+    const PTTransitionPreset effectivePreset = preset.playbackMode == PTTransitionMode::SweepOnly
+            ? PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset) : preset;
+
+    if (PTParamMatrixEngine::sweepInstantForOffset(effectivePreset.offsetDirection))
         return float(globalProgress);
 
     const double start01 = entry.phaseStart01;
-    const double width01 = windowWidth01(preset);
+    const double width01 = windowWidth01(effectivePreset);
     const double end01 = qMin(1.0, start01 + width01);
 
     if (globalProgress <= start01)
@@ -107,7 +131,7 @@ float PTSpatialFixturePlan::sweepBlend01(double globalProgress,
         return 1.0f;
 
     const double localPhase = (globalProgress - start01) / qMax(0.001, end01 - start01);
-    const PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, &global);
+    const PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(effectivePreset, &global);
     return PTDimmerWaveEngine::dimmerSweepAttack01(float(localPhase), waveParams);
 }
 
@@ -131,33 +155,44 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
     if (scopePoints.isEmpty() || gridWidth <= 0 || gridHeight <= 0)
         return preview;
 
+    const bool sweepMode = preset.playbackMode == PTTransitionMode::SweepOnly;
+    const PTTransitionPreset effectivePreset = sweepMode
+            ? PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset) : preset;
+    const PTDimmerWaveEngine::OffsetDistributionPolicy offsetPolicy = sweepMode
+            ? PTDimmerWaveEngine::OffsetDistributionPolicy::NonWrappingSweep
+            : PTDimmerWaveEngine::OffsetDistributionPolicy::CyclicNoDuplicate;
     const int span = PTDimmerWaveEngine::gridSpanAlongAxis(
-            gridWidth, gridHeight, preset.axis, global.fxOrientation);
-    preview.effectiveOffsetSlots = PTDimmerWaveEngine::effectiveOffsetSlotCount(span, preset);
-    preview.wings = qBound(1, preset.wings, qMax(1, span));
-    preview.blocks = qMax(1, preset.blocks);
-    preview.slotsPerWing = PTDimmerWaveEngine::offsetSlotCountForWing(span, preset);
-    preview.maxOffsetStep = PTDimmerWaveEngine::maxOffsetStepForGrid(span, preset);
-    preview.effectiveOffsetStep = PTDimmerWaveEngine::effectiveOffsetStepForSpan(span, preset);
-    preview.offsetStepMode = preset.offsetStepMode;
-    preview.offsetCoverage = qBound(0, preset.offsetCoverage, 100);
-    preview.offsetStepOk = preset.offsetStepMode != PTOffsetStepMode::FixedDegrees
-            || preset.offsetStep == 0
-            || preset.offsetStep <= preview.maxOffsetStep;
+            gridWidth, gridHeight, effectivePreset.axis, global.fxOrientation);
+    preview.effectiveOffsetSlots = PTDimmerWaveEngine::effectiveOffsetSlotCount(span, effectivePreset);
+    preview.wings = qBound(1, effectivePreset.wings, qMax(1, span));
+    preview.blocks = qMax(1, effectivePreset.blocks);
+    preview.slotsPerWing = PTDimmerWaveEngine::offsetSlotCountForWing(span, effectivePreset);
+    preview.maxOffsetStep = PTDimmerWaveEngine::maxOffsetStepForGrid(
+            span, effectivePreset, offsetPolicy);
+    preview.effectiveOffsetStep = PTDimmerWaveEngine::effectiveOffsetStepForSpan(
+            span, effectivePreset, offsetPolicy);
+    preview.offsetStepMode = effectivePreset.offsetStepMode;
+    preview.offsetCoverage = qBound(0, effectivePreset.offsetCoverage, 100);
+    preview.offsetStepOk = effectivePreset.offsetStepMode != PTOffsetStepMode::FixedDegrees
+            || effectivePreset.offsetStep == 0
+            || effectivePreset.offsetStep <= preview.maxOffsetStep;
 
-    const PTSpatialFixturePlan plan = build(scopePoints, preset, global, gridWidth, gridHeight);
-    const quint32 cycleMs = qMax(quint32(1), PTParamMatrixEngine::effectiveDurationMs(global, preset));
+    const PTSpatialFixturePlan plan = build(scopePoints, effectivePreset, global, gridWidth, gridHeight);
+    const quint32 cycleMs = qMax(quint32(1),
+                                 PTParamMatrixEngine::effectiveDurationMs(global, effectivePreset));
 
     QHash<int, QSet<int>> offsetSlotsByDegree;
-    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(preset, &global);
+    PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(effectivePreset, &global);
     if (global.fxOrientation == 1)
         waveParams.axis = PTTransitionAxis::Y;
 
     for (const PTSpatialFixtureEntry& e : plan.entries)
     {
         const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
-                e.pt.x(), e.pt.y(), gridWidth, gridHeight, waveParams);
-        const int finalOffset = ((info.headOffsetDeg + preset.startOffset) % 360 + 360) % 360;
+                e.pt.x(), e.pt.y(), gridWidth, gridHeight, waveParams, offsetPolicy);
+        const int finalOffset = sweepMode
+                ? qBound(0, int(std::round(e.phaseStart01 * 360.0)), 360)
+                : ((info.headOffsetDeg + effectivePreset.startOffset) % 360 + 360) % 360;
         offsetSlotsByDegree[info.wingIndex * 10000 + finalOffset].insert(info.offsetSlot);
     }
 
@@ -173,19 +208,24 @@ PTSpatialGridPreview PTSpatialFixturePlan::buildGridPreview(const QList<QLCPoint
                 cell.occupied = true;
                 cell.chaseOrder = e->serialIndex + 1;
                 const PTDimmerWaveOffsetInfo info = PTDimmerWaveEngine::offsetInfoForPoint(
-                        x, y, gridWidth, gridHeight, waveParams);
+                        x, y, gridWidth, gridHeight, waveParams, offsetPolicy);
                 cell.wingIndex = info.wingIndex;
                 cell.localIndex = info.localIndex;
                 cell.blockIndex = info.blockIndex;
                 cell.localOrder = info.localOrder;
                 cell.offsetSlot = info.offsetSlot;
-                cell.headOffsetDeg = ((e->headOffsetDeg + preset.startOffset) % 360 + 360) % 360;
+                cell.headOffsetDeg = sweepMode
+                        ? qBound(0, int(std::round(e->phaseStart01 * 360.0)), 360)
+                        : ((e->headOffsetDeg + effectivePreset.startOffset) % 360 + 360) % 360;
                 cell.phaseStart01 = qBound(0.0,
-                        PTDimmerWaveEngine::phase01AtCycleStart(cycleMs, waveParams,
-                                                                e->headOffsetDeg, e->serialIndex,
-                                                                plan.count()),
+                        sweepMode ? e->phaseStart01
+                                  : PTDimmerWaveEngine::phase01AtCycleStart(cycleMs, waveParams,
+                                                                            e->headOffsetDeg,
+                                                                            e->serialIndex,
+                                                                            plan.count()),
                         1.0);
-                if (offsetSlotsByDegree.value(info.wingIndex * 10000 + cell.headOffsetDeg).size() > 1)
+                if (!sweepMode
+                        && offsetSlotsByDegree.value(info.wingIndex * 10000 + cell.headOffsetDeg).size() > 1)
                 {
                     cell.offsetCollision = true;
                     preview.hasOffsetCollisions = true;

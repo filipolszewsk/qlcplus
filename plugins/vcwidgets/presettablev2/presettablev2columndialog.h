@@ -23,6 +23,7 @@
 class Doc;
 class FixtureGroup;
 class QLCFixtureMode;
+class InputSelectionWidget;
 
 class PresetTableV2ColumnDialog : public QDialog
 {
@@ -35,6 +36,8 @@ public:
                                      const PTColumn& column,
                                      PTMode mode,
                                      FixtureGroup* group,
+                                     const QVector<PTOutput>& outputs = QVector<PTOutput>(),
+                                     int widgetPage = 0,
                                      QWidget* parent = nullptr);
 
     PTColumn column() const;
@@ -63,6 +66,8 @@ private:
     Doc*          m_doc   = nullptr;
     PTMode        m_mode;
     FixtureGroup* m_group = nullptr;
+    QVector<PTOutput> m_outputs;
+    int           m_widgetPage = 0;
 
     // Binding section (FG mode only)
     QGroupBox*    m_bindGrp     = nullptr;
@@ -81,6 +86,8 @@ private:
 
     QLineEdit*        m_nameEdit      = nullptr;
     QCheckBox*        m_useFor1DFxChk = nullptr;
+    QGroupBox*        m_intensityGrp  = nullptr;
+    QVector<InputSelectionWidget*> m_intensityInputSels;
     QRadioButton*     m_rbNumeric     = nullptr;
     QRadioButton*     m_rbDropdown    = nullptr;
     QRadioButton*     m_rbScaler      = nullptr;

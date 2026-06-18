@@ -28,6 +28,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QTreeWidget>
+#include <QTabWidget>
 #include <QSet>
 
 #include <QJsonObject>
@@ -58,6 +59,7 @@ class QComboBox;
 class QPushButton;
 class QCheckBox;
 class QSlider;
+class QSpinBox;
 class QDoubleSpinBox;
 
 // ---------------------------------------------------------------------------
@@ -117,6 +119,7 @@ struct PTColumn {
     Type              type         = Numeric;
     bool              fade         = true;    // true=interpolate, false=snap at 127
     bool              useFor1DFx   = false;   // FixtureGroup: explicit 1D Channel FX target
+    QVector<QSharedPointer<QLCInputSource>> intensityInputSources; // FixtureGroup: per-output multiplier input
     QVector<PTOption> options;                // used when type == Dropdown
     int               width        = -1;      // persisted pixel width; -1 = Qt default
     QVector<PTColumnTypeBinding> bindings;    // used only in PTMode::FixtureGroup
@@ -147,6 +150,22 @@ struct PTPositionOutputLayer {
     QVector<PTPositionSelectionLayer> selections;
 };
 
+struct PTCellValueOverrides {
+    QMap<int, uchar> values;
+    bool isEmpty() const { return values.isEmpty(); }
+};
+
+struct PTValueSelectionLayer {
+    QString name;
+    QSet<QLCPoint> cells;
+    QMap<QLCPoint, PTCellValueOverrides> overrides;
+};
+
+struct PTValueOutputLayer {
+    QMap<QLCPoint, PTCellValueOverrides> allOverrides;
+    QVector<PTValueSelectionLayer> selections;
+};
+
 struct PTPositionDraftContext {
     int row = -1;
     int output = -1;
@@ -162,10 +181,19 @@ struct PTPositionTreeRef {
 };
 Q_DECLARE_METATYPE(PTPositionTreeRef)
 
+struct PTValueTreeRef {
+    int row = -1;
+    int output = -1;
+    int selection = -1;
+    bool isLayerLeaf = false;
+};
+Q_DECLARE_METATYPE(PTValueTreeRef)
+
 struct PTRow {
     QString        name;
     QVector<uchar> values;  // size == number of value columns
     QMap<QLCPoint, PTPositionValue> positions; // Position mode: per fixture-group cell
+    QMap<QLCPoint, PTCellValueOverrides> cellValues; // FixtureGroup: sparse per-cell values
 };
 
 struct PTOutput {
@@ -175,16 +203,18 @@ struct PTOutput {
     PTOutputScope scope = PTOutputScope::RowsAndMask;
     /** Default Transition preset when no DMX; -1 = instant (legacy selector_sweep 0). */
     int        sweepPresetIndex = -1;
-    /** Default Continuous FX preset; -1 = off (legacy selector_continuous 0). */
+    /** Default Interpolation preset; -1 = off (legacy selector_continuous 0). */
     int        continuousPresetIndex = -1;
     /** Default MultiFX background preset; -1 = off. */
     int        multiFxPresetIndex = -1;
-    /** Default Position Continuous Motion preset; -1 = off. Position mode only. */
+    /** Default Position 2D FX preset; -1 = off. Position mode only. */
     int        positionMotionPresetIndex = -1;
-    /** Default Fixture Group 1D Channel FX preset; -1 = off. Fixture Group only. */
+    /** Default Fixture Group 1D FX preset; -1 = off. Fixture Group only. */
     int        channel1DPresetIndex = -1;
-    /** Secondary table row for continuous FX (-1 = off). Overridden by external input when mapped. */
+    /** Secondary table row for Interpolation (-1 = off). Overridden by external input when mapped. */
     int        secondaryRowIndex = -1;
+    /** FixtureGroup: column multiplied by per-output Intensity input; -1 = disabled. */
+    int        intensityColumnIndex = -1;
 };
 
 // ---------------------------------------------------------------------------
@@ -226,12 +256,14 @@ private:
 // ---------------------------------------------------------------------------
 
 class PresetTableV2Widget : public VCWidget, public DMXSource, public PresetTableV2ControlIface,
+                            public PresetTableV2PreviewStateIface,
                             public PresetTableV2MultiButtonTargetIface,
                             public PresetTableV2MultiButtonTargetExtrasIface,
                             public PresetTableV2MultiButtonFlashIface
 {
     Q_OBJECT
     Q_INTERFACES(PresetTableV2ControlIface)
+    Q_INTERFACES(PresetTableV2PreviewStateIface)
     Q_INTERFACES(PresetTableV2MultiButtonTargetIface)
     Q_INTERFACES(PresetTableV2MultiButtonTargetExtrasIface)
     Q_INTERFACES(PresetTableV2MultiButtonFlashIface)
@@ -278,6 +310,7 @@ public:
                                      const PTTransitionPreset& preset,
                                      const PTGlobalEffectSettings& global,
                                      PTSpatialGridPreview& out) const override;
+    double crossfadePreviewProgress01(bool* active) const override;
     bool tableUsesPositionMode() const override;
     QList<QLCPoint> fixtureGroupPoints() const override;
     PTPositionValue positionForPreview(int tableRow, int outputIdx, int selectionIdx,
@@ -295,6 +328,8 @@ public:
     bool multiButtonStagingAvailable(int outputIdx, int parameter) const override;
     quint64 multiButtonStateRevision(int outputIdx, int parameter) const override;
     bool multiButtonOutputControlsParameter(int outputIdx, int parameter) const override;
+    QList<PresetTableV2MultiButtonLinkedAction> multiButtonLinkedSlaveActions(
+            int outputIdx, int parameter) const override;
     bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
     int multiButtonStagedIndex(int outputIdx, int parameter) const override;
     bool multiButtonActivate(int outputIdx, int parameter, int index) override;
@@ -371,6 +406,17 @@ private slots:
     void slotPositionSpreadPanChanged(int value);
     void slotPositionSpreadTiltChanged(int value);
     void slotTableCurrentCellChanged(int row, int col);
+    void slotValueGridTreeChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
+    void slotValueGridSelectionChanged(const QSet<QLCPoint>& cells,
+                                       const QList<QLCPoint>& order);
+    void slotValueGridCellEditRequested(const QLCPoint& point);
+    void slotValueGridColumnChanged(int index);
+    void slotValueGridValueChanged(int value);
+    void slotValueGridSpreadChanged(int value);
+    void slotValueGridClear();
+    void slotValueGridAddSelection();
+    void slotValueGridCopySelection();
+    void slotValueGridPasteSelection();
 
 private:
     struct PTPositionEditSnapshot
@@ -452,6 +498,32 @@ private:
     bool positionDraftAppliesToDmx(int outputIdx, int activeRow) const;
     void applyDraftToRowData(int targetRow, const PTPositionDraftContext& ctx,
                              const QMap<QLCPoint, PTPositionValue>& cells);
+    void rebuildValueGridEditor();
+    void rebuildValueGridTree();
+    bool selectValueGridLayer(int row, int output, int selection);
+    bool valueLayerHasOverrides(int row, int output, int selection) const;
+    QSet<QLCPoint> valueEditableCellsForLayer(int row, int output, int selection) const;
+    QSet<QLCPoint> valueEditableCells() const;
+    void pruneValueGridSelection();
+    QList<QLCPoint> valueTargetCellOrder() const;
+    QList<QLCPoint> valueTargetCellOrderForSpread(int spread) const;
+    QSet<QLCPoint> valueTargetCells() const;
+    void refreshValueGridCells();
+    void updateValueGridControls();
+    void updateValueGridSelectionLabel();
+    int valueGridColumn() const;
+    void commitValueGridLiveEdit();
+    uchar effectiveCellValue(int rowIdx, int outputIdx, const QLCPoint& point,
+                             int colIdx) const;
+    QVector<uchar> effectiveValuesForPoint(int rowIdx, int outputIdx,
+                                           const QLCPoint& point) const;
+    void writeCellValueOverrides(int row, int output, int selection, int col,
+                                 const QMap<QLCPoint, uchar>& values);
+    void clearCellValueOverrides(int row, int output, int selection, int col,
+                                 const QSet<QLCPoint>& cells);
+    bool rowHasGridOverridesForColumnLocked(int row, int col) const;
+    void clearGridOverridesForColumnLocked(int row, int col);
+    void ensureColumnIntensitySizeLocked();
     QString positionColumnHeader(const QLCPoint& pt) const;
     QString positionCellTooltip(const QLCPoint& pt) const;
     GroupHead groupHeadAtPoint(const QLCPoint& pt) const;
@@ -541,6 +613,8 @@ private:
     {
         bool active = false;
         int primaryRow = -1;
+        int stagedPrimaryRow = -1;
+        int liveSecondaryRow = -1;
         int secondaryRow = -1;
         QVector<uchar> livePrimaryValues;
         QVector<uchar> liveSecondaryValues;
@@ -615,10 +689,13 @@ private:
     void syncLiveTransitionFromOutputs();
     void writeContinuousSpatial(int outputIdx, MasterTimer* timer,
                                 QList<Universe*>& universes, const PTOutput& out,
+                                int primaryRow, int secondaryRow,
                                 const QVector<uchar>& priVals, const QVector<uchar>& secVals,
                                 const QSize& gridSize,
                                 const QMap<QLCPoint, GroupHead>& headsMap,
                                 const PTTransitionPreset* presetOverride = nullptr,
+                                int stagedPrimaryRow = -1,
+                                int stagedSecondaryRow = -1,
                                 const QVector<uchar>* stagedPriVals = nullptr,
                                 const QVector<uchar>* stagedSecVals = nullptr,
                                 const PTTransitionPreset* stagedPresetOverride = nullptr,
@@ -628,8 +705,7 @@ private:
     void startSpatialChase(int outputIdx, int rowIdx, const QList<QLCPoint>& points,
                           const PTTransitionPreset& preset, int gridWidth, int gridHeight);
     void tickSpatialChase(int outputIdx, MasterTimer* timer,
-                          QList<Universe*>& universes, const PTOutput& out,
-                          const QVector<uchar>& aVals);
+                          QList<Universe*>& universes, const PTOutput& out);
 
     bool useMatrixEngineLocked() const;
     /** Linked EFX Engine with at least one sweep preset (ignores spatial checkbox). */
@@ -687,6 +763,8 @@ private:
             const PTTransitionPreset& preset, const PTGlobalEffectSettings& global,
             const QSize& gridSize, const PTSpatialFixturePlan& plan, int serialCount,
             quint32 elapsedMs, Fixture* fxi) const;
+    QVector<uchar> applyOutputIntensityLocked(int outputIdx,
+                                              const QVector<uchar>& values) const;
 
 public:
     // Resolve the QLCChannel* bound to a column (FixtureGroup mode only); nullptr otherwise.
@@ -699,6 +777,8 @@ public:
     QVector<PTRow>    m_rows;
     /** Position mode: per-row per-output override layers (inherit + override). */
     QVector<QHash<int, PTPositionOutputLayer>> m_positionOverrides;
+    /** FixtureGroup mode: per-row per-output sparse value override layers. */
+    QVector<QHash<int, PTValueOutputLayer>> m_valueOverrides;
     QVector<PTOutput> m_outputs;
     QVector<int>      m_activeRow;           // per output, -1 = off
     QVector<int>      m_stagedRow;           // per output, -1 = off/no row; m_stagedRowValid disambiguates
@@ -760,6 +840,7 @@ public:
     QVector<quint32>            m_positionMotionElapsedMs;
     QVector<quint32>            m_channel1DElapsedMs;
     QVector<quint32>            m_multiFxStagedElapsedMs;
+    QVector<uchar>              m_outputIntensity;
     QVector<quint32>            m_continuousLastCycleMs;
     QVector<quint32>            m_positionMotionLastCycleMs;
     QVector<quint32>            m_channel1DLastCycleMs;
@@ -789,6 +870,9 @@ public:
     QToolBar*             m_toolbar    = nullptr;
     QTableWidget*         m_table      = nullptr;
     QTableView*           m_nameFrozenTable = nullptr;
+    QTabWidget*           m_tableGridTabs = nullptr;
+    int                   m_tableTabIndex = -1;
+    int                   m_gridTabIndex = -1;
     QLabel*               m_statusBar  = nullptr;
     PresetTableV2Delegate*  m_delegate   = nullptr;
 
@@ -844,6 +928,32 @@ public:
     bool                        m_positionSpreadTiltInputWaitingForCenter = true;
     PTPositionDraftContext      m_positionDraftCtx;
     QMap<QLCPoint, PTPositionValue> m_positionDraftCells;
+
+    // Fixture Group value grid editor
+    QWidget*                      m_valueGridPanel = nullptr;
+    QTreeWidget*                  m_valueGridTree = nullptr;
+    PTPositionFixtureGridWidget*  m_valueGrid = nullptr;
+    QComboBox*                    m_valueGridColumnCombo = nullptr;
+    QSlider*                      m_valueGridValueSlider = nullptr;
+    QSpinBox*                     m_valueGridValueSpin = nullptr;
+    QSlider*                      m_valueGridSpreadSlider = nullptr;
+    QSpinBox*                     m_valueGridSpreadSpin = nullptr;
+    QLabel*                       m_valueGridInfoLabel = nullptr;
+    QPushButton*                  m_valueGridClearBtn = nullptr;
+    QPushButton*                  m_valueGridAddSelectionBtn = nullptr;
+    QPushButton*                  m_valueGridCopySelectionBtn = nullptr;
+    QPushButton*                  m_valueGridPasteSelectionBtn = nullptr;
+    QSet<QLCPoint>                m_valueGridSelectedCells;
+    QList<QLCPoint>               m_valueGridSelectionOrder;
+    QSet<int>                     m_valueGridExpandedRows;
+    int                           m_valueGridEditRow = -1;
+    int                           m_valueGridEditOutput = -1;
+    int                           m_valueGridEditSelection = -1;
+    int                           m_valueGridEditColumn = 0;
+    bool                          m_valueGridSyncing = false;
+    PTValueSelectionLayer         m_valueGridSelectionClipboard;
+    bool                          m_valueGridSelectionClipboardValid = false;
+    QVector<QVector<uchar>>       m_columnIntensity;
 
     bool m_rebuildingTable  = false;   // guard against recursive slotCellChanged
     bool m_resizingColumns  = false;

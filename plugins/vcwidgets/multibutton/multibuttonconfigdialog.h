@@ -95,6 +95,8 @@ public:
         int                                widgetParameter,
         QSharedPointer<QLCInputSource>     widgetLiveInputSource,
         MultiButtonWidgetBusPolicy         widgetBusPolicy,
+        MultiButtonWidgetActionMode        widgetActionMode,
+        const QList<MultiButtonWidgetActionTarget>& widgetActionTargets,
         int                                widgetPage,
         QWidget*                           parent = nullptr);
 
@@ -149,6 +151,8 @@ public:
     int                                   widgetParameter() const;
     QSharedPointer<QLCInputSource>        widgetLiveInputSource() const;
     MultiButtonWidgetBusPolicy            widgetBusPolicy() const;
+    MultiButtonWidgetActionMode            widgetActionMode() const;
+    QList<MultiButtonWidgetActionTarget>   widgetActionTargets() const;
 
     void accept() override;
 
@@ -225,6 +229,15 @@ private slots:
     void slotWidgetOutputChanged(int index);
     void slotWidgetParameterChanged(int index);
     void slotWidgetTargetSearchChanged(const QString& text);
+    void slotWidgetActionModeChanged(int index);
+    void slotWidgetActionSelectionChanged();
+    void slotWidgetActionItemChanged(QTableWidgetItem* item);
+    void slotWidgetActionAdd();
+    void slotWidgetActionDuplicate();
+    void slotWidgetActionRemove();
+    void slotWidgetActionMoveUp();
+    void slotWidgetActionMoveDown();
+    void slotWidgetActionTemplate();
 
 private:
     void rebuildList();
@@ -265,8 +278,18 @@ private:
     void rebuildWidgetParameterCombo();
     void rebuildWidgetPreview();
     void updateWidgetLiveInputUi();
+    void rebuildWidgetActionTable();
+    void updateWidgetActionUi();
+    void loadWidgetActionIntoEditor(int row);
+    void commitWidgetActionFromEditor();
+    QString widgetActionTargetName(quint32 widgetId) const;
+    QString widgetActionOutputName(const MultiButtonWidgetActionTarget& action) const;
+    QString widgetActionParameterName(const MultiButtonWidgetActionTarget& action) const;
+    PresetTableV2MultiButtonTargetIface* targetForWidgetId(quint32 widgetId) const;
+    VCWidget* selectedWidgetTargetObject() const;
     PresetTableV2MultiButtonTargetIface* selectedWidgetTarget() const;
     PresetTableV2MultiButtonTargetExtrasIface* selectedWidgetTargetExtras() const;
+    bool selectedWidgetTargetMissing() const;
     int widgetPreviewOutputIndex() const;
     static quint64 bindingKey(quint32 fixtureId, quint32 channel);
     static QString bindingHeaderLabel(Doc* doc, const LevelChannelBinding& b);
@@ -337,6 +360,14 @@ private:
     QTreeWidget*  m_widgetTargetTree = nullptr;
     QComboBox*    m_widgetOutputCombo = nullptr;
     QComboBox*    m_widgetParameterCombo = nullptr;
+    QComboBox*    m_widgetActionModeCombo = nullptr;
+    QTableWidget* m_widgetActionTable = nullptr;
+    QPushButton*  m_widgetActionAddBtn = nullptr;
+    QPushButton*  m_widgetActionDupBtn = nullptr;
+    QPushButton*  m_widgetActionRemoveBtn = nullptr;
+    QPushButton*  m_widgetActionUpBtn = nullptr;
+    QPushButton*  m_widgetActionDownBtn = nullptr;
+    QPushButton*  m_widgetActionTemplateBtn = nullptr;
     QListWidget*  m_widgetPreviewList = nullptr;
     QLabel*       m_widgetLiveInputStatus = nullptr;
     InputSelectionWidget* m_widgetLiveInputSel = nullptr;
@@ -345,6 +376,9 @@ private:
     int           m_widgetParameter = 0;
     QSharedPointer<QLCInputSource> m_widgetLiveInputSource;
     MultiButtonWidgetBusPolicy m_widgetBusPolicy = MultiButtonWidgetBusPolicy::SharedBus;
+    MultiButtonWidgetActionMode m_widgetActionMode = MultiButtonWidgetActionMode::SingleTarget;
+    QList<MultiButtonWidgetActionTarget> m_widgetActionTargets;
+    bool m_syncingWidgetActionUi = false;
 
     QSpinBox*     m_longPressSpin     = nullptr;
     QCheckBox*    m_offAtEndCheck     = nullptr;

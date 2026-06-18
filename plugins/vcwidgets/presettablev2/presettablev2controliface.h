@@ -81,3 +81,15 @@ public:
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.5")
+
+class PresetTableV2PreviewStateIface
+{
+public:
+    virtual ~PresetTableV2PreviewStateIface() = default;
+
+    /** Read-only crossfade progress for EFX preview; active=false means static preview. */
+    virtual double crossfadePreviewProgress01(bool* active) const = 0;
+};
+
+Q_DECLARE_INTERFACE(PresetTableV2PreviewStateIface,
+                    "org.qlcplus.PresetTableV2PreviewStateIface/1.0")

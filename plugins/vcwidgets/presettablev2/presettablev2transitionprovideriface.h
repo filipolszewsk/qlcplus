@@ -111,7 +111,20 @@ public:
 
     /** Immutable copy for DMX/render paths. GUI code may still use the legacy getters. */
     virtual PTTransitionProviderSnapshot transitionProviderSnapshot() const = 0;
+
+    /** Optional master/slave bank source. invalidId means local bank. */
+    virtual quint32 bankSourceEngineId(PTTransitionMode mode) const
+    {
+        Q_UNUSED(mode);
+        return quint32(-1);
+    }
+
+    /** Linked Preset Table id owned by this provider. invalidId means not resolved yet. */
+    virtual quint32 targetTableId() const
+    {
+        return quint32(-1);
+    }
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,
-                    "org.qlcplus.PresetTableV2TransitionProvider/2.5")
+                    "org.qlcplus.PresetTableV2TransitionProvider/2.6")

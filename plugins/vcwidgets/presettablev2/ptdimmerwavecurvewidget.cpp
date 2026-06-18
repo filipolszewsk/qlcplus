@@ -12,6 +12,7 @@
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -52,6 +53,13 @@ PTDimmerWaveCurveWidget::PTDimmerWaveCurveWidget(QWidget* parent)
     setMinimumHeight(100);
     setAutoFillBackground(true);
     setFocusPolicy(Qt::StrongFocus);
+    connect(&m_timer, &QTimer::timeout, this, [this]() {
+        const double ms = qMax(200.0, double(m_cycleDurationMs));
+        m_animPhase01 += double(m_timer.interval()) / ms;
+        if (m_animPhase01 >= 1.0)
+            m_animPhase01 -= 1.0;
+        update();
+    });
 }
 
 void PTDimmerWaveCurveWidget::setParams(const PTDimmerWaveParams& params)
@@ -65,13 +73,44 @@ void PTDimmerWaveCurveWidget::setParams(const PTDimmerWaveParams& params)
 void PTDimmerWaveCurveWidget::setCycleDurationMs(quint32 ms)
 {
     m_cycleDurationMs = qMax(quint32(20), ms);
+    updateAnimationState();
     update();
+}
+
+void PTDimmerWaveCurveWidget::setPhaseMarkers(const QVector<PhaseMarker>& markers,
+                                              MarkerMode mode)
+{
+    m_phaseMarkers = markers;
+    m_markerMode = mode;
+    updateAnimationState();
+    update();
+}
+
+void PTDimmerWaveCurveWidget::setOneShotProgress(qreal progress01)
+{
+    m_oneShotProgress01 = qBound<qreal>(0.0, progress01, 1.0);
+    if (m_markerMode == MarkerMode::OneShot)
+        update();
 }
 
 void PTDimmerWaveCurveWidget::setEditable(bool editable)
 {
     m_editable = editable;
     update();
+}
+
+void PTDimmerWaveCurveWidget::updateAnimationState()
+{
+    if (m_phaseMarkers.isEmpty() || m_markerMode == MarkerMode::OneShot)
+    {
+        m_timer.stop();
+        m_animPhase01 = 0.0;
+        return;
+    }
+
+    m_timer.setInterval(qMax(16, int(m_cycleDurationMs) / 60));
+    if (!m_timer.isActive())
+        m_timer.start();
 }
 
 void PTDimmerWaveCurveWidget::setCustomCurve(const QVector<PTCustomCurvePoint>& points)
@@ -361,6 +400,41 @@ void PTDimmerWaveCurveWidget::paintEvent(QPaintEvent* event)
                                 : palette().color(QPalette::Button));
             p.drawEllipse(point, selected ? 7 : 5, selected ? 7 : 5);
         }
+    }
+
+    for (const PhaseMarker& marker : m_phaseMarkers)
+    {
+        qreal x01 = 0.0;
+        qreal value01 = 0.0;
+        if (m_markerMode == MarkerMode::OneShot)
+        {
+            const qreal window01 = qMax<qreal>(
+                    0.02, qreal(qBound(1, m_params.waveWidth, 360)) / 360.0);
+            const qreal start01 = qBound<qreal>(0.0, marker.phaseOffset01, 1.0);
+            const qreal end01 = qMin<qreal>(1.0, start01 + window01);
+            const qreal local01 = m_oneShotProgress01 <= start01
+                    ? 0.0
+                    : (m_oneShotProgress01 >= end01
+                       ? 1.0
+                       : (m_oneShotProgress01 - start01)
+                         / qMax<qreal>(0.001, end01 - start01));
+            x01 = qBound<qreal>(0.0, local01 * window01, 1.0);
+            value01 = PTDimmerWaveEngine::dimmerSweepAttack01(float(local01), m_params);
+        }
+        else
+        {
+            const qreal phase01 = m_animPhase01 + marker.phaseOffset01;
+            x01 = phase01 - std::floor(phase01);
+            const qreal deg = x01 * 360.0;
+            value01 = PTDimmerWaveEngine::sampleDimmerCycle01(float(deg), m_params);
+        }
+        const QPointF pt(r.left() + x01 * r.width(),
+                         r.bottom() - value01 * r.height());
+        const QColor color = marker.color.isValid()
+                ? marker.color : palette().color(QPalette::Highlight);
+        p.setPen(QPen(color.darker(130), 1));
+        p.setBrush(color);
+        p.drawEllipse(pt, 5, 5);
     }
 
     p.setPen(palette().color(QPalette::Text));

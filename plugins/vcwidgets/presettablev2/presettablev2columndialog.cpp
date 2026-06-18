@@ -14,6 +14,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
+#include "inputselectionwidget.h"
 
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -61,11 +62,15 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
                                                    const PTColumn& column,
                                                    PTMode mode,
                                                    FixtureGroup* group,
+                                                   const QVector<PTOutput>& outputs,
+                                                   int widgetPage,
                                                    QWidget* parent)
     : QDialog(parent)
     , m_doc(doc)
     , m_mode(mode)
     , m_group(group)
+    , m_outputs(outputs)
+    , m_widgetPage(widgetPage)
 {
     setWindowTitle(tr("Edit Column"));
     setMinimumWidth(400);
@@ -78,7 +83,7 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     m_nameEdit = new QLineEdit(column.name, nameGrp);
     form->addRow(tr("Name:"), m_nameEdit);
     m_useFor1DFxChk = new QCheckBox(tr("Use for 1D FX"), nameGrp);
-    m_useFor1DFxChk->setToolTip(tr("1D Channel FX presets affect this Preset Table column."));
+    m_useFor1DFxChk->setToolTip(tr("1D FX presets affect this Preset Table column."));
     m_useFor1DFxChk->setChecked(column.useFor1DFx);
     m_useFor1DFxChk->setVisible(mode == PTMode::FixtureGroup);
     form->addRow(QString(), m_useFor1DFxChk);
@@ -110,6 +115,24 @@ PresetTableV2ColumnDialog::PresetTableV2ColumnDialog(Doc* doc,
     bindLayout->addLayout(bindBtnRow);
 
     root->addWidget(m_bindGrp);
+
+    // ---- Per-output final multiplier inputs -------------------------
+    m_intensityGrp = new QGroupBox(tr("Column multiplier inputs"), this);
+    m_intensityGrp->setVisible(mode == PTMode::FixtureGroup);
+    QFormLayout* intensityForm = new QFormLayout(m_intensityGrp);
+    for (int o = 0; o < m_outputs.size(); ++o)
+    {
+        const QString outLabel = m_outputs.at(o).name.isEmpty()
+                ? tr("Output %1").arg(o + 1) : m_outputs.at(o).name;
+        InputSelectionWidget* sel = new InputSelectionWidget(m_doc, m_intensityGrp);
+        sel->setWidgetPage(m_widgetPage);
+        sel->setKeyInputVisibility(false);
+        if (o < column.intensityInputSources.size())
+            sel->setInputSource(column.intensityInputSources.at(o));
+        m_intensityInputSels.append(sel);
+        intensityForm->addRow(outLabel, sel);
+    }
+    root->addWidget(m_intensityGrp);
 
     // ---- Type -------------------------------------------------------
     QGroupBox* typeGrp = new QGroupBox(tr("Value type"), this);
@@ -410,7 +433,15 @@ PTColumn PresetTableV2ColumnDialog::column() const
     }
 
     if (m_mode == PTMode::FixtureGroup)
+    {
         col.bindings = m_bindings;
+        col.intensityInputSources.resize(m_intensityInputSels.size());
+        for (int i = 0; i < m_intensityInputSels.size(); ++i)
+        {
+            if (m_intensityInputSels.at(i))
+                col.intensityInputSources[i] = m_intensityInputSels.at(i)->inputSource();
+        }
+    }
 
     return col;
 }

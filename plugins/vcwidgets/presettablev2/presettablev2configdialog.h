@@ -85,6 +85,7 @@ public:
                                QSharedPointer<QLCInputSource> channel1DSrc,
                                QSharedPointer<QLCInputSource> multiFxSrc,
                                QSharedPointer<QLCInputSource> transSecondarySrc,
+                               QSharedPointer<QLCInputSource> intensitySrc,
                                FixtureGroup* group,
                                int widgetPage,
                                class PresetTableV2TransitionProviderIface* transitionProvider,
@@ -99,6 +100,7 @@ public:
     QSharedPointer<QLCInputSource> channel1DInputSource() const;
     QSharedPointer<QLCInputSource> multiFxInputSource() const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource() const;
+    QSharedPointer<QLCInputSource> intensityInputSource() const;
 
     void setFixtureGroup(FixtureGroup* group);
     void setTransitionProvider(class PresetTableV2TransitionProviderIface* provider);
@@ -124,6 +126,7 @@ private:
     QComboBox*            m_channel1DPresetCombo = nullptr;
     QComboBox*            m_multiFxPresetCombo = nullptr;
     QComboBox*            m_secondaryRowCombo = nullptr;
+    QComboBox*            m_intensityColumnCombo = nullptr;
     InputSelectionWidget* m_inputSel   = nullptr;
     InputSelectionWidget* m_transSweepInputSel = nullptr;
     InputSelectionWidget* m_transContinuousInputSel = nullptr;
@@ -131,6 +134,7 @@ private:
     InputSelectionWidget* m_channel1DInputSel = nullptr;
     InputSelectionWidget* m_multiFxInputSel = nullptr;
     InputSelectionWidget* m_transSecondaryInputSel = nullptr;
+    InputSelectionWidget* m_intensityInputSel = nullptr;
 
     void rebuildTransitionPresetCombos();
     void rebuildSecondaryRowCombo();
@@ -190,6 +194,7 @@ public:
     QSharedPointer<QLCInputSource> channel1DInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> multiFxInputSource(int outputIdx) const;
     QSharedPointer<QLCInputSource> transSecondaryInputSource(int outputIdx) const;
+    QSharedPointer<QLCInputSource> intensityInputSource(int outputIdx) const;
     bool crossfadeEnabled() const;
     bool syncMultiFxPhaseToCrossfade() const;
     int multiFxCrossfadeSyncOffsetMs() const;

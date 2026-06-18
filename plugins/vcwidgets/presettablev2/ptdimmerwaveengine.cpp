@@ -65,7 +65,17 @@ int PTDimmerWaveEngine::evenOffsetStepForSpan(int span)
 {
     if (span <= 1)
         return 1;
-    return 360 / (span - 1);
+    return qMax(1, 360 / span);
+}
+
+static int scalableOffsetStepForSlots(
+        int slotsPerWing, PTDimmerWaveEngine::OffsetDistributionPolicy policy)
+{
+    if (slotsPerWing <= 1)
+        return 0;
+    if (policy == PTDimmerWaveEngine::OffsetDistributionPolicy::NonWrappingSweep)
+        return qMax(1, 360 / (slotsPerWing - 1));
+    return qMax(1, 360 / slotsPerWing);
 }
 
 int PTDimmerWaveEngine::gridSpanAlongAxis(int gridWidth, int gridHeight, PTTransitionAxis axis,
@@ -100,19 +110,20 @@ int PTDimmerWaveEngine::offsetSlotCountForWing(int gridSpanAlongAxis,
 }
 
 int PTDimmerWaveEngine::maxOffsetStepForGrid(int gridSpanAlongAxis,
-                                             const PTTransitionPreset& preset)
+                                             const PTTransitionPreset& preset,
+                                             OffsetDistributionPolicy policy)
 {
     const int slotsPerWing = offsetSlotCountForWing(gridSpanAlongAxis, preset);
-    if (slotsPerWing <= 1)
-        return 360;
-    return qMax(1, 360 / (slotsPerWing - 1));
+    const int step = scalableOffsetStepForSlots(slotsPerWing, policy);
+    return step == 0 ? 360 : step;
 }
 
 int PTDimmerWaveEngine::effectiveOffsetStepForSpan(int gridSpanAlongAxis,
-                                                   const PTTransitionPreset& preset)
+                                                   const PTTransitionPreset& preset,
+                                                   OffsetDistributionPolicy policy)
 {
     const int slotsPerWing = offsetSlotCountForWing(gridSpanAlongAxis, preset);
-    const int scalableMax = slotsPerWing <= 1 ? 0 : qMax(1, 360 / (slotsPerWing - 1));
+    const int scalableMax = scalableOffsetStepForSlots(slotsPerWing, policy);
     switch (preset.offsetStepMode)
     {
         case PTOffsetStepMode::Off:
@@ -129,6 +140,15 @@ int PTDimmerWaveEngine::effectiveOffsetStepForSpan(int gridSpanAlongAxis,
             return qBound(0, preset.offsetStep, maxOffsetStepForGrid(gridSpanAlongAxis, preset));
     }
     return 0;
+}
+
+PTTransitionPreset PTDimmerWaveEngine::normalizedTransitionSweepPreset(
+        PTTransitionPreset preset)
+{
+    preset.offsetStepMode = PTOffsetStepMode::AutoFit;
+    preset.offsetCoverage = 100;
+    preset.offsetStep = 0;
+    return preset;
 }
 
 void PTDimmerWaveEngine::clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis)
@@ -417,8 +437,9 @@ int PTDimmerWaveEngine::calculateHeadStartOffsetExtended(int col, int row, int g
     return offsetInfoForPoint(col, row, gridWidth, gridHeight, params).headOffsetDeg;
 }
 
-PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, int gridWidth, int gridHeight,
-                                                              const PTDimmerWaveParams& params)
+PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(
+        int col, int row, int gridWidth, int gridHeight, const PTDimmerWaveParams& params,
+        OffsetDistributionPolicy policy)
 {
     PTDimmerWaveOffsetInfo info;
     const PTDimmerWaveSpatialSpan spatial = spatialSpanForPoint(col, row, gridWidth, gridHeight, params.axis);
@@ -450,11 +471,11 @@ PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, 
             step = 0;
             break;
         case PTOffsetStepMode::AutoFit:
-            step = blocksPerWing <= 1 ? 0 : qMax(1, 360 / (blocksPerWing - 1));
+            step = scalableOffsetStepForSlots(blocksPerWing, policy);
             break;
         case PTOffsetStepMode::CoveragePercent:
         {
-            const int maxStep = blocksPerWing <= 1 ? 0 : qMax(1, 360 / (blocksPerWing - 1));
+            const int maxStep = scalableOffsetStepForSlots(blocksPerWing, policy);
             step = qBound(0, int(std::round(double(maxStep)
                                             * double(qBound(0, params.offsetCoverage, 100))
                                             / 100.0)), maxStep);
@@ -467,9 +488,23 @@ PTDimmerWaveOffsetInfo PTDimmerWaveEngine::offsetInfoForPoint(int col, int row, 
     }
 
     if (step == 0)
+    {
         info.headOffsetDeg = 0;
+        info.phaseStart01 = 0.0;
+    }
+    else if (policy == OffsetDistributionPolicy::NonWrappingSweep)
+    {
+        const double phase = blocksPerWing <= 1
+                ? 0.0
+                : qBound(0.0, double(index) / double(blocksPerWing - 1), 1.0);
+        info.phaseStart01 = phase;
+        info.headOffsetDeg = int(std::round(phase * 360.0));
+    }
     else
+    {
         info.headOffsetDeg = (step * index) % 360;
+        info.phaseStart01 = double(info.headOffsetDeg) / 360.0;
+    }
     return info;
 }
 

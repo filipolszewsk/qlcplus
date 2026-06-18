@@ -47,11 +47,18 @@ struct PTDimmerWaveOffsetInfo
     int offsetSlot = 0;
     int slotsPerWing = 1;
     int headOffsetDeg = 0;
+    double phaseStart01 = 0.0;
 };
 
 class PTDimmerWaveEngine
 {
 public:
+    enum class OffsetDistributionPolicy
+    {
+        CyclicNoDuplicate = 0,
+        NonWrappingSweep
+    };
+
     static PTDimmerWaveParams paramsFromPreset(const PTTransitionPreset& preset,
                                                const PTGlobalEffectSettings* global = nullptr);
 
@@ -63,8 +70,11 @@ public:
 
     static int effectiveOffsetSlotCount(int gridSpanAlongAxis, const PTTransitionPreset& preset);
     static int offsetSlotCountForWing(int gridSpanAlongAxis, const PTTransitionPreset& preset);
-    static int maxOffsetStepForGrid(int gridSpanAlongAxis, const PTTransitionPreset& preset);
-    static int effectiveOffsetStepForSpan(int gridSpanAlongAxis, const PTTransitionPreset& preset);
+    static int maxOffsetStepForGrid(int gridSpanAlongAxis, const PTTransitionPreset& preset,
+                                    OffsetDistributionPolicy policy = OffsetDistributionPolicy::CyclicNoDuplicate);
+    static int effectiveOffsetStepForSpan(int gridSpanAlongAxis, const PTTransitionPreset& preset,
+                                          OffsetDistributionPolicy policy = OffsetDistributionPolicy::CyclicNoDuplicate);
+    static PTTransitionPreset normalizedTransitionSweepPreset(PTTransitionPreset preset);
     static void clampOffsetStep(PTTransitionPreset& preset, int gridSpanAlongAxis);
 
     static PTDimmerWaveSpatialSpan spatialSpanForPoint(int col, int row, int gridWidth, int gridHeight,
@@ -76,8 +86,10 @@ public:
     static int calculateHeadStartOffsetExtended(int col, int row, int gridWidth, int gridHeight,
                                                 const PTDimmerWaveParams& params);
 
-    static PTDimmerWaveOffsetInfo offsetInfoForPoint(int col, int row, int gridWidth, int gridHeight,
-                                                     const PTDimmerWaveParams& params);
+    static PTDimmerWaveOffsetInfo offsetInfoForPoint(
+            int col, int row, int gridWidth, int gridHeight,
+            const PTDimmerWaveParams& params,
+            OffsetDistributionPolicy policy = OffsetDistributionPolicy::CyclicNoDuplicate);
 
     static float applyWaveShape(float input, int shape);
     static float sampleCustomCurve01(float phase01, const QVector<PTCustomCurvePoint>& points);

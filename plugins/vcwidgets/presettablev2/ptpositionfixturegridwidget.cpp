@@ -354,7 +354,7 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
         QColor fill = emptyBg;
         if (!editable)
             fill = disabledBg;
-        else if (cell.position.valid)
+        else if (cell.position.valid || cell.valueValid)
             fill = cell.inherited ? inheritedBg : storedBg;
         p.fillRect(cr, fill);
         p.setPen(QPen(palette().color(QPalette::Mid), 1));
@@ -390,9 +390,11 @@ void PTPositionFixtureGridWidget::paintEvent(QPaintEvent* /*event*/)
         valFont.setBold(false);
         valFont.setPointSize(qMax(7, valFont.pointSize() - 1));
         p.setFont(valFont);
-        const QString valText = cell.position.valid
-                ? PTPositionConverter::formatPosition(cell.position, 0)
-                : QStringLiteral("—");
+        const QString valText = cell.valueValid
+                ? cell.valueText
+                : (cell.position.valid
+                   ? PTPositionConverter::formatPosition(cell.position, 0)
+                   : QStringLiteral("—"));
         p.drawText(cr.adjusted(2, 0, -2, -2), Qt::AlignHCenter | Qt::AlignBottom, valText);
     }
 

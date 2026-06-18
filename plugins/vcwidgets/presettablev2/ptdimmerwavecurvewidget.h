@@ -6,6 +6,8 @@
 
 #include "ptdimmerwaveengine.h"
 
+#include <QColor>
+#include <QTimer>
 #include <QWidget>
 
 class PTDimmerWaveCurveWidget : public QWidget
@@ -13,10 +15,25 @@ class PTDimmerWaveCurveWidget : public QWidget
     Q_OBJECT
 
 public:
+    enum class MarkerMode
+    {
+        Cyclic,
+        OneShot
+    };
+
+    struct PhaseMarker
+    {
+        qreal phaseOffset01 = 0.0;
+        QColor color;
+    };
+
     explicit PTDimmerWaveCurveWidget(QWidget* parent = nullptr);
 
     void setParams(const PTDimmerWaveParams& params);
     void setCycleDurationMs(quint32 ms);
+    void setPhaseMarkers(const QVector<PhaseMarker>& markers,
+                         MarkerMode mode = MarkerMode::Cyclic);
+    void setOneShotProgress(qreal progress01);
     void setEditable(bool editable);
     void setCustomCurve(const QVector<PTCustomCurvePoint>& points);
     QVector<PTCustomCurvePoint> customCurve() const { return m_customCurve; }
@@ -50,9 +67,15 @@ private:
     void normalizeCustomCurve();
     void emitCustomCurveChanged();
     int hitPoint(const QPointF& pos, DragTarget* target) const;
+    void updateAnimationState();
 
     PTDimmerWaveParams m_params;
     quint32 m_cycleDurationMs = 5000;
+    QVector<PhaseMarker> m_phaseMarkers;
+    MarkerMode m_markerMode = MarkerMode::Cyclic;
+    qreal m_oneShotProgress01 = 0.0;
+    QTimer m_timer;
+    qreal m_animPhase01 = 0.0;
     QVector<PTCustomCurvePoint> m_customCurve;
     bool m_editable = false;
     int m_selectedIndex = -1;

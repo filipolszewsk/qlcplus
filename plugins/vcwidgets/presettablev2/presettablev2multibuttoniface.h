@@ -1,9 +1,18 @@
 #pragma once
 
+#include <QList>
 #include <QSharedPointer>
 #include <QString>
+#include <QtGlobal>
 
 class QLCInputSource;
+
+struct PresetTableV2MultiButtonLinkedAction
+{
+    quint32 widgetId = 0;
+    int outputIndex = 0;
+    int parameter = 0;
+};
 
 class PresetTableV2MultiButtonTargetIface
 {
@@ -49,10 +58,17 @@ public:
     virtual ~PresetTableV2MultiButtonTargetExtrasIface() = default;
     virtual bool multiButtonSupportsAllOutputs() const = 0;
     virtual bool multiButtonOutputControlsParameter(int outputIdx, int parameter) const = 0;
+    virtual QList<PresetTableV2MultiButtonLinkedAction> multiButtonLinkedSlaveActions(
+            int outputIdx, int parameter) const
+    {
+        Q_UNUSED(outputIdx);
+        Q_UNUSED(parameter);
+        return {};
+    }
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetExtrasIface,
-                    "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.1")
+                    "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.2")
 
 class PresetTableV2MultiButtonFlashIface
 {

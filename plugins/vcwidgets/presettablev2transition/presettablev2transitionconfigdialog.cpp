@@ -13,6 +13,20 @@
 #include <QGroupBox>
 #include <QCheckBox>
 
+static QString bankLabel(PTTransitionMode mode)
+{
+    switch (mode)
+    {
+        case PTTransitionMode::Off:            break;
+        case PTTransitionMode::SweepOnly:      return QObject::tr("Transition");
+        case PTTransitionMode::Continuous:     return QObject::tr("Interpolation");
+        case PTTransitionMode::Channel1D:      return QObject::tr("1D FX");
+        case PTTransitionMode::PositionMotion: return QObject::tr("2D FX");
+        case PTTransitionMode::MultiFx:        return QObject::tr("MultiFX");
+    }
+    return QObject::tr("Bank");
+}
+
 PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         PresetTableV2TransitionWidget* widget, QWidget* parent)
     : QDialog(parent)
@@ -25,7 +39,7 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
 
     QLabel* hint = new QLabel(
             tr("Global speed, intensity, position size and min/max cycle times are edited here only.\n"
-               "Preset banks: Transitions / Continuous FX tabs on the widget.\n"
+               "Preset banks: Transition / Interpolation / 1D FX / 2D FX / MultiFX tabs on the widget.\n"
                "Per-column external inputs: double-click column headers on the widget."),
             this);
     hint->setWordWrap(true);
@@ -44,6 +58,21 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     root->addLayout(form);
 
     rebuildTableCombo();
+
+    auto* sourceBox = new QGroupBox(tr("Bank sources"), this);
+    auto* sourceForm = new QFormLayout(sourceBox);
+    for (PTTransitionMode mode : { PTTransitionMode::SweepOnly,
+                                   PTTransitionMode::Continuous,
+                                   PTTransitionMode::Channel1D,
+                                   PTTransitionMode::PositionMotion,
+                                   PTTransitionMode::MultiFx })
+    {
+        QComboBox* combo = new QComboBox(sourceBox);
+        m_bankSourceCombos.insert(int(mode), combo);
+        sourceForm->addRow(bankLabel(mode) + QStringLiteral(":"), combo);
+    }
+    root->addWidget(sourceBox);
+    rebuildBankSourceCombos();
 
     const PTGlobalEffectSettings gs = m_widget ? m_widget->globalEffectSettings()
                                                : PTGlobalEffectSettings();
@@ -189,6 +218,48 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
+void PresetTableV2TransitionConfigDialog::rebuildBankSourceCombos()
+{
+    const quint32 selfId = m_widget ? m_widget->id() : VCWidget::invalidId();
+    for (auto it = m_bankSourceCombos.begin(); it != m_bankSourceCombos.end(); ++it)
+    {
+        QComboBox* combo = it.value();
+        if (!combo)
+            continue;
+        const PTTransitionMode mode = PTTransitionMode(it.key());
+        combo->clear();
+        combo->addItem(tr("Local"), QVariant::fromValue(quint32(VCWidget::invalidId())));
+
+        const quint32 current = m_widget ? m_widget->bankSourceEngineId(mode)
+                                         : VCWidget::invalidId();
+        bool currentFound = current == VCWidget::invalidId();
+        for (VCWidget* w : PresetTableV2VCLookup::allTransitionWidgets())
+        {
+            if (!w || w->id() == selfId)
+                continue;
+            if (!qobject_cast<PresetTableV2TransitionProviderIface*>(w))
+                continue;
+            if (m_widget && m_widget->bankSourceWouldCreateCycle(mode, w->id()))
+                continue;
+            combo->addItem(PresetTableV2VCLookup::vcWidgetLabel(w),
+                           QVariant::fromValue(w->id()));
+            if (w->id() == current)
+                currentFound = true;
+        }
+        if (!currentFound && current != VCWidget::invalidId())
+            combo->addItem(tr("Missing engine #%1").arg(current), QVariant::fromValue(current));
+
+        for (int i = 0; i < combo->count(); ++i)
+        {
+            if (combo->itemData(i).toUInt() == current)
+            {
+                combo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+}
+
 void PresetTableV2TransitionConfigDialog::slotSpeedSliderChanged(int v)
 {
     if (m_speedValueLabel)
@@ -270,6 +341,12 @@ PTGlobalEffectSettings PresetTableV2TransitionConfigDialog::globalSettings() con
     if (m_speedOverdriveKneeSlider)
         gs.speedOverdriveKnee = qBound(1, m_speedOverdriveKneeSlider->value(), 254);
     return gs;
+}
+
+quint32 PresetTableV2TransitionConfigDialog::bankSourceEngineId(PTTransitionMode mode) const
+{
+    QComboBox* combo = m_bankSourceCombos.value(int(mode), nullptr);
+    return combo ? combo->currentData().toUInt() : VCWidget::invalidId();
 }
 
 void PresetTableV2TransitionConfigDialog::updateEffectiveCyclePreview()

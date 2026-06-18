@@ -15,6 +15,7 @@ static const quint8 kTransContinuousBankBase = 90;
 static const quint8 kPositionMotionBankBase = 120;
 static const quint8 kMultiFxBankBase = 150;
 static const quint8 kChannel1DBankBase = 180;
+static const quint8 kOutputIntensityBase = 210;
 static const quint32 kCrossfade = 240;
 static const quint32 kMultiFxBlend = 241;
 static const quint32 kMultiFxRestart = 242;
@@ -31,14 +32,16 @@ inline quint8 rowSelector(int outputIdx) { return quint8(outputIdx); }
 inline quint8 transSweep(int outputIdx) { return quint8(kTransSweepBase + outputIdx); }
 /** Secondary table row for Continuous only (DMX 0 = Properties default; 1 = row 1, …). */
 inline quint8 transSecondaryRow(int outputIdx) { return quint8(kTransSecondaryRowBase + outputIdx); }
-/** Continuous FX selector (legacy selector_continuous) — bank preset index (0 = off). */
+/** Interpolation selector (legacy selector_continuous) — bank preset index (0 = off). */
 inline quint8 transContinuousBank(int outputIdx) { return quint8(kTransContinuousBankBase + outputIdx); }
 /** MultiFX background bus selector — bank preset index (0 = off). */
 inline quint8 multiFxBank(int outputIdx) { return quint8(kMultiFxBankBase + outputIdx); }
-/** Position-only Continuous Motion selector — bank preset index (0 = off). */
+/** Position-only 2D FX selector — bank preset index (0 = off). */
 inline quint8 positionMotionBank(int outputIdx) { return quint8(kPositionMotionBankBase + outputIdx); }
-/** Fixture Group only 1D Channel FX selector — bank preset index (0 = off). */
+/** Fixture Group only 1D FX selector — bank preset index (0 = off). */
 inline quint8 channel1DBank(int outputIdx) { return quint8(kChannel1DBankBase + outputIdx); }
+/** Fixture Group output intensity multiplier — 0..255, defaults to 255 when unmapped. */
+inline quint8 outputIntensity(int outputIdx) { return quint8(kOutputIntensityBase + outputIdx); }
 
 /** @deprecated Use transSweep */
 inline quint8 transPrimary(int outputIdx) { return transSweep(outputIdx); }

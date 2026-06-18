@@ -336,6 +336,8 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
         p.channel1DAmount = int(val(PTEfxCol::InputChannel1DAmount));
     if (liveByColumn.contains(PTEfxCol::InputChannel1DCustomColumn))
         p.channel1DCustomColumn = int(val(PTEfxCol::InputChannel1DCustomColumn));
+    if (p.playbackMode == PTTransitionMode::SweepOnly)
+        p = PTDimmerWaveEngine::normalizedTransitionSweepPreset(p);
     return p;
 }
 
@@ -348,6 +350,9 @@ void PresetTableV2SpatialEngine::applySweepPresetConstraints(PTTransitionPreset&
     preset.waveLevel = 255;
     preset.waveFadeIn = qBound(0, preset.waveFadeIn, 50);
     preset.waveFadeOut = qBound(0, preset.waveFadeOut, 50);
+    preset.offsetStepMode = PTOffsetStepMode::AutoFit;
+    preset.offsetCoverage = 100;
+    preset.offsetStep = 0;
 }
 
 QVector<uchar> PresetTableV2SpatialEngine::blendValues(const QVector<uchar>& primary,

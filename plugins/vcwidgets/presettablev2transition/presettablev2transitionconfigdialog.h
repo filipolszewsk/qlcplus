@@ -9,6 +9,8 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QSharedPointer>
+#include <QHash>
+#include "presettablev2effectengine.h"
 #include "ptparammatrixengine.h"
 
 class QLCInputSource;
@@ -25,6 +27,7 @@ public:
     quint32 targetTableId() const;
     QString widgetCaption() const;
     PTGlobalEffectSettings globalSettings() const;
+    quint32 bankSourceEngineId(PTTransitionMode mode) const;
     QSharedPointer<QLCInputSource> globalSpeedInputSource() const;
     QSharedPointer<QLCInputSource> globalIntensityInputSource() const;
     QSharedPointer<QLCInputSource> globalPositionSizeInputSource() const;
@@ -39,11 +42,13 @@ private slots:
 
 private:
     void rebuildTableCombo();
+    void rebuildBankSourceCombos();
     void updateEffectiveCyclePreview();
 
     PresetTableV2TransitionWidget* m_widget = nullptr;
     QLineEdit*                     m_captionEdit = nullptr;
     QComboBox*                     m_tableCombo = nullptr;
+    QHash<int, QComboBox*>         m_bankSourceCombos;
     QSlider*                       m_speedSlider = nullptr;
     QLabel*                        m_speedValueLabel = nullptr;
     QSlider*                       m_intensitySlider = nullptr;

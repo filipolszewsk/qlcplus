@@ -68,6 +68,9 @@ static const QString KXMLWidgetLinkParam   = QStringLiteral("Parameter");
 static const QString KXMLWidgetLiveInput   = QStringLiteral("WidgetLiveInput");
 static const QString KXMLWidgetBusPolicy   = QStringLiteral("WidgetBusPolicy");
 static const QString KXMLWidgetFlashGateInput = QStringLiteral("WidgetFlashGateInput");
+static const QString KXMLWidgetActionMode  = QStringLiteral("WidgetActionMode");
+static const QString KXMLWidgetActionTarget = QStringLiteral("WidgetActionTarget");
+static const QString KXMLWidgetActionEnabled = QStringLiteral("Enabled");
 static const QString KXMLTargetListName    = QStringLiteral("TargetListName");
 static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppearance");
 
@@ -85,6 +88,20 @@ static MultiButtonWidgetBusPolicy stringToWidgetBusPolicy(const QString& s)
     if (s.compare(QStringLiteral("holdOverride"), Qt::CaseInsensitive) == 0)
         return MultiButtonWidgetBusPolicy::HoldOverride;
     return MultiButtonWidgetBusPolicy::SharedBus;
+}
+
+static QString widgetActionModeToString(MultiButtonWidgetActionMode mode)
+{
+    return mode == MultiButtonWidgetActionMode::MultiTarget
+            ? QStringLiteral("multi") : QStringLiteral("single");
+}
+
+static MultiButtonWidgetActionMode stringToWidgetActionMode(const QString& s)
+{
+    if (s.compare(QStringLiteral("multi"), Qt::CaseInsensitive) == 0
+            || s.compare(QStringLiteral("multiTarget"), Qt::CaseInsensitive) == 0)
+        return MultiButtonWidgetActionMode::MultiTarget;
+    return MultiButtonWidgetActionMode::SingleTarget;
 }
 
 static const QString KXMLCurrentIndex      = QStringLiteral("CurrentIndex");
@@ -390,6 +407,28 @@ void MultiButtonWidget::setWidgetEntryAppearance(const QList<LevelPreset>& appea
     syncWidgetEntryAppearanceCount();
     m_iconCache.clear();
     syncEntryInputSources();
+    update();
+}
+
+void MultiButtonWidget::setWidgetActionMode(MultiButtonWidgetActionMode mode)
+{
+    if (m_widgetActionMode == mode)
+        return;
+    m_widgetActionMode = mode;
+    m_lastResolvedEntryCount = -1;
+    syncWidgetLinkLiveStagedState();
+    recalcLayoutSize();
+    update();
+}
+
+void MultiButtonWidget::setWidgetActionTargets(
+        const QList<MultiButtonWidgetActionTarget>& targets)
+{
+    m_widgetActionTargets = targets;
+    clearWidgetActionTargetCache();
+    m_lastResolvedEntryCount = -1;
+    syncWidgetLinkLiveStagedState();
+    syncDynamicEntryCountLayout();
     update();
 }
 
@@ -1021,8 +1060,11 @@ void MultiButtonWidget::recalcLayoutSize()
 
 bool MultiButtonWidget::widgetLinkEntryCountDynamic() const
 {
-    return m_mode == MultiButtonMode::Widget
-            && m_widgetTargetId != VCWidget::invalidId();
+    if (m_mode != MultiButtonMode::Widget)
+        return false;
+    if (widgetMultiTargetActive())
+        return widgetActionLooksValid(leaderWidgetAction());
+    return m_widgetTargetId != VCWidget::invalidId();
 }
 
 void MultiButtonWidget::syncDynamicEntryCountLayout()
@@ -1329,8 +1371,293 @@ QList<uchar> MultiButtonWidget::resolvedPresetValues(const LevelPreset& preset,
     return out;
 }
 
+bool MultiButtonWidget::widgetMultiTargetActive() const
+{
+    return m_mode == MultiButtonMode::Widget
+            && m_widgetActionMode == MultiButtonWidgetActionMode::MultiTarget;
+}
+
+bool MultiButtonWidget::widgetActionLooksValid(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    return action.enabled
+            && action.widgetId != VCWidget::invalidId()
+            && action.widgetId != id();
+}
+
+QList<MultiButtonWidgetActionTarget> MultiButtonWidget::effectiveWidgetActions() const
+{
+    QList<MultiButtonWidgetActionTarget> actions;
+    if (widgetMultiTargetActive())
+    {
+        for (const MultiButtonWidgetActionTarget& action : m_widgetActionTargets)
+        {
+            if (widgetActionLooksValid(action))
+                actions.append(action);
+        }
+    }
+
+    if (actions.isEmpty())
+    {
+        MultiButtonWidgetActionTarget action;
+        action.enabled = true;
+        action.widgetId = m_widgetTargetId;
+        action.outputIndex = m_widgetOutputIndex;
+        action.parameter = m_widgetParameter;
+        if (widgetActionLooksValid(action))
+            actions.append(action);
+    }
+
+    const int explicitActionCount = actions.size();
+    for (int baseIndex = 0; baseIndex < explicitActionCount; ++baseIndex)
+    {
+        const MultiButtonWidgetActionTarget base = actions.at(baseIndex);
+        VCWidget* targetWidget = widgetActionTargetObject(base);
+        auto* extras = qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(targetWidget);
+        if (!extras)
+            continue;
+
+        const QList<PresetTableV2MultiButtonLinkedAction> linked =
+                extras->multiButtonLinkedSlaveActions(base.outputIndex, base.parameter);
+        for (const PresetTableV2MultiButtonLinkedAction& linkedAction : linked)
+        {
+            MultiButtonWidgetActionTarget action;
+            action.enabled = true;
+            action.widgetId = linkedAction.widgetId;
+            action.outputIndex = linkedAction.outputIndex;
+            action.parameter = linkedAction.parameter;
+            if (!widgetActionLooksValid(action))
+                continue;
+
+            bool duplicate = false;
+            for (const MultiButtonWidgetActionTarget& existing : actions)
+            {
+                if (existing.widgetId == action.widgetId
+                        && existing.outputIndex == action.outputIndex
+                        && existing.parameter == action.parameter)
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate)
+                actions.append(action);
+        }
+    }
+    return actions;
+}
+
+MultiButtonWidgetActionTarget MultiButtonWidget::leaderWidgetAction() const
+{
+    const QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
+    return actions.isEmpty() ? MultiButtonWidgetActionTarget() : actions.first();
+}
+
+void MultiButtonWidget::clearWidgetActionTargetCache() const
+{
+    m_widgetActionTargetCache.clear();
+}
+
+VCWidget* MultiButtonWidget::widgetActionTargetObject(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    if (!widgetActionLooksValid(action))
+        return nullptr;
+
+    if (m_widgetActionTargetCache.contains(action.widgetId))
+    {
+        if (m_widgetActionTargetCache.value(action.widgetId))
+            return m_widgetActionTargetCache.value(action.widgetId).data();
+        m_widgetActionTargetCache.remove(action.widgetId);
+    }
+
+    VirtualConsole* vc = VirtualConsole::instance();
+    VCFrame* root = vc ? vc->contents() : nullptr;
+    if (!root)
+        return nullptr;
+
+    const QList<VCWidget*> widgets =
+            root->findChildren<VCWidget*>(QString(), Qt::FindChildrenRecursively);
+    for (VCWidget* candidate : widgets)
+    {
+        if (!candidate || candidate->id() != action.widgetId)
+            continue;
+
+        m_widgetActionTargetCache.insert(action.widgetId, candidate);
+        connect(candidate, &QObject::destroyed, this, [this, targetId = action.widgetId]() {
+            m_widgetActionTargetCache.remove(targetId);
+            VCPluginDiagnostics::breadcrumbRateLimited(
+                    QStringLiteral("multibutton"), id(), caption(),
+                    QStringLiteral("multibutton/action-target-destroyed/%1/%2")
+                            .arg(id()).arg(targetId),
+                    1000,
+                    QStringLiteral("action target destroyed targetId=%1").arg(targetId));
+        });
+        return candidate;
+    }
+
+    VCPluginDiagnostics::breadcrumbRateLimited(
+            QStringLiteral("multibutton"), id(), caption(),
+            QStringLiteral("multibutton/action-target-missing/%1/%2")
+                    .arg(id()).arg(action.widgetId),
+            1000,
+            QStringLiteral("action target missing targetId=%1")
+                    .arg(action.widgetId));
+    return nullptr;
+}
+
+PresetTableV2MultiButtonTargetIface* MultiButtonWidget::widgetActionTarget(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    VCWidget* target = widgetActionTargetObject(action);
+    auto* iface = qobject_cast<PresetTableV2MultiButtonTargetIface*>(target);
+    if (target && !iface)
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("multibutton"), id(), caption(),
+                QStringLiteral("multibutton/action-target-class-mismatch/%1/%2")
+                        .arg(id()).arg(action.widgetId),
+                1000,
+                QStringLiteral("action target class mismatch targetId=%1 class=%2")
+                        .arg(action.widgetId)
+                        .arg(QString::fromLatin1(target->metaObject()->className())));
+    }
+    return iface;
+}
+
+bool MultiButtonWidget::widgetActionUsesAllOutputs(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    return action.outputIndex < 0;
+}
+
+int MultiButtonWidget::widgetActionReadOutputIndex(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    return widgetActionUsesAllOutputs(action) ? leaderOutputIndex() : action.outputIndex;
+}
+
+bool MultiButtonWidget::widgetActionUsesInternalStaging(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    PresetTableV2MultiButtonTargetIface* target = widgetActionTarget(action);
+    return target
+            && target->multiButtonStagingAvailable(widgetActionReadOutputIndex(action),
+                                                   action.parameter);
+}
+
+bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget& action,
+                                             int idx, bool staged) const
+{
+    PresetTableV2MultiButtonTargetIface* target = widgetActionTarget(action);
+    if (!target)
+        return false;
+
+    const int entryCount = target->multiButtonEntryCount(widgetActionReadOutputIndex(action),
+                                                         action.parameter);
+    if (idx >= entryCount)
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("multibutton"), id(), caption(),
+                QStringLiteral("multibutton/action-index-out-of-range/%1/%2/%3")
+                        .arg(id()).arg(action.widgetId).arg(action.parameter),
+                1000,
+                QStringLiteral("action index out of range targetId=%1 output=%2 parameter=%3 index=%4 count=%5")
+                        .arg(action.widgetId).arg(action.outputIndex)
+                        .arg(action.parameter).arg(idx).arg(entryCount));
+        return false;
+    }
+
+    if (!widgetActionUsesAllOutputs(action))
+    {
+        return staged
+                ? target->multiButtonActivateStaged(action.outputIndex, action.parameter, idx)
+                : target->multiButtonActivate(action.outputIndex, action.parameter, idx);
+    }
+
+    const int outputCount = target->multiButtonOutputCount();
+    bool leaderOk = false;
+    for (int outputIdx = 0; outputIdx < outputCount; ++outputIdx)
+    {
+        const bool ok = staged
+                ? target->multiButtonActivateStaged(outputIdx, action.parameter, idx)
+                : target->multiButtonActivate(outputIdx, action.parameter, idx);
+        if (outputIdx == leaderOutputIndex())
+            leaderOk = ok;
+    }
+    return leaderOk;
+}
+
+bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
+                                              bool forceSingleLeader) const
+{
+    if (m_widgetActionActivationGuard)
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("multibutton"), id(), caption(),
+                QStringLiteral("multibutton/action-cycle-guard/%1").arg(id()),
+                1000,
+                QStringLiteral("action cycle guard index=%1").arg(idx));
+        return false;
+    }
+
+    m_widgetActionActivationGuard = true;
+    const QList<MultiButtonWidgetActionTarget> actions = forceSingleLeader
+            ? QList<MultiButtonWidgetActionTarget>{ leaderWidgetAction() }
+            : effectiveWidgetActions();
+    bool leaderOk = false;
+    bool anyOk = false;
+    for (int i = 0; i < actions.size(); ++i)
+    {
+        const MultiButtonWidgetActionTarget& action = actions.at(i);
+        const bool stagingAvailable = widgetActionUsesInternalStaging(action);
+        const bool actionStaged = staged && stagingAvailable;
+        const bool ok = activateWidgetAction(action, idx, actionStaged);
+        anyOk = anyOk || ok;
+        if (i == 0)
+            leaderOk = ok;
+        if (ok)
+        {
+            VCPluginDiagnostics::breadcrumbRateLimited(
+                    QStringLiteral("multibutton"), id(), caption(),
+                    QStringLiteral("multibutton/action-activate/%1/%2/%3")
+                            .arg(id()).arg(action.widgetId).arg(action.parameter),
+                    250,
+                    QStringLiteral("action activate targetId=%1 output=%2 parameter=%3 index=%4 staged=%5 stagingAvailable=%6")
+                            .arg(action.widgetId).arg(action.outputIndex)
+                            .arg(action.parameter).arg(idx)
+                            .arg(actionStaged ? 1 : 0)
+                            .arg(stagingAvailable ? 1 : 0));
+        }
+    }
+    m_widgetActionActivationGuard = false;
+    return leaderOk || anyOk;
+}
+
+int MultiButtonWidget::widgetEntryCountForAction(
+        const MultiButtonWidgetActionTarget& action) const
+{
+    PresetTableV2MultiButtonTargetIface* target = widgetActionTarget(action);
+    return target ? target->multiButtonEntryCount(widgetActionReadOutputIndex(action),
+                                                  action.parameter) : 0;
+}
+
+QString MultiButtonWidget::widgetEntryNameForAction(
+        const MultiButtonWidgetActionTarget& action, int idx) const
+{
+    PresetTableV2MultiButtonTargetIface* target = widgetActionTarget(action);
+    return target ? target->multiButtonEntryName(widgetActionReadOutputIndex(action),
+                                                 action.parameter, idx) : QString();
+}
+
 VCWidget* MultiButtonWidget::widgetLinkTargetObject() const
 {
+    if (widgetMultiTargetActive())
+    {
+        const MultiButtonWidgetActionTarget action = leaderWidgetAction();
+        return widgetActionTargetObject(action);
+    }
+
     if (m_widgetTargetId == VCWidget::invalidId() || m_widgetTargetId == id())
         return nullptr;
     if (m_widgetTargetObject && m_widgetTargetObjectId == m_widgetTargetId)
@@ -1355,6 +1682,12 @@ VCWidget* MultiButtonWidget::widgetLinkTargetObject() const
         m_widgetTargetObject = candidate;
         m_widgetTargetObjectId = m_widgetTargetId;
         connect(candidate, &QObject::destroyed, this, [this]() {
+            VCPluginDiagnostics::breadcrumbRateLimited(
+                    QStringLiteral("multibutton"), id(), caption(),
+                    QStringLiteral("multibutton/widget-target-destroyed/%1").arg(id()),
+                    1000,
+                    QStringLiteral("widget target destroyed cachedTargetId=%1")
+                            .arg(m_widgetTargetObjectId));
             m_widgetTargetObject.clear();
             m_widgetTargetObjectId = VCWidget::invalidId();
         });
@@ -1410,15 +1743,19 @@ QString MultiButtonWidget::generatedWidgetLinkDisplayName() const
             ? QString::fromLatin1(targetWidget->metaObject()->className())
             : targetWidget->caption().trimmed();
 
+    const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+    const int outputIdx = widgetMultiTargetActive() ? leader.outputIndex : m_widgetOutputIndex;
+    const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
+
     QString outputName;
-    if (m_widgetOutputIndex < 0)
+    if (outputIdx < 0)
         outputName = tr("All");
     else
-        outputName = target->multiButtonOutputName(m_widgetOutputIndex).trimmed();
+        outputName = target->multiButtonOutputName(outputIdx).trimmed();
     if (outputName.isEmpty())
-        outputName = tr("Output %1").arg(m_widgetOutputIndex + 1);
+        outputName = tr("Output %1").arg(outputIdx + 1);
 
-    QString parameterName = target->multiButtonParameterName(m_widgetParameter).trimmed();
+    QString parameterName = target->multiButtonParameterName(parameter).trimmed();
     if (parameterName.endsWith(tr(" preset")))
         parameterName.chop(tr(" preset").size());
     if (parameterName.isEmpty())
@@ -1429,6 +1766,8 @@ QString MultiButtonWidget::generatedWidgetLinkDisplayName() const
 
 bool MultiButtonWidget::isAllOutputsMode() const
 {
+    if (widgetMultiTargetActive())
+        return widgetActionUsesAllOutputs(leaderWidgetAction());
     return m_widgetOutputIndex < 0;
 }
 
@@ -1439,6 +1778,8 @@ int MultiButtonWidget::leaderOutputIndex() const
 
 int MultiButtonWidget::widgetLinkReadOutputIndex() const
 {
+    if (widgetMultiTargetActive())
+        return widgetActionReadOutputIndex(leaderWidgetAction());
     return isAllOutputsMode() ? leaderOutputIndex() : m_widgetOutputIndex;
 }
 
@@ -1498,10 +1839,13 @@ MultiButtonWidget::WidgetLinkOutputState MultiButtonWidget::widgetLinkOutputStat
     if (!target || outputIdx < 0)
         return state;
 
-    state.liveIdx = target->multiButtonLiveIndex(outputIdx, m_widgetParameter);
-    state.stagedValid = target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter);
+    const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+    const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
+
+    state.liveIdx = target->multiButtonLiveIndex(outputIdx, parameter);
+    state.stagedValid = target->multiButtonHasStagedIndex(outputIdx, parameter);
     if (state.stagedValid)
-        state.stagedIdx = target->multiButtonStagedIndex(outputIdx, m_widgetParameter);
+        state.stagedIdx = target->multiButtonStagedIndex(outputIdx, parameter);
     return state;
 }
 
@@ -1538,11 +1882,16 @@ bool MultiButtonWidget::refreshAllOutputsConsensus(PresetTableV2MultiButtonTarge
 
 bool MultiButtonWidget::widgetLinkHasImplicitOff() const
 {
+    const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+    const quint32 widgetId = widgetMultiTargetActive() ? leader.widgetId : m_widgetTargetId;
+    const int outputIndex = widgetMultiTargetActive() ? leader.outputIndex : m_widgetOutputIndex;
+    const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
+
     if (m_mode != MultiButtonMode::Widget
-            || m_widgetTargetId == VCWidget::invalidId()
-            || m_widgetTargetId == id()
-            || m_widgetOutputIndex != 0
-            || m_widgetParameter != 0)
+            || widgetId == VCWidget::invalidId()
+            || widgetId == id()
+            || outputIndex != 0
+            || parameter != 0)
         return false;
 
     return qobject_cast<MultiButtonWidget*>(widgetLinkTargetObject()) != nullptr;
@@ -1598,6 +1947,9 @@ int MultiButtonWidget::widgetBusTargetIndex(PresetTableV2MultiButtonTargetIface*
     if (!target)
         return -1;
 
+    const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+    const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
+
     if (isAllOutputsMode())
     {
         if (!m_allOutputsConsensusState.valid)
@@ -1610,10 +1962,10 @@ int MultiButtonWidget::widgetBusTargetIndex(PresetTableV2MultiButtonTargetIface*
     const int outputIdx = widgetLinkReadOutputIndex();
     if (widgetLinkUsesInternalStaging())
     {
-        if (target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter))
-            return target->multiButtonStagedIndex(outputIdx, m_widgetParameter);
+        if (target->multiButtonHasStagedIndex(outputIdx, parameter))
+            return target->multiButtonStagedIndex(outputIdx, parameter);
     }
-    return target->multiButtonLiveIndex(outputIdx, m_widgetParameter);
+    return target->multiButtonLiveIndex(outputIdx, parameter);
 }
 
 void MultiButtonWidget::commitWidgetBusFromUi(int selectorIdx)
@@ -1721,12 +2073,8 @@ void MultiButtonWidget::applyWidgetRecallInput(uchar value)
     if (widgetBusInPublishGrace())
         return;
 
-    PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-    if (!target)
-        return;
-
     const int idx = value == 0 ? -1 : int(value) - 1;
-    const bool ok = activateLinkedOutput(target, idx, widgetLinkUsesInternalStaging());
+    const bool ok = activateWidgetActions(idx, true);
     if (!ok)
         return;
 
@@ -2183,6 +2531,8 @@ int MultiButtonWidget::entryCount() const
         return m_functionIds.size();
     if (m_mode == MultiButtonMode::Widget)
     {
+        if (widgetMultiTargetActive())
+            return widgetEntryCountForAction(leaderWidgetAction());
         if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
             return target->multiButtonEntryCount(widgetLinkReadOutputIndex(), m_widgetParameter);
         return 0;
@@ -2934,9 +3284,11 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     if (!allowFlashEntry && entryIsFlash(idx))
         return;
 
-    const bool widgetInternalStage = widgetLinkUsesInternalStaging()
+    const bool allowPerActionStaging = (m_mode == MultiButtonMode::Widget)
             && !m_widgetLiveActivationOverride;
-    if (!widgetInternalStage && !m_visualOnly && idx == m_currentIndex) return;
+    const bool widgetInternalStage = allowPerActionStaging
+            && widgetLinkUsesInternalStaging();
+    if (!allowPerActionStaging && !m_visualOnly && idx == m_currentIndex) return;
 
     if (m_logPresetChanges)
     {
@@ -2950,8 +3302,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     {
         if (m_mode == MultiButtonMode::Widget)
         {
-            PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-            const bool ok = target && activateLinkedOutput(target, -1, widgetInternalStage);
+            const bool ok = activateWidgetActions(-1, allowPerActionStaging);
             if (ok)
             {
                 syncWidgetLinkLiveStagedState();
@@ -2980,8 +3331,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     }
     else if (m_mode == MultiButtonMode::Widget)
     {
-        PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-        const bool ok = target && activateLinkedOutput(target, idx, widgetInternalStage);
+        const bool ok = activateWidgetActions(idx, allowPerActionStaging);
         if (!ok)
         {
             m_currentIndex = -1;
@@ -3034,8 +3384,7 @@ void MultiButtonWidget::activateAutomationLive(int idx)
         const bool previousOverride = m_widgetLiveActivationOverride;
         m_widgetLiveActivationOverride = true;
 
-        PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-        const bool ok = target && activateLinkedOutput(target, idx, false);
+        const bool ok = activateWidgetActions(idx, false);
         if (ok)
         {
             syncWidgetLinkLiveStagedState();
@@ -3125,8 +3474,7 @@ void MultiButtonWidget::stageEntry(int idx, bool allowFlashEntry)
 
     if (widgetLinkUsesInternalStaging())
     {
-        PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
-        if (!target || !activateLinkedOutput(target, idx, true))
+        if (!activateWidgetActions(idx, true))
             return;
     }
     m_stagedIndex = idx;
@@ -3649,6 +3997,8 @@ QString MultiButtonWidget::linkedWidgetEntryName(int idx) const
 {
     if (idx < 0)
         return QString();
+    if (widgetMultiTargetActive())
+        return widgetEntryNameForAction(leaderWidgetAction(), idx);
     if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
         return target->multiButtonEntryName(widgetLinkReadOutputIndex(), m_widgetParameter, idx);
     return QString();
@@ -3718,6 +4068,8 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
         return false;
 
     PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+    const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+    const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
 
     int liveIdx = -1;
     int stagedIdx = -1;
@@ -3736,20 +4088,20 @@ bool MultiButtonWidget::syncWidgetLinkLiveStagedState()
         if (target)
         {
             stateRevision = target->multiButtonStateRevision(leaderOutputIndex(),
-                                                             m_widgetParameter);
+                                                             parameter);
         }
     }
     else
     {
         const int outputIdx = widgetLinkReadOutputIndex();
         liveIdx = target
-                ? target->multiButtonLiveIndex(outputIdx, m_widgetParameter) : -1;
+                ? target->multiButtonLiveIndex(outputIdx, parameter) : -1;
         stateRevision = target
-                ? target->multiButtonStateRevision(outputIdx, m_widgetParameter) : 0;
+                ? target->multiButtonStateRevision(outputIdx, parameter) : 0;
         stagedValid = target && widgetLinkUsesInternalStaging()
-                && target->multiButtonHasStagedIndex(outputIdx, m_widgetParameter);
+                && target->multiButtonHasStagedIndex(outputIdx, parameter);
         stagedIdx = stagedValid
-                ? target->multiButtonStagedIndex(outputIdx, m_widgetParameter) : -1;
+                ? target->multiButtonStagedIndex(outputIdx, parameter) : -1;
     }
 
     const int prevLive = m_currentIndex;
@@ -3799,7 +4151,11 @@ int MultiButtonWidget::monitorHighlightIndex() const
             return m_monitorMatchIndex >= 0 ? m_monitorMatchIndex : m_currentIndex;
         }
         if (PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget())
-            return target->multiButtonLiveIndex(widgetLinkReadOutputIndex(), m_widgetParameter);
+        {
+            const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+            const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
+            return target->multiButtonLiveIndex(widgetLinkReadOutputIndex(), parameter);
+        }
         return m_monitorMatchIndex >= 0 ? m_monitorMatchIndex : m_currentIndex;
     }
 
@@ -3841,8 +4197,10 @@ bool MultiButtonWidget::stagedHighlightValid() const
         if (isAllOutputsMode())
             return m_allOutputsConsensusState.valid && m_allOutputsConsensusState.stagedValid;
         PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
+        const MultiButtonWidgetActionTarget leader = leaderWidgetAction();
+        const int parameter = widgetMultiTargetActive() ? leader.parameter : m_widgetParameter;
         return target
-                && target->multiButtonHasStagedIndex(widgetLinkReadOutputIndex(), m_widgetParameter);
+                && target->multiButtonHasStagedIndex(widgetLinkReadOutputIndex(), parameter);
     }
 
     return hasLocalStagedSelection();
@@ -3852,6 +4210,9 @@ bool MultiButtonWidget::widgetLinkUsesInternalStaging() const
 {
     if (m_mode != MultiButtonMode::Widget)
         return false;
+
+    if (widgetMultiTargetActive())
+        return widgetActionUsesInternalStaging(leaderWidgetAction());
 
     PresetTableV2MultiButtonTargetIface* target = widgetLinkTarget();
     return target
@@ -4820,6 +5181,8 @@ void MultiButtonWidget::editProperties()
         m_widgetParameter,
         m_widgetLiveInputSource,
         m_widgetBusPolicy,
+        m_widgetActionMode,
+        m_widgetActionTargets,
         page(),
         this);
 
@@ -4876,6 +5239,8 @@ void MultiButtonWidget::editProperties()
     m_widgetOutputIndex = dlg.widgetOutputIndex();
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = dlg.widgetParameter();
+    setWidgetActionMode(dlg.widgetActionMode());
+    setWidgetActionTargets(dlg.widgetActionTargets());
     m_widgetLiveInputSource = cloneInputSource(dlg.widgetLiveInputSource());
     m_widgetBusPolicy = dlg.widgetBusPolicy();
     releaseWidgetLiveFaders();
@@ -4959,6 +5324,8 @@ VCWidget* MultiButtonWidget::createCopy(VCWidget* parent)
     copy->m_widgetTargetId = m_widgetTargetId;
     copy->m_widgetOutputIndex = m_widgetOutputIndex;
     copy->m_widgetParameter = m_widgetParameter;
+    copy->m_widgetActionMode = m_widgetActionMode;
+    copy->m_widgetActionTargets = m_widgetActionTargets;
     copy->m_widgetLiveInputSource = cloneInputSource(m_widgetLiveInputSource);
     copy->m_widgetBusPolicy = m_widgetBusPolicy;
     copy->m_targetListName = m_targetListName;
@@ -5203,6 +5570,9 @@ void MultiButtonWidget::applyPropertiesFrom(const VCWidget* source, PastePropert
         m_widgetTargetObjectId = VCWidget::invalidId();
         m_widgetOutputIndex = src->m_widgetOutputIndex;
         m_widgetParameter = src->m_widgetParameter;
+        m_widgetActionMode = src->m_widgetActionMode;
+        m_widgetActionTargets = src->m_widgetActionTargets;
+        clearWidgetActionTargetCache();
         m_widgetLiveInputSource = cloneInputSource(src->m_widgetLiveInputSource);
         m_widgetBusPolicy = src->m_widgetBusPolicy;
         m_targetListName = src->m_targetListName;
@@ -5282,6 +5652,19 @@ void MultiButtonWidget::toClipboardJson(QJsonObject &obj, const Doc *doc) const
     widgetLink["outputIndex"] = m_widgetOutputIndex;
     widgetLink["parameter"] = m_widgetParameter;
     widgetLink["busPolicy"] = widgetBusPolicyToString(m_widgetBusPolicy);
+    widgetLink["actionMode"] = widgetActionModeToString(m_widgetActionMode);
+    QJsonArray actionArr;
+    for (const MultiButtonWidgetActionTarget& action : m_widgetActionTargets)
+    {
+        QJsonObject ao;
+        ao["enabled"] = action.enabled;
+        ao["targetWidgetId"] = QString::number(action.widgetId);
+        ao["outputIndex"] = action.outputIndex;
+        ao["parameter"] = action.parameter;
+        actionArr.append(ao);
+    }
+    if (!actionArr.isEmpty())
+        widgetLink["actions"] = actionArr;
     if (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
     {
         widgetLink["liveInputUniverse"] = int(m_widgetLiveInputSource->universe());
@@ -5507,6 +5890,21 @@ void MultiButtonWidget::fromClipboardJson(const QJsonObject &obj, Doc *doc)
     m_widgetOutputIndex = widgetLink["outputIndex"].toInt(0);
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetLink["parameter"].toInt(0));
+    m_widgetActionMode = stringToWidgetActionMode(widgetLink["actionMode"].toString());
+    m_widgetActionTargets.clear();
+    const QJsonArray actionArr = widgetLink["actions"].toArray();
+    for (const QJsonValue& val : actionArr)
+    {
+        const QJsonObject ao = val.toObject();
+        MultiButtonWidgetActionTarget action;
+        action.enabled = ao["enabled"].toBool(true);
+        action.widgetId = ao["targetWidgetId"].toString(
+                    QString::number(VCWidget::invalidId())).toUInt();
+        action.outputIndex = ao["outputIndex"].toInt(0);
+        action.parameter = qMax(0, ao["parameter"].toInt(0));
+        m_widgetActionTargets.append(action);
+    }
+    clearWidgetActionTargetCache();
     if (widgetLink.contains(QStringLiteral("busPolicy")))
     {
         m_widgetBusPolicy = stringToWidgetBusPolicy(
@@ -5872,6 +6270,8 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     quint32                   widgetTargetId = VCWidget::invalidId();
     int                       widgetOutputIndex = 0;
     int                       widgetParameter = 0;
+    MultiButtonWidgetActionMode widgetActionMode = MultiButtonWidgetActionMode::SingleTarget;
+    QList<MultiButtonWidgetActionTarget> widgetActionTargets;
     QSharedPointer<QLCInputSource> widgetLiveInputSource;
     QList<MultiButtonAutomationProfile> loadedAutomation;
     bool hasAutomationElement = false;
@@ -5917,6 +6317,9 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             widgetTargetId = attrs.value(KXMLWidgetLinkTarget).toUInt();
             widgetOutputIndex = attrs.value(KXMLWidgetLinkOutput).toInt();
             widgetParameter = attrs.value(KXMLWidgetLinkParam).toInt();
+            if (attrs.hasAttribute(KXMLWidgetActionMode))
+                widgetActionMode = stringToWidgetActionMode(
+                        attrs.value(KXMLWidgetActionMode).toString());
             if (attrs.hasAttribute(KXMLWidgetBusPolicy))
             {
                 m_widgetBusPolicy = stringToWidgetBusPolicy(
@@ -5926,6 +6329,18 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
             {
                 if (root.name() == KXMLWidgetLiveInput)
                     widgetLiveInputSource = readInputBlock(root, this).source;
+                else if (root.name() == KXMLWidgetActionTarget)
+                {
+                    const auto aa = root.attributes();
+                    MultiButtonWidgetActionTarget action;
+                    action.enabled = !aa.hasAttribute(KXMLWidgetActionEnabled)
+                            || aa.value(KXMLWidgetActionEnabled).toInt() != 0;
+                    action.widgetId = aa.value(KXMLWidgetLinkTarget).toUInt();
+                    action.outputIndex = aa.value(KXMLWidgetLinkOutput).toInt();
+                    action.parameter = qMax(0, aa.value(KXMLWidgetLinkParam).toInt());
+                    widgetActionTargets.append(action);
+                    root.skipCurrentElement();
+                }
                 else if (root.name() == KXMLWidgetFlashGateInput)
                     root.skipCurrentElement();
                 else
@@ -6210,6 +6625,9 @@ bool MultiButtonWidget::loadXML(QXmlStreamReader& root)
     m_widgetOutputIndex = widgetOutputIndex;
     m_allOutputsConsensusState = WidgetLinkConsensusState();
     m_widgetParameter = qMax(0, widgetParameter);
+    m_widgetActionMode = widgetActionMode;
+    m_widgetActionTargets = widgetActionTargets;
+    clearWidgetActionTargetCache();
     m_widgetLiveInputSource = cloneInputSource(widgetLiveInputSource);
     syncWidgetLiveInputSourceToTarget();
     releaseWidgetLiveFaders();
@@ -6345,11 +6763,27 @@ bool MultiButtonWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLWidgetLinkOutput, QString::number(m_widgetOutputIndex));
         doc->writeAttribute(KXMLWidgetLinkParam, QString::number(m_widgetParameter));
         doc->writeAttribute(KXMLWidgetBusPolicy, widgetBusPolicyToString(m_widgetBusPolicy));
+        if (m_widgetActionMode != MultiButtonWidgetActionMode::SingleTarget)
+            doc->writeAttribute(KXMLWidgetActionMode,
+                                widgetActionModeToString(m_widgetActionMode));
         if (!m_widgetLiveInputSource.isNull() && m_widgetLiveInputSource->isValid())
         {
             doc->writeStartElement(KXMLWidgetLiveInput);
             saveInputBlock(doc, m_widgetLiveInputSource, QKeySequence());
             doc->writeEndElement();
+        }
+        if (m_widgetActionMode == MultiButtonWidgetActionMode::MultiTarget)
+        {
+            for (const MultiButtonWidgetActionTarget& action : m_widgetActionTargets)
+            {
+                doc->writeStartElement(KXMLWidgetActionTarget);
+                doc->writeAttribute(KXMLWidgetActionEnabled,
+                                    action.enabled ? QStringLiteral("1") : QStringLiteral("0"));
+                doc->writeAttribute(KXMLWidgetLinkTarget, QString::number(action.widgetId));
+                doc->writeAttribute(KXMLWidgetLinkOutput, QString::number(action.outputIndex));
+                doc->writeAttribute(KXMLWidgetLinkParam, QString::number(action.parameter));
+                doc->writeEndElement();
+            }
         }
         doc->writeEndElement();
     }

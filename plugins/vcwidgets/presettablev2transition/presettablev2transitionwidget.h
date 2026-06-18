@@ -16,6 +16,7 @@
 #include <QCheckBox>
 #include <QTabWidget>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QHash>
 #include <QMutex>
 #include <QSet>
@@ -88,8 +89,11 @@ public:
     explicit PresetTableV2TransitionWidget(QWidget* parent, Doc* doc);
     ~PresetTableV2TransitionWidget() override;
 
-    quint32 targetTableId() const;
+    quint32 targetTableId() const override;
     void setTargetTableId(quint32 id);
+    quint32 bankSourceEngineId(PTTransitionMode mode) const override;
+    void setBankSourceEngineId(PTTransitionMode mode, quint32 engineId);
+    bool bankSourceWouldCreateCycle(PTTransitionMode mode, quint32 sourceEngineId) const;
 
     PresetTableV2ControlIface* linkedTable() const;
     Doc* doc() const { return m_doc; }
@@ -292,8 +296,16 @@ private:
                                  int outputIdx = -1, int selectionIdx = -1);
     bool removeSelectionAt(PTTransitionMode mode, int row, int outputIdx, int selectionIndex);
     QVector<PTTransitionColumnGroupBar::Group> columnGroupsForMode(PTTransitionMode mode) const;
+    QSet<int> allowedPresetColumnsForMode(PTTransitionMode mode) const;
+    bool isPresetColumnAllowedForMode(PTTransitionMode mode, int col) const;
     void applyColumnGroupFilter(QTreeWidget* table, PTTransitionMode mode);
     void refreshColumnGroupBarForActiveTab();
+    bool bankIsSlaved(PTTransitionMode mode) const;
+    bool effectiveProviderSnapshotForBank(PTTransitionMode mode,
+                                          ::PTTransitionProviderSnapshot* snapshot) const;
+    void notifySlaveEnginesOfSnapshotChange(const QString& reason);
+    QString bankSourceDescription(PTTransitionMode mode) const;
+    void updateBankSourceUi(PTTransitionMode mode);
     void migrateLegacyInputSources();
     void updateEffectPreview();
     int gridSpanForPreset(const PTTransitionPreset& preset) const;
@@ -328,6 +340,7 @@ private:
     QTreeWidgetItem* selectedPresetItem(QTreeWidget* table) const;
     void setColumnOverrideValue(PTTransitionPresetOverride& ov, int col,
                                 const PTTransitionPreset& value);
+    QSet<int> applySmartWingsDefaults(PTTransitionMode mode, QTreeWidgetItem* item);
     bool overrideColumnDiffersFromParent(const PTTransitionPreset& parent,
                                          const PTTransitionPresetOverride& ov,
                                          int col) const;
@@ -443,6 +456,7 @@ private:
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
+    QHash<int, quint32> m_bankSourceEngineIds;
     mutable QMutex m_providerSnapshotMutex;
     PTTransitionProviderSnapshot m_providerSnapshot;
     quint64 m_providerSnapshotRevision = 0;
@@ -458,6 +472,7 @@ private:
     QWidget*                 m_spatialPreviewColumn = nullptr;
     QLabel*                  m_curveLabel = nullptr;
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
+    QTimer*                  m_previewRefreshTimer = nullptr;
     QLabel*                  m_positionPreviewLabel = nullptr;
     class QStackedWidget*    m_positionMotionStack = nullptr;
     class PTPositionMotion1DPreviewWidget* m_positionMotion1DWidget = nullptr;
@@ -481,6 +496,7 @@ private:
     PTTransitionColumnGroupBar* m_positionMotionColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_channel1DColumnGroupBar = nullptr;
     PTTransitionColumnGroupBar* m_multiFxColumnGroupBar = nullptr;
+    QHash<int, QLabel*> m_bankSourceLabels;
     QSet<int> m_sweepExpandedPresets;
     QSet<int> m_continuousExpandedPresets;
     QSet<int> m_positionMotionExpandedPresets;

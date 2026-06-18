@@ -52,6 +52,7 @@
 #include <QAction>
 #include <QLabel>
 #include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -62,6 +63,7 @@
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QSplitter>
+#include <QTabBar>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QMetaType>
@@ -161,6 +163,7 @@ static const QString KXMLColName    = QStringLiteral("Name");
 static const QString KXMLColType    = QStringLiteral("Type");
 static const QString KXMLColFade    = QStringLiteral("Fade");
 static const QString KXMLColUseFor1DFx = QStringLiteral("UseFor1DFx");
+static const QString KXMLColIntensityInput = QStringLiteral("ColumnIntensityInput");
 static const QString KXMLOption     = QStringLiteral("Option");
 static const QString KXMLOptName     = QStringLiteral("Name");
 static const QString KXMLOptValue    = QStringLiteral("Value");
@@ -207,6 +210,7 @@ static const QString KXMLOutContinuousPreset = QStringLiteral("ContinuousPreset"
 static const QString KXMLOutPositionMotionPreset = QStringLiteral("PositionMotionPreset");
 static const QString KXMLOutChannel1DPreset = QStringLiteral("Channel1DPreset");
 static const QString KXMLOutMultiFxPreset = QStringLiteral("MultiFxPreset");
+static const QString KXMLOutIntensityColumn = QStringLiteral("IntensityColumn");
 static const QString KXMLOutTransitionPreset = QStringLiteral("TransitionPreset");
 static const QString KXMLOutTransitionSecondary = QStringLiteral("TransitionSecondaryPreset");
 static const QString KXMLOutSecondaryRow = QStringLiteral("SecondaryRow");
@@ -215,6 +219,7 @@ static const QString KXMLOutTransSweepInput = QStringLiteral("OutTransSweepInput
 static const QString KXMLOutTransContinuousInput = QStringLiteral("OutTransContinuousInput");
 static const QString KXMLOutPositionMotionInput = QStringLiteral("OutPositionMotionInput");
 static const QString KXMLOutChannel1DInput = QStringLiteral("OutChannel1DFxInput");
+static const QString KXMLOutIntensityInput = QStringLiteral("OutIntensityInput");
 static const QString KXMLOutTransSecondaryInput = QStringLiteral("OutTransSecondaryInput");
 static const QString KXMLOutMultiFxInput = QStringLiteral("OutMultiFxInput");
 
@@ -601,6 +606,10 @@ static const QString KXMLPositionTilt   = QStringLiteral("Tilt");
 static const QString KXMLPositionPanDeg = QStringLiteral("PanDeg");
 static const QString KXMLPositionTiltDeg= QStringLiteral("TiltDeg");
 static const QString KXMLPositionOverride = QStringLiteral("PositionOverride");
+static const QString KXMLCellValue      = QStringLiteral("CellValue");
+static const QString KXMLCellValueOverride = QStringLiteral("CellValueOverride");
+static const QString KXMLCellValueCol   = QStringLiteral("Col");
+static const QString KXMLCellValueValue = QStringLiteral("Value");
 static const QString KXMLPosOvRow       = QStringLiteral("Row");
 static const QString KXMLPosOvOutput    = QStringLiteral("Output");
 static const QString KXMLPosOvSelection = QStringLiteral("Selection");
@@ -1014,7 +1023,7 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_nameFrozenTable->verticalHeader()->setDefaultSectionSize(22);
     m_nameFrozenTable->horizontalHeader()->setStretchLastSection(true);
     m_nameFrozenTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_nameFrozenTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_nameFrozenTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     m_nameFrozenTable->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     m_nameFrozenTable->setFixedWidth((m_nameColWidth > 0 ? m_nameColWidth : 140) + 2);
     m_nameFrozenTable->installEventFilter(this);
@@ -1065,6 +1074,8 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     m_positionPresetTree->setHeaderHidden(true);
     m_positionPresetTree->setRootIsDecorated(true);
     m_positionPresetTree->setIndentation(14);
+    m_positionPresetTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_positionPresetTree->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     rowListLayout->addWidget(m_positionPresetTree, 1);
     m_positionRowListPanel->setMinimumWidth(200);
     m_positionRowListPanel->setMaximumWidth(280);
@@ -1179,15 +1190,95 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
 
     m_positionValueStrip->setMaximumHeight(48);
 
+    m_tableGridTabs = new QTabWidget(this);
+    m_tableTabIndex = m_tableGridTabs->addTab(m_tableWrap, tr("Table"));
+
     m_positionSplitter = new QSplitter(Qt::Horizontal, this);
     m_positionSplitter->addWidget(m_positionRowListPanel);
-    m_positionSplitter->addWidget(m_tableWrap);
+    m_positionSplitter->addWidget(m_tableGridTabs);
     m_positionSplitter->addWidget(m_positionEditorPanel);
+
+    m_valueGridPanel = new QWidget(this);
+    QVBoxLayout* valueGridLayout = new QVBoxLayout(m_valueGridPanel);
+    valueGridLayout->setContentsMargins(4, 4, 4, 4);
+    valueGridLayout->setSpacing(6);
+    QSplitter* valueGridSplitter = new QSplitter(Qt::Horizontal, m_valueGridPanel);
+    m_valueGridTree = new QTreeWidget(valueGridSplitter);
+    m_valueGridTree->setHeaderHidden(true);
+    m_valueGridTree->setRootIsDecorated(true);
+    m_valueGridTree->setIndentation(14);
+    m_valueGridTree->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_valueGridTree->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_valueGridTree->setMinimumWidth(180);
+    valueGridSplitter->addWidget(m_valueGridTree);
+
+    QWidget* valueGridRight = new QWidget(valueGridSplitter);
+    QVBoxLayout* valueGridRightLayout = new QVBoxLayout(valueGridRight);
+    valueGridRightLayout->setContentsMargins(4, 0, 0, 0);
+    valueGridRightLayout->setSpacing(6);
+    QLabel* valueGridTitle = new QLabel(tr("Fixture Grid"), valueGridRight);
+    valueGridRightLayout->addWidget(valueGridTitle);
+    m_valueGrid = new PTPositionFixtureGridWidget(valueGridRight);
+    m_valueGrid->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    valueGridRightLayout->addWidget(m_valueGrid, 1);
+
+    QFormLayout* valueForm = new QFormLayout();
+    valueForm->setContentsMargins(0, 0, 0, 0);
+    m_valueGridColumnCombo = new QComboBox(valueGridRight);
+    valueForm->addRow(tr("Column"), m_valueGridColumnCombo);
+    QWidget* valueRow = new QWidget(valueGridRight);
+    QHBoxLayout* valueRowLayout = new QHBoxLayout(valueRow);
+    valueRowLayout->setContentsMargins(0, 0, 0, 0);
+    m_valueGridValueSlider = new QSlider(Qt::Horizontal, valueRow);
+    m_valueGridValueSlider->setRange(0, 255);
+    m_valueGridValueSpin = new QSpinBox(valueRow);
+    m_valueGridValueSpin->setRange(0, 255);
+    valueRowLayout->addWidget(m_valueGridValueSlider, 1);
+    valueRowLayout->addWidget(m_valueGridValueSpin);
+    valueForm->addRow(tr("Value"), valueRow);
+    QWidget* spreadRow = new QWidget(valueGridRight);
+    QHBoxLayout* spreadRowLayout = new QHBoxLayout(spreadRow);
+    spreadRowLayout->setContentsMargins(0, 0, 0, 0);
+    m_valueGridSpreadSlider = new QSlider(Qt::Horizontal, spreadRow);
+    m_valueGridSpreadSlider->setRange(-255, 255);
+    m_valueGridSpreadSlider->setValue(0);
+    m_valueGridSpreadSpin = new QSpinBox(spreadRow);
+    m_valueGridSpreadSpin->setRange(-255, 255);
+    spreadRowLayout->addWidget(m_valueGridSpreadSlider, 1);
+    spreadRowLayout->addWidget(m_valueGridSpreadSpin);
+    valueForm->addRow(tr("Spread"), spreadRow);
+    valueGridRightLayout->addLayout(valueForm);
+
+    m_valueGridInfoLabel = new QLabel(valueGridRight);
+    m_valueGridInfoLabel->setWordWrap(true);
+    m_valueGridInfoLabel->setFont(stripFont);
+    valueGridRightLayout->addWidget(m_valueGridInfoLabel);
+    QHBoxLayout* valueToolRow = new QHBoxLayout();
+    m_valueGridClearBtn = new QPushButton(tr("Clear"), valueGridRight);
+    m_valueGridCopySelectionBtn = new QPushButton(tr("Copy Selection"), valueGridRight);
+    m_valueGridPasteSelectionBtn = new QPushButton(tr("Paste Selection"), valueGridRight);
+    m_valueGridPasteSelectionBtn->setEnabled(false);
+    m_valueGridAddSelectionBtn = new QPushButton(tr("Add Selection"), valueGridRight);
+    valueToolRow->addWidget(m_valueGridClearBtn);
+    valueToolRow->addWidget(m_valueGridCopySelectionBtn);
+    valueToolRow->addWidget(m_valueGridPasteSelectionBtn);
+    valueToolRow->addStretch(1);
+    valueToolRow->addWidget(m_valueGridAddSelectionBtn);
+    valueGridRightLayout->addLayout(valueToolRow);
+    valueGridRightLayout->addStretch(1);
+    valueGridSplitter->addWidget(valueGridRight);
+    valueGridSplitter->setStretchFactor(0, 0);
+    valueGridSplitter->setStretchFactor(1, 1);
+    valueGridLayout->addWidget(valueGridSplitter, 1);
+
+    m_gridTabIndex = m_tableGridTabs->addTab(m_valueGridPanel, tr("Grid"));
     m_positionSplitter->setStretchFactor(0, 0);
     m_positionSplitter->setStretchFactor(1, 3);
     m_positionSplitter->setStretchFactor(2, 4);
     m_positionRowListPanel->setVisible(false);
     m_positionEditorPanel->setVisible(false);
+    if (m_gridTabIndex >= 0)
+        m_tableGridTabs->setTabVisible(m_gridTabIndex, false);
     m_layout->addWidget(m_positionSplitter, 1);
 
     connect(m_positionGrid, &PTPositionFixtureGridWidget::selectionChanged,
@@ -1233,6 +1324,30 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
             this, &PresetTableV2Widget::slotPositionRevert);
     connect(m_table, &QTableWidget::currentCellChanged,
             this, &PresetTableV2Widget::slotTableCurrentCellChanged);
+    connect(m_valueGridTree, &QTreeWidget::currentItemChanged,
+            this, &PresetTableV2Widget::slotValueGridTreeChanged);
+    connect(m_valueGrid, &PTPositionFixtureGridWidget::selectionChanged,
+            this, &PresetTableV2Widget::slotValueGridSelectionChanged);
+    connect(m_valueGrid, &PTPositionFixtureGridWidget::cellEditRequested,
+            this, &PresetTableV2Widget::slotValueGridCellEditRequested);
+    connect(m_valueGridColumnCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &PresetTableV2Widget::slotValueGridColumnChanged);
+    connect(m_valueGridValueSlider, &QSlider::valueChanged,
+            this, &PresetTableV2Widget::slotValueGridValueChanged);
+    connect(m_valueGridValueSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PresetTableV2Widget::slotValueGridValueChanged);
+    connect(m_valueGridSpreadSlider, &QSlider::valueChanged,
+            this, &PresetTableV2Widget::slotValueGridSpreadChanged);
+    connect(m_valueGridSpreadSpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PresetTableV2Widget::slotValueGridSpreadChanged);
+    connect(m_valueGridClearBtn, &QPushButton::clicked,
+            this, &PresetTableV2Widget::slotValueGridClear);
+    connect(m_valueGridAddSelectionBtn, &QPushButton::clicked,
+            this, &PresetTableV2Widget::slotValueGridAddSelection);
+    connect(m_valueGridCopySelectionBtn, &QPushButton::clicked,
+            this, &PresetTableV2Widget::slotValueGridCopySelection);
+    connect(m_valueGridPasteSelectionBtn, &QPushButton::clicked,
+            this, &PresetTableV2Widget::slotValueGridPasteSelection);
 
     // ---- Status bar (Operate mode only) ----------------------------------
     m_statusBar = new QLabel(this);
@@ -1249,6 +1364,12 @@ PresetTableV2Widget::PresetTableV2Widget(QWidget* parent, Doc* doc)
     {
         connect(m_doc, SIGNAL(fixtureGroupMaskChanged(quint32)),
                 this, SLOT(slotFixtureGroupMaskChanged(quint32)));
+        if (m_doc->inputOutputMap())
+        {
+            connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+                    this, SLOT(slotInputValueChanged(quint32,quint32,uchar)),
+                    Qt::UniqueConnection);
+        }
     }
 }
 
@@ -1272,11 +1393,40 @@ void PresetTableV2Widget::setColumns(const QVector<PTColumn>& cols)
     {
         QMutexLocker lk(&m_stateMutex);
         m_columns = cols;
+        for (PTColumn& col : m_columns)
+            col.intensityInputSources.resize(m_outputs.size());
+        ensureColumnIntensitySizeLocked();
         // Resize row value vectors
         for (PTRow& row : m_rows)
+        {
             row.values.resize(m_columns.size(), 0);
+            for (auto it = row.cellValues.begin(); it != row.cellValues.end(); )
+            {
+                for (auto vIt = it.value().values.begin(); vIt != it.value().values.end(); )
+                    vIt = (vIt.key() >= m_columns.size()) ? it.value().values.erase(vIt) : ++vIt;
+                it = it.value().values.isEmpty() ? row.cellValues.erase(it) : ++it;
+            }
+        }
+        for (QHash<int, PTValueOutputLayer>& rowLayers : m_valueOverrides)
+        {
+            for (auto layerIt = rowLayers.begin(); layerIt != rowLayers.end(); ++layerIt)
+            {
+                auto prune = [this](QMap<QLCPoint, PTCellValueOverrides>& map) {
+                    for (auto it = map.begin(); it != map.end(); )
+                    {
+                        for (auto vIt = it.value().values.begin(); vIt != it.value().values.end(); )
+                            vIt = (vIt.key() >= m_columns.size()) ? it.value().values.erase(vIt) : ++vIt;
+                        it = it.value().values.isEmpty() ? map.erase(it) : ++it;
+                    }
+                };
+                prune(layerIt.value().allOverrides);
+                for (PTValueSelectionLayer& sel : layerIt.value().selections)
+                    prune(sel.overrides);
+            }
+        }
     }
     rebuildTable();
+    rebuildValueGridEditor();
 }
 
 void PresetTableV2Widget::setRows(const QVector<PTRow>& rows)
@@ -1286,12 +1436,14 @@ void PresetTableV2Widget::setRows(const QVector<PTRow>& rows)
         m_rows = rows;
         for (PTRow& row : m_rows)
             row.values.resize(m_columns.size(), 0);
+        m_valueOverrides.resize(m_rows.size());
         // Reset active rows
         m_activeRow.fill(-1, m_outputs.size());
         m_stagedRow.fill(-1, m_outputs.size());
         m_stagedRowValid.fill(false, m_outputs.size());
     }
     rebuildTable();
+    rebuildValueGridEditor();
 }
 
 void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
@@ -1309,6 +1461,9 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
     {
         QMutexLocker lk(&m_stateMutex);
         m_outputs = capped;
+        for (PTColumn& col : m_columns)
+            col.intensityInputSources.resize(m_outputs.size());
+        ensureColumnIntensitySizeLocked();
         m_activeRow.resize(m_outputs.size());
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
@@ -1350,6 +1505,10 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_multiFxStagedElapsedMs.resize(m_outputs.size());
         m_multiFxLastCycleMs.resize(m_outputs.size());
         m_multiFxStagedLastCycleMs.resize(m_outputs.size());
+        const int oldIntensitySize = m_outputIntensity.size();
+        m_outputIntensity.resize(m_outputs.size());
+        for (int i = oldIntensitySize; i < m_outputIntensity.size(); ++i)
+            m_outputIntensity[i] = 255;
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
         m_spatialChase.resize(m_outputs.size());
@@ -1497,8 +1656,10 @@ void PresetTableV2Widget::slotAddRow()
         QMutexLocker lk(&m_stateMutex);
         m_rows.append(row);
         m_positionOverrides.append(QHash<int, PTPositionOutputLayer>());
+        m_valueOverrides.append(QHash<int, PTValueOutputLayer>());
     }
     rebuildTable();
+    rebuildValueGridEditor();
     m_doc->setModified();
 }
 
@@ -1512,11 +1673,14 @@ void PresetTableV2Widget::slotRemoveRow()
         m_rows.remove(selRow);
         if (selRow >= 0 && selRow < m_positionOverrides.size())
             m_positionOverrides.remove(selRow);
+        if (selRow >= 0 && selRow < m_valueOverrides.size())
+            m_valueOverrides.remove(selRow);
         // Clamp active rows
         for (int& ar : m_activeRow)
             if (ar >= m_rows.size()) ar = -1;
     }
     rebuildTable();
+    rebuildValueGridEditor();
     m_doc->setModified();
 }
 
@@ -1585,7 +1749,8 @@ void PresetTableV2Widget::slotColumnHeaderDoubleClicked(int logicalIndex)
     FixtureGroup* grp = (colMode == PTMode::FixtureGroup || colMode == PTMode::Position)
         ? m_doc->fixtureGroup(groupId) : nullptr;
 
-    PresetTableV2ColumnDialog dlg(m_doc, m_columns[valCol], colMode, grp, this);
+    PresetTableV2ColumnDialog dlg(m_doc, m_columns[valCol], colMode, grp,
+                                  m_outputs, page(), this);
     if (dlg.exec() != QDialog::Accepted) return;
 
     {
@@ -1801,7 +1966,10 @@ void PresetTableV2Widget::pasteValueToItem(QTableWidgetItem* item, const QString
     int row = item->row();
     QMutexLocker lk(&m_stateMutex);
     if (row < m_rows.size() && valCol < m_rows[row].values.size())
+    {
         m_rows[row].values[valCol] = uchar(dmxVal);
+        clearGridOverridesForColumnLocked(row, valCol);
+    }
 }
 
 void PresetTableV2Widget::slotTableContextMenu(const QPoint& pos)
@@ -2139,18 +2307,30 @@ PTPositionValue PresetTableV2Widget::positionForPreview(int tableRow, int output
 void PresetTableV2Widget::updatePositionModeChrome()
 {
     const bool positionMode = (m_mode == PTMode::Position);
+    const bool fixtureGroupMode = (m_mode == PTMode::FixtureGroup);
     if (m_positionEditorPanel)
         m_positionEditorPanel->setVisible(positionMode);
     if (m_positionRowListPanel)
         m_positionRowListPanel->setVisible(positionMode);
-    if (m_tableWrap)
-        m_tableWrap->setVisible(!positionMode);
+    if (m_tableGridTabs)
+    {
+        m_tableGridTabs->setVisible(!positionMode);
+        if (m_tableGridTabs->tabBar())
+            m_tableGridTabs->tabBar()->setVisible(fixtureGroupMode);
+        if (m_gridTabIndex >= 0)
+            m_tableGridTabs->setTabVisible(m_gridTabIndex, fixtureGroupMode);
+        if (!fixtureGroupMode && m_tableGridTabs->currentIndex() == m_gridTabIndex
+                && m_tableTabIndex >= 0)
+            m_tableGridTabs->setCurrentIndex(m_tableTabIndex);
+    }
     if (m_actAddCol)
         m_actAddCol->setVisible(!positionMode && mode() == Doc::Design);
     if (m_actRemCol)
         m_actRemCol->setVisible(!positionMode && mode() == Doc::Design);
     if (m_actColSep)
         m_actColSep->setVisible(!positionMode && mode() == Doc::Design);
+    if (fixtureGroupMode)
+        rebuildValueGridEditor();
 }
 
 int PresetTableV2Widget::currentPositionEditRow() const
@@ -2348,6 +2528,859 @@ bool PresetTableV2Widget::positionLayerHasOverrides(int row, int output, int sel
     if (selection >= layer.selections.size())
         return false;
     return !layer.selections.at(selection).overrides.isEmpty();
+}
+
+static QColor positionSelectionLayerColor(int selectionIndex);
+
+bool PresetTableV2Widget::valueLayerHasOverrides(int row, int output, int selection) const
+{
+    if (row < 0 || row >= m_rows.size())
+        return false;
+    if (output < 0)
+        return !m_rows[row].cellValues.isEmpty();
+    if (row >= m_valueOverrides.size())
+        return false;
+
+    QMutexLocker lk(&m_stateMutex);
+    const PTValueOutputLayer layer = m_valueOverrides[row].value(output);
+    if (selection < 0)
+        return !layer.allOverrides.isEmpty();
+    if (selection >= layer.selections.size())
+        return false;
+    return !layer.selections.at(selection).overrides.isEmpty();
+}
+
+QSet<QLCPoint> PresetTableV2Widget::valueEditableCellsForLayer(int row, int output,
+                                                               int selection) const
+{
+    QSet<QLCPoint> result;
+    if (output < 0)
+    {
+        for (const QLCPoint& pt : positionTablePoints())
+            result.insert(pt);
+        return result;
+    }
+
+    for (const QLCPoint& pt : outputPointsForPresetOverride(output))
+        result.insert(pt);
+
+    if (selection < 0 || row < 0 || row >= m_valueOverrides.size())
+        return result;
+
+    QMutexLocker lk(&m_stateMutex);
+    const PTValueOutputLayer layer = m_valueOverrides[row].value(output);
+    if (selection >= layer.selections.size())
+        return result;
+
+    const PTValueSelectionLayer& selLayer = layer.selections.at(selection);
+    if (selLayer.cells.isEmpty())
+        return result;
+
+    QSet<QLCPoint> filtered;
+    for (const QLCPoint& pt : selLayer.cells)
+        if (result.contains(pt))
+            filtered.insert(pt);
+    return filtered;
+}
+
+QSet<QLCPoint> PresetTableV2Widget::valueEditableCells() const
+{
+    return valueEditableCellsForLayer(m_valueGridEditRow,
+                                      m_valueGridEditOutput,
+                                      m_valueGridEditSelection);
+}
+
+void PresetTableV2Widget::pruneValueGridSelection()
+{
+    const QSet<QLCPoint> editable = valueEditableCells();
+    QSet<QLCPoint> pruned;
+    QList<QLCPoint> order;
+    for (const QLCPoint& pt : m_valueGridSelectionOrder)
+    {
+        if (editable.contains(pt))
+        {
+            pruned.insert(pt);
+            order.append(pt);
+        }
+    }
+    for (const QLCPoint& pt : m_valueGridSelectedCells)
+    {
+        if (editable.contains(pt))
+        {
+            pruned.insert(pt);
+            if (!order.contains(pt))
+                order.append(pt);
+        }
+    }
+    m_valueGridSelectedCells = pruned;
+    m_valueGridSelectionOrder = order;
+}
+
+QList<QLCPoint> PresetTableV2Widget::valueTargetCellOrder() const
+{
+    QSet<QLCPoint> target = m_valueGridSelectedCells;
+    if (target.isEmpty())
+        target = valueEditableCells();
+    QList<QLCPoint> order;
+    for (const QLCPoint& pt : m_valueGridSelectionOrder)
+        if (target.contains(pt) && !order.contains(pt))
+            order.append(pt);
+    const QList<QLCPoint> rowMajor = PTPositionFixtureGridWidget::rowMajorOrder(target);
+    for (const QLCPoint& pt : rowMajor)
+        if (!order.contains(pt))
+            order.append(pt);
+    return order;
+}
+
+QSet<QLCPoint> PresetTableV2Widget::valueTargetCells() const
+{
+    QSet<QLCPoint> target = m_valueGridSelectedCells;
+    return target.isEmpty() ? valueEditableCells() : target;
+}
+
+uchar PresetTableV2Widget::effectiveCellValue(int rowIdx, int outputIdx,
+                                              const QLCPoint& point, int colIdx) const
+{
+    uchar value = 0;
+    if (rowIdx >= 0 && rowIdx < m_rows.size()
+            && colIdx >= 0 && colIdx < m_rows[rowIdx].values.size())
+    {
+        value = m_rows[rowIdx].values.at(colIdx);
+        const auto rowCellIt = m_rows[rowIdx].cellValues.constFind(point);
+        if (rowCellIt != m_rows[rowIdx].cellValues.constEnd()
+                && rowCellIt.value().values.contains(colIdx))
+            value = rowCellIt.value().values.value(colIdx);
+    }
+
+    if (outputIdx < 0 || rowIdx < 0 || rowIdx >= m_valueOverrides.size())
+        return value;
+
+    const PTValueOutputLayer layer = m_valueOverrides[rowIdx].value(outputIdx);
+    const auto outIt = layer.allOverrides.constFind(point);
+    if (outIt != layer.allOverrides.constEnd() && outIt.value().values.contains(colIdx))
+        value = outIt.value().values.value(colIdx);
+
+    for (const PTValueSelectionLayer& sel : layer.selections)
+    {
+        if (!sel.cells.contains(point))
+            continue;
+        const auto selIt = sel.overrides.constFind(point);
+        if (selIt != sel.overrides.constEnd() && selIt.value().values.contains(colIdx))
+            value = selIt.value().values.value(colIdx);
+    }
+    return value;
+}
+
+QVector<uchar> PresetTableV2Widget::effectiveValuesForPoint(int rowIdx, int outputIdx,
+                                                            const QLCPoint& point) const
+{
+    QVector<uchar> values(m_columns.size(), uchar(0));
+    for (int c = 0; c < values.size(); ++c)
+        values[c] = effectiveCellValue(rowIdx, outputIdx, point, c);
+    return values;
+}
+
+void PresetTableV2Widget::rebuildValueGridEditor()
+{
+    if (m_mode != PTMode::FixtureGroup || !m_valueGridPanel)
+        return;
+
+    const int oldRow = m_valueGridEditRow;
+    const int oldOutput = m_valueGridEditOutput;
+    const int oldSelection = m_valueGridEditSelection;
+    rebuildValueGridTree();
+    if (!selectValueGridLayer(oldRow, oldOutput, oldSelection))
+    {
+        const int row = (m_table && m_table->currentRow() >= 0)
+                ? m_table->currentRow() : (m_rows.isEmpty() ? -1 : 0);
+        selectValueGridLayer(row, -1, -1);
+    }
+    updateValueGridControls();
+    refreshValueGridCells();
+}
+
+void PresetTableV2Widget::rebuildValueGridTree()
+{
+    if (!m_valueGridTree)
+        return;
+    QSignalBlocker blocker(m_valueGridTree);
+    m_valueGridTree->clear();
+
+    for (int r = 0; r < m_rows.size(); ++r)
+    {
+        QString label = m_rows.at(r).name;
+        if (valueLayerHasOverrides(r, -1, -1))
+            label += QStringLiteral(" *");
+        QTreeWidgetItem* presetItem = new QTreeWidgetItem(QStringList(label));
+        PTValueTreeRef presetRef;
+        presetRef.row = r;
+        presetRef.isLayerLeaf = true;
+        presetItem->setData(0, Qt::UserRole, QVariant::fromValue(presetRef));
+        m_valueGridTree->addTopLevelItem(presetItem);
+
+        for (int o = 0; o < m_outputs.size(); ++o)
+        {
+            QString outName = m_outputs.at(o).name.isEmpty()
+                    ? tr("Output %1").arg(o + 1) : m_outputs.at(o).name;
+            if (valueLayerHasOverrides(r, o, -1))
+                outName += QStringLiteral(" *");
+            QTreeWidgetItem* outItem = new QTreeWidgetItem(QStringList(outName));
+            PTValueTreeRef outRef;
+            outRef.row = r;
+            outRef.output = o;
+            outRef.isLayerLeaf = true;
+            outItem->setData(0, Qt::UserRole, QVariant::fromValue(outRef));
+            presetItem->addChild(outItem);
+
+            if (r < m_valueOverrides.size())
+            {
+                const PTValueOutputLayer layer = m_valueOverrides.at(r).value(o);
+                for (int s = 0; s < layer.selections.size(); ++s)
+                {
+                    QString selName = layer.selections.at(s).name.isEmpty()
+                            ? tr("Selection %1").arg(s + 1) : layer.selections.at(s).name;
+                    if (valueLayerHasOverrides(r, o, s))
+                        selName += QStringLiteral(" *");
+                    QTreeWidgetItem* selItem = new QTreeWidgetItem(QStringList(selName));
+                    PTValueTreeRef selRef;
+                    selRef.row = r;
+                    selRef.output = o;
+                    selRef.selection = s;
+                    selRef.isLayerLeaf = true;
+                    selItem->setData(0, Qt::UserRole, QVariant::fromValue(selRef));
+                    outItem->addChild(selItem);
+                }
+            }
+        }
+
+        if (m_valueGridExpandedRows.contains(r))
+            presetItem->setExpanded(true);
+    }
+}
+
+bool PresetTableV2Widget::selectValueGridLayer(int row, int output, int selection)
+{
+    if (!m_valueGridTree || row < 0)
+        return false;
+    for (int i = 0; i < m_valueGridTree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem* presetItem = m_valueGridTree->topLevelItem(i);
+        const PTValueTreeRef presetRef =
+                presetItem->data(0, Qt::UserRole).value<PTValueTreeRef>();
+        if (presetRef.row != row)
+            continue;
+        if (output < 0)
+        {
+            m_valueGridTree->setCurrentItem(presetItem);
+            return true;
+        }
+        for (int o = 0; o < presetItem->childCount(); ++o)
+        {
+            QTreeWidgetItem* outItem = presetItem->child(o);
+            const PTValueTreeRef outRef =
+                    outItem->data(0, Qt::UserRole).value<PTValueTreeRef>();
+            if (outRef.output != output)
+                continue;
+            if (selection < 0)
+            {
+                presetItem->setExpanded(true);
+                m_valueGridTree->setCurrentItem(outItem);
+                return true;
+            }
+            for (int s = 0; s < outItem->childCount(); ++s)
+            {
+                QTreeWidgetItem* selItem = outItem->child(s);
+                const PTValueTreeRef selRef =
+                        selItem->data(0, Qt::UserRole).value<PTValueTreeRef>();
+                if (selRef.selection == selection)
+                {
+                    presetItem->setExpanded(true);
+                    outItem->setExpanded(true);
+                    m_valueGridTree->setCurrentItem(selItem);
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void PresetTableV2Widget::refreshValueGridCells()
+{
+    if (!m_valueGrid)
+        return;
+    if (m_mode != PTMode::FixtureGroup || !m_doc)
+    {
+        m_valueGrid->setPlaceholderText(tr("Fixture Grid is available in Fixture Group mode"));
+        return;
+    }
+
+    FixtureGroup* grp = m_doc->fixtureGroup(m_fixtureGroupId);
+    if (!grp)
+    {
+        m_valueGrid->setPlaceholderText(tr("Select a fixture group in Properties"));
+        return;
+    }
+
+    const QMap<QLCPoint, GroupHead> heads = m_doc->effectiveHeadsMap(grp);
+    if (heads.isEmpty())
+    {
+        m_valueGrid->setPlaceholderText(tr("Fixture group has no mapped heads"));
+        return;
+    }
+
+    QMap<QLCPoint, PTPositionGridCell> cells;
+    QSize gridSize;
+    const int col = valueGridColumn();
+    for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+    {
+        gridSize.setWidth(qMax(gridSize.width(), it.key().x() + 1));
+        gridSize.setHeight(qMax(gridSize.height(), it.key().y() + 1));
+        PTPositionGridCell cell;
+        cell.point = it.key();
+        Fixture* fxi = m_doc->fixture(it.value().fxi);
+        QString name = fxi ? fxi->name() : tr("Empty");
+        if (name.size() > 6)
+            name = name.left(5) + QLatin1Char('.');
+        cell.label = name;
+        if (m_valueGridEditRow >= 0 && col >= 0)
+        {
+            const uchar value = effectiveCellValue(m_valueGridEditRow,
+                                                   m_valueGridEditOutput,
+                                                   it.key(), col);
+            cell.valueText = QString::number(value);
+            cell.valueValid = true;
+            bool currentLayerHasValue = (m_valueGridEditOutput < 0);
+            if (m_valueGridEditOutput < 0
+                    && m_valueGridEditRow < m_rows.size())
+            {
+                currentLayerHasValue = m_rows.at(m_valueGridEditRow).cellValues
+                        .value(it.key()).values.contains(col);
+            }
+            else if (m_valueGridEditRow < m_valueOverrides.size())
+            {
+                const PTValueOutputLayer layer =
+                        m_valueOverrides.at(m_valueGridEditRow).value(m_valueGridEditOutput);
+                if (m_valueGridEditSelection < 0)
+                {
+                    currentLayerHasValue = layer.allOverrides
+                            .value(it.key()).values.contains(col);
+                }
+                else if (m_valueGridEditSelection < layer.selections.size())
+                {
+                    currentLayerHasValue = layer.selections.at(m_valueGridEditSelection)
+                            .overrides.value(it.key()).values.contains(col);
+                }
+            }
+            cell.inherited = !currentLayerHasValue;
+        }
+        cells.insert(it.key(), cell);
+    }
+
+    pruneValueGridSelection();
+    const QSet<QLCPoint> editable = valueEditableCells();
+    QVector<PTPositionGridSelectionLayer> foreignLayers;
+    if (m_valueGridEditRow >= 0 && m_valueGridEditOutput >= 0
+            && m_valueGridEditRow < m_valueOverrides.size())
+    {
+        const PTValueOutputLayer layer =
+                m_valueOverrides.at(m_valueGridEditRow).value(m_valueGridEditOutput);
+        for (int s = 0; s < layer.selections.size(); ++s)
+        {
+            if (s == m_valueGridEditSelection)
+                continue;
+            PTPositionGridSelectionLayer gridLayer;
+            gridLayer.name = layer.selections.at(s).name;
+            gridLayer.color = positionSelectionLayerColor(s);
+            gridLayer.cells = layer.selections.at(s).cells;
+            if (!gridLayer.cells.isEmpty())
+                foreignLayers.append(gridLayer);
+        }
+    }
+
+    m_valueGrid->setGrid(gridSize, cells);
+    m_valueGrid->setEditableCells(editable);
+    m_valueGrid->setForeignSelectionLayers(foreignLayers);
+    m_valueGrid->setImplicitAllSelection(m_valueGridSelectedCells.isEmpty());
+    m_valueGrid->setSelectedCells(m_valueGridSelectedCells, m_valueGridSelectionOrder);
+    updateValueGridSelectionLabel();
+}
+
+int PresetTableV2Widget::valueGridColumn() const
+{
+    if (m_valueGridColumnCombo && m_valueGridColumnCombo->currentIndex() >= 0)
+        return m_valueGridColumnCombo->currentData().toInt();
+    return qBound(0, m_valueGridEditColumn, qMax(0, m_columns.size() - 1));
+}
+
+void PresetTableV2Widget::updateValueGridControls()
+{
+    if (!m_valueGridColumnCombo)
+        return;
+    QSignalBlocker comboBlocker(m_valueGridColumnCombo);
+    const int previous = valueGridColumn();
+    m_valueGridColumnCombo->clear();
+    for (int c = 0; c < m_columns.size(); ++c)
+        m_valueGridColumnCombo->addItem(m_columns.at(c).name, c);
+    const int idx = m_valueGridColumnCombo->findData(previous);
+    if (idx >= 0)
+        m_valueGridColumnCombo->setCurrentIndex(idx);
+    else if (m_valueGridColumnCombo->count() > 0)
+        m_valueGridColumnCombo->setCurrentIndex(0);
+
+    const bool enabled = m_mode == PTMode::FixtureGroup
+            && m_valueGridEditRow >= 0
+            && !m_columns.isEmpty();
+    for (QWidget* w : { static_cast<QWidget*>(m_valueGridColumnCombo),
+                        static_cast<QWidget*>(m_valueGridValueSlider),
+                        static_cast<QWidget*>(m_valueGridValueSpin),
+                        static_cast<QWidget*>(m_valueGridSpreadSlider),
+                        static_cast<QWidget*>(m_valueGridSpreadSpin),
+                        static_cast<QWidget*>(m_valueGridClearBtn),
+                        static_cast<QWidget*>(m_valueGridCopySelectionBtn),
+                        static_cast<QWidget*>(m_valueGridPasteSelectionBtn),
+                        static_cast<QWidget*>(m_valueGridAddSelectionBtn) })
+    {
+        if (w)
+            w->setEnabled(enabled);
+    }
+    if (m_valueGridPasteSelectionBtn)
+        m_valueGridPasteSelectionBtn->setEnabled(enabled && m_valueGridSelectionClipboardValid);
+    updateValueGridSelectionLabel();
+}
+
+void PresetTableV2Widget::updateValueGridSelectionLabel()
+{
+    if (!m_valueGridInfoLabel)
+        return;
+    const int count = valueTargetCells().size();
+    const QString colName = (valueGridColumn() >= 0 && valueGridColumn() < m_columns.size())
+            ? m_columns.at(valueGridColumn()).name : tr("Column");
+    QString layer = tr("Preset");
+    if (m_valueGridEditOutput >= 0)
+    {
+        layer = m_outputs.value(m_valueGridEditOutput).name.isEmpty()
+                ? tr("Output %1").arg(m_valueGridEditOutput + 1)
+                : m_outputs.value(m_valueGridEditOutput).name;
+        if (m_valueGridEditSelection >= 0 && m_valueGridEditRow < m_valueOverrides.size())
+        {
+            const PTValueOutputLayer out =
+                    m_valueOverrides.at(m_valueGridEditRow).value(m_valueGridEditOutput);
+            if (m_valueGridEditSelection < out.selections.size())
+                layer += QStringLiteral(" / ") + out.selections.at(m_valueGridEditSelection).name;
+        }
+    }
+    m_valueGridInfoLabel->setText(tr("%1 · %2 · %3 cells")
+                                  .arg(layer, colName).arg(count));
+}
+
+void PresetTableV2Widget::writeCellValueOverrides(int row, int output, int selection,
+                                                  int col,
+                                                  const QMap<QLCPoint, uchar>& values)
+{
+    if (row < 0 || row >= m_rows.size() || col < 0 || col >= m_columns.size())
+        return;
+    QMutexLocker lk(&m_stateMutex);
+    if (output < 0)
+    {
+        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+            m_rows[row].cellValues[it.key()].values[col] = it.value();
+        return;
+    }
+    while (m_valueOverrides.size() <= row)
+        m_valueOverrides.append(QHash<int, PTValueOutputLayer>());
+    PTValueOutputLayer& layer = m_valueOverrides[row][output];
+    if (selection < 0)
+    {
+        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+            layer.allOverrides[it.key()].values[col] = it.value();
+        return;
+    }
+    while (layer.selections.size() <= selection)
+    {
+        PTValueSelectionLayer sel;
+        sel.name = tr("Selection %1").arg(layer.selections.size() + 1);
+        layer.selections.append(sel);
+    }
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+    {
+        layer.selections[selection].cells.insert(it.key());
+        layer.selections[selection].overrides[it.key()].values[col] = it.value();
+    }
+}
+
+void PresetTableV2Widget::clearCellValueOverrides(int row, int output, int selection,
+                                                  int col, const QSet<QLCPoint>& cells)
+{
+    if (row < 0 || row >= m_rows.size() || col < 0 || col >= m_columns.size())
+        return;
+    QMutexLocker lk(&m_stateMutex);
+    auto clearMap = [&](QMap<QLCPoint, PTCellValueOverrides>& map) {
+        for (const QLCPoint& pt : cells)
+        {
+            auto it = map.find(pt);
+            if (it == map.end())
+                continue;
+            it.value().values.remove(col);
+            if (it.value().values.isEmpty())
+                map.erase(it);
+        }
+    };
+    if (output < 0)
+    {
+        clearMap(m_rows[row].cellValues);
+        return;
+    }
+    if (row >= m_valueOverrides.size() || !m_valueOverrides[row].contains(output))
+        return;
+    PTValueOutputLayer& layer = m_valueOverrides[row][output];
+    if (selection < 0)
+        clearMap(layer.allOverrides);
+    else if (selection < layer.selections.size())
+        clearMap(layer.selections[selection].overrides);
+}
+
+bool PresetTableV2Widget::rowHasGridOverridesForColumnLocked(int row, int col) const
+{
+    if (row < 0 || row >= m_rows.size() || col < 0 || col >= m_columns.size())
+        return false;
+
+    auto hasColumn = [col](const QMap<QLCPoint, PTCellValueOverrides>& map) {
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+        {
+            if (it.value().values.contains(col))
+                return true;
+        }
+        return false;
+    };
+
+    if (hasColumn(m_rows.at(row).cellValues))
+        return true;
+    if (row >= m_valueOverrides.size())
+        return false;
+    const QHash<int, PTValueOutputLayer>& outputs = m_valueOverrides.at(row);
+    for (auto outIt = outputs.constBegin(); outIt != outputs.constEnd(); ++outIt)
+    {
+        if (hasColumn(outIt.value().allOverrides))
+            return true;
+        for (const PTValueSelectionLayer& sel : outIt.value().selections)
+        {
+            if (hasColumn(sel.overrides))
+                return true;
+        }
+    }
+    return false;
+}
+
+void PresetTableV2Widget::clearGridOverridesForColumnLocked(int row, int col)
+{
+    if (row < 0 || row >= m_rows.size() || col < 0 || col >= m_columns.size())
+        return;
+
+    auto clearColumn = [col](QMap<QLCPoint, PTCellValueOverrides>& map) {
+        for (auto it = map.begin(); it != map.end(); )
+        {
+            it.value().values.remove(col);
+            it = it.value().values.isEmpty() ? map.erase(it) : ++it;
+        }
+    };
+
+    clearColumn(m_rows[row].cellValues);
+    if (row >= m_valueOverrides.size())
+        return;
+    QHash<int, PTValueOutputLayer>& outputs = m_valueOverrides[row];
+    for (auto outIt = outputs.begin(); outIt != outputs.end(); )
+    {
+        clearColumn(outIt.value().allOverrides);
+        for (PTValueSelectionLayer& sel : outIt.value().selections)
+            clearColumn(sel.overrides);
+        outIt = (outIt.value().allOverrides.isEmpty()
+                 && outIt.value().selections.isEmpty())
+                ? outputs.erase(outIt) : ++outIt;
+    }
+}
+
+void PresetTableV2Widget::ensureColumnIntensitySizeLocked()
+{
+    m_columnIntensity.resize(m_outputs.size());
+    for (QVector<uchar>& outputValues : m_columnIntensity)
+    {
+        const int oldSize = outputValues.size();
+        outputValues.resize(m_columns.size());
+        for (int c = oldSize; c < outputValues.size(); ++c)
+            outputValues[c] = uchar(255);
+    }
+}
+
+void PresetTableV2Widget::slotValueGridTreeChanged(QTreeWidgetItem* current,
+                                                   QTreeWidgetItem* /*previous*/)
+{
+    if (!current)
+        return;
+    const PTValueTreeRef ref = current->data(0, Qt::UserRole).value<PTValueTreeRef>();
+    m_valueGridEditRow = ref.row;
+    m_valueGridEditOutput = ref.output;
+    m_valueGridEditSelection = ref.selection;
+    if (ref.row >= 0)
+        m_valueGridExpandedRows.insert(ref.row);
+    m_valueGridSelectedCells.clear();
+    m_valueGridSelectionOrder.clear();
+    refreshValueGridCells();
+    updateValueGridControls();
+}
+
+void PresetTableV2Widget::slotValueGridSelectionChanged(const QSet<QLCPoint>& cells,
+                                                        const QList<QLCPoint>& order)
+{
+    m_valueGridSelectedCells = cells;
+    m_valueGridSelectionOrder = order;
+    updateValueGridSelectionLabel();
+}
+
+void PresetTableV2Widget::slotValueGridCellEditRequested(const QLCPoint& point)
+{
+    m_valueGridSelectedCells.clear();
+    m_valueGridSelectedCells.insert(point);
+    m_valueGridSelectionOrder = QList<QLCPoint>() << point;
+    if (m_valueGrid)
+        m_valueGrid->setSelectedCells(m_valueGridSelectedCells, m_valueGridSelectionOrder);
+    const int col = valueGridColumn();
+    const int value = effectiveCellValue(m_valueGridEditRow, m_valueGridEditOutput, point, col);
+    QSignalBlocker b1(m_valueGridValueSlider);
+    QSignalBlocker b2(m_valueGridValueSpin);
+    if (m_valueGridValueSlider)
+        m_valueGridValueSlider->setValue(value);
+    if (m_valueGridValueSpin)
+        m_valueGridValueSpin->setValue(value);
+}
+
+void PresetTableV2Widget::slotValueGridColumnChanged(int index)
+{
+    if (index >= 0 && m_valueGridColumnCombo)
+        m_valueGridEditColumn = m_valueGridColumnCombo->itemData(index).toInt();
+    refreshValueGridCells();
+}
+
+void PresetTableV2Widget::slotValueGridValueChanged(int value)
+{
+    if (m_valueGridSyncing)
+        return;
+    QSignalBlocker b1(m_valueGridValueSlider);
+    QSignalBlocker b2(m_valueGridValueSpin);
+    if (m_valueGridValueSlider)
+        m_valueGridValueSlider->setValue(value);
+    if (m_valueGridValueSpin)
+        m_valueGridValueSpin->setValue(value);
+    commitValueGridLiveEdit();
+}
+
+void PresetTableV2Widget::slotValueGridSpreadChanged(int value)
+{
+    if (m_valueGridSyncing)
+        return;
+    QSignalBlocker b1(m_valueGridSpreadSlider);
+    QSignalBlocker b2(m_valueGridSpreadSpin);
+    if (m_valueGridSpreadSlider)
+        m_valueGridSpreadSlider->setValue(value);
+    if (m_valueGridSpreadSpin)
+        m_valueGridSpreadSpin->setValue(value);
+    commitValueGridLiveEdit();
+}
+
+QList<QLCPoint> PresetTableV2Widget::valueTargetCellOrderForSpread(int spread) const
+{
+    QList<QLCPoint> order = valueTargetCellOrder();
+    if (order.size() < 2)
+        return order;
+
+    QSet<QLCPoint> cells;
+    for (const QLCPoint& pt : order)
+        cells.insert(pt);
+    qreal cx = 0;
+    qreal cy = 0;
+    for (const QLCPoint& pt : cells)
+    {
+        cx += qreal(pt.x());
+        cy += qreal(pt.y());
+    }
+    cx /= qreal(cells.size());
+    cy /= qreal(cells.size());
+
+    std::sort(order.begin(), order.end(), [cx, cy](const QLCPoint& a, const QLCPoint& b) {
+        const qreal adx = qreal(a.x()) - cx;
+        const qreal ady = qreal(a.y()) - cy;
+        const qreal bdx = qreal(b.x()) - cx;
+        const qreal bdy = qreal(b.y()) - cy;
+        const qreal da = adx * adx + ady * ady;
+        const qreal db = bdx * bdx + bdy * bdy;
+        if (!qFuzzyCompare(da + 1.0, db + 1.0))
+            return da < db;
+        if (a.y() != b.y())
+            return a.y() < b.y();
+        return a.x() < b.x();
+    });
+    if (spread < 0)
+        std::reverse(order.begin(), order.end());
+    return order;
+}
+
+void PresetTableV2Widget::commitValueGridLiveEdit()
+{
+    if (m_valueGridSyncing)
+        return;
+    const int spread = m_valueGridSpreadSpin ? m_valueGridSpreadSpin->value() : 0;
+    const QList<QLCPoint> order = valueTargetCellOrderForSpread(spread);
+    if (m_valueGridEditRow < 0 || order.isEmpty())
+        return;
+    const int col = valueGridColumn();
+    const int base = m_valueGridValueSpin ? m_valueGridValueSpin->value() : 0;
+    QMap<QLCPoint, uchar> values;
+    const int denom = qMax(1, order.size() - 1);
+    const int amount = qAbs(spread);
+    for (int i = 0; i < order.size(); ++i)
+    {
+        const double norm = order.size() <= 1 ? 0.0 : double(i) / double(denom);
+        const int value = qBound(0, int(qRound(double(base) + double(amount) * norm)), 255);
+        values.insert(order.at(i), uchar(value));
+    }
+    writeCellValueOverrides(m_valueGridEditRow, m_valueGridEditOutput,
+                            m_valueGridEditSelection, col, values);
+    rebuildValueGridTree();
+    selectValueGridLayer(m_valueGridEditRow, m_valueGridEditOutput, m_valueGridEditSelection);
+    refreshValueGridCells();
+    refreshTableFromData();
+    update();
+    if (m_doc)
+        m_doc->setModified();
+}
+
+void PresetTableV2Widget::slotValueGridClear()
+{
+    const QSet<QLCPoint> cells = valueTargetCells();
+    if (cells.isEmpty())
+        return;
+    clearCellValueOverrides(m_valueGridEditRow, m_valueGridEditOutput,
+                            m_valueGridEditSelection, valueGridColumn(), cells);
+    rebuildValueGridTree();
+    selectValueGridLayer(m_valueGridEditRow, m_valueGridEditOutput, m_valueGridEditSelection);
+    refreshValueGridCells();
+    refreshTableFromData();
+    update();
+    if (m_doc)
+        m_doc->setModified();
+}
+
+void PresetTableV2Widget::slotValueGridAddSelection()
+{
+    if (m_valueGridEditRow < 0 || m_valueGridEditOutput < 0)
+        return;
+    const QSet<QLCPoint> cells = valueTargetCells();
+    if (cells.isEmpty())
+        return;
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+            this, tr("Add Selection"), tr("Selection name:"),
+            QLineEdit::Normal, tr("Selection %1").arg(1), &ok);
+    if (!ok)
+        return;
+    QMutexLocker lk(&m_stateMutex);
+    while (m_valueOverrides.size() <= m_valueGridEditRow)
+        m_valueOverrides.append(QHash<int, PTValueOutputLayer>());
+    PTValueOutputLayer& layer = m_valueOverrides[m_valueGridEditRow][m_valueGridEditOutput];
+    PTValueSelectionLayer sel;
+    sel.name = name.trimmed().isEmpty()
+            ? tr("Selection %1").arg(layer.selections.size() + 1) : name.trimmed();
+    sel.cells = cells;
+    layer.selections.append(sel);
+    const int selection = layer.selections.size() - 1;
+    lk.unlock();
+    rebuildValueGridTree();
+    selectValueGridLayer(m_valueGridEditRow, m_valueGridEditOutput, selection);
+    refreshValueGridCells();
+    if (m_doc)
+        m_doc->setModified();
+}
+
+void PresetTableV2Widget::slotValueGridCopySelection()
+{
+    if (m_valueGridEditRow < 0 || m_valueGridEditOutput < 0
+            || m_valueGridEditRow >= m_valueOverrides.size())
+    {
+        return;
+    }
+
+    QMutexLocker lk(&m_stateMutex);
+    const PTValueOutputLayer layer =
+            m_valueOverrides.at(m_valueGridEditRow).value(m_valueGridEditOutput);
+    if (m_valueGridEditSelection < 0
+            || m_valueGridEditSelection >= layer.selections.size())
+    {
+        return;
+    }
+    m_valueGridSelectionClipboard = layer.selections.at(m_valueGridEditSelection);
+    m_valueGridSelectionClipboardValid = true;
+    lk.unlock();
+
+    updateValueGridControls();
+}
+
+void PresetTableV2Widget::slotValueGridPasteSelection()
+{
+    if (!m_valueGridSelectionClipboardValid
+            || m_valueGridEditRow < 0 || m_valueGridEditOutput < 0)
+    {
+        return;
+    }
+
+    const QSet<QLCPoint> editable =
+            valueEditableCellsForLayer(m_valueGridEditRow, m_valueGridEditOutput, -1);
+    PTValueSelectionLayer pasted = m_valueGridSelectionClipboard;
+    QSet<QLCPoint> filteredCells;
+    for (const QLCPoint& pt : pasted.cells)
+    {
+        if (editable.contains(pt))
+            filteredCells.insert(pt);
+    }
+    pasted.cells = filteredCells;
+
+    for (auto it = pasted.overrides.begin(); it != pasted.overrides.end(); )
+        it = editable.contains(it.key()) ? ++it : pasted.overrides.erase(it);
+
+    if (pasted.cells.isEmpty())
+        return;
+
+    int selection = -1;
+    {
+        QMutexLocker lk(&m_stateMutex);
+        while (m_valueOverrides.size() <= m_valueGridEditRow)
+            m_valueOverrides.append(QHash<int, PTValueOutputLayer>());
+        PTValueOutputLayer& layer =
+                m_valueOverrides[m_valueGridEditRow][m_valueGridEditOutput];
+        const QString baseName = pasted.name.trimmed().isEmpty()
+                ? tr("Selection") : pasted.name.trimmed();
+        QString name = baseName;
+        auto nameExists = [&layer](const QString& candidate) {
+            for (const PTValueSelectionLayer& sel : layer.selections)
+            {
+                if (sel.name == candidate)
+                    return true;
+            }
+            return false;
+        };
+        int suffix = 2;
+        while (nameExists(name))
+            name = QStringLiteral("%1 %2").arg(baseName).arg(suffix++);
+        pasted.name = name;
+        layer.selections.append(pasted);
+        selection = layer.selections.size() - 1;
+    }
+
+    rebuildValueGridTree();
+    selectValueGridLayer(m_valueGridEditRow, m_valueGridEditOutput, selection);
+    refreshValueGridCells();
+    refreshTableFromData();
+    if (m_doc)
+        m_doc->setModified();
 }
 
 static QColor positionSelectionLayerColor(int selectionIndex)
@@ -4163,8 +5196,18 @@ void PresetTableV2Widget::slotPositionRevert()
     refreshPositionEditorFromSelection();
 }
 
-void PresetTableV2Widget::slotTableCurrentCellChanged(int /*row*/, int /*col*/)
+void PresetTableV2Widget::slotTableCurrentCellChanged(int row, int col)
 {
+    if (m_mode != PTMode::FixtureGroup)
+        return;
+    if (row >= 0 && row < m_rows.size() && row != m_valueGridEditRow)
+        selectValueGridLayer(row, m_valueGridEditOutput, m_valueGridEditSelection);
+    if (col > 0 && col - 1 < m_columns.size())
+    {
+        m_valueGridEditColumn = col - 1;
+        updateValueGridControls();
+        refreshValueGridCells();
+    }
 }
 
 // ==========================================================================
@@ -4234,7 +5277,12 @@ void PresetTableV2Widget::rebuildTable()
 
             QString displayText;
             QIcon   displayIcon;
-            if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
+            const bool hasGridOverrides = rowHasGridOverridesForColumnLocked(r, c);
+            if (hasGridOverrides)
+            {
+                displayText = tr("Grid");
+            }
+            else if (ptcol.type == PTColumn::Dropdown && !ptcol.options.isEmpty())
             {
                 auto lbl = optionLabelFor(ptcol, int(dmxVal));
                 displayText = lbl.first;
@@ -4252,6 +5300,8 @@ void PresetTableV2Widget::rebuildTable()
 
             QTableWidgetItem* item = new QTableWidgetItem(displayText);
             item->setData(Qt::UserRole, int(dmxVal));
+            if (hasGridOverrides)
+                item->setToolTip(tr("Grid overrides active. Typing a value clears grid overrides for this column."));
             if (!displayIcon.isNull())
                 item->setIcon(displayIcon);
             m_table->setItem(r, c + 1, item);
@@ -4304,6 +5354,11 @@ void PresetTableV2Widget::syncFrozenNameColumnLayout()
     m_table->horizontalHeader()->updateGeometry();
     m_nameFrozenTable->viewport()->update();
     m_table->viewport()->update();
+}
+
+void PresetTableV2Widget::refreshTableFromData()
+{
+    rebuildTable();
 }
 
 // ==========================================================================
@@ -4387,7 +5442,10 @@ void PresetTableV2Widget::slotCellChanged(int row, int col)
         {
             int valCol = col - 1;
             if (valCol < m_rows[row].values.size())
+            {
                 m_rows[row].values[valCol] = uchar(itemValue.toInt());
+                clearGridOverridesForColumnLocked(row, valCol);
+            }
         }
     }
 
@@ -4396,6 +5454,11 @@ void PresetTableV2Widget::slotCellChanged(int row, int col)
         QSignalBlocker blocker(m_table);
         item->setText(normalizedPositionText);
         item->setData(Qt::UserRole, normalizedPositionText);
+    }
+    else if (modeSnapshot != PTMode::Position && col > 0)
+    {
+        refreshTableFromData();
+        refreshValueGridCells();
     }
 
     VCPluginDiagnostics::breadcrumb(
@@ -4520,8 +5583,23 @@ void PresetTableV2Widget::refreshTransitionPresetCache()
     if (PresetTableV2TransitionProviderIface* provider =
             PresetTableV2VCLookup::transitionProviderByVcId(linkedTransitionWidgetId()))
     {
-        snapshot = provider->transitionProviderSnapshot();
-        hasSnapshot = true;
+        const quint32 providerTargetId = provider->targetTableId();
+        if (providerTargetId == id())
+        {
+            snapshot = provider->transitionProviderSnapshot();
+            hasSnapshot = true;
+        }
+        else
+        {
+            VCPluginDiagnostics::breadcrumbRateLimited(
+                    QStringLiteral("presettablev2"), id(), caption(),
+                    QStringLiteral("presettablev2/provider-target-mismatch/%1").arg(id()),
+                    1000,
+                    QStringLiteral("provider target mismatch linkedEngine=%1 providerTarget=%2 table=%3")
+                            .arg(m_linkedTransitionWidgetId)
+                            .arg(providerTargetId)
+                            .arg(id()));
+        }
     }
 
     QMutexLocker lk(&m_stateMutex);
@@ -4889,19 +5967,31 @@ PTTransitionPreset PresetTableV2Widget::transitionPresetAtIndexLocked(PTTransiti
     const QVector<PTTransitionPreset>& bank = transitionSnapshotPresetsForModeLocked(mode);
     if (presetIndex < bank.size())
     {
+        PTTransitionPreset preset;
         if (point != nullptr)
         {
             const int selectionIdx = transitionSnapshotSelectionIndexForPointLocked(
                         mode, presetIndex, outputIdx, *point);
             if (selectionIdx >= 0)
-                return transitionSnapshotEffectivePresetForSelectionLocked(
+            {
+                preset = transitionSnapshotEffectivePresetForSelectionLocked(
                             mode, presetIndex, outputIdx, selectionIdx, true);
+                if (mode == PTTransitionMode::SweepOnly)
+                    preset = PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset);
+                return preset;
+            }
         }
-        return transitionSnapshotEffectivePresetForOutputLocked(
+        preset = transitionSnapshotEffectivePresetForOutputLocked(
                     mode, presetIndex, outputIdx, true);
+        if (mode == PTTransitionMode::SweepOnly)
+            preset = PTDimmerWaveEngine::normalizedTransitionSweepPreset(preset);
+        return preset;
     }
 
-    return PresetTableV2SpatialEngine::presetFromLegacySpatial(m_spatialEffects);
+    PTTransitionPreset legacy = PresetTableV2SpatialEngine::presetFromLegacySpatial(m_spatialEffects);
+    if (mode == PTTransitionMode::SweepOnly)
+        legacy = PTDimmerWaveEngine::normalizedTransitionSweepPreset(legacy);
+    return legacy;
 }
 
 PTTransitionPreset PresetTableV2Widget::sweepPresetForOutputLocked(int outputIdx) const
@@ -5022,6 +6112,8 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
 
     const int liveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
     state.primaryRow = activeRow;
+    state.stagedPrimaryRow = hasStagedPrimary ? m_stagedRow[outputIdx] : activeRow;
+    state.liveSecondaryRow = liveSecondary;
     const int stagedSecondary = hasStagedSecondary
             ? ((m_stagedSecondaryRow[outputIdx] >= 0
                 && m_stagedSecondaryRow[outputIdx] < m_rows.size())
@@ -5218,6 +6310,7 @@ void PresetTableV2Widget::sendLiveSelectorFeedbackLocked(int outputIdx)
     const int liveSecondary = rawLiveSecondaryRowIndexLocked(outputIdx);
     sendFeedback(liveSecondary < 0 ? 0 : liveSecondary + 1,
                  PTInputId::transSecondaryRow(outputIdx));
+
 }
 
 bool PresetTableV2Widget::continuousCrossfadeModeLocked(int outputIdx) const
@@ -5601,18 +6694,10 @@ bool PresetTableV2Widget::spatialGridPreview(const PTTransitionPreset& preset,
     if (sz.width() <= 0 || sz.height() <= 0)
         return false;
 
-    QList<QLCPoint> points;
     const QMap<QLCPoint, GroupHead> heads = grp->headsMap();
-    for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
-        points.append(it.key());
-
-    out = PTSpatialFixturePlan::buildGridPreview(
-            points, preset, global, sz.width(), sz.height());
-    if (!out.valid)
-        return false;
-
     const FixtureGroupMask docMask = m_doc->fixtureGroupMask(m_fixtureGroupId);
     const QMap<QLCPoint, GroupHead> maskedHeads = m_doc->effectiveHeadsMap(grp);
+    bool anyOutputPreview = false;
     for (int o = 0; o < m_outputs.size(); ++o)
     {
         const PTOutput& ptOut = m_outputs[o];
@@ -5621,15 +6706,65 @@ bool PresetTableV2Widget::spatialGridPreview(const PTTransitionPreset& preset,
 
         const QMap<QLCPoint, GroupHead>& scopeHeads =
                 (ptOut.scope == PTOutputScope::Rows) ? heads : maskedHeads;
+        QList<QLCPoint> points;
         for (auto it = scopeHeads.constBegin(); it != scopeHeads.constEnd(); ++it)
         {
             const QLCPoint& pt = it.key();
             if (!outputScopeAllowsPoint(ptOut.scope, pt, ptOut))
                 continue;
-            auto cellIt = out.cells.find(pt);
-            if (cellIt != out.cells.end() && !cellIt->outputIndexes.contains(o))
-                cellIt->outputIndexes.append(o);
+            points.append(pt);
         }
+        if (points.isEmpty())
+            continue;
+
+        PTSpatialGridPreview outputPreview = PTSpatialFixturePlan::buildGridPreview(
+                points, preset, global, sz.width(), sz.height());
+        if (!outputPreview.valid)
+            continue;
+
+        if (!anyOutputPreview)
+        {
+            out = outputPreview;
+            for (auto it = out.cells.begin(); it != out.cells.end(); ++it)
+                it->outputIndexes.clear();
+            anyOutputPreview = true;
+        }
+        else
+        {
+            out.hasOffsetCollisions = out.hasOffsetCollisions || outputPreview.hasOffsetCollisions;
+            out.offsetStepOk = out.offsetStepOk && outputPreview.offsetStepOk;
+        }
+
+        for (const QLCPoint& pt : points)
+        {
+            auto srcIt = outputPreview.cells.constFind(pt);
+            if (srcIt == outputPreview.cells.constEnd())
+                continue;
+            PTSpatialGridCellData cell = srcIt.value();
+            cell.outputIndexes.clear();
+            auto dstIt = out.cells.find(pt);
+            if (dstIt != out.cells.end())
+            {
+                cell.outputIndexes = dstIt->outputIndexes;
+                *dstIt = cell;
+            }
+            else
+            {
+                dstIt = out.cells.insert(pt, cell);
+            }
+            if (!dstIt->outputIndexes.contains(o))
+                dstIt->outputIndexes.append(o);
+        }
+    }
+
+    if (!anyOutputPreview)
+    {
+        QList<QLCPoint> points;
+        for (auto it = heads.constBegin(); it != heads.constEnd(); ++it)
+            points.append(it.key());
+
+        out = PTSpatialFixturePlan::buildGridPreview(
+                points, preset, global, sz.width(), sz.height());
     }
     return out.valid;
 }
@@ -5685,6 +6820,18 @@ bool PresetTableV2Widget::spatialGridPreviewForOutput(int outputIdx,
     return out.valid;
 }
 
+double PresetTableV2Widget::crossfadePreviewProgress01(bool* active) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    const bool isActive = m_crossfadeEnabled
+            && (m_crossfadeSessionActive || crossfadeHasStagedChangesLocked());
+    if (active)
+        *active = isActive;
+    if (!isActive)
+        return 0.0;
+    return qBound(0.0, crossfadeProgress01Locked(0), 1.0);
+}
+
 int PresetTableV2Widget::multiButtonOutputCount() const
 {
     QMutexLocker lk(&m_stateMutex);
@@ -5719,12 +6866,11 @@ QString PresetTableV2Widget::multiButtonParameterName(int parameter) const
             return positionMode ? tr("Position transition preset")
                                 : tr("Transition preset");
         case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
-            return positionMode ? tr("Interpolation preset")
-                                : tr("Continuous FX preset");
+            return tr("Interpolation preset");
         case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
-            return tr("Continuous Motion preset");
+            return tr("2D FX preset");
         case PresetTableV2MultiButtonTargetIface::Channel1DPreset:
-            return tr("1D Channel FX preset");
+            return tr("1D FX preset");
         case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
             return positionMode ? tr("Position MultiFX preset")
                                 : tr("MultiFX preset");
@@ -5937,6 +7083,89 @@ bool PresetTableV2Widget::multiButtonOutputControlsParameter(int outputIdx,
     }
 
     return false;
+}
+
+QList<PresetTableV2MultiButtonLinkedAction>
+PresetTableV2Widget::multiButtonLinkedSlaveActions(int outputIdx, int parameter) const
+{
+    QList<PresetTableV2MultiButtonLinkedAction> actions;
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    if (mode == PTTransitionMode::Off)
+        return actions;
+
+    const quint32 masterEngineId = linkedTransitionWidgetId();
+    if (masterEngineId == VCWidget::invalidId())
+        return actions;
+
+    auto bankUltimatelySourcesFrom = [](quint32 engineId, quint32 masterId,
+                                        PTTransitionMode bankMode) {
+        QSet<quint32> visited;
+        quint32 current = engineId;
+        while (current != VCWidget::invalidId())
+        {
+            if (current == masterId)
+                return true;
+            if (visited.contains(current))
+                return false;
+            visited.insert(current);
+
+            PresetTableV2TransitionProviderIface* provider =
+                    PresetTableV2VCLookup::transitionProviderByVcId(current);
+            if (!provider)
+                return false;
+            current = provider->bankSourceEngineId(bankMode);
+        }
+        return false;
+    };
+
+    const QList<PresetTableV2Widget*> tables = PresetTableV2VCLookup::allTables();
+    for (PresetTableV2Widget* table : tables)
+    {
+        if (!table || table == this)
+            continue;
+
+        const quint32 candidateEngineId = table->linkedTransitionWidgetId();
+        if (candidateEngineId == VCWidget::invalidId()
+                || candidateEngineId == masterEngineId)
+            continue;
+
+        PresetTableV2TransitionProviderIface* provider =
+                PresetTableV2VCLookup::transitionProviderByVcId(candidateEngineId);
+        if (!provider)
+            continue;
+
+        const quint32 directSource = provider->bankSourceEngineId(mode);
+        if (directSource == VCWidget::invalidId())
+            continue;
+        if (!bankUltimatelySourcesFrom(directSource, masterEngineId, mode))
+            continue;
+
+        const int candidateOutput = outputIdx < 0 ? outputIdx : outputIdx;
+        if (candidateOutput >= 0
+                && (candidateOutput >= table->multiButtonOutputCount()
+                    || !table->multiButtonOutputControlsParameter(candidateOutput, parameter)))
+            continue;
+
+        PresetTableV2MultiButtonLinkedAction action;
+        action.widgetId = table->id();
+        action.outputIndex = candidateOutput;
+        action.parameter = parameter;
+        actions.append(action);
+    }
+
+    if (!actions.isEmpty())
+    {
+        VCPluginDiagnostics::breadcrumbRateLimited(
+                QStringLiteral("presettablev2"), id(), caption(),
+                QStringLiteral("presettablev2/linked-slave-actions/%1/%2/%3")
+                        .arg(id()).arg(outputIdx).arg(parameter),
+                1000,
+                QStringLiteral("linked slave actions output=%1 parameter=%2 count=%3")
+                        .arg(outputIdx).arg(parameter).arg(actions.size()));
+    }
+
+    return actions;
 }
 
 bool PresetTableV2Widget::multiButtonHasStagedIndex(int outputIdx, int parameter) const
@@ -6930,10 +8159,9 @@ PTGlobalEffectSettings PresetTableV2Widget::globalEffectSettingsLocked() const
 quint32 PresetTableV2Widget::cycleDurationMsLocked(const PTGlobalEffectSettings& global,
                                                    const PTTransitionPreset& preset) const
 {
-    bool honorPresetDuration = false;
-    honorPresetDuration =
-            m_transitionProviderSnapshot.liveColumnOverrides.contains(PTEfxCol::InputDuration);
-    return PTParamMatrixEngine::effectiveDurationMs(global, preset, honorPresetDuration);
+    PTTransitionPreset timingPreset = preset;
+    timingPreset.durationMs = 0;
+    return PTParamMatrixEngine::effectiveDurationMs(global, timingPreset, false);
 }
 
 void PresetTableV2Widget::rescaleElapsedForDurationChange(quint32& elapsedMs,
@@ -7446,8 +8674,7 @@ void PresetTableV2Widget::startSpatialChase(int outputIdx, int rowIdx, const QLi
 
 void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
                                             QList<Universe*>& universes,
-                                            const PTOutput& out,
-                                            const QVector<uchar>& aVals)
+                                            const PTOutput& out)
 {
     if (outputIdx < 0 || outputIdx >= m_spatialChase.size())
         return;
@@ -7466,7 +8693,8 @@ void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
     const QMap<QLCPoint, GroupHead>& headsMap =
             (out.scope == PTOutputScope::Rows) ? fullHeads : maskedHeads;
 
-    const quint32 durationMs = qMax(quint32(1), chase.spatialPreset.durationMs);
+    const quint32 durationMs = qMax(quint32(1),
+            cycleDurationMsLocked(globalEffectSettingsLocked(), chase.spatialPreset));
     const double increment = double(kPTEfxStepMs) / double(durationMs);
     chase.progress = qMin(1.0, chase.progress + increment);
 
@@ -7510,7 +8738,10 @@ void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
             m_faders.insert(uni, fader);
         }
 
-        applyPointChannels(fader.data(), universes[uni], head, fxi, pt, aVals, fadeMs);
+        const QVector<uchar> pointValues =
+                effectiveValuesForPoint(chase.targetRow, outputIdx, pt);
+        applyPointChannels(fader.data(), universes[uni], head, fxi, pt,
+                           applyOutputIntensityLocked(outputIdx, pointValues), fadeMs);
         chase.armed.insert(pt);
         chase.armedFixtures.insert(head.fxi);
     }
@@ -7526,11 +8757,14 @@ void PresetTableV2Widget::tickSpatialChase(int outputIdx, MasterTimer* timer,
 void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* timer,
                                                  QList<Universe*>& universes,
                                                  const PTOutput& out,
+                                                 int primaryRow, int secondaryRow,
                                                  const QVector<uchar>& priVals,
                                                  const QVector<uchar>& secVals,
                                                  const QSize& gridSize,
                                                  const QMap<QLCPoint, GroupHead>& headsMap,
                                                  const PTTransitionPreset* presetOverride,
+                                                 int stagedPrimaryRow,
+                                                 int stagedSecondaryRow,
                                                  const QVector<uchar>* stagedPriVals,
                                                  const QVector<uchar>* stagedSecVals,
                                                  const PTTransitionPreset* stagedPresetOverride,
@@ -7737,21 +8971,33 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
             m_faders.insert(uni, fader);
         }
 
+        auto valuesForPoint = [&](int rowIdx, const QVector<uchar>* fallbackValues) -> QVector<uchar> {
+            if (rowIdx >= 0 && rowIdx < m_rows.size())
+                return effectiveValuesForPoint(rowIdx, outputIdx, pt);
+            return fallbackValues ? *fallbackValues : QVector<uchar>(m_columns.size(), uchar(0));
+        };
+        const QVector<uchar> pointPriVals = valuesForPoint(primaryRow, &priVals);
+        const QVector<uchar> pointSecVals = valuesForPoint(secondaryRow, &secVals);
+        const QVector<uchar> pointStagedPriVals =
+                valuesForPoint(stagedPrimaryRow, stagedPriVals);
+        const QVector<uchar> pointStagedSecVals =
+                valuesForPoint(stagedSecondaryRow, stagedSecVals);
+
         QVector<uchar> normalValues;
         if (morphOutput)
         {
             const QVector<uchar> liveValues = continuousOutputValues(
-                    m_columns, priVals, secVals, spatialPreset, double(dimmer),
+                    m_columns, pointPriVals, pointSecVals, spatialPreset, double(dimmer),
                     global.intensity);
             const QVector<uchar> stagedValues = continuousOutputValues(
-                    m_columns, *stagedPriVals, *stagedSecVals, stagedPreset,
+                    m_columns, pointStagedPriVals, pointStagedSecVals, stagedPreset,
                     double(stagedDimmer), global.intensity);
             normalValues = blendRowValues(liveValues, stagedValues, morphProgress);
         }
         else
         {
             normalValues = continuousOutputValues(
-                    m_columns, priVals, secVals, spatialPreset, double(dimmer),
+                    m_columns, pointPriVals, pointSecVals, spatialPreset, double(dimmer),
                     global.intensity);
         }
         if (mixChannel1D)
@@ -7788,7 +9034,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         {
             const QVector<uchar> multiValues = multiFxPreset.enabled
                     ? continuousColumnValues(
-                        m_columns, priVals, secVals,
+                        m_columns, pointPriVals, pointSecVals,
                         double(multiFxDimmer), multiFxPreset.waveShape,
                         multiFxPreset.waveFadeIn, multiFxPreset.waveFadeOut,
                         global.intensity)
@@ -7796,10 +9042,10 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
             QVector<uchar> effectiveMultiValues = multiValues;
             if (hasStagedMultiFx)
             {
-                const QVector<uchar>& stagedPri = (morphOutput && stagedPriVals)
-                        ? *stagedPriVals : priVals;
-                const QVector<uchar>& stagedSec = (morphOutput && stagedSecVals)
-                        ? *stagedSecVals : secVals;
+                const QVector<uchar>& stagedPri = morphOutput
+                        ? pointStagedPriVals : pointPriVals;
+                const QVector<uchar>& stagedSec = morphOutput
+                        ? pointStagedSecVals : pointSecVals;
                 const QVector<uchar> stagedMultiValues = stagedMultiFxPreset.enabled
                         ? continuousColumnValues(
                             m_columns, stagedPri, stagedSec,
@@ -7813,7 +9059,8 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
             normalValues = blendRowValues(normalValues, effectiveMultiValues,
                                           double(m_multiFxBlend) / 255.0);
         }
-        applyPointChannels(fader.data(), universes[uni], head, fxi, pt, normalValues, fadeMs);
+        applyPointChannels(fader.data(), universes[uni], head, fxi, pt,
+                           applyOutputIntensityLocked(outputIdx, normalValues), fadeMs);
         writtenFixtures.insert(head.fxi);
     }
 }
@@ -8283,6 +9530,54 @@ QVector<uchar> PresetTableV2Widget::applyChannel1DFxToValuesLocked(
     }
 
     return applied ? out : baseValues;
+}
+
+QVector<uchar> PresetTableV2Widget::applyOutputIntensityLocked(
+        int outputIdx, const QVector<uchar>& values) const
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size())
+        return values;
+
+    QVector<uchar> out = values;
+    if (out.size() < m_columns.size())
+        out.resize(m_columns.size());
+    bool changed = false;
+    for (int col = 0; col < m_columns.size(); ++col)
+    {
+        const bool mapped = outputIdx < m_columns.at(col).intensityInputSources.size()
+                && !m_columns.at(col).intensityInputSources.at(outputIdx).isNull()
+                && m_columns.at(col).intensityInputSources.at(outputIdx)->isValid();
+        if (!mapped)
+            continue;
+        const uchar intensity = (outputIdx < m_columnIntensity.size()
+                                 && col < m_columnIntensity.at(outputIdx).size())
+                ? m_columnIntensity.at(outputIdx).at(col) : uchar(255);
+        if (intensity >= 255)
+            continue;
+        const int base = col < out.size() ? out.at(col) : 0;
+        out[col] = uchar(qBound(0, int(std::lround(double(base) * double(intensity) / 255.0)), 255));
+        changed = true;
+    }
+
+    const int legacyCol = m_outputs.at(outputIdx).intensityColumnIndex;
+    const bool legacyMappedByColumn = legacyCol >= 0 && legacyCol < m_columns.size()
+            && outputIdx < m_columns.at(legacyCol).intensityInputSources.size()
+            && !m_columns.at(legacyCol).intensityInputSources.at(outputIdx).isNull()
+            && m_columns.at(legacyCol).intensityInputSources.at(outputIdx)->isValid();
+    if (!legacyMappedByColumn && legacyCol >= 0 && legacyCol < m_columns.size())
+    {
+        const uchar intensity = outputIdx < m_outputIntensity.size()
+                ? m_outputIntensity.at(outputIdx) : uchar(255);
+        if (intensity < 255)
+        {
+            const int base = legacyCol < out.size() ? out.at(legacyCol) : 0;
+            out[legacyCol] = uchar(qBound(0, int(std::lround(double(base) * double(intensity) / 255.0)), 255));
+            changed = true;
+        }
+    }
+    if (!changed)
+        return values;
+    return out;
 }
 
 void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
@@ -9113,10 +10408,37 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             m_faders.insert(uni, fader);
         }
 
+        auto valuesForPoint = [&](int rowIdx, const QVector<uchar>* fallbackValues) -> QVector<uchar> {
+            if (rowIdx >= 0 && rowIdx < m_rows.size())
+                return effectiveValuesForPoint(rowIdx, outputIdx, pt);
+            return fallbackValues ? *fallbackValues : QVector<uchar>(m_columns.size(), uchar(0));
+        };
+        int stagedPrimaryRowForPoint = blendFromRow;
+        if (stagedPrimaryOverride
+                && outputIdx >= 0
+                && outputIdx < m_stagedRowValid.size()
+                && outputIdx < m_stagedRow.size()
+                && m_stagedRowValid[outputIdx])
+            stagedPrimaryRowForPoint = m_stagedRow[outputIdx];
+        int stagedSecondaryRowForPoint = blendToRow;
+        if (stagedSecondaryOverride
+                && outputIdx >= 0
+                && outputIdx < m_stagedSecondaryValid.size()
+                && outputIdx < m_stagedSecondaryRow.size()
+                && m_stagedSecondaryValid[outputIdx])
+            stagedSecondaryRowForPoint = m_stagedSecondaryRow[outputIdx];
+        const QVector<uchar> pointPriVals = valuesForPoint(blendFromRow, primaryOverride);
+        const QVector<uchar> pointSecVals = valuesForPoint(blendToRow, secondaryOverride);
+        const QVector<uchar> pointStagedPriVals =
+                valuesForPoint(stagedPrimaryRowForPoint, stagedPrimaryOverride);
+        const QVector<uchar> pointStagedSecVals =
+                valuesForPoint(stagedSecondaryRowForPoint, stagedSecondaryOverride);
+
         auto applyRow = [&](const QVector<uchar>& rowVals) {
             if (writtenFixtures.contains(head.fxi))
                 return;
             QVector<uchar> vals = PTParamMatrixEngine::blendWithIntensity(rowVals, global.intensity);
+            vals = applyOutputIntensityLocked(outputIdx, vals);
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, fadeMs);
             writtenFixtures.insert(head.fxi);
         };
@@ -9157,17 +10479,17 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                                               stagedSpatialPlan.indexByPoint.value(pt, 0),
                                               stagedSerialCount);
                 const QVector<uchar> liveValues = continuousOutputValues(
-                        m_columns, priVals, secVals, pointPreset, double(dimmer),
+                        m_columns, pointPriVals, pointSecVals, pointPreset, double(dimmer),
                         global.intensity);
                 const QVector<uchar> stagedValues = continuousOutputValues(
-                        m_columns, *stagedPrimaryOverride, *stagedSecondaryOverride,
+                        m_columns, pointStagedPriVals, pointStagedSecVals,
                         pointStagedPreset, double(stagedDimmer), global.intensity);
                 finalValues = blendRowValues(liveValues, stagedValues, morphProgress);
             }
             else
             {
                 finalValues = continuousOutputValues(
-                        m_columns, priVals, secVals, pointPreset, double(dimmer),
+                        m_columns, pointPriVals, pointSecVals, pointPreset, double(dimmer),
                         global.intensity);
             }
             if (mixChannel1D)
@@ -9203,7 +10525,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 const float multiFxDimmer = multiFxDimmerAtPoint(pt, multiFxElapsedMs);
                 const QVector<uchar> multiValues = pointMultiFxPreset.enabled
                         ? continuousColumnValues(
-                            m_columns, priVals, secVals,
+                            m_columns, pointPriVals, pointSecVals,
                             double(multiFxDimmer), pointMultiFxPreset.waveShape,
                             pointMultiFxPreset.waveFadeIn, pointMultiFxPreset.waveFadeOut,
                             global.intensity)
@@ -9215,10 +10537,10 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                             multiFxPresetForPoint(pt, true);
                     const float stagedMultiFxDimmer = stagedMultiFxDimmerAtPoint(
                             pt, stagedMultiFxElapsedMs);
-                    const QVector<uchar>& stagedPri = (morphOutput && stagedPrimaryOverride)
-                            ? *stagedPrimaryOverride : priVals;
-                    const QVector<uchar>& stagedSec = (morphOutput && stagedSecondaryOverride)
-                            ? *stagedSecondaryOverride : secVals;
+                    const QVector<uchar>& stagedPri = morphOutput
+                            ? pointStagedPriVals : pointPriVals;
+                    const QVector<uchar>& stagedSec = morphOutput
+                            ? pointStagedSecVals : pointSecVals;
                     const QVector<uchar> stagedMultiValues = pointStagedMultiFxPreset.enabled
                             ? continuousColumnValues(
                                 m_columns, stagedPri, stagedSec,
@@ -9239,7 +10561,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         auto applyContinuous = [&]() {
             if (writtenFixtures.contains(head.fxi))
                 return;
-            const QVector<uchar> finalValues = continuousValuesAtPoint();
+            const QVector<uchar> finalValues =
+                    applyOutputIntensityLocked(outputIdx, continuousValuesAtPoint());
             applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues, 0);
             writtenFixtures.insert(head.fxi);
         };
@@ -9255,12 +10578,13 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 const QVector<uchar> fromValues = continuousFx
                         ? continuousValuesAtPoint()
                         : PTParamMatrixEngine::blendWithIntensity(
-                            st.flashReturnValues.isEmpty() ? priVals : st.flashReturnValues,
+                            st.flashReturnValues.isEmpty() ? pointPriVals : st.flashReturnValues,
                             global.intensity);
                 const QVector<uchar> toValues =
                         PTParamMatrixEngine::blendWithIntensity(st.flashValues,
                                                                 global.intensity);
-                const QVector<uchar> finalValues = blendRowValues(fromValues, toValues, blend);
+                const QVector<uchar> finalValues = applyOutputIntensityLocked(
+                        outputIdx, blendRowValues(fromValues, toValues, blend));
                 applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues,
                                    fadeMs);
                 writtenFixtures.insert(head.fxi);
@@ -9275,13 +10599,13 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 const QVector<uchar> fromValues = continuousFx
                         ? continuousValuesAtPoint()
                         : PTParamMatrixEngine::blendWithIntensity(
-                            st.flashReturnValues.isEmpty() ? priVals : st.flashReturnValues,
+                            st.flashReturnValues.isEmpty() ? pointPriVals : st.flashReturnValues,
                             global.intensity);
                 const QVector<uchar> toValues =
                         PTParamMatrixEngine::blendWithIntensity(st.flashValues,
                                                                 global.intensity);
-                const QVector<uchar> finalValues = blendRowValues(fromValues, toValues,
-                                                                  releaseBlend);
+                const QVector<uchar> finalValues = applyOutputIntensityLocked(
+                        outputIdx, blendRowValues(fromValues, toValues, releaseBlend));
                 applyPointChannels(fader.data(), universes[uni], head, fxi, pt, finalValues,
                                    fadeMs);
                 writtenFixtures.insert(head.fxi);
@@ -9300,7 +10624,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             {
                 const float blend = spatialPlan.sweepBlend01(
                         st.sweepManualPhase, pt, preset, global);
-                const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
+                const QVector<uchar> vals = applyOutputIntensityLocked(
+                        outputIdx, applySweepBlend(pointPriVals, pointSecVals, blend));
                 applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
                 writtenFixtures.insert(head.fxi);
             }
@@ -9312,7 +10637,8 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                     sweepTimedProgress01, pt, preset, global);
             if (!writtenFixtures.contains(head.fxi))
             {
-                const QVector<uchar> vals = applySweepBlend(priVals, secVals, blend);
+                const QVector<uchar> vals = applyOutputIntensityLocked(
+                        outputIdx, applySweepBlend(pointPriVals, pointSecVals, blend));
                 applyPointChannels(fader.data(), universes[uni], head, fxi, pt, vals, 0);
                 writtenFixtures.insert(head.fxi);
             }
@@ -9325,7 +10651,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
         }
         else
         {
-            applyRow(priVals);
+            applyRow(pointPriVals);
         }
     }
 
@@ -9396,8 +10722,6 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
 
         const QVector<uchar> offVals(m_columns.size(), uchar(0));
         const QVector<uchar>& aVals = activeRowValid ? m_rows[activeRow].values : offVals;
-        const QVector<uchar>* bVals = stagedRowValid
-            ? &m_rows[stagedRow].values : (stagedPrimaryValid ? &offVals : nullptr);
 
         const QMap<QLCPoint, GroupHead>& headsMap =
                 (out.scope == PTOutputScope::Rows) ? fullHeads : maskedHeads;
@@ -9444,8 +10768,10 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
                             ? layer.livePrimaryValues : aVals;
                     const QVector<uchar>& liveSec = layer.active
                             ? layer.liveSecondaryValues : aVals;
+                    const int liveSecondaryRow = (layer.active && layer.liveSecondaryRow >= 0)
+                            ? layer.liveSecondaryRow : activeRow;
                     writeMatrixSpatial(o, timer, universes, out, activeRow,
-                                       layer.active ? secRow : activeRow,
+                                       liveSecondaryRow,
                                        basePreset, globalFx, gridSize, headsMap, true,
                                        &livePri, &liveSec,
                                        layer.hasStaged ? &layer.primaryValues : nullptr,
@@ -9520,8 +10846,9 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
                     fader = universes[uni]->requestFader(Universe::Auto);
                     m_faders.insert(uni, fader);
                 }
-                QVector<uchar> vals = aVals;
+                QVector<uchar> vals = effectiveValuesForPoint(activeRow, o, sf.point);
                 vals = PTParamMatrixEngine::blendWithIntensity(vals, globalFx.intensity);
+                vals = applyOutputIntensityLocked(o, vals);
                 applyPointChannels(fader.data(), universes[uni], sf.head, fxi, sf.point, vals, 0);
             }
             continue;
@@ -9542,8 +10869,11 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
             if (layer.active)
             {
                 writeContinuousSpatial(o, timer, universes, out,
+                                       layer.primaryRow, layer.liveSecondaryRow,
                                        layer.livePrimaryValues, layer.liveSecondaryValues,
                                        gridSize, headsMap, &layer.livePreset,
+                                       layer.hasStaged ? layer.stagedPrimaryRow : -1,
+                                       layer.hasStaged ? layer.secondaryRow : -1,
                                        layer.hasStaged ? &layer.primaryValues : nullptr,
                                        layer.hasStaged ? &layer.secondaryValues : nullptr,
                                        layer.hasStaged ? &layer.preset : nullptr,
@@ -9576,7 +10906,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
 
             if (m_spatialChase[o].active)
             {
-                tickSpatialChase(o, timer, universes, out, aVals);
+                tickSpatialChase(o, timer, universes, out);
                 continue;
             }
         }
@@ -9605,11 +10935,18 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
                 m_faders.insert(uni, fader);
             }
 
+            const QVector<uchar> pointAVals = applyOutputIntensityLocked(
+                    o, effectiveValuesForPoint(activeRow, o, sf.point));
+            const QVector<uchar> pointBVals =
+                    (stagedRowValid || stagedPrimaryValid)
+                    ? applyOutputIntensityLocked(o, effectiveValuesForPoint(stagedRow, o, sf.point))
+                    : pointAVals;
+
             for (int c = 0; c < m_columns.size(); ++c)
             {
                 const PTColumn& col = m_columns[c];
-                uchar aVal = (c < aVals.size()) ? aVals[c] : 0;
-                uchar bVal = (bVals && c < bVals->size()) ? (*bVals)[c] : aVal;
+                uchar aVal = (c < pointAVals.size()) ? pointAVals[c] : 0;
+                uchar bVal = (c < pointBVals.size()) ? pointBVals[c] : aVal;
                 const bool linearCrossfade = m_crossfadeEnabled && hasStaged
                         && !crossfadeSweep;
 
@@ -9749,6 +11086,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
     int numRows           = m_rows.size();
     bool xfEnabled        = m_crossfadeEnabled;
     bool initialSync      = m_initialInputSyncPending;
+    QVector<PTColumn> columnsSnapshot = m_columns;
     lk.unlock();
 
     if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::kMultiFxBlend))
@@ -9982,6 +11320,32 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
     {
         if (o >= PTInputId::kMaxRoutableOutputs)
             break;
+
+        for (int c = 0; c < columnsSnapshot.size(); ++c)
+        {
+            const QSharedPointer<QLCInputSource> src =
+                    (o < columnsSnapshot.at(c).intensityInputSources.size())
+                    ? columnsSnapshot.at(c).intensityInputSources.at(o)
+                    : QSharedPointer<QLCInputSource>();
+            if (src.isNull() || !src->isValid()
+                    || src->universe() != universe || src->channel() != pagedCh)
+            {
+                continue;
+            }
+            if (src.data() != sender() && src->needsUpdate())
+            {
+                src->updateInputValue(value);
+                return;
+            }
+            {
+                QMutexLocker lk2(&m_stateMutex);
+                ensureColumnIntensitySizeLocked();
+                if (o < m_columnIntensity.size() && c < m_columnIntensity[o].size())
+                    m_columnIntensity[o][c] = value;
+            }
+            sendFeedback(value, src);
+            return;
+        }
 
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSweep(o)))
         {
@@ -10387,6 +11751,10 @@ void PresetTableV2Widget::editProperties()
         m_stagedRow.fill(-1);
         m_stagedRowValid.resize(m_outputs.size());
         m_stagedRowValid.fill(false);
+        const int oldIntensitySize = m_outputIntensity.size();
+        m_outputIntensity.resize(m_outputs.size());
+        for (int i = oldIntensitySize; i < m_outputIntensity.size(); ++i)
+            m_outputIntensity[i] = 255;
         m_spatialAppliedRow.resize(m_outputs.size());
         m_spatialAppliedRow.fill(-1);
 
@@ -10512,10 +11880,12 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
     QVector<PTColumn> colsCopy;
     QVector<PTRow>    rowsCopy;
     QVector<QHash<int, PTPositionOutputLayer>> positionOverridesCopy;
+    QVector<QHash<int, PTValueOutputLayer>> valueOverridesCopy;
     QVector<PTOutput> outsCopy;
     QVector<int>      activeRowCopy;
     QVector<int>      stagedRowCopy;
     QVector<bool>     stagedRowValidCopy;
+    QVector<uchar>    outputIntensityCopy;
     bool              xfEnabledCopy;
     bool              syncMultiFxPhaseCopy;
     int               multiFxSyncOffsetMsCopy;
@@ -10541,10 +11911,12 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         colsCopy      = m_columns;
         rowsCopy      = m_rows;
         positionOverridesCopy = m_positionOverrides;
+        valueOverridesCopy = m_valueOverrides;
         outsCopy      = m_outputs;
         activeRowCopy = m_activeRow;
         stagedRowCopy = m_stagedRow;
         stagedRowValidCopy = m_stagedRowValid;
+        outputIntensityCopy = m_outputIntensity;
         xfEnabledCopy   = m_crossfadeEnabled;
         syncMultiFxPhaseCopy = m_syncMultiFxPhaseToCrossfade;
         multiFxSyncOffsetMsCopy = m_multiFxCrossfadeSyncOffsetMs;
@@ -10572,17 +11944,22 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
         activeRowCopy.resize(outsCopy.size());
         stagedRowCopy.resize(outsCopy.size());
         stagedRowValidCopy.resize(outsCopy.size());
+        outputIntensityCopy.resize(outsCopy.size());
     }
+    for (int i = outputIntensityCopy.size(); i < outsCopy.size(); ++i)
+        outputIntensityCopy.append(255);
 
     {
         QMutexLocker lk2(&copy->m_stateMutex);
         copy->m_columns            = colsCopy;
         copy->m_rows               = rowsCopy;
         copy->m_positionOverrides  = positionOverridesCopy;
+        copy->m_valueOverrides     = valueOverridesCopy;
         copy->m_outputs            = outsCopy;
         copy->m_activeRow          = activeRowCopy;
         copy->m_stagedRow          = stagedRowCopy;
         copy->m_stagedRowValid     = stagedRowValidCopy;
+        copy->m_outputIntensity    = outputIntensityCopy;
         copy->m_crossfadeEnabled   = xfEnabledCopy;
         copy->m_syncMultiFxPhaseToCrossfade = syncMultiFxPhaseCopy;
         copy->m_multiFxCrossfadeSyncOffsetMs = multiFxSyncOffsetMsCopy;
@@ -10627,6 +12004,8 @@ VCWidget* PresetTableV2Widget::createCopy(VCWidget* parent)
                                     PTInputId::transContinuousBank(o));
                 copy->setInputSource(inputSource(PTInputId::positionMotionBank(o)),
                                      PTInputId::positionMotionBank(o));
+                copy->setInputSource(inputSource(PTInputId::channel1DBank(o)),
+                                     PTInputId::channel1DBank(o));
                 copy->setInputSource(inputSource(PTInputId::multiFxBank(o)),
                                      PTInputId::multiFxBank(o));
             }
@@ -11036,6 +12415,7 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
     QVector<PTColumn> cols;
     QVector<PTRow>    rows;
     QVector<QHash<int, PTPositionOutputLayer>> positionOverrides;
+    QVector<QHash<int, PTValueOutputLayer>> valueOverrides;
     QVector<PTOutput> outs;
     QKeySequence loadedMultiFxRestartKey;
     QKeySequence loadedWidgetFlashGateKey;
@@ -11114,6 +12494,17 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                     }
                     root.skipCurrentElement();
                 }
+                else if (root.name() == KXMLColIntensityInput)
+                {
+                    const int outputIdx = root.attributes().value(KXMLOutIndex).toInt();
+                    PTInputBinding binding = readPTInputBlock(root, this);
+                    if (outputIdx >= 0 && !binding.source.isNull() && binding.source->isValid())
+                    {
+                        if (col.intensityInputSources.size() <= outputIdx)
+                            col.intensityInputSources.resize(outputIdx + 1);
+                        col.intensityInputSources[outputIdx] = binding.source;
+                    }
+                }
                 else
                 {
                     root.skipCurrentElement();
@@ -11174,6 +12565,17 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                     row.positions.insert(pt, pos);
                     root.skipCurrentElement();
                 }
+                else if (root.name() == KXMLCellValue)
+                {
+                    const auto vattrs = root.attributes();
+                    const QLCPoint pt(vattrs.value(KXMLPositionX).toInt(),
+                                      vattrs.value(KXMLPositionY).toInt());
+                    const int col = vattrs.value(KXMLCellValueCol).toInt();
+                    const int value = qBound(0, vattrs.value(KXMLCellValueValue).toInt(), 255);
+                    if (col >= 0)
+                        row.cellValues[pt].values[col] = uchar(value);
+                    root.skipCurrentElement();
+                }
                 else
                     root.skipCurrentElement();
             }
@@ -11212,6 +12614,44 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
             }
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLCellValueOverride)
+        {
+            const auto pattrs = root.attributes();
+            const int rowIdx = pattrs.value(KXMLPosOvRow).toInt();
+            const int outputIdx = pattrs.value(KXMLPosOvOutput).toInt();
+            const int selectionIdx = pattrs.value(KXMLPosOvSelection).toInt();
+            const QLCPoint pt(pattrs.value(KXMLPositionX).toInt(),
+                              pattrs.value(KXMLPositionY).toInt());
+            const int col = pattrs.value(KXMLCellValueCol).toInt();
+            const int value = qBound(0, pattrs.value(KXMLCellValueValue).toInt(), 255);
+            if (rowIdx >= 0 && outputIdx >= 0)
+            {
+                while (valueOverrides.size() <= rowIdx)
+                    valueOverrides.append(QHash<int, PTValueOutputLayer>());
+                PTValueOutputLayer& layer = valueOverrides[rowIdx][outputIdx];
+                if (selectionIdx < 0)
+                {
+                    if (col >= 0)
+                        layer.allOverrides[pt].values[col] = uchar(value);
+                }
+                else
+                {
+                    while (layer.selections.size() <= selectionIdx)
+                    {
+                        PTValueSelectionLayer sel;
+                        sel.name = tr("Selection %1").arg(layer.selections.size() + 1);
+                        layer.selections.append(sel);
+                    }
+                    PTValueSelectionLayer& sel = layer.selections[selectionIdx];
+                    if (pattrs.hasAttribute(KXMLPosOvSelName))
+                        sel.name = pattrs.value(KXMLPosOvSelName).toString();
+                    sel.cells.insert(pt);
+                    if (col >= 0)
+                        sel.overrides[pt].values[col] = uchar(value);
+                }
+            }
+            root.skipCurrentElement();
+        }
         else if (root.name() == KXMLOutput)
         {
             auto attrs = root.attributes();
@@ -11244,6 +12684,8 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                 out.secondaryRowIndex = attrs.value(KXMLOutSecondaryRow).toInt();
             else if (attrs.hasAttribute(KXMLOutTransitionSecondary))
                 out.secondaryRowIndex = attrs.value(KXMLOutTransitionSecondary).toInt();
+            if (attrs.hasAttribute(KXMLOutIntensityColumn))
+                out.intensityColumnIndex = attrs.value(KXMLOutIntensityColumn).toInt();
 
             while (root.readNextStartElement())
             {
@@ -11286,6 +12728,13 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
                 {
                     if (idx < PTInputId::kMaxRoutableOutputs)
                         loadXMLSources(root, PTInputId::channel1DBank(idx));
+                    else
+                        root.skipCurrentElement();
+                }
+                else if (root.name() == KXMLOutIntensityInput)
+                {
+                    if (idx < PTInputId::kMaxRoutableOutputs)
+                        loadXMLSources(root, PTInputId::outputIntensity(idx));
                     else
                         root.skipCurrentElement();
                 }
@@ -11373,6 +12822,9 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
         m_positionOverrides = positionOverrides;
         while (m_positionOverrides.size() < m_rows.size())
             m_positionOverrides.append(QHash<int, PTPositionOutputLayer>());
+        m_valueOverrides = valueOverrides;
+        while (m_valueOverrides.size() < m_rows.size())
+            m_valueOverrides.append(QHash<int, PTValueOutputLayer>());
         // Ensure row values are correct size
         for (PTRow& r : m_rows)
             r.values.resize(m_columns.size(), 0);
@@ -11385,12 +12837,35 @@ bool PresetTableV2Widget::loadXML(QXmlStreamReader& root)
             outs.resize(PTInputId::kMaxRoutableOutputs);
         }
         m_outputs = outs;
+        for (int o = 0; o < m_outputs.size(); ++o)
+        {
+            const int col = m_outputs.at(o).intensityColumnIndex;
+            if (col < 0 || col >= m_columns.size())
+                continue;
+            QSharedPointer<QLCInputSource> src = inputSource(PTInputId::outputIntensity(o));
+            if (src.isNull() || !src->isValid())
+                continue;
+            if (m_columns[col].intensityInputSources.size() <= o)
+                m_columns[col].intensityInputSources.resize(o + 1);
+            if (m_columns[col].intensityInputSources[o].isNull()
+                    || !m_columns[col].intensityInputSources[o]->isValid())
+            {
+                m_columns[col].intensityInputSources[o] = src;
+            }
+        }
+        for (PTColumn& col : m_columns)
+            col.intensityInputSources.resize(m_outputs.size());
         m_activeRow.resize(m_outputs.size());
         m_activeRow.fill(-1);
         m_stagedRow.resize(m_outputs.size());
         m_stagedRow.fill(-1);
         m_stagedRowValid.resize(m_outputs.size());
         m_stagedRowValid.fill(false);
+        const int oldIntensitySize = m_outputIntensity.size();
+        m_outputIntensity.resize(m_outputs.size());
+        for (int i = oldIntensitySize; i < m_outputIntensity.size(); ++i)
+            m_outputIntensity[i] = 255;
+        ensureColumnIntensitySizeLocked();
         m_crossfadeEnabled   = xfEnabled;
         m_syncMultiFxPhaseToCrossfade = syncMultiFxPhase;
         m_multiFxCrossfadeSyncOffsetMs = qBound(0, multiFxSyncOffsetMs, 200);
@@ -11546,6 +13021,17 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
             doc->writeEndElement();
         }
 
+        for (int o = 0; o < col.intensityInputSources.size(); ++o)
+        {
+            const QSharedPointer<QLCInputSource> src = col.intensityInputSources.at(o);
+            if (src.isNull() || !src->isValid())
+                continue;
+            doc->writeStartElement(KXMLColIntensityInput);
+            doc->writeAttribute(KXMLOutIndex, QString::number(o));
+            savePTInputBlock(doc, src);
+            doc->writeEndElement();
+        }
+
         for (const PTOption& opt : col.options)
         {
             doc->writeStartElement(KXMLOption);
@@ -11576,6 +13062,18 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
             doc->writeAttribute(KXMLPositionPanDeg, QString::number(it.value().panDeg, 'f', 2));
             doc->writeAttribute(KXMLPositionTiltDeg, QString::number(it.value().tiltDeg, 'f', 2));
             doc->writeEndElement();
+        }
+        for (auto it = row.cellValues.constBegin(); it != row.cellValues.constEnd(); ++it)
+        {
+            for (auto vit = it.value().values.constBegin(); vit != it.value().values.constEnd(); ++vit)
+            {
+                doc->writeStartElement(KXMLCellValue);
+                doc->writeAttribute(KXMLPositionX, QString::number(it.key().x()));
+                doc->writeAttribute(KXMLPositionY, QString::number(it.key().y()));
+                doc->writeAttribute(KXMLCellValueCol, QString::number(vit.key()));
+                doc->writeAttribute(KXMLCellValueValue, QString::number(vit.value()));
+                doc->writeEndElement();
+            }
         }
         doc->writeEndElement();  // Row
     }
@@ -11626,6 +13124,45 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         }
     }
 
+    for (int rowIdx = 0; rowIdx < m_valueOverrides.size(); ++rowIdx)
+    {
+        const QHash<int, PTValueOutputLayer>& rowLayers = m_valueOverrides.at(rowIdx);
+        for (auto outIt = rowLayers.constBegin(); outIt != rowLayers.constEnd(); ++outIt)
+        {
+            const int outputIdx = outIt.key();
+            const PTValueOutputLayer& layer = outIt.value();
+            auto writeValueOverride = [&](int selectionIdx, const QString& selName,
+                                          const QLCPoint& pt, int col, int value) {
+                doc->writeStartElement(KXMLCellValueOverride);
+                doc->writeAttribute(KXMLPosOvRow, QString::number(rowIdx));
+                doc->writeAttribute(KXMLPosOvOutput, QString::number(outputIdx));
+                doc->writeAttribute(KXMLPosOvSelection, QString::number(selectionIdx));
+                if (!selName.isEmpty())
+                    doc->writeAttribute(KXMLPosOvSelName, selName);
+                doc->writeAttribute(KXMLPositionX, QString::number(pt.x()));
+                doc->writeAttribute(KXMLPositionY, QString::number(pt.y()));
+                doc->writeAttribute(KXMLCellValueCol, QString::number(col));
+                if (col >= 0)
+                    doc->writeAttribute(KXMLCellValueValue, QString::number(value));
+                doc->writeEndElement();
+            };
+
+            for (auto pit = layer.allOverrides.constBegin(); pit != layer.allOverrides.constEnd(); ++pit)
+                for (auto vit = pit.value().values.constBegin(); vit != pit.value().values.constEnd(); ++vit)
+                    writeValueOverride(-1, QString(), pit.key(), vit.key(), vit.value());
+
+            for (int selIdx = 0; selIdx < layer.selections.size(); ++selIdx)
+            {
+                const PTValueSelectionLayer& sel = layer.selections.at(selIdx);
+                for (const QLCPoint& pt : sel.cells)
+                    writeValueOverride(selIdx, sel.name, pt, -1, 0);
+                for (auto pit = sel.overrides.constBegin(); pit != sel.overrides.constEnd(); ++pit)
+                    for (auto vit = pit.value().values.constBegin(); vit != pit.value().values.constEnd(); ++vit)
+                        writeValueOverride(selIdx, sel.name, pit.key(), vit.key(), vit.value());
+            }
+        }
+    }
+
     // Collect output data under lock, then write outside
     struct OutData {
         QString       name;
@@ -11638,6 +13175,7 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
         int           channel1DPresetIndex;
         int           multiFxPresetIndex;
         int           secondaryRowIndex;
+        int           intensityColumnIndex;
     };
     QVector<OutData> outData;
     outData.reserve(m_outputs.size());
@@ -11646,7 +13184,7 @@ bool PresetTableV2Widget::saveXML(QXmlStreamWriter* doc)
                         out.sweepPresetIndex, out.continuousPresetIndex,
                         out.positionMotionPresetIndex, out.channel1DPresetIndex,
                         out.multiFxPresetIndex,
-                        out.secondaryRowIndex});
+                        out.secondaryRowIndex, out.intensityColumnIndex});
 
     bool isFGMode = (m_mode == PTMode::FixtureGroup || m_mode == PTMode::Position);
     lk.unlock();
