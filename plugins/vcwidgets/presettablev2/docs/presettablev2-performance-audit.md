@@ -10,43 +10,52 @@ This note tracks the first CPU/performance pass across the three linked VC widge
 
 The current architecture is much safer than the earlier live lookup model because playback mostly reads immutable provider snapshots. The remaining performance risks are mostly repeated UI/link discovery and per-fixture recomputation in hot DMX paths.
 
-## Priority 1: MultiButton Effective-Action Cache
+## Progress
+
+- ~~Priority 1: MultiButton effective-action cache~~ Done in `46b280ba7`.
+- ~~Priority 2: Precompute `PTSpatialFixturePlan` in Position DMX~~ First pass done in `a5f20ee14`.
+- Priority 3: Tick-local cache for `effectiveValuesForPoint`.
+- Priority 4: Coalesce Preset Table Engine snapshot/rebuild.
+
+## ~~Priority 1: MultiButton Effective-Action Cache~~
+
+Status: done in `46b280ba7`.
 
 `MultiButtonWidget` can be called from paint, UI highlight, shared-bus recall, and `writeDMX()`. Before this pass, those paths could repeatedly rebuild the effective widget action list, including auto-slave discovery.
 
-The important expensive calls to avoid in frequent paths are:
+The implemented cache avoids repeating these expensive calls in frequent paths:
 
-- full VC tree lookup via `findChildren<VCWidget*>`;
-- `PresetTableV2VCLookup::allTables()`;
-- `multiButtonLinkedSlaveActions(...)`.
+- ~~full VC tree lookup via `findChildren<VCWidget*>`;~~
+- ~~`PresetTableV2VCLookup::allTables()`;~~
+- ~~`multiButtonLinkedSlaveActions(...)`.~~
 
-The intended behavior is:
+Implemented behavior:
 
-- cache `effectiveWidgetActions()`;
-- cache the leader action used for labels/count/highlight;
-- cache whether any action supports staged selection;
-- invalidate on link/config/load/properties/target-destroyed;
-- use a short TTL/revision check for external source/slave changes.
+- ~~cache `effectiveWidgetActions()`;~~
+- ~~cache the leader action used for labels/count/highlight;~~
+- ~~cache whether any action supports staged selection;~~
+- ~~invalidate on link/config/load/properties/target-destroyed;~~
+- ~~use a short TTL/revision check for external source/slave changes.~~
 
 This keeps staged/live behavior unchanged while avoiding repeated global lookup work during normal playback.
 
-## Priority 2: Precompute `PTSpatialFixturePlan` In Position DMX
+## ~~Priority 2: Precompute `PTSpatialFixturePlan` In Position DMX~~
 
-Status: first pass implemented with a tick-local spatial-plan cache in Position DMX.
+Status: first pass done in `a5f20ee14` with a tick-local spatial-plan cache in Position DMX.
 
 `PresetTableV2Widget::writeDMXPositionFixtureGroup()` still builds some spatial plans inside the per-fixture loop. That makes cost grow as:
 
 `outputs x fixtures x active layers`
 
-The optimization should avoid rebuilding identical plans inside the fixture loop. The first implementation caches plans once per output/tick and reuses them for matching spatial preset signatures:
+The implemented optimization avoids rebuilding identical plans inside the fixture loop. Plans are cached once per output/tick and reused for matching spatial preset signatures:
 
-- transition sweep;
-- live/staged interpolation;
-- live/staged 2D FX;
-- legacy sweep motion;
-- MultiFX.
+- ~~transition sweep;~~
+- ~~live/staged interpolation;~~
+- ~~live/staged 2D FX;~~
+- ~~legacy sweep motion;~~
+- ~~MultiFX.~~
 
-The fixture loop should then only read `indexByPoint` and apply values.
+The fixture loop now reuses the cached plan and only reads `indexByPoint` / applies values for matching signatures.
 
 ## Priority 3: Tick-Local Cache For `effectiveValuesForPoint`
 
