@@ -32,11 +32,13 @@ This keeps staged/live behavior unchanged while avoiding repeated global lookup 
 
 ## Priority 2: Precompute `PTSpatialFixturePlan` In Position DMX
 
+Status: first pass implemented with a tick-local spatial-plan cache in Position DMX.
+
 `PresetTableV2Widget::writeDMXPositionFixtureGroup()` still builds some spatial plans inside the per-fixture loop. That makes cost grow as:
 
 `outputs x fixtures x active layers`
 
-The next optimization should precompute plans once per output/tick for:
+The optimization should avoid rebuilding identical plans inside the fixture loop. The first implementation caches plans once per output/tick and reuses them for matching spatial preset signatures:
 
 - transition sweep;
 - live/staged interpolation;
@@ -78,4 +80,3 @@ Global VC lookup is acceptable in properties dialogs, one-shot relinking, and di
 - high-frequency input handling.
 
 Diagnostics should stay rate-limited in hot paths. Full breadcrumb flushes should remain reserved for important commits, link changes, startup/shutdown, and crash dumps.
-

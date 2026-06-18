@@ -9759,10 +9759,43 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
         for (const PTOutputScopeFixture& sf : scopeFixtures)
             points.append(sf.point);
 
+        QHash<QString, PTSpatialFixturePlan> spatialPlanCache;
+        auto spatialPlanKey = [&](const PTTransitionPreset& sourcePreset) -> QString {
+            const PTTransitionPreset p = sourcePreset.playbackMode == PTTransitionMode::SweepOnly
+                    ? PTDimmerWaveEngine::normalizedTransitionSweepPreset(sourcePreset)
+                    : sourcePreset;
+            return QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14")
+                    .arg(int(p.playbackMode))
+                    .arg(int(p.axis))
+                    .arg(int(p.offsetDirection))
+                    .arg(int(p.offsetStepMode))
+                    .arg(p.offsetStep)
+                    .arg(p.offsetCoverage)
+                    .arg(p.wings)
+                    .arg(p.blocks)
+                    .arg(int(p.wingsSymmetry))
+                    .arg(int(p.propagation))
+                    .arg(p.waveWidth)
+                    .arg(p.startOffset)
+                    .arg(globalFx.fxOrientation)
+                    .arg(p.enabled ? 1 : 0);
+        };
+        auto spatialPlanForPreset = [&](const PTTransitionPreset& preset) -> PTSpatialFixturePlan {
+            const QString key = spatialPlanKey(preset);
+            auto it = spatialPlanCache.constFind(key);
+            if (it == spatialPlanCache.constEnd())
+            {
+                spatialPlanCache.insert(key, PTSpatialFixturePlan::build(
+                                            points, preset, globalFx,
+                                            gridSize.width(), gridSize.height()));
+                it = spatialPlanCache.constFind(key);
+            }
+            return it.value();
+        };
+
         const bool crossfadeSweep = playback.crossfadeTransition;
         const PTTransitionPreset sweepPreset = sweepPresetForOutputLocked(o);
-        const PTSpatialFixturePlan sweepPlan = PTSpatialFixturePlan::build(
-                points, sweepPreset, globalFx, gridSize.width(), gridSize.height());
+        const PTSpatialFixturePlan sweepPlan = spatialPlanForPreset(sweepPreset);
         const double xfProgress = crossfadeProgress01Locked(xfEffective);
 
         for (const PTOutputScopeFixture& sf : scopeFixtures)
@@ -9815,9 +9848,8 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                     PTTransitionMode::SweepOnly, liveSweepPresetIndexLocked(o), o, &sf.point);
             if (!legacySweepMotionPreset.enabled)
                 legacySweepMotionPreset = PTTransitionPreset();
-            const PTSpatialFixturePlan legacySweepMotionPlan = PTSpatialFixturePlan::build(
-                    points, legacySweepMotionPreset, globalFx,
-                    gridSize.width(), gridSize.height());
+            const PTSpatialFixturePlan legacySweepMotionPlan =
+                    spatialPlanForPreset(legacySweepMotionPreset);
             const int legacySweepMotionSerialCount = qMax(1, legacySweepMotionPlan.count());
 
             const bool positionXfActive = stagedRowValid && m_crossfadeEnabled && hasStaged;
@@ -9910,8 +9942,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                         effectivePositionValue(targetSecondaryRow, o, sf.point);
                 if (!secondary.valid)
                     return outPos;
-                const PTSpatialFixturePlan plan = PTSpatialFixturePlan::build(
-                        points, preset, globalFx, gridSize.width(), gridSize.height());
+                const PTSpatialFixturePlan plan = spatialPlanForPreset(preset);
                 const int serialCount = qMax(1, plan.count());
                 const int serialIdx = plan.indexByPoint.value(sf.point, 0);
                 const float dimmer = matrixDimmerAtPoint(
@@ -9951,12 +9982,10 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
             {
                 if (hasStagedMotion)
                 {
-                    const PTSpatialFixturePlan liveMotionPlan = PTSpatialFixturePlan::build(
-                            points, liveMotionPreset, globalFx,
-                            gridSize.width(), gridSize.height());
-                    const PTSpatialFixturePlan stagedMotionPlan = PTSpatialFixturePlan::build(
-                            points, stagedMotionPreset, globalFx,
-                            gridSize.width(), gridSize.height());
+                    const PTSpatialFixturePlan liveMotionPlan =
+                            spatialPlanForPreset(liveMotionPreset);
+                    const PTSpatialFixturePlan stagedMotionPlan =
+                            spatialPlanForPreset(stagedMotionPreset);
                     const PTPositionValue liveOut = liveMotionPreset.enabled
                             ? applyRelativeMotionTo(base, liveMotionPreset, liveMotionPlan,
                                                     qMax(1, liveMotionPlan.count()),
@@ -9971,9 +10000,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 }
                 else
                 {
-                    const PTSpatialFixturePlan motionPlan = PTSpatialFixturePlan::build(
-                            points, motionPreset, globalFx,
-                            gridSize.width(), gridSize.height());
+                    const PTSpatialFixturePlan motionPlan = spatialPlanForPreset(motionPreset);
                     base = applyRelativeMotionTo(base, motionPreset, motionPlan,
                                                  qMax(1, motionPlan.count()),
                                                  motionElapsedMs, motionCycleMs, 1.0);
@@ -10002,8 +10029,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                     m_multiFxElapsedMs[o] += MasterTimer::tick();
                     if (m_multiFxElapsedMs[o] > mfCycle)
                         m_multiFxElapsedMs[o] = 0;
-                    const PTSpatialFixturePlan mfPlan = PTSpatialFixturePlan::build(
-                            points, mfPreset, globalFx, gridSize.width(), gridSize.height());
+                    const PTSpatialFixturePlan mfPlan = spatialPlanForPreset(mfPreset);
                     const int mfSerialCount = qMax(1, mfPlan.count());
                     PTDimmerWaveParams waveParams = PTDimmerWaveEngine::paramsFromPreset(
                             mfPreset, &globalFx);
