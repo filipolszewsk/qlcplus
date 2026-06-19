@@ -2685,18 +2685,40 @@ void PresetTableV2TransitionWidget::buildUi()
                 item->setExpanded(!item->isExpanded());
         });
         connect(frozen, &QTreeView::customContextMenuRequested, this,
-                [this, frozen, table](const QPoint& pos) {
+                [this, frozen, table, mode](const QPoint& pos) {
             const QModelIndex idx = frozen->indexAt(pos);
-            if (!idx.isValid() || idx.data(kItemOutputIndexRole).toInt() >= 0)
+            if (!idx.isValid())
                 return;
             QTreeWidgetItem* item = table->itemFromIndex(idx);
-            if (!item || item->childCount() <= 0)
+            if (!item)
                 return;
             QMenu menu(this);
-            QAction* toggleAct = menu.addAction(item->isExpanded()
-                    ? tr("Collapse outputs") : tr("Expand outputs"));
+            QAction* copySelectionAct = nullptr;
+            QAction* pasteSelectionAct = nullptr;
+            QAction* toggleAct = nullptr;
+            if (canCopySelectionLayer(item))
+            {
+                copySelectionAct = menu.addAction(tr("Copy selection"));
+                copySelectionAct->setShortcut(QKeySequence::Copy);
+            }
+            if (canPasteSelectionLayer(mode, item))
+            {
+                pasteSelectionAct = menu.addAction(tr("Paste selection"));
+                pasteSelectionAct->setShortcut(QKeySequence::Paste);
+            }
+            if (!menu.isEmpty() && item->childCount() > 0)
+                menu.addSeparator();
+            if (item->childCount() > 0)
+                toggleAct = menu.addAction(item->isExpanded()
+                        ? tr("Collapse outputs") : tr("Expand outputs"));
+            if (menu.isEmpty())
+                return;
             QAction* chosen = menu.exec(frozen->viewport()->mapToGlobal(pos));
-            if (chosen == toggleAct)
+            if (chosen == copySelectionAct)
+                copySelectionLayer(item);
+            else if (chosen == pasteSelectionAct)
+                pasteSelectionLayer(mode, item);
+            else if (chosen == toggleAct)
                 item->setExpanded(!item->isExpanded());
         });
     };
@@ -6759,9 +6781,23 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
     if (mode == PTTransitionMode::MultiFx && multiFxRouteIdx >= 0)
     {
         QMenu menu(this);
+        QAction* copySelectionAct = nullptr;
+        QAction* pasteSelectionAct = nullptr;
         QAction* removeRouteAct = nullptr;
         QAction* addSelectionAct = nullptr;
         QAction* removeSelectionAct = nullptr;
+        if (canCopySelectionLayer(item))
+        {
+            copySelectionAct = menu.addAction(tr("Copy selection"));
+            copySelectionAct->setShortcut(QKeySequence::Copy);
+        }
+        if (canPasteSelectionLayer(mode, item))
+        {
+            pasteSelectionAct = menu.addAction(tr("Paste selection"));
+            pasteSelectionAct->setShortcut(QKeySequence::Paste);
+        }
+        if (!menu.isEmpty())
+            menu.addSeparator();
         if (!slaved && multiFxRouteOutputIdx < 0 && multiFxRouteIdx > 0)
             removeRouteAct = menu.addAction(tr("Remove target table"));
         if (!slaved && multiFxRouteOutputIdx >= 0)
@@ -6774,7 +6810,15 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
         if (menu.isEmpty())
             return;
         QAction* chosen = menu.exec(table->viewport()->mapToGlobal(pos));
-        if (chosen && chosen == removeRouteAct)
+        if (chosen && chosen == copySelectionAct)
+        {
+            copySelectionLayer(item);
+        }
+        else if (chosen && chosen == pasteSelectionAct)
+        {
+            pasteSelectionLayer(mode, item);
+        }
+        else if (chosen && chosen == removeRouteAct)
         {
             removeMultiFxTargetTableRoute(row, multiFxRouteIdx);
             rebuildPresetTable(mode);
@@ -6830,6 +6874,13 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
     if (outputIdx < 0)
     {
         QMenu menu(this);
+        QAction* pasteSelectionAct = nullptr;
+        if (canPasteSelectionLayer(mode, item))
+        {
+            pasteSelectionAct = menu.addAction(tr("Paste selection"));
+            pasteSelectionAct->setShortcut(QKeySequence::Paste);
+            menu.addSeparator();
+        }
         QAction* toggleAct = item->childCount() > 0
                 ? menu.addAction(item->isExpanded()
                         ? tr("Collapse outputs") : tr("Expand outputs"))
@@ -6851,7 +6902,9 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
         if (menu.isEmpty())
             return;
         QAction* chosen = menu.exec(table->viewport()->mapToGlobal(pos));
-        if (chosen && chosen == toggleAct)
+        if (chosen && chosen == pasteSelectionAct)
+            pasteSelectionLayer(mode, item);
+        else if (chosen && chosen == toggleAct)
             item->setExpanded(!item->isExpanded());
         else if (chosen && addTargetMenu && addTargetMenu->actions().contains(chosen))
         {
@@ -6870,8 +6923,22 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
         if (slaved)
             return;
         QMenu menu(this);
+        QAction* copySelectionAct = nullptr;
+        QAction* pasteSelectionAct = nullptr;
         QAction* addSelectionAct = nullptr;
         QAction* removeSelectionAct = nullptr;
+        if (canCopySelectionLayer(item))
+        {
+            copySelectionAct = menu.addAction(tr("Copy selection"));
+            copySelectionAct->setShortcut(QKeySequence::Copy);
+        }
+        if (canPasteSelectionLayer(mode, item))
+        {
+            pasteSelectionAct = menu.addAction(tr("Paste selection"));
+            pasteSelectionAct->setShortcut(QKeySequence::Paste);
+        }
+        if (!menu.isEmpty())
+            menu.addSeparator();
         if (selectionIdx <= 0)
             addSelectionAct = menu.addAction(tr("Add selection"));
         else
@@ -6881,6 +6948,16 @@ void PresetTableV2TransitionWidget::slotPresetContextMenuRequested(const QPoint&
         QAction* chosen = menu.exec(table->viewport()->mapToGlobal(pos));
         if (!chosen)
             return;
+        if (chosen == copySelectionAct)
+        {
+            copySelectionLayer(item);
+            return;
+        }
+        if (chosen == pasteSelectionAct)
+        {
+            pasteSelectionLayer(mode, item);
+            return;
+        }
 
         QVector<QHash<int, PTTransitionOutputLayer>>& overrides = overridesForMode(mode);
         while (overrides.size() <= row)
@@ -7422,6 +7499,265 @@ void PresetTableV2TransitionWidget::copyCells(QTreeWidget* table)
     QApplication::clipboard()->setMimeData(mime);
 }
 
+bool PresetTableV2TransitionWidget::canCopySelectionLayer(QTreeWidgetItem* item) const
+{
+    if (!item || item->data(0, kItemSelectionIndexRole).toInt() <= 0)
+        return false;
+
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt() - 1;
+    if (row < 0 || outputIdx < 0 || selectionIdx < 0)
+        return false;
+
+    QTreeWidget* table = item->treeWidget();
+    const PTTransitionMode mode = modeForTable(table);
+    const QVariant routeVar = item->data(0, kItemMultiFxRouteIndexRole);
+    if (mode == PTTransitionMode::MultiFx && routeVar.isValid())
+    {
+        const int routeIdx = routeVar.toInt();
+        const int routeOutputIdx = item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+                ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : outputIdx;
+        if (row >= m_multiFxTargetRoutes.size()
+                || routeIdx < 0 || routeIdx >= m_multiFxTargetRoutes.at(row).size()
+                || routeOutputIdx < 0)
+            return false;
+        const PTTransitionProviderOutputLayer layer =
+                m_multiFxTargetRoutes.at(row).at(routeIdx).outputOverrides.value(routeOutputIdx);
+        return selectionIdx < layer.selections.size();
+    }
+
+    const QVector<QHash<int, PTTransitionOutputLayer>>& overrides = overridesForMode(mode);
+    if (row >= overrides.size() || !overrides.at(row).contains(outputIdx))
+        return false;
+    return selectionIdx < overrides.at(row).value(outputIdx).selections.size();
+}
+
+bool PresetTableV2TransitionWidget::canPasteSelectionLayer(
+        PTTransitionMode mode, QTreeWidgetItem* item) const
+{
+    if (!item || !m_selectionClipboard.valid || bankIsSlaved(mode))
+        return false;
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    if (row < 0)
+        return false;
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+    const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+    if (selectionIdx > 0)
+        return true;
+    if (outputIdx >= 0)
+        return true;
+    if (mode == PTTransitionMode::MultiFx
+            && item->data(0, kItemMultiFxRouteIndexRole).isValid())
+        return true;
+    return item->childCount() > 0;
+}
+
+void PresetTableV2TransitionWidget::copySelectionLayer(QTreeWidgetItem* item)
+{
+    if (!canCopySelectionLayer(item))
+        return;
+
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt() - 1;
+    const PTTransitionMode mode = modeForTable(item->treeWidget());
+    const QVariant routeVar = item->data(0, kItemMultiFxRouteIndexRole);
+
+    if (mode == PTTransitionMode::MultiFx && routeVar.isValid())
+    {
+        const int routeIdx = routeVar.toInt();
+        const int routeOutputIdx = item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+                ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : outputIdx;
+        const PTTransitionProviderOutputLayer layer =
+                m_multiFxTargetRoutes.at(row).at(routeIdx).outputOverrides.value(routeOutputIdx);
+        const PTTransitionProviderSelection selection = layer.selections.at(selectionIdx);
+        m_selectionClipboard.valid = true;
+        m_selectionClipboard.name = selection.name;
+        m_selectionClipboard.cells = selection.cells;
+        m_selectionClipboard.overrides = selection.overrides;
+        return;
+    }
+
+    const PTTransitionOutputLayer layer = overridesForMode(mode).at(row).value(outputIdx);
+    const PTTransitionSelection selection = layer.selections.at(selectionIdx);
+    m_selectionClipboard.valid = true;
+    m_selectionClipboard.name = selection.name;
+    m_selectionClipboard.cells = selection.cells;
+    m_selectionClipboard.overrides.values = selection.overrides.values;
+    m_selectionClipboard.overrides.columns = selection.overrides.columns;
+}
+
+void PresetTableV2TransitionWidget::pasteSelectionLayer(
+        PTTransitionMode mode, QTreeWidgetItem* item)
+{
+    if (!canPasteSelectionLayer(mode, item))
+        return;
+
+    auto filteredCells = [this](PresetTableV2ControlIface* tableIface, int outputIdx) {
+        QSet<QLCPoint> scopeSet;
+        if (tableIface && outputIdx >= 0)
+        {
+            const QList<QLCPoint> scopePoints =
+                    tableIface->outputPointsForPresetOverride(outputIdx);
+            for (const QLCPoint& pt : scopePoints)
+                scopeSet.insert(pt);
+        }
+
+        QVector<QLCPoint> cells;
+        QList<QLCPoint> sortedCells = m_selectionClipboard.cells;
+        std::sort(sortedCells.begin(), sortedCells.end(), [](const QLCPoint& a, const QLCPoint& b) {
+            return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+        });
+        for (const QLCPoint& pt : sortedCells)
+        {
+            if (!scopeSet.isEmpty() && !scopeSet.contains(pt))
+                continue;
+            cells.append(pt);
+        }
+        return cells;
+    };
+
+    auto providerPasteIndex = [this](PTTransitionProviderOutputLayer& layer, int requested) {
+        if (requested >= 0 && requested < layer.selections.size())
+            return requested;
+        for (int i = 0; i < layer.selections.size(); ++i)
+        {
+            if (!m_selectionClipboard.name.isEmpty()
+                    && layer.selections.at(i).name == m_selectionClipboard.name)
+                return i;
+        }
+        PTTransitionProviderSelection selection;
+        selection.name = m_selectionClipboard.name.isEmpty()
+                ? tr("Selection %1").arg(layer.selections.size() + 1)
+                : m_selectionClipboard.name;
+        layer.selections.append(selection);
+        return int(layer.selections.size()) - 1;
+    };
+
+    auto classicPasteIndex = [this](PTTransitionOutputLayer& layer, int requested) {
+        if (requested >= 0 && requested < layer.selections.size())
+            return requested;
+        for (int i = 0; i < layer.selections.size(); ++i)
+        {
+            if (!m_selectionClipboard.name.isEmpty()
+                    && layer.selections.at(i).name == m_selectionClipboard.name)
+                return i;
+        }
+        PTTransitionSelection selection;
+        selection.name = m_selectionClipboard.name.isEmpty()
+                ? tr("Selection %1").arg(layer.selections.size() + 1)
+                : m_selectionClipboard.name;
+        layer.selections.append(selection);
+        return int(layer.selections.size()) - 1;
+    };
+
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    const int outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt() - 1;
+    const QVariant routeVar = item->data(0, kItemMultiFxRouteIndexRole);
+
+    if (mode == PTTransitionMode::MultiFx && routeVar.isValid())
+    {
+        normalizeMultiFxTargetRoutes();
+        const int routeIdx = routeVar.toInt();
+        if (row < 0 || row >= m_multiFxTargetRoutes.size()
+                || routeIdx < 0 || routeIdx >= m_multiFxTargetRoutes.at(row).size())
+            return;
+
+        PTMultiFxTargetTableRoute& route = m_multiFxTargetRoutes[row][routeIdx];
+        PresetTableV2ControlIface* tableIface =
+                PresetTableV2VCLookup::controlIfaceByVcId(route.tableId);
+        QList<int> outputs;
+        const int routeOutputIdx = item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+                ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : outputIdx;
+        if (routeOutputIdx >= 0)
+            outputs.append(routeOutputIdx);
+        else
+        {
+            const int count = targetTableOutputCount(route.tableId);
+            for (int o = 0; o < count; ++o)
+                outputs.append(o);
+            if (outputs.isEmpty())
+            {
+                for (const PTMultiFxTargetOutputRoute& out : route.outputs)
+                    outputs.append(out.outputIndex);
+            }
+        }
+
+        for (int outIdx : outputs)
+        {
+            if (outIdx < 0)
+                continue;
+            bool knownOutput = false;
+            for (const PTMultiFxTargetOutputRoute& out : route.outputs)
+            {
+                if (out.outputIndex == outIdx)
+                {
+                    knownOutput = true;
+                    break;
+                }
+            }
+            if (!knownOutput)
+            {
+                PTMultiFxTargetOutputRoute out;
+                out.outputIndex = outIdx;
+                route.outputs.append(out);
+            }
+
+            PTTransitionProviderOutputLayer layer = route.outputOverrides.value(outIdx);
+            const int pasteIdx = providerPasteIndex(layer, routeOutputIdx >= 0 ? selectionIdx : -1);
+            layer.selections[pasteIdx].name = m_selectionClipboard.name.isEmpty()
+                    ? tr("Selection %1").arg(pasteIdx + 1) : m_selectionClipboard.name;
+            layer.selections[pasteIdx].cells = filteredCells(tableIface, outIdx);
+            layer.selections[pasteIdx].overrides = m_selectionClipboard.overrides;
+            route.outputOverrides.insert(outIdx, layer);
+        }
+
+        publishProviderSnapshot(QStringLiteral("multifx selection paste"));
+        rebuildPresetTable(mode);
+        notifyTablePresetCacheRefresh();
+        updateEffectPreview();
+        if (m_doc)
+            m_doc->setModified();
+        return;
+    }
+
+    QVector<QHash<int, PTTransitionOutputLayer>>& overrides = overridesForMode(mode);
+    while (overrides.size() <= row)
+        overrides.append(QHash<int, PTTransitionOutputLayer>());
+
+    QList<int> outputs;
+    if (outputIdx >= 0)
+        outputs.append(outputIdx);
+    else
+    {
+        const int count = linkedOutputCount();
+        for (int o = 0; o < count; ++o)
+            outputs.append(o);
+    }
+    PresetTableV2ControlIface* tableIface = linkedTable();
+    for (int outIdx : outputs)
+    {
+        if (outIdx < 0)
+            continue;
+        PTTransitionOutputLayer layer = overrides[row].value(outIdx);
+        const int pasteIdx = classicPasteIndex(layer, outputIdx >= 0 ? selectionIdx : -1);
+        layer.selections[pasteIdx].name = m_selectionClipboard.name.isEmpty()
+                ? tr("Selection %1").arg(pasteIdx + 1) : m_selectionClipboard.name;
+        layer.selections[pasteIdx].cells = filteredCells(tableIface, outIdx);
+        layer.selections[pasteIdx].overrides.values = m_selectionClipboard.overrides.values;
+        layer.selections[pasteIdx].overrides.columns = m_selectionClipboard.overrides.columns;
+        overrides[row].insert(outIdx, layer);
+    }
+
+    rebuildPresetTable(mode);
+    notifyTablePresetCacheRefresh();
+    updateEffectPreview();
+    if (m_doc)
+        m_doc->setModified();
+}
+
 void PresetTableV2TransitionWidget::pasteCells(QTreeWidget* table)
 {
     if (!table)
@@ -7670,6 +8006,34 @@ bool PresetTableV2TransitionWidget::eventFilter(QObject* watched, QEvent* event)
         QKeyEvent* key = static_cast<QKeyEvent*>(event);
         if (QTreeWidget* table = tableFromFocusObject(watched))
         {
+            const QVector<QTreeView*> frozenViews = {
+                m_sweepNameView, m_continuousNameView, m_channel1DNameView,
+                m_positionMotionNameView, m_multiFxNameView
+            };
+            bool frozenNameFocus = false;
+            for (QTreeView* frozen : frozenViews)
+            {
+                if (frozen && (watched == frozen || watched == frozen->viewport()))
+                {
+                    frozenNameFocus = true;
+                    break;
+                }
+            }
+            if (frozenNameFocus)
+            {
+                QTreeWidgetItem* item = table->currentItem();
+                const PTTransitionMode mode = modeForTable(table);
+                if (key->matches(QKeySequence::Copy) && canCopySelectionLayer(item))
+                {
+                    copySelectionLayer(item);
+                    return true;
+                }
+                if (key->matches(QKeySequence::Paste) && canPasteSelectionLayer(mode, item))
+                {
+                    pasteSelectionLayer(mode, item);
+                    return true;
+                }
+            }
             if (key->matches(QKeySequence::Copy))
             {
                 copyCells(table);

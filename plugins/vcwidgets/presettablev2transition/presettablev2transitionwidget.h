@@ -214,6 +214,14 @@ private:
         QVector<PTTransitionSelection> selections;
     };
 
+    struct PTSelectionClipboard
+    {
+        bool valid = false;
+        QString name;
+        QVector<QLCPoint> cells;
+        PTTransitionProviderPresetOverride overrides;
+    };
+
     struct PTTransitionProviderSnapshot
     {
         QVector<PTTransitionPreset> sweepPresets;
@@ -481,6 +489,10 @@ private:
                               const QString& raw, QSet<int>& touchedRows);
     void copyCells(QTreeWidget* table);
     void pasteCells(QTreeWidget* table);
+    bool canCopySelectionLayer(QTreeWidgetItem* item) const;
+    bool canPasteSelectionLayer(PTTransitionMode mode, QTreeWidgetItem* item) const;
+    void copySelectionLayer(QTreeWidgetItem* item);
+    void pasteSelectionLayer(PTTransitionMode mode, QTreeWidgetItem* item);
     void pasteValueToPresetCell(PTTransitionMode mode, QTreeWidget* table,
                                 QTreeWidgetItem* item, int col, const QString& raw);
     QVariant editorValue(QTreeWidget* table, QTreeWidgetItem* item, int col) const;
@@ -524,6 +536,7 @@ private:
     QHash<QTreeWidget*, int> m_focusColumnByTable;
     QHash<QTreeWidget*, PTTransitionCellKey> m_cellSelectionAnchorByTable;
     QHash<QTreeWidget*, QSet<PTTransitionCellKey>> m_selectedCellsByTable;
+    PTSelectionClipboard m_selectionClipboard;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
     bool m_crossfadeManualInputMapped = false;
