@@ -12,6 +12,8 @@ struct PresetTableV2MultiButtonLinkedAction
     quint32 widgetId = 0;
     int outputIndex = 0;
     int parameter = 0;
+    quint32 sourceEngineId = quint32(-1);
+    quint64 phaseAnchorMs = 0;
 };
 
 class PresetTableV2MultiButtonTargetIface
@@ -44,13 +46,42 @@ public:
     virtual int multiButtonStagedIndex(int outputIdx, int parameter) const = 0;
     virtual bool multiButtonActivate(int outputIdx, int parameter, int index) = 0;
     virtual bool multiButtonActivateStaged(int outputIdx, int parameter, int index) = 0;
+    virtual bool multiButtonActivateFromSource(int outputIdx, int parameter, int index,
+                                               quint32 sourceEngineId)
+    {
+        return multiButtonActivateFromSourceAndPhase(outputIdx, parameter, index,
+                                                     sourceEngineId, 0);
+    }
+    virtual bool multiButtonActivateStagedFromSource(int outputIdx, int parameter, int index,
+                                                     quint32 sourceEngineId)
+    {
+        return multiButtonActivateStagedFromSourceAndPhase(outputIdx, parameter, index,
+                                                           sourceEngineId, 0);
+    }
+    virtual bool multiButtonActivateFromSourceAndPhase(int outputIdx, int parameter, int index,
+                                                       quint32 sourceEngineId,
+                                                       quint64 phaseAnchorMs)
+    {
+        Q_UNUSED(sourceEngineId);
+        Q_UNUSED(phaseAnchorMs);
+        return multiButtonActivate(outputIdx, parameter, index);
+    }
+    virtual bool multiButtonActivateStagedFromSourceAndPhase(int outputIdx, int parameter,
+                                                             int index,
+                                                             quint32 sourceEngineId,
+                                                             quint64 phaseAnchorMs)
+    {
+        Q_UNUSED(sourceEngineId);
+        Q_UNUSED(phaseAnchorMs);
+        return multiButtonActivateStaged(outputIdx, parameter, index);
+    }
     virtual QSharedPointer<QLCInputSource> multiButtonLiveInputSource(int outputIdx, int parameter) const = 0;
     virtual bool multiButtonSetLiveInputSource(int outputIdx, int parameter,
                                                QSharedPointer<QLCInputSource> src) = 0;
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetIface,
-                    "org.qlcplus.PresetTableV2MultiButtonTargetIface/1.1")
+                    "org.qlcplus.PresetTableV2MultiButtonTargetIface/1.3")
 
 class PresetTableV2MultiButtonTargetExtrasIface
 {
@@ -65,10 +96,16 @@ public:
         Q_UNUSED(parameter);
         return {};
     }
+    virtual QList<PresetTableV2MultiButtonLinkedAction> multiButtonLinkedSlaveActionsForIndex(
+            int outputIdx, int parameter, int index) const
+    {
+        Q_UNUSED(index);
+        return multiButtonLinkedSlaveActions(outputIdx, parameter);
+    }
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonTargetExtrasIface,
-                    "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.2")
+                    "org.qlcplus.PresetTableV2MultiButtonTargetExtrasIface/1.4")
 
 class PresetTableV2MultiButtonFlashIface
 {

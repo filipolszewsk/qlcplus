@@ -30,6 +30,29 @@ struct PTTransitionProviderOutputLayer
     QVector<PTTransitionProviderSelection> selections;
 };
 
+enum class PTMultiFxTargetLayerKind : int
+{
+    Auto = 0,
+    Channel1D = 1,
+    PositionMotion = 2
+};
+
+struct PTMultiFxTargetOutputRoute
+{
+    int outputIndex = -1;
+    QVector<int> selectionKeys;
+};
+
+struct PTMultiFxTargetTableRoute
+{
+    bool enabled = true;
+    quint32 tableId = quint32(-1);
+    int layerKind = int(PTMultiFxTargetLayerKind::Auto);
+    PTTransitionProviderPresetOverride tableOverride;
+    QHash<int, PTTransitionProviderOutputLayer> outputOverrides;
+    QVector<PTMultiFxTargetOutputRoute> outputs;
+};
+
 struct PTTransitionProviderSnapshot
 {
     QVector<PTTransitionPreset> sweepPresets;
@@ -42,6 +65,7 @@ struct PTTransitionProviderSnapshot
     QVector<QHash<int, PTTransitionProviderOutputLayer>> multiFxOutputOverrides;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> positionMotionOutputOverrides;
     QVector<QHash<int, PTTransitionProviderOutputLayer>> channel1DOutputOverrides;
+    QVector<QVector<PTMultiFxTargetTableRoute>> multiFxTargetRoutes;
     QHash<quint8, uchar> liveColumnOverrides;
     PTGlobalEffectSettings globalSettings;
     PTTransitionMode activeMode = PTTransitionMode::SweepOnly;
@@ -127,4 +151,4 @@ public:
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,
-                    "org.qlcplus.PresetTableV2TransitionProvider/2.6")
+                    "org.qlcplus.PresetTableV2TransitionProvider/2.7")

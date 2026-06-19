@@ -330,10 +330,22 @@ public:
     bool multiButtonOutputControlsParameter(int outputIdx, int parameter) const override;
     QList<PresetTableV2MultiButtonLinkedAction> multiButtonLinkedSlaveActions(
             int outputIdx, int parameter) const override;
+    QList<PresetTableV2MultiButtonLinkedAction> multiButtonLinkedSlaveActionsForIndex(
+            int outputIdx, int parameter, int index) const override;
     bool multiButtonHasStagedIndex(int outputIdx, int parameter) const override;
     int multiButtonStagedIndex(int outputIdx, int parameter) const override;
     bool multiButtonActivate(int outputIdx, int parameter, int index) override;
     bool multiButtonActivateStaged(int outputIdx, int parameter, int index) override;
+    bool multiButtonActivateFromSource(int outputIdx, int parameter, int index,
+                                       quint32 sourceEngineId) override;
+    bool multiButtonActivateStagedFromSource(int outputIdx, int parameter, int index,
+                                             quint32 sourceEngineId) override;
+    bool multiButtonActivateFromSourceAndPhase(int outputIdx, int parameter, int index,
+                                               quint32 sourceEngineId,
+                                               quint64 phaseAnchorMs) override;
+    bool multiButtonActivateStagedFromSourceAndPhase(int outputIdx, int parameter, int index,
+                                                     quint32 sourceEngineId,
+                                                     quint64 phaseAnchorMs) override;
     QSharedPointer<QLCInputSource> multiButtonLiveInputSource(int outputIdx, int parameter) const override;
     bool multiButtonSetLiveInputSource(int outputIdx, int parameter,
                                        QSharedPointer<QLCInputSource> src) override;
@@ -577,6 +589,10 @@ private:
     PTTransitionPreset finalizeTransitionSnapshotPresetLocked(
             PTTransitionMode mode, const PTTransitionPreset& preset) const;
     PTTransitionPreset transitionSnapshotPresetLocked(PTTransitionMode mode, int index) const;
+    const PTMultiFxTargetTableRoute* transitionSnapshotMultiFxRouteForThisTableLocked(
+            int row) const;
+    const PTMultiFxTargetTableRoute* transitionSnapshotMultiFxRouteForThisTableLocked(
+            const PTTransitionProviderSnapshot& snapshot, int row) const;
     PTTransitionPreset transitionSnapshotEffectivePresetForOutputLocked(
             PTTransitionMode mode, int row, int outputIdx, bool applyLive) const;
     PTTransitionPreset transitionSnapshotEffectivePresetForSelectionLocked(
@@ -605,6 +621,14 @@ private:
                                                            int presetIndex,
                                                            int outputIdx = -1,
                                                            const QLCPoint* point = nullptr) const;
+    PTTransitionPreset multiFxPresetAtIndexStrictLocked(int presetIndex,
+                                                        int outputIdx = -1,
+                                                        const QLCPoint* point = nullptr,
+                                                        bool staged = false) const;
+    PTGlobalEffectSettings multiFxGlobalSettingsLocked(int outputIdx, bool staged,
+                                                       const PTGlobalEffectSettings& fallback) const;
+    bool multiFxUsesSourceClockLocked(int outputIdx, bool staged) const;
+    quint32 multiFxElapsedMsForOutputLocked(int outputIdx, bool staged) const;
     bool transitionPresetIndexValidLocked(PTTransitionMode mode, int presetIndex) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
     PTTransitionPreset continuousPresetForOutputLocked(int outputIdx) const;
@@ -839,6 +863,14 @@ public:
     QVector<int>                m_livePositionMotionPreset;
     QVector<int>                m_liveChannel1DPreset;
     QVector<int>                m_liveMultiFxPreset;
+    QVector<quint32>            m_liveMultiFxSourceEngineId;
+    QVector<PTTransitionProviderSnapshot> m_liveMultiFxSourceSnapshot;
+    QVector<bool>               m_liveMultiFxSourceSnapshotValid;
+    QVector<quint64>            m_liveMultiFxPhaseAnchorMs;
+    QVector<quint32>            m_stagedMultiFxSourceEngineId;
+    QVector<PTTransitionProviderSnapshot> m_stagedMultiFxSourceSnapshot;
+    QVector<bool>               m_stagedMultiFxSourceSnapshotValid;
+    QVector<quint64>            m_stagedMultiFxPhaseAnchorMs;
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;

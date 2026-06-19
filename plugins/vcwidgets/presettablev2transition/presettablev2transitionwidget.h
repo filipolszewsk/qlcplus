@@ -75,6 +75,8 @@ struct PTTransitionCellAddress
     int row = -1;
     int outputIdx = -1;
     int selectionIdx = -1;
+    int multiFxRouteIdx = -1;
+    int multiFxRouteOutputIdx = -1;
     int col = -1;
 };
 
@@ -149,7 +151,8 @@ private slots:
     void slotDuplicatePreset();
     void slotPresetItemChanged(QTreeWidgetItem* item, int col);
     void slotPresetChanged(PTTransitionMode mode, int row, int col, int outputIdx = -1,
-                           int selectionIdx = -1);
+                           int selectionIdx = -1, int routeIdx = -1,
+                           int routeOutputIdx = -1);
     void slotRefreshTableLink();
     void slotColumnHeaderDoubleClicked(int logicalIndex);
     void slotBankTabChanged(int index);
@@ -223,6 +226,7 @@ private:
         QVector<QHash<int, PTTransitionOutputLayer>> multiFxOutputOverrides;
         QVector<QHash<int, PTTransitionOutputLayer>> positionMotionOutputOverrides;
         QVector<QHash<int, PTTransitionOutputLayer>> channel1DOutputOverrides;
+        QVector<QVector<PTMultiFxTargetTableRoute>> multiFxTargetRoutes;
         QHash<quint8, uchar> liveColumnOverrides;
         PTGlobalEffectSettings globalSettings;
         PTTransitionMode activeMode = PTTransitionMode::SweepOnly;
@@ -296,6 +300,11 @@ private:
                                  int outputIdx = -1, int selectionIdx = -1);
     bool removeSelectionAt(PTTransitionMode mode, int row, int outputIdx, int selectionIndex);
     QVector<PTTransitionColumnGroupBar::Group> columnGroupsForMode(PTTransitionMode mode) const;
+    PTTransitionMode multiFxContextModeForItem(QTreeWidgetItem* item) const;
+    QSet<int> allowedMultiFxColumnsForContext(PTTransitionMode contextMode,
+                                              bool rootContext) const;
+    QVector<PTTransitionColumnGroupBar::Group> columnGroupsForMultiFxContext(
+            PTTransitionMode contextMode, bool rootContext) const;
     QSet<int> allowedPresetColumnsForMode(PTTransitionMode mode) const;
     bool isPresetColumnAllowedForMode(PTTransitionMode mode, int col) const;
     void applyColumnGroupFilter(QTreeWidget* table, PTTransitionMode mode);
@@ -334,12 +343,85 @@ private:
                                 const PTTransitionOutputLayer& layer) const;
     int linkedOutputCount() const;
     QString linkedOutputName(int outputIdx) const;
+    QString targetTableName(quint32 tableId) const;
+    int targetTableOutputCount(quint32 tableId) const;
+    QString targetTableOutputName(quint32 tableId, int outputIdx) const;
+    bool targetTableUsesPositionMode(quint32 tableId) const;
+    PTTransitionMode multiFxRouteMode(const PTMultiFxTargetTableRoute& route) const;
+    QString multiFxRouteModeLabel(const PTMultiFxTargetTableRoute& route) const;
+    void normalizeMultiFxTargetRoutes();
+    void addMultiFxTargetTableRoute(int presetIndex, quint32 tableId);
+    void removeMultiFxTargetTableRoute(int presetIndex, int routeIndex);
+    struct MultiFxRouteCellContext
+    {
+        PTTransitionPreset effective;
+        QSet<int> allowedColumns;
+        QSet<int> overrideColumns;
+        PTTransitionMode routeMode = PTTransitionMode::MultiFx;
+        bool valid = false;
+    };
+    enum class MultiFxUiRowKind
+    {
+        TargetTable,
+        OutputAll,
+        Selection
+    };
+    struct MultiFxUiRow
+    {
+        MultiFxUiRowKind kind = MultiFxUiRowKind::TargetTable;
+        int presetRow = -1;
+        int routeIndex = -1;
+        int outputIndex = -1;
+        int selectionIndex = -1;
+        quint32 tableId = VCWidget::invalidId();
+        QString label;
+        QString tooltip;
+        PTTransitionPreset effective;
+        QSet<int> allowedColumns;
+        QSet<int> overrideColumns;
+        PTTransitionMode routeMode = PTTransitionMode::MultiFx;
+        bool valid = false;
+    };
+    MultiFxRouteCellContext multiFxRouteCellContext(
+            int row, int routeIndex, int outputIdx, int selectionIdx,
+            const QVector<PTTransitionPreset>& displayPresets,
+            const QVector<QVector<PTMultiFxTargetTableRoute>>& displayRoutes) const;
+    MultiFxRouteCellContext multiFxRouteCellContextForItem(QTreeWidgetItem* item) const;
+    QVector<int> multiFxOutputIndicesForRoute(const PTMultiFxTargetTableRoute& route) const;
+    MultiFxUiRow multiFxUiRowForAddress(
+            int row, int routeIndex, int outputIdx, int selectionIdx,
+            const QVector<PTTransitionPreset>& displayPresets,
+            const QVector<QVector<PTMultiFxTargetTableRoute>>& displayRoutes) const;
+    void renderPresetRowCells(QTreeWidgetItem* item,
+                              const MultiFxUiRow& row,
+                              bool cellSelection = false);
+    void refreshMultiFxRouteVisualsForPreset(
+            int row,
+            const QVector<PTTransitionPreset>& displayPresets,
+            const QVector<QVector<PTMultiFxTargetTableRoute>>& displayRoutes);
+    PTTransitionPreset effectiveMultiFxRoutePreset(int row, int routeIndex,
+                                                   int outputIdx = -1,
+                                                   int selectionIdx = -1) const;
+    QTreeWidgetItem* itemForMultiFxRouteAddress(int row, int routeIndex,
+                                                int outputIdx, int selectionIdx) const;
     QTreeWidgetItem* parentItemForPreset(PTTransitionMode mode, int row) const;
     QTreeWidgetItem* itemForPresetAddress(PTTransitionMode mode, int row,
                                           int outputIdx, int selectionIdx) const;
     QTreeWidgetItem* selectedPresetItem(QTreeWidget* table) const;
     void setColumnOverrideValue(PTTransitionPresetOverride& ov, int col,
                                 const PTTransitionPreset& value);
+    void setColumnOverrideValue(PTTransitionProviderPresetOverride& ov, int col,
+                                const PTTransitionPreset& value);
+    void applyOverrideColumnsToPreset(PTTransitionPreset& preset,
+                                      const PTTransitionProviderPresetOverride& ov) const;
+    void clearPresetOverrideColumn(PTTransitionPresetOverride& ov, int col);
+    void clearDescendantColumnOverrides(PTTransitionMode mode, int row,
+                                        int outputIdx, int selectionIdx,
+                                        const QSet<int>& cols);
+    void clearMultiFxProviderOverrideColumn(PTTransitionProviderPresetOverride& ov, int col);
+    void clearMultiFxDescendantColumnOverrides(int row, int routeIdx,
+                                               int outputIdx, int selectionIdx,
+                                               const QSet<int>& cols);
     QSet<int> applySmartWingsDefaults(PTTransitionMode mode, QTreeWidgetItem* item);
     bool overrideColumnDiffersFromParent(const PTTransitionPreset& parent,
                                          const PTTransitionPresetOverride& ov,
@@ -435,6 +517,7 @@ private:
     QVector<QHash<int, PTTransitionOutputLayer>> m_multiFxOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_positionMotionOutputOverrides;
     QVector<QHash<int, PTTransitionOutputLayer>> m_channel1DOutputOverrides;
+    QVector<QVector<PTMultiFxTargetTableRoute>> m_multiFxTargetRoutes;
     QVector<PTCustomCurveGalleryItem> m_customCurveGallery;
     QVector<PTShapeGalleryItem> m_shapeGallery;
     QHash<int, QString> m_columnGroupFilterByMode;
@@ -453,6 +536,7 @@ private:
     bool m_committingCustomDialog = false;
     bool m_disableLiveLinkedTableLookup = false;
     bool m_pastingCells = false;
+    bool m_syncingFrozenExpansion = false;
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;

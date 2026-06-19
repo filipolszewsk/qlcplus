@@ -70,6 +70,8 @@ struct MultiButtonWidgetActionTarget
     quint32 widgetId = VCWidget::invalidId();
     int     outputIndex = 0;
     int     parameter = 0;
+    quint32 sourceEngineId = VCWidget::invalidId();
+    quint64 phaseAnchorMs = 0;
 };
 
 struct SpreadTileInfo

@@ -35,6 +35,7 @@
 #include <QLabel>
 #include <QFont>
 #include <QDebug>
+#include <QDateTime>
 #include <QFileDialog>
 #include <QColorDialog>
 #include <QInputDialog>
@@ -1430,6 +1431,8 @@ MultiButtonWidget::buildEffectiveWidgetActionsUncached() const
             action.widgetId = linkedAction.widgetId;
             action.outputIndex = linkedAction.outputIndex;
             action.parameter = linkedAction.parameter;
+            action.sourceEngineId = linkedAction.sourceEngineId;
+            action.phaseAnchorMs = linkedAction.phaseAnchorMs;
             if (!widgetActionLooksValid(action))
                 continue;
 
@@ -1438,7 +1441,8 @@ MultiButtonWidget::buildEffectiveWidgetActionsUncached() const
             {
                 if (existing.widgetId == action.widgetId
                         && existing.outputIndex == action.outputIndex
-                        && existing.parameter == action.parameter)
+                        && existing.parameter == action.parameter
+                        && existing.sourceEngineId == action.sourceEngineId)
                 {
                     duplicate = true;
                     break;
@@ -1660,8 +1664,12 @@ bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget
     if (!widgetActionUsesAllOutputs(action))
     {
         return staged
-                ? target->multiButtonActivateStaged(action.outputIndex, action.parameter, idx)
-                : target->multiButtonActivate(action.outputIndex, action.parameter, idx);
+                ? target->multiButtonActivateStagedFromSourceAndPhase(
+                      action.outputIndex, action.parameter, idx, action.sourceEngineId,
+                      action.phaseAnchorMs)
+                : target->multiButtonActivateFromSourceAndPhase(
+                      action.outputIndex, action.parameter, idx, action.sourceEngineId,
+                      action.phaseAnchorMs);
     }
 
     const int outputCount = target->multiButtonOutputCount();
@@ -1669,8 +1677,12 @@ bool MultiButtonWidget::activateWidgetAction(const MultiButtonWidgetActionTarget
     for (int outputIdx = 0; outputIdx < outputCount; ++outputIdx)
     {
         const bool ok = staged
-                ? target->multiButtonActivateStaged(outputIdx, action.parameter, idx)
-                : target->multiButtonActivate(outputIdx, action.parameter, idx);
+                ? target->multiButtonActivateStagedFromSourceAndPhase(
+                      outputIdx, action.parameter, idx, action.sourceEngineId,
+                      action.phaseAnchorMs)
+                : target->multiButtonActivateFromSourceAndPhase(
+                      outputIdx, action.parameter, idx, action.sourceEngineId,
+                      action.phaseAnchorMs);
         if (outputIdx == leaderOutputIndex())
             leaderOk = ok;
     }
@@ -1696,9 +1708,66 @@ bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
     }
 
     m_widgetActionActivationGuard = true;
-    const QList<MultiButtonWidgetActionTarget> actions = forceSingleLeader
+    const quint64 phaseAnchorMs = quint64(QDateTime::currentMSecsSinceEpoch());
+    QList<MultiButtonWidgetActionTarget> actions = forceSingleLeader
             ? QList<MultiButtonWidgetActionTarget>{ leaderWidgetAction() }
             : effectiveWidgetActions();
+    for (MultiButtonWidgetActionTarget& action : actions)
+    {
+        if (action.phaseAnchorMs == 0)
+            action.phaseAnchorMs = phaseAnchorMs;
+    }
+    if (!forceSingleLeader)
+    {
+        auto appendUniqueAction = [&](const MultiButtonWidgetActionTarget& action) {
+            if (!widgetActionLooksValid(action))
+                return;
+            for (MultiButtonWidgetActionTarget& existing : actions)
+            {
+                if (existing.widgetId == action.widgetId
+                        && existing.outputIndex == action.outputIndex
+                        && existing.parameter == action.parameter)
+                {
+                    if (existing.sourceEngineId == action.sourceEngineId)
+                        return;
+                    if (existing.sourceEngineId == VCWidget::invalidId()
+                            && action.sourceEngineId != VCWidget::invalidId())
+                    {
+                        existing = action;
+                        return;
+                    }
+                    return;
+                }
+            }
+            actions.append(action);
+        };
+
+        const int baseCount = actions.size();
+        for (int actionIndex = 0; actionIndex < baseCount; ++actionIndex)
+        {
+            const MultiButtonWidgetActionTarget base = actions.at(actionIndex);
+            VCWidget* targetWidget = widgetActionTargetObject(base);
+            auto* extras = qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(targetWidget);
+            if (!extras)
+                continue;
+
+            const QList<PresetTableV2MultiButtonLinkedAction> linked =
+                    extras->multiButtonLinkedSlaveActionsForIndex(
+                            base.outputIndex, base.parameter, idx);
+            for (const PresetTableV2MultiButtonLinkedAction& linkedAction : linked)
+            {
+                MultiButtonWidgetActionTarget action;
+                action.enabled = true;
+                action.widgetId = linkedAction.widgetId;
+                action.outputIndex = linkedAction.outputIndex;
+                action.parameter = linkedAction.parameter;
+                action.sourceEngineId = linkedAction.sourceEngineId;
+                action.phaseAnchorMs = linkedAction.phaseAnchorMs != 0
+                        ? linkedAction.phaseAnchorMs : phaseAnchorMs;
+                appendUniqueAction(action);
+            }
+        }
+    }
     bool leaderOk = false;
     bool anyOk = false;
     bool anyStagedOk = false;
@@ -1719,12 +1788,13 @@ bool MultiButtonWidget::activateWidgetActions(int idx, bool staged,
                     QStringLiteral("multibutton/action-activate/%1/%2/%3")
                             .arg(id()).arg(action.widgetId).arg(action.parameter),
                     250,
-                    QStringLiteral("action activate targetId=%1 output=%2 parameter=%3 index=%4 staged=%5 stagingAvailable=%6 source=%7")
+                    QStringLiteral("action activate targetId=%1 output=%2 parameter=%3 index=%4 staged=%5 stagingAvailable=%6 source=%7 anchor=%8")
                             .arg(action.widgetId).arg(action.outputIndex)
                             .arg(action.parameter).arg(idx)
                             .arg(actionStaged ? 1 : 0)
                             .arg(stagingAvailable ? 1 : 0)
-                            .arg(source.isEmpty() ? QStringLiteral("action") : source));
+                            .arg(source.isEmpty() ? QStringLiteral("action") : source)
+                            .arg(action.phaseAnchorMs));
         }
     }
     m_widgetActionActivationGuard = false;
