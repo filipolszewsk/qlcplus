@@ -475,6 +475,9 @@ private:
     void refreshOverrideVisualsForItem(PTTransitionMode mode, QTreeWidgetItem* item);
     void applySelectionRowVisuals(QTreeWidgetItem* item);
     void updateRemoveActionLabel();
+    void activateNameRowContext(QTreeWidget* table, QTreeWidgetItem* item);
+    bool isNameRowContextItem(QTreeWidget* table, QTreeWidgetItem* item) const;
+    void updateNameRowContextVisual(QTreeWidget* table, QTreeWidgetItem* item);
     void configureFrozenNameView(PTTransitionMode mode);
     void closeActiveTableEditors(QTreeWidget* table);
     void applyPositionModeColumnVisibility(QTreeWidget* table, PTTransitionMode mode);
@@ -572,6 +575,7 @@ private:
     QHash<QTreeWidget*, PTTransitionCellKey> m_cellSelectionAnchorByTable;
     QHash<QTreeWidget*, QSet<PTTransitionCellKey>> m_selectedCellsByTable;
     QHash<QTreeWidget*, QTreeWidgetItem*> m_frozenNameContextItemByTable;
+    QHash<QTreeWidget*, QTreeWidgetItem*> m_nameRowContextItemByTable;
     QHash<QTreeWidget*, QMetaObject::Connection> m_tableToFrozenSelectionConnections;
     QHash<QTreeWidget*, QMetaObject::Connection> m_frozenToTableSelectionConnections;
     PTSelectionClipboard m_selectionClipboard;

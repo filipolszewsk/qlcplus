@@ -613,7 +613,20 @@ void PresetTableV2TransitionDelegate::paint(QPainter* painter,
     QStyleOptionViewItem opt(option);
     initStyleOption(&opt, index);
 
-    const bool selected = opt.state & QStyle::State_Selected;
+    bool nameRowContext = false;
+    if (m_owner && option.widget)
+    {
+        QTreeWidget* table = qobject_cast<QTreeWidget*>(const_cast<QWidget*>(option.widget));
+        if (!table)
+            table = qobject_cast<QTreeWidget*>(const_cast<QWidget*>(option.widget)->parentWidget());
+        if (table)
+        {
+            if (QTreeWidgetItem* item = table->itemFromIndex(index))
+                nameRowContext = m_owner->isNameRowContextItem(table, item);
+        }
+    }
+
+    const bool selected = (opt.state & QStyle::State_Selected) || nameRowContext;
     const bool current = opt.state & QStyle::State_HasFocus;
     const bool inherited = index.data(kPresetCellInheritedRole).toBool();
 
@@ -1404,7 +1417,7 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
 
     if (mode == PTTransitionMode::MultiFx)
     {
-        QTreeWidgetItem* current = table->currentItem();
+        QTreeWidgetItem* current = selectedPresetItem(table);
         const bool rootContext = !current
                 || !current->data(0, kItemMultiFxRouteIndexRole).isValid();
         const PTTransitionMode contextMode = multiFxContextModeForItem(current);
@@ -2690,7 +2703,7 @@ void PresetTableV2TransitionWidget::buildUi()
             QTreeWidgetItem* item = table->itemFromIndex(idx);
             if (!item)
                 return;
-            m_frozenNameContextItemByTable.insert(table, item);
+            activateNameRowContext(table, item);
             showNameContextMenu(mode, table, item, frozen->viewport()->mapToGlobal(pos));
         });
     };
@@ -2773,6 +2786,8 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
     const int currentSelection = currentBefore ? currentBefore->data(0, kItemSelectionIndexRole).toInt() : -1;
     QSignalBlocker tableBlocker(table);
     m_rebuildingTable = true;
+    m_nameRowContextItemByTable.remove(table);
+    m_frozenNameContextItemByTable.remove(table);
     clearCellSelection(table);
     table->clear();
     updateColumnHeaders(table);
@@ -5745,6 +5760,46 @@ QTreeWidgetItem* PresetTableV2TransitionWidget::selectedPresetItem(QTreeWidget* 
     return table->currentItem();
 }
 
+void PresetTableV2TransitionWidget::updateNameRowContextVisual(QTreeWidget* table,
+                                                               QTreeWidgetItem* item)
+{
+    if (!table || !item || item->treeWidget() != table)
+        return;
+
+    const QRect rect = table->visualItemRect(item);
+    if (rect.isValid())
+        table->viewport()->update(rect);
+}
+
+bool PresetTableV2TransitionWidget::isNameRowContextItem(QTreeWidget* table,
+                                                         QTreeWidgetItem* item) const
+{
+    if (!table || !item || item->treeWidget() != table)
+        return false;
+    return m_nameRowContextItemByTable.value(table, nullptr) == item;
+}
+
+void PresetTableV2TransitionWidget::activateNameRowContext(QTreeWidget* table,
+                                                           QTreeWidgetItem* item)
+{
+    if (!table || !item || item->treeWidget() != table)
+        return;
+
+    QTreeWidgetItem* previous = m_nameRowContextItemByTable.value(table, nullptr);
+    m_nameRowContextItemByTable.insert(table, item);
+    m_frozenNameContextItemByTable.insert(table, item);
+
+    if (previous != item)
+    {
+        updateNameRowContextVisual(table, previous);
+        updateNameRowContextVisual(table, item);
+    }
+
+    updateRemoveActionLabel();
+    applyColumnGroupFilter(table, modeForTable(table));
+    updateEffectPreview();
+}
+
 bool PresetTableV2TransitionWidget::removeSelectionAt(PTTransitionMode mode, int row,
                                                       int outputIdx, int selectionIndex)
 {
@@ -6192,7 +6247,7 @@ void PresetTableV2TransitionWidget::configureFrozenNameView(PTTransitionMode mod
         if (cur.isValid())
         {
             if (QTreeWidgetItem* item = table->itemFromIndex(cur))
-                m_frozenNameContextItemByTable.insert(table, item);
+                activateNameRowContext(table, item);
         }
     };
 
@@ -7215,6 +7270,8 @@ void PresetTableV2TransitionWidget::activateCellForClipboard(QTreeWidget* table,
 
     Q_UNUSED(item)
     Q_UNUSED(mods)
+    if (QTreeWidgetItem* previous = m_nameRowContextItemByTable.take(table))
+        updateNameRowContextVisual(table, previous);
     m_frozenNameContextItemByTable.remove(table);
     m_focusColumnByTable.insert(table, col);
     clearCellSelection(table);
