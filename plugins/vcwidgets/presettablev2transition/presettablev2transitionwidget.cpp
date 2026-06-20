@@ -4430,8 +4430,12 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
     const PTDimmerWaveParams params = PTDimmerWaveEngine::paramsFromPreset(preset, &previewGlobal);
     const quint32 cycleMs = PTParamMatrixEngine::effectiveDurationMs(previewGlobal, preset, false);
     const bool positionMode = previewTableIface && previewTableIface->tableUsesPositionMode();
+    const PTTransitionMode previewLayerMode =
+            (mode == PTTransitionMode::MultiFx && multiFxRouteIdx >= 0)
+            ? multiFxContextModeForItem(item)
+            : mode;
     const bool transitionTab = (mode == PTTransitionMode::SweepOnly);
-    const bool showMotion = positionMode && mode == PTTransitionMode::PositionMotion;
+    const bool showMotion = positionMode && previewLayerMode == PTTransitionMode::PositionMotion;
     const bool showCurvePreview = !showMotion;
     double crossfadePreviewProgress = 0.0;
     if (transitionTab)
