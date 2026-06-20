@@ -222,6 +222,32 @@ private:
         PTTransitionProviderPresetOverride overrides;
     };
 
+    enum class PTEfxTreeClipboardKind
+    {
+        None,
+        Preset,
+        MultiFxRoute,
+        OutputLayer,
+        SelectionLayer
+    };
+
+    struct PTEfxTreeClipboard
+    {
+        bool valid = false;
+        PTEfxTreeClipboardKind kind = PTEfxTreeClipboardKind::None;
+        PTTransitionMode mode = PTTransitionMode::SweepOnly;
+        PTTransitionPreset preset;
+        QHash<int, PTTransitionOutputLayer> classicOutputLayers;
+        QVector<PTMultiFxTargetTableRoute> multiFxRoutes;
+        PTMultiFxTargetTableRoute multiFxRoute;
+        PTTransitionProviderOutputLayer providerOutputLayer;
+        PTTransitionOutputLayer classicOutputLayer;
+        PTTransitionProviderSelection providerSelection;
+        PTTransitionSelection classicSelection;
+        bool providerLayer = false;
+        int outputIndex = -1;
+    };
+
     struct PTTransitionProviderSnapshot
     {
         QVector<PTTransitionPreset> sweepPresets;
@@ -358,6 +384,9 @@ private:
     PTTransitionMode multiFxRouteMode(const PTMultiFxTargetTableRoute& route) const;
     QString multiFxRouteModeLabel(const PTMultiFxTargetTableRoute& route) const;
     void normalizeMultiFxTargetRoutes();
+    void displayDataForMode(PTTransitionMode mode,
+                            QVector<PTTransitionPreset>& displayPresets,
+                            QVector<QVector<PTMultiFxTargetTableRoute>>& displayRoutes) const;
     void addMultiFxTargetTableRoute(int presetIndex, quint32 tableId);
     void removeMultiFxTargetTableRoute(int presetIndex, int routeIndex);
     struct MultiFxRouteCellContext
@@ -471,6 +500,12 @@ private:
                                   Qt::KeyboardModifiers mods);
     void showParameterContextMenu(PTTransitionMode mode, QTreeWidget* table,
                                   QTreeWidgetItem* item, int col, const QPoint& globalPos);
+    void showNameContextMenu(PTTransitionMode mode, QTreeWidget* table,
+                             QTreeWidgetItem* item, const QPoint& globalPos);
+    bool copyTreeLayer(QTreeWidgetItem* item);
+    bool canPasteTreeLayer(PTTransitionMode mode, QTreeWidgetItem* item) const;
+    bool pasteTreeLayer(PTTransitionMode mode, QTreeWidgetItem* item);
+    bool duplicateTreeLayer(PTTransitionMode mode, QTreeWidgetItem* item);
     bool isClipboardCell(QTreeWidget* table, QTreeWidgetItem* item, int col) const;
     bool sameClipboardContext(QTreeWidgetItem* a, QTreeWidgetItem* b) const;
     QList<QTreeWidgetItem*> clipboardRowsInContext(QTreeWidget* table,
@@ -536,7 +571,11 @@ private:
     QHash<QTreeWidget*, int> m_focusColumnByTable;
     QHash<QTreeWidget*, PTTransitionCellKey> m_cellSelectionAnchorByTable;
     QHash<QTreeWidget*, QSet<PTTransitionCellKey>> m_selectedCellsByTable;
+    QHash<QTreeWidget*, QTreeWidgetItem*> m_frozenNameContextItemByTable;
+    QHash<QTreeWidget*, QMetaObject::Connection> m_tableToFrozenSelectionConnections;
+    QHash<QTreeWidget*, QMetaObject::Connection> m_frozenToTableSelectionConnections;
     PTSelectionClipboard m_selectionClipboard;
+    PTEfxTreeClipboard m_treeClipboard;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
     bool m_crossfadeManualInputMapped = false;
@@ -550,6 +589,7 @@ private:
     bool m_disableLiveLinkedTableLookup = false;
     bool m_pastingCells = false;
     bool m_syncingFrozenExpansion = false;
+    bool m_syncingFrozenSelection = false;
 
     mutable QMutex m_liveMutex;
     QHash<quint8, uchar> m_liveColumnOverrides;
