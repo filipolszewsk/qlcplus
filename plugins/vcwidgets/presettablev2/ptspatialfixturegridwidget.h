@@ -28,6 +28,7 @@ public:
 
     void setPreview(const PTSpatialGridPreview& preview);
     void setPlaceholderText(const QString& text);
+    void setStatusTextVisible(bool visible);
     void setSelectionLayers(bool editable,
                             int activeSelectionIndex,
                             const QSet<QLCPoint>& scopeCells,
@@ -58,6 +59,7 @@ private:
 
     PTSpatialGridPreview m_preview;
     QString m_placeholder;
+    bool m_statusTextVisible = true;
     bool m_positionEditMode = false;
     QSet<QLCPoint> m_positionFilledCells;
     QSet<QLCPoint> m_positionSelectedCells;

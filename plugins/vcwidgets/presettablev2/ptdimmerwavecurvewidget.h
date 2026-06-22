@@ -35,6 +35,7 @@ public:
                          MarkerMode mode = MarkerMode::Cyclic);
     void setOneShotProgress(qreal progress01);
     void setEditable(bool editable);
+    void setStatusTextVisible(bool visible);
     void setCustomCurve(const QVector<PTCustomCurvePoint>& points);
     QVector<PTCustomCurvePoint> customCurve() const { return m_customCurve; }
     int selectedPointIndex() const { return m_selectedIndex; }
@@ -78,6 +79,7 @@ private:
     qreal m_animPhase01 = 0.0;
     QVector<PTCustomCurvePoint> m_customCurve;
     bool m_editable = false;
+    bool m_statusTextVisible = true;
     int m_selectedIndex = -1;
     DragTarget m_dragTarget = DragTarget::None;
     QPointF m_dragStartCurvePoint;

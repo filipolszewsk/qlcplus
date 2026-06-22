@@ -74,6 +74,7 @@ static const QString KXMLRoot = QStringLiteral("PluginWidget");
 static const QString KXMLPluginId = QStringLiteral("PluginId");
 static const QString KXMLPluginIdVal = QStringLiteral("org.qlcplus.vcwidgets.presettablev2transition");
 static const QString KXMLTargetTable = QStringLiteral("TargetTableId");
+static const QString KXMLShowLog = QStringLiteral("ShowLog");
 static const QString KDefaultEngineCaption = QStringLiteral("Preset Table Engine");
 
 static bool isDefaultPresetTableEngineCaption(const QString& caption)
@@ -1669,6 +1670,7 @@ PresetTableV2TransitionWidget::PresetTableV2TransitionWidget(QWidget* parent, Do
     buildUi();
     rebuildAllPresetTables();
     updateGlobalSummaryLabel();
+    updateLogVisibility();
     slotRefreshTableLink();
     publishProviderSnapshot(QStringLiteral("construct"));
 }
@@ -2605,6 +2607,26 @@ void PresetTableV2TransitionWidget::updateGlobalSummaryLabel()
             tr("Global speed, intensity, position size and min/max cycle times — open widget properties to edit."));
 }
 
+void PresetTableV2TransitionWidget::updateLogVisibility()
+{
+    if (m_linkLabel)
+        m_linkLabel->setVisible(m_logVisible);
+    if (m_globalSummaryLabel)
+        m_globalSummaryLabel->setVisible(m_logVisible);
+    if (m_enableChk)
+        m_enableChk->setVisible(m_logVisible);
+    if (m_curveLabel)
+        m_curveLabel->setVisible(m_logVisible && m_curveLabel->isVisible());
+    if (m_positionPreviewLabel)
+        m_positionPreviewLabel->setVisible(m_logVisible && m_positionPreviewLabel->isVisible());
+    if (m_spatialGridCaption)
+        m_spatialGridCaption->setVisible(m_logVisible);
+    if (m_curveWidget)
+        m_curveWidget->setStatusTextVisible(m_logVisible);
+    if (m_spatialGridWidget)
+        m_spatialGridWidget->setStatusTextVisible(m_logVisible);
+}
+
 void PresetTableV2TransitionWidget::buildUi()
 {
     m_layout = new QVBoxLayout(this);
@@ -2967,6 +2989,7 @@ void PresetTableV2TransitionWidget::buildUi()
         m_shapeGallery = PTShapesGallery::defaultBuiltinItems();
     refreshColumnGroupBarForActiveTab();
     updateRemoveActionLabel();
+    updateLogVisibility();
 }
 
 void PresetTableV2TransitionWidget::rebuildAllPresetTables()
@@ -4735,7 +4758,7 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
 
     if (m_curveLabel)
     {
-        m_curveLabel->setVisible(showCurvePreview);
+        m_curveLabel->setVisible(m_logVisible && showCurvePreview);
         if (positionMode && mode == PTTransitionMode::Continuous)
             m_curveLabel->setText(tr("Position interpolation envelope"));
         else if (positionMode && transitionTab)
@@ -4761,7 +4784,7 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
 
     if (m_positionPreviewLabel)
     {
-        m_positionPreviewLabel->setVisible(showMotion);
+        m_positionPreviewLabel->setVisible(m_logVisible && showMotion);
         if (showMotion)
         {
             if (motion1D)
@@ -9963,6 +9986,7 @@ void PresetTableV2TransitionWidget::editProperties()
 
     setCaption(dlg.widgetCaption());
     setTargetTableId(dlg.targetTableId());
+    m_logVisible = dlg.logVisible();
 
     const PTGlobalEffectSettings gs = dlg.globalSettings();
     m_globalSettings.speed = gs.speed;
@@ -9991,6 +10015,7 @@ void PresetTableV2TransitionWidget::editProperties()
             && dlg.globalCrossfadeManualInputSource()->isValid();
     publishProviderSnapshot(QStringLiteral("properties"));
     updateGlobalSummaryLabel();
+    updateLogVisibility();
     rebuildAllPresetTables();
     updateEffectPreview();
 
@@ -10026,9 +10051,11 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     copy->m_customCurveGallery = m_customCurveGallery;
     copy->m_shapeGallery = m_shapeGallery;
     copy->m_globalSettings = m_globalSettings;
+    copy->m_logVisible = m_logVisible;
     copy->m_bankSourceEngineIds = m_bankSourceEngineIds;
     copy->rebuildAllPresetTables();
     copy->updateGlobalSummaryLabel();
+    copy->updateLogVisibility();
     for (int col = 1; col < ColCount; ++col)
     {
         const quint8 stableId = PTEfxCol::inputIdForColumn(col);
@@ -10342,6 +10369,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
     loadXMLCommon(root);
     const auto rootAttrs = root.attributes();
     m_targetTableId = rootAttrs.value(KXMLTargetTable).toUInt();
+    m_logVisible = rootAttrs.hasAttribute(KXMLShowLog)
+            && rootAttrs.value(KXMLShowLog).toInt() != 0;
     if (rootAttrs.hasAttribute(KXMLGlobalMinMsRoot))
         m_globalSettings.minDurationMs = rootAttrs.value(KXMLGlobalMinMsRoot).toUInt();
     if (rootAttrs.hasAttribute(KXMLGlobalMaxMsRoot))
@@ -10995,6 +11024,8 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
     doc->writeAttribute(KXMLPluginId, KXMLPluginIdVal);
     if (m_targetTableId != VCWidget::invalidId())
         doc->writeAttribute(KXMLTargetTable, QString::number(m_targetTableId));
+    doc->writeAttribute(KXMLShowLog, m_logVisible ? QStringLiteral("1")
+                                                  : QStringLiteral("0"));
     doc->writeAttribute(KXMLGlobalMinMsRoot, QString::number(m_globalSettings.minDurationMs));
     doc->writeAttribute(KXMLGlobalMaxMsRoot, QString::number(m_globalSettings.maxDurationMs));
     saveXMLCommon(doc);

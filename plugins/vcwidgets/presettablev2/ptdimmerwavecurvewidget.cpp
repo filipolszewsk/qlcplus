@@ -99,6 +99,14 @@ void PTDimmerWaveCurveWidget::setEditable(bool editable)
     update();
 }
 
+void PTDimmerWaveCurveWidget::setStatusTextVisible(bool visible)
+{
+    if (m_statusTextVisible == visible)
+        return;
+    m_statusTextVisible = visible;
+    update();
+}
+
 void PTDimmerWaveCurveWidget::updateAnimationState()
 {
     if (m_phaseMarkers.isEmpty() || m_markerMode == MarkerMode::OneShot)
@@ -437,11 +445,14 @@ void PTDimmerWaveCurveWidget::paintEvent(QPaintEvent* event)
         p.drawEllipse(pt, 5, 5);
     }
 
-    p.setPen(palette().color(QPalette::Text));
-    p.drawText(QRect(8, height() - 18, width() - 16, 16), Qt::AlignLeft,
-               tr("X: 0–360° (1 cycle = %1 ms)   Y: 0–255   Width: %2°")
-                       .arg(m_cycleDurationMs)
-                       .arg(waveW));
+    if (m_statusTextVisible)
+    {
+        p.setPen(palette().color(QPalette::Text));
+        p.drawText(QRect(8, height() - 18, width() - 16, 16), Qt::AlignLeft,
+                   tr("X: 0–360° (1 cycle = %1 ms)   Y: 0–255   Width: %2°")
+                           .arg(m_cycleDurationMs)
+                           .arg(waveW));
+    }
 }
 
 void PTDimmerWaveCurveWidget::mousePressEvent(QMouseEvent* event)

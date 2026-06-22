@@ -101,6 +101,14 @@ void PTSpatialFixtureGridWidget::setPlaceholderText(const QString& text)
     update();
 }
 
+void PTSpatialFixtureGridWidget::setStatusTextVisible(bool visible)
+{
+    if (m_statusTextVisible == visible)
+        return;
+    m_statusTextVisible = visible;
+    update();
+}
+
 void PTSpatialFixtureGridWidget::setSelectionLayers(
         bool editable,
         int activeSelectionIndex,
@@ -164,7 +172,8 @@ QRect PTSpatialFixtureGridWidget::gridCellRect(const QLCPoint& pt) const
     if (pt.x() < 0 || pt.y() < 0 || pt.x() >= cols || pt.y() >= rows)
         return QRect();
 
-    const QRect area = rect().adjusted(6, 6, -6, -28);
+    const QRect area = rect().adjusted(6, 6, -6,
+                                      m_statusTextVisible ? -28 : -6);
     const int cellW = qMax(24, area.width() / cols);
     const int cellH = qMax(24, area.height() / rows);
     const int totalW = cellW * cols;
@@ -371,6 +380,9 @@ void PTSpatialFixtureGridWidget::paintEvent(QPaintEvent* event)
             }
         }
     }
+
+    if (!m_statusTextVisible)
+        return;
 
     p.setFont(baseFont);
     p.setPen(textColor);

@@ -128,6 +128,7 @@ public:
     void requestFlash(int tableRowIndex, int transitionPresetIndex) override;
     void promoteStagedColumnOverrides() override;
     bool crossfadeManualControlEnabled() const override;
+    bool logVisible() const { return m_logVisible; }
 
     VCWidget* createCopy(VCWidget* parent) override;
     bool loadXML(QXmlStreamReader& root) override;
@@ -287,6 +288,7 @@ private:
     QTreeWidget* activeTable() const;
 
     void updateGlobalSummaryLabel();
+    void updateLogVisibility();
     void updatePresetRowUiForItem(QTreeWidgetItem* item, PTTransitionMode bankMode);
 
     void buildUi();
@@ -587,6 +589,7 @@ private:
     PTEfxTreeClipboard m_treeClipboard;
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
+    bool m_logVisible = false;
     bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
     bool m_committingPresetCell = false;

@@ -27,6 +27,7 @@ public:
     quint32 targetTableId() const;
     QString widgetCaption() const;
     PTGlobalEffectSettings globalSettings() const;
+    bool logVisible() const;
     quint32 bankSourceEngineId(PTTransitionMode mode) const;
     QSharedPointer<QLCInputSource> globalSpeedInputSource() const;
     QSharedPointer<QLCInputSource> globalIntensityInputSource() const;
@@ -48,6 +49,7 @@ private:
     PresetTableV2TransitionWidget* m_widget = nullptr;
     QLineEdit*                     m_captionEdit = nullptr;
     QComboBox*                     m_tableCombo = nullptr;
+    QCheckBox*                     m_logVisibleChk = nullptr;
     QHash<int, QComboBox*>         m_bankSourceCombos;
     QSlider*                       m_speedSlider = nullptr;
     QLabel*                        m_speedValueLabel = nullptr;

@@ -53,6 +53,10 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         m_captionEdit->setText(m_widget->caption());
     form->addRow(tr("Widget name:"), m_captionEdit);
 
+    m_logVisibleChk = new QCheckBox(tr("Show diagnostics/status text"), this);
+    m_logVisibleChk->setChecked(m_widget ? m_widget->logVisible() : false);
+    form->addRow(tr("Log:"), m_logVisibleChk);
+
     m_tableCombo = new QComboBox(this);
     form->addRow(tr("Preset Table v2:"), m_tableCombo);
     root->addLayout(form);
@@ -341,6 +345,11 @@ PTGlobalEffectSettings PresetTableV2TransitionConfigDialog::globalSettings() con
     if (m_speedOverdriveKneeSlider)
         gs.speedOverdriveKnee = qBound(1, m_speedOverdriveKneeSlider->value(), 254);
     return gs;
+}
+
+bool PresetTableV2TransitionConfigDialog::logVisible() const
+{
+    return m_logVisibleChk && m_logVisibleChk->isChecked();
 }
 
 quint32 PresetTableV2TransitionConfigDialog::bankSourceEngineId(PTTransitionMode mode) const
