@@ -1382,8 +1382,7 @@ QSet<int> PresetTableV2TransitionWidget::allowedMultiFxColumnsForContext(
     else if (contextMode == PTTransitionMode::Channel1D)
         add({ ColChannel1DApplyMode, ColChannel1DAmount });
     else if (contextMode == PTTransitionMode::Continuous)
-        add({ ColMultiFxInterpolationSource, ColMultiFxInterpolationPrimary,
-              ColMultiFxInterpolationSecondary });
+        add({ ColMultiFxInterpolationPrimary, ColMultiFxInterpolationSecondary });
     return cols;
 }
 
@@ -1403,7 +1402,6 @@ PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
                  ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
                  ColChannel1DApplyMode, ColChannel1DAmount,
                  ColMultiFxTargetMode,
-                 ColMultiFxInterpolationSource,
                  ColMultiFxInterpolationPrimary,
                  ColMultiFxInterpolationSecondary });
     Q_UNUSED(rootContext);
@@ -1427,7 +1425,6 @@ PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
         { ColMultiFxTargetMode,
           ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
           ColChannel1DApplyMode, ColChannel1DAmount,
-          ColMultiFxInterpolationSource,
           ColMultiFxInterpolationPrimary,
           ColMultiFxInterpolationSecondary });
     add(QStringLiteral("spread"), tr("Spread"),
@@ -2055,9 +2052,7 @@ QWidget* PresetTableV2TransitionWidget::createEditorForItemColumn(
                 PresetTableV2VCLookup::controlIfaceByVcId(tableId))
         {
             QComboBox* c = new QComboBox(parent);
-            c->addItem(col == ColMultiFxInterpolationPrimary ? tr("Dynamic")
-                                                             : tr("Off"),
-                       -1);
+            c->addItem(tr("Dynamic"), -1);
             const int count = table->presetTableRowCountForPresetOverride();
             for (int i = 0; i < count; ++i)
             {
@@ -2320,7 +2315,7 @@ QString PresetTableV2TransitionWidget::displayTextForColumn(int col, const QVari
     {
         const int row = value.toInt();
         if (row < 0)
-            return col == ColMultiFxInterpolationPrimary ? tr("Dynamic") : tr("Off");
+            return tr("Dynamic");
         return tr("Row %1").arg(row + 1);
     }
     return value.toString();
@@ -2368,9 +2363,13 @@ QVariant PresetTableV2TransitionWidget::presetColumnValue(const PTTransitionPres
         case ColMultiFxInterpolationSource:
             return preset.multiFxInterpolationSourceMode;
         case ColMultiFxInterpolationPrimary:
-            return preset.multiFxInterpolationPrimaryRow;
+            return preset.multiFxInterpolationSourceMode
+                    == int(PTMultiFxInterpolationSourceMode::Dynamic)
+                    ? -1 : preset.multiFxInterpolationPrimaryRow;
         case ColMultiFxInterpolationSecondary:
-            return preset.multiFxInterpolationSecondaryRow;
+            return preset.multiFxInterpolationSourceMode
+                    == int(PTMultiFxInterpolationSourceMode::Dynamic)
+                    ? -1 : preset.multiFxInterpolationSecondaryRow;
         default:               return QVariant();
     }
 }
@@ -2492,9 +2491,19 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
             break;
         case ColMultiFxInterpolationPrimary:
             preset.multiFxInterpolationPrimaryRow = qMax(-1, value.toInt());
+            preset.multiFxInterpolationSourceMode =
+                    (preset.multiFxInterpolationPrimaryRow >= 0
+                     || preset.multiFxInterpolationSecondaryRow >= 0)
+                    ? int(PTMultiFxInterpolationSourceMode::Static)
+                    : int(PTMultiFxInterpolationSourceMode::Dynamic);
             break;
         case ColMultiFxInterpolationSecondary:
             preset.multiFxInterpolationSecondaryRow = qMax(-1, value.toInt());
+            preset.multiFxInterpolationSourceMode =
+                    (preset.multiFxInterpolationPrimaryRow >= 0
+                     || preset.multiFxInterpolationSecondaryRow >= 0)
+                    ? int(PTMultiFxInterpolationSourceMode::Static)
+                    : int(PTMultiFxInterpolationSourceMode::Dynamic);
             break;
         default:
             break;

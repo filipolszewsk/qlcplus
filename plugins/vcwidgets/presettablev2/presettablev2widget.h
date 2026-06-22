@@ -650,6 +650,7 @@ private:
         int stagedPrimaryRow = -1;
         int liveSecondaryRow = -1;
         int secondaryRow = -1;
+        int stagedSecondaryRow = -1;
         QVector<uchar> livePrimaryValues;
         QVector<uchar> liveSecondaryValues;
         QVector<uchar> primaryValues;

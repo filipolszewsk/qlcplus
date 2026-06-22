@@ -140,6 +140,35 @@ private:
     bool& m_flag;
 };
 
+struct MultiFxInterpolationRows
+{
+    int fromRow = -1;
+    int toRow = -1;
+    bool fromStatic = false;
+    bool toStatic = false;
+    bool valid = false;
+};
+
+static MultiFxInterpolationRows resolveMultiFxInterpolationRows(
+        const PTTransitionPreset& preset, int dynamicFromRow,
+        int dynamicToRow, int rowCount)
+{
+    MultiFxInterpolationRows rows;
+    const bool staticEnabled = preset.multiFxInterpolationSourceMode
+            == int(PTMultiFxInterpolationSourceMode::Static);
+    rows.fromStatic = staticEnabled && preset.multiFxInterpolationPrimaryRow >= 0;
+    rows.toStatic = staticEnabled && preset.multiFxInterpolationSecondaryRow >= 0;
+    rows.fromRow = rows.fromStatic ? preset.multiFxInterpolationPrimaryRow
+                                   : dynamicFromRow;
+    rows.toRow = rows.toStatic ? preset.multiFxInterpolationSecondaryRow
+                               : dynamicToRow;
+
+    const bool toValid = rows.toRow >= 0 && rows.toRow < rowCount;
+    const bool fromValid = rows.fromRow >= 0 && rows.fromRow < rowCount;
+    rows.valid = toValid && (!rows.fromStatic || fromValid);
+    return rows;
+}
+
 } // namespace
 
 const QColor PresetTableV2Widget::s_outputColors[8] = {
@@ -5893,7 +5922,11 @@ void PresetTableV2Widget::applyTransitionSnapshotOverrideColumnsLocked(
         SnapshotColChannel1DLow,
         SnapshotColChannel1DHigh,
         SnapshotColChannel1DAmount,
-        SnapshotColChannel1DCustomColumn
+        SnapshotColChannel1DCustomColumn,
+        SnapshotColMultiFxTargetMode,
+        SnapshotColMultiFxInterpolationSource,
+        SnapshotColMultiFxInterpolationPrimary,
+        SnapshotColMultiFxInterpolationSecondary
     };
 
     for (int col : ov.columns)
@@ -5945,6 +5978,15 @@ void PresetTableV2Widget::applyTransitionSnapshotOverrideColumnsLocked(
             case SnapshotColChannel1DAmount: preset.channel1DAmount = v.channel1DAmount; break;
             case SnapshotColChannel1DCustomColumn:
                 preset.channel1DCustomColumn = v.channel1DCustomColumn;
+                break;
+            case SnapshotColMultiFxInterpolationSource:
+                preset.multiFxInterpolationSourceMode = v.multiFxInterpolationSourceMode;
+                break;
+            case SnapshotColMultiFxInterpolationPrimary:
+                preset.multiFxInterpolationPrimaryRow = v.multiFxInterpolationPrimaryRow;
+                break;
+            case SnapshotColMultiFxInterpolationSecondary:
+                preset.multiFxInterpolationSecondaryRow = v.multiFxInterpolationSecondaryRow;
                 break;
             default: break;
         }
@@ -6574,13 +6616,9 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
     state.primaryRow = activeRow;
     state.stagedPrimaryRow = hasStagedPrimary ? m_stagedRow[outputIdx] : activeRow;
     state.liveSecondaryRow = liveSecondary;
-    const int stagedSecondary = hasStagedSecondary
-            ? ((m_stagedSecondaryRow[outputIdx] >= 0
-                && m_stagedSecondaryRow[outputIdx] < m_rows.size())
-               ? m_stagedSecondaryRow[outputIdx]
-               : liveSecondary)
-            : -1;
-    state.secondaryRow = hasStagedSecondary ? stagedSecondary : liveSecondary;
+    const int stagedSecondary = hasStagedSecondary ? m_stagedSecondaryRow[outputIdx] : -1;
+    state.secondaryRow = liveSecondary;
+    state.stagedSecondaryRow = stagedSecondary;
     state.livePrimaryValues = m_rows[activeRow].values;
     state.primaryValues = state.livePrimaryValues;
     if (hasStagedPrimary && m_stagedRow[outputIdx] >= 0)
@@ -6594,8 +6632,13 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
         state.liveSecondaryValues = state.livePrimaryValues;
     state.secondaryValues = state.liveSecondaryValues;
 
-    if (hasStagedSecondary && stagedSecondary >= 0 && stagedSecondary < m_rows.size())
-        state.secondaryValues = m_rows[stagedSecondary].values;
+    if (hasStagedSecondary)
+    {
+        if (stagedSecondary >= 0 && stagedSecondary < m_rows.size())
+            state.secondaryValues = m_rows[stagedSecondary].values;
+        else
+            state.secondaryValues = state.primaryValues;
+    }
 
     state.livePreset = continuousPresetForOutputLocked(outputIdx);
     state.preset = hasStagedContinuous
@@ -6605,7 +6648,7 @@ PresetTableV2Widget::continuousLayerStateForOutputLocked(int outputIdx,
             || hasStagedContinuous || hasStagedMultiFx;
     state.active = (state.livePreset.enabled || state.preset.enabled
                     || multiFxActiveForOutputLocked(outputIdx))
-            && (state.secondaryRow >= 0 || hasStagedSecondary || hasStagedContinuous
+            && (state.liveSecondaryRow >= 0 || hasStagedSecondary || hasStagedContinuous
                 || hasStagedPrimary || hasStagedMultiFx);
     return state;
 }
@@ -7729,8 +7772,24 @@ PresetTableV2Widget::multiButtonLinkedSlaveActionsForIndex(int outputIdx, int pa
         sawRoutes = sawRoutes || !routes.isEmpty();
         for (const PTMultiFxTargetTableRoute& tableRoute : routes)
         {
-            for (const PTMultiFxTargetOutputRoute& outputRoute : tableRoute.outputs)
-                appendRouteAction(tableRoute, outputRoute);
+            bool appendedLiveOutputs = false;
+            if (PresetTableV2ControlIface* targetTable =
+                    PresetTableV2VCLookup::controlIfaceByVcId(tableRoute.tableId))
+            {
+                const int outputCount = targetTable->outputCountForPresetOverrides();
+                for (int outputIdx = 0; outputIdx < outputCount; ++outputIdx)
+                {
+                    PTMultiFxTargetOutputRoute outputRoute;
+                    outputRoute.outputIndex = outputIdx;
+                    appendRouteAction(tableRoute, outputRoute);
+                    appendedLiveOutputs = true;
+                }
+            }
+            if (!appendedLiveOutputs)
+            {
+                for (const PTMultiFxTargetOutputRoute& outputRoute : tableRoute.outputs)
+                    appendRouteAction(tableRoute, outputRoute);
+            }
         }
     };
 
@@ -8111,7 +8170,7 @@ bool PresetTableV2Widget::multiButtonActivateFromSourceAndPhase(
     {
         if (index < -1 || index >= m_rows.size())
             return false;
-        if (continuousFxSelectorToStagedLocked())
+        if (m_crossfadeEnabled)
         {
             armCrossfadeStagingLocked();
             stageSecondaryRowLocked(outputIdx, index);
@@ -8258,7 +8317,7 @@ bool PresetTableV2Widget::multiButtonActivateFromSourceAndPhase(
     }
     else if (parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset)
     {
-        if (continuousFxSelectorToStagedLocked())
+        if (m_crossfadeEnabled)
         {
             armCrossfadeStagingLocked();
             materializeContinuousRowsLocked(outputIdx, true);
@@ -9860,18 +9919,15 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
                                                   const PTGlobalEffectSettings& g) {
                 if (!p.enabled)
                     return normalValues;
-                int fromRow = primaryRow;
-                int toRow = secondaryRow;
-                if (p.multiFxInterpolationSourceMode
-                        == int(PTMultiFxInterpolationSourceMode::Static))
-                {
-                    fromRow = p.multiFxInterpolationPrimaryRow;
-                    toRow = p.multiFxInterpolationSecondaryRow;
-                }
-                if (toRow < 0 || toRow >= m_rows.size())
+                const MultiFxInterpolationRows rows =
+                        resolveMultiFxInterpolationRows(p, primaryRow, secondaryRow,
+                                                        m_rows.size());
+                if (!rows.valid)
                     return normalValues;
-                const QVector<uchar> fromVals = valuesForPoint(fromRow, &pointPriVals);
-                const QVector<uchar> toVals = valuesForPoint(toRow, &pointSecVals);
+                const QVector<uchar> fromVals = valuesForPoint(
+                            rows.fromRow, rows.fromStatic ? nullptr : &pointPriVals);
+                const QVector<uchar> toVals = valuesForPoint(
+                            rows.toRow, rows.toStatic ? nullptr : &pointSecVals);
                 return continuousOutputValues(
                             m_columns, fromVals, toVals, p, dimmerValue, g.intensity);
             };
@@ -9971,12 +10027,8 @@ PresetTableV2Widget::resolveOutputPlaybackStateLocked(int outputIdx, int activeR
             && m_stagedSecondaryValid[outputIdx]
             && outputIdx < m_stagedSecondaryRow.size();
     const int effectiveSecondary = effectiveSecondaryRowLocked(outputIdx, activeRow);
-    state.secondaryRow = hasStagedSecondary
-            ? ((m_stagedSecondaryRow[outputIdx] >= 0
-                && m_stagedSecondaryRow[outputIdx] < m_rows.size())
-               ? m_stagedSecondaryRow[outputIdx]
-               : effectiveSecondary)
-            : effectiveSecondary;
+    Q_UNUSED(hasStagedSecondary);
+    state.secondaryRow = effectiveSecondary;
     state.crossfadeTransition = crossfadeSweepModeLocked(outputIdx, activeRow, hasStaged);
     state.crossfadeContinuous = continuousCrossfadeModeLocked(outputIdx)
             || channel1DCrossfadeModeLocked(outputIdx)
@@ -10824,26 +10876,21 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                         return outPos;
                     if (routeMode == PTTransitionMode::Continuous)
                     {
-                        int fromRow = -1;
-                        int toRow = secondaryRow;
-                        if (mfPreset.multiFxInterpolationSourceMode
-                                == int(PTMultiFxInterpolationSourceMode::Static))
-                        {
-                            fromRow = mfPreset.multiFxInterpolationPrimaryRow;
-                            toRow = mfPreset.multiFxInterpolationSecondaryRow;
-                        }
-                        if (toRow < 0 || toRow >= m_rows.size())
+                        const MultiFxInterpolationRows rows =
+                                resolveMultiFxInterpolationRows(
+                                    mfPreset, -1, secondaryRow, m_rows.size());
+                        if (!rows.valid)
                             return outPos;
                         PTPositionValue fromPos = input;
-                        if (fromRow >= 0 && fromRow < m_rows.size())
+                        if (rows.fromRow >= 0 && rows.fromRow < m_rows.size())
                         {
                             const PTPositionValue explicitFrom =
-                                    effectivePositionValue(fromRow, o, sf.point);
+                                    effectivePositionValue(rows.fromRow, o, sf.point);
                             if (explicitFrom.valid)
                                 fromPos = explicitFrom;
                         }
                         const PTPositionValue toPos =
-                                effectivePositionValue(toRow, o, sf.point);
+                                effectivePositionValue(rows.toRow, o, sf.point);
                         if (!fromPos.valid || !toPos.valid)
                             return outPos;
                         const PTSpatialFixturePlan mfPlan = spatialPlanForPreset(mfPreset);
@@ -11527,18 +11574,15 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                                                       const PTGlobalEffectSettings& g) {
                     if (!p.enabled)
                         return finalValues;
-                    int fromRow = blendFromRow;
-                    int toRow = blendToRow;
-                    if (p.multiFxInterpolationSourceMode
-                            == int(PTMultiFxInterpolationSourceMode::Static))
-                    {
-                        fromRow = p.multiFxInterpolationPrimaryRow;
-                        toRow = p.multiFxInterpolationSecondaryRow;
-                    }
-                    if (toRow < 0 || toRow >= m_rows.size())
+                    const MultiFxInterpolationRows rows =
+                            resolveMultiFxInterpolationRows(p, blendFromRow, blendToRow,
+                                                            m_rows.size());
+                    if (!rows.valid)
                         return finalValues;
-                    const QVector<uchar> fromVals = valuesForPoint(fromRow, &pointPriVals);
-                    const QVector<uchar> toVals = valuesForPoint(toRow, &pointSecVals);
+                    const QVector<uchar> fromVals = valuesForPoint(
+                                rows.fromRow, rows.fromStatic ? nullptr : &pointPriVals);
+                    const QVector<uchar> toVals = valuesForPoint(
+                                rows.toRow, rows.toStatic ? nullptr : &pointSecVals);
                     return continuousOutputValues(
                                 m_columns, fromVals, toVals, p, dimmerValue, g.intensity);
                 };
@@ -11915,7 +11959,7 @@ void PresetTableV2Widget::writeDMXFixtureGroup(MasterTimer* timer, QList<Univers
                                        layer.livePrimaryValues, layer.liveSecondaryValues,
                                        gridSize, headsMap, &layer.livePreset,
                                        layer.hasStaged ? layer.stagedPrimaryRow : -1,
-                                       layer.hasStaged ? layer.secondaryRow : -1,
+                                       layer.hasStaged ? layer.stagedSecondaryRow : -1,
                                        layer.hasStaged ? &layer.primaryValues : nullptr,
                                        layer.hasStaged ? &layer.secondaryValues : nullptr,
                                        layer.hasStaged ? &layer.preset : nullptr,
@@ -12483,7 +12527,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::transSecondaryRow(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = !initialSync && continuousFxSelectorToStagedLocked();
+            const bool toStaged = !initialSync && m_crossfadeEnabled;
             const int rowIdx = PresetTableV2SpatialEngine::tableRowIndexFromInput(value, numRows);
             if (toStaged)
             {
@@ -12591,7 +12635,7 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
         if (checkInputSource(universe, pagedCh, value, sender(), PTInputId::multiFxBank(o)))
         {
             QMutexLocker lk2(&m_stateMutex);
-            const bool toStaged = !initialSync && continuousFxSelectorToStagedLocked();
+            const bool toStaged = !initialSync && m_crossfadeEnabled;
             const int presetIdx = PresetTableV2SpatialEngine::transitionPresetIndexFromInput(
                     value, multiFxPresetCount);
             if (toStaged)
