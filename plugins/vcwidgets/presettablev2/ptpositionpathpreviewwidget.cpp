@@ -91,6 +91,19 @@ QPointF PTPositionPathPreviewWidget::mapRelative(qreal panOffDeg, qreal tiltOffD
     return QPointF(center.x() + panOffDeg * scale, center.y() - tiltOffDeg * scale);
 }
 
+static qreal normalizedCyclePhaseForPreview(const PTTransitionPreset& preset,
+                                            double cycle01, bool* active)
+{
+    const qreal width01 = qreal(qBound(1, preset.waveWidth, 360)) / qreal(360.0);
+    cycle01 -= std::floor(cycle01);
+    const bool insideWindow = cycle01 <= double(width01);
+    if (active)
+        *active = insideWindow;
+    if (!insideWindow)
+        return 1.0;
+    return qreal(cycle01 / double(width01));
+}
+
 void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event)
@@ -144,6 +157,16 @@ void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
             path.lineTo(pt);
     }
 
+    if (m_usePresetMotion && m_preset.waveWidth < 360)
+    {
+        p.setPen(QPen(palette().color(QPalette::Mid), 1, Qt::DashLine));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(path);
+        p.drawText(QRectF(plot.left() + 4, plot.top() + 4, plot.width() - 8, 16),
+                   Qt::AlignLeft | Qt::AlignVCenter,
+                   tr("active %1° then hold").arg(qBound(1, m_preset.waveWidth, 360)));
+    }
+
     p.setPen(QPen(QColor(80, 160, 255), 2));
     p.setBrush(Qt::NoBrush);
     p.drawPath(path);
@@ -153,7 +176,11 @@ void PTPositionPathPreviewWidget::paintEvent(QPaintEvent* event)
 
     for (const OrbitBall& ball : m_balls)
     {
-        const double phase = (m_animPhase01 + ball.phaseOffset01) * 2.0 * M_PI;
+        const double cycle01 = m_animPhase01 + ball.phaseOffset01;
+        const double motionPhase01 = m_usePresetMotion
+                ? double(normalizedCyclePhaseForPreview(m_preset, cycle01, nullptr))
+                : cycle01 - std::floor(cycle01);
+        const double phase = motionPhase01 * 2.0 * M_PI;
         qreal panOff = 0;
         qreal tiltOff = 0;
         if (m_usePresetMotion)

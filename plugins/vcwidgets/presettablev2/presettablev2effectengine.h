@@ -135,7 +135,8 @@ enum class PTPositionMotionDirection : int
     Forward = 0,
     Reverse,
     AlternateWings,
-    SymmetricPairs
+    SymmetricPairs,
+    ReverseAlternateWings
 };
 
 struct PTCustomCurvePoint

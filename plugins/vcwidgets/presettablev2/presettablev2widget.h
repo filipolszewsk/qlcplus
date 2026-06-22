@@ -628,6 +628,7 @@ private:
     PTGlobalEffectSettings multiFxGlobalSettingsLocked(int outputIdx, bool staged,
                                                        const PTGlobalEffectSettings& fallback) const;
     bool multiFxUsesSourceClockLocked(int outputIdx, bool staged) const;
+    void syncMultiFxSourceElapsedLocked(int outputIdx, bool staged, quint32 cycleMs);
     quint32 multiFxElapsedMsForOutputLocked(int outputIdx, bool staged) const;
     bool transitionPresetIndexValidLocked(PTTransitionMode mode, int presetIndex) const;
     PTTransitionPreset sweepPresetForOutputLocked(int outputIdx) const;
@@ -867,10 +868,12 @@ public:
     QVector<PTTransitionProviderSnapshot> m_liveMultiFxSourceSnapshot;
     QVector<bool>               m_liveMultiFxSourceSnapshotValid;
     QVector<quint64>            m_liveMultiFxPhaseAnchorMs;
+    QVector<quint64>            m_liveMultiFxSyncedPhaseAnchorMs;
     QVector<quint32>            m_stagedMultiFxSourceEngineId;
     QVector<PTTransitionProviderSnapshot> m_stagedMultiFxSourceSnapshot;
     QVector<bool>               m_stagedMultiFxSourceSnapshotValid;
     QVector<quint64>            m_stagedMultiFxPhaseAnchorMs;
+    QVector<quint64>            m_stagedMultiFxSyncedPhaseAnchorMs;
     QVector<int>                m_liveSecondaryRow;
     QVector<quint32>            m_continuousElapsedMs;
     QVector<quint32>            m_multiFxElapsedMs;

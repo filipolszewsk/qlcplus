@@ -32,6 +32,8 @@ public:
     void setMotionPreviewFromPreset(const PTTransitionPreset& preset,
                                     const PTDimmerWaveParams& waveParams,
                                     const QVector<PhaseMarker>& markers, quint32 cycleMs);
+    void setMotionPreview2DFromPreset(const PTTransitionPreset& preset,
+                                      const QVector<PhaseMarker>& markers, quint32 cycleMs);
     void clear();
 
 signals:
@@ -47,11 +49,13 @@ private:
     QRectF plotRect() const;
     QPointF mapSample(double cycle01, qreal normValue, const QRectF& plot) const;
     qreal sampleAtCycle01(double cycle01) const;
+    qreal sampleAxisAtCycle01(double cycle01, bool tiltAxis) const;
 
     PTPositionMotion m_motion = PTPositionMotion::Off;
     PTTransitionPreset m_preset;
     PTDimmerWaveParams m_waveParams;
     bool m_usePresetMotion = false;
+    bool m_dualAxisPreview = false;
     qreal m_panSize = 0;
     qreal m_tiltSize = 0;
     QVector<PhaseMarker> m_markers;

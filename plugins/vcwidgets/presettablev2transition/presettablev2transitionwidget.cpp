@@ -46,6 +46,7 @@
 #include <QMouseEvent>
 #include <QRegularExpression>
 #include <QPushButton>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QTimer>
 #include <QAbstractItemView>
@@ -864,8 +865,27 @@ void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
         return;
 
     const PTTransitionMode mode = modeForTable(table);
-    if (!isPresetColumnAllowedForMode(mode, address.col))
+    QTreeWidgetItem* item = (mode == PTTransitionMode::MultiFx
+                             && address.multiFxRouteIdx >= 0)
+            ? itemForMultiFxRouteAddress(address.row, address.multiFxRouteIdx,
+                                         address.multiFxRouteOutputIdx,
+                                         address.selectionIdx)
+            : itemForPresetAddress(mode, address.row,
+                                   address.outputIdx,
+                                   address.selectionIdx);
+    if (mode == PTTransitionMode::MultiFx)
+    {
+        const bool rootContext = !item
+                || !item->data(0, kItemMultiFxRouteIndexRole).isValid();
+        const PTTransitionMode contextMode = multiFxContextModeForItem(item);
+        if (!allowedMultiFxColumnsForContext(contextMode, rootContext)
+                .contains(address.col))
+            return;
+    }
+    else if (!isPresetColumnAllowedForMode(mode, address.col))
+    {
         return;
+    }
     if (mode == PTTransitionMode::SweepOnly
             && (address.col == ColOffsetStepMode || address.col == ColOffsetStep))
     {
@@ -894,14 +914,6 @@ void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
     }
 
     ScopedBoolFlag guard(m_committingPresetCell);
-    QTreeWidgetItem* item = (mode == PTTransitionMode::MultiFx
-                             && address.multiFxRouteIdx >= 0)
-            ? itemForMultiFxRouteAddress(address.row, address.multiFxRouteIdx,
-                                         address.multiFxRouteOutputIdx,
-                                         address.selectionIdx)
-            : itemForPresetAddress(mode, address.row,
-                                   address.outputIdx,
-                                   address.selectionIdx);
     if (item)
     {
         QSignalBlocker blocker(table);
@@ -1294,7 +1306,7 @@ QSet<int> PresetTableV2TransitionWidget::allowedMultiFxColumnsForContext(
     if (contextMode == PTTransitionMode::PositionMotion)
         add({ ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode });
     else if (contextMode == PTTransitionMode::Channel1D)
-        add({ ColChannel1DApplyMode, ColChannel1DAmount, ColWaveLevel });
+        add({ ColChannel1DApplyMode, ColChannel1DAmount });
     return cols;
 }
 
@@ -1302,34 +1314,39 @@ QVector<PTTransitionColumnGroupBar::Group>
 PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
         PTTransitionMode contextMode, bool rootContext) const
 {
-    Q_UNUSED(contextMode);
-    Q_UNUSED(rootContext);
     QVector<PTTransitionColumnGroupBar::Group> groups;
+    QSet<int> visible;
+    auto addVisible = [&visible](std::initializer_list<int> list) {
+        for (int col : list)
+            visible.insert(col);
+    };
+    addVisible({ ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
+                 ColOffsetStepMode, ColOffsetStep, ColWaveWidth, ColWaveShape,
+                 ColFadeIn, ColFadeOut, ColStartOffset, ColSpeedMult });
+    if (!rootContext)
+    {
+        addVisible({ ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
+                     ColChannel1DApplyMode, ColChannel1DAmount });
+    }
+
     auto add = [&](const QString& id, const QString& label, std::initializer_list<int> cols) {
         PTTransitionColumnGroupBar::Group group;
         group.id = id;
         group.label = label;
         for (int col : cols)
-            group.columns.append(col);
+        {
+            if (visible.contains(col))
+                group.columns.append(col);
+        }
         if (!group.columns.isEmpty())
             groups.append(group);
     };
 
-    add(QStringLiteral("all"), tr("All"),
-        { ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
-          ColOffsetStepMode, ColOffsetStep, ColPositionMotion,
-          ColPositionMotionDir, ColPosition1DBuiltinMode,
-          ColChannel1DApplyMode, ColChannel1DAmount,
-          ColWaveLevel, ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut,
-          ColStartOffset, ColSpeedMult });
     add(QStringLiteral("common"), tr("Common"),
-        { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut,
-          ColStartOffset, ColSpeedMult });
-    add(QStringLiteral("2dfx"), tr("2D FX"),
+        { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut });
+    add(QStringLiteral("fx"), tr("FX"),
         { ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
-          ColAxis });
-    add(QStringLiteral("1dfx"), tr("1D FX"),
-        { ColChannel1DApplyMode, ColChannel1DAmount, ColWaveLevel });
+          ColChannel1DApplyMode, ColChannel1DAmount });
     add(QStringLiteral("spread"), tr("Spread"),
         { ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
           ColOffsetStepMode, ColOffsetStep });
@@ -1431,17 +1448,11 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
             }
             return false;
         };
+        const bool hasStoredActive = m_columnGroupFilterByMode.contains(int(mode));
         QString activeId = m_columnGroupFilterByMode.value(int(mode));
         const QString preferredId = rootContext ? QStringLiteral("common")
-                : (contextMode == PTTransitionMode::PositionMotion
-                   ? QStringLiteral("2dfx")
-                   : (contextMode == PTTransitionMode::Channel1D
-                      ? QStringLiteral("1dfx") : QStringLiteral("common")));
-        if (activeId.isEmpty() || !groupExists(activeId)
-                || (!rootContext && contextMode == PTTransitionMode::PositionMotion
-                    && activeId == QStringLiteral("1dfx"))
-                || (!rootContext && contextMode == PTTransitionMode::Channel1D
-                    && activeId == QStringLiteral("2dfx")))
+                                                : QStringLiteral("fx");
+        if (!hasStoredActive || (!activeId.isEmpty() && !groupExists(activeId)))
         {
             activeId = groupExists(preferredId) ? preferredId
                                                 : (groups.isEmpty() ? QString() : groups.first().id);
@@ -1449,6 +1460,7 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
                 m_columnGroupFilterByMode.insert(int(mode), activeId);
         }
 
+        updateColumnHeaders(table);
         if (PTTransitionColumnGroupBar* bar = columnGroupBarForMode(mode))
         {
             bar->blockSignals(true);
@@ -1458,8 +1470,6 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
         }
 
         QString groupId = activeId;
-        if (groupId.isEmpty() && !groups.isEmpty())
-            groupId = groups.first().id;
         QSet<int> filtered;
         for (const PTTransitionColumnGroupBar::Group& group : groups)
         {
@@ -1470,11 +1480,19 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
                 break;
             }
         }
+        if (filtered.isEmpty() && groupId.isEmpty())
+        {
+            for (const PTTransitionColumnGroupBar::Group& group : groups)
+            {
+                for (int col : group.columns)
+                    filtered.insert(col);
+            }
+        }
         if (filtered.isEmpty())
         {
             for (const PTTransitionColumnGroupBar::Group& group : groups)
             {
-                if (group.id == QStringLiteral("all"))
+                if (group.id == QStringLiteral("common"))
                 {
                     for (int col : group.columns)
                         filtered.insert(col);
@@ -1753,8 +1771,10 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionDirCombo(QWidget* pa
     c->addItem(QObject::tr("Forward"), int(PTPositionMotionDirection::Forward));
     c->addItem(QObject::tr("Reverse"), int(PTPositionMotionDirection::Reverse));
     c->addItem(QObject::tr("Alternate Wings"), int(PTPositionMotionDirection::AlternateWings));
+    c->addItem(QObject::tr("Reverse Alternate Wings"),
+               int(PTPositionMotionDirection::ReverseAlternateWings));
     c->addItem(QObject::tr("Mirror Pairs"), int(PTPositionMotionDirection::SymmetricPairs));
-    configureTransitionCombo(c, 140);
+    configureTransitionCombo(c, 180);
     return c;
 }
 
@@ -2046,6 +2066,8 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
                 case PTPositionMotionDirection::Forward:        return tr("Forward");
                 case PTPositionMotionDirection::Reverse:        return tr("Reverse");
                 case PTPositionMotionDirection::AlternateWings: return tr("Alternate Wings");
+                case PTPositionMotionDirection::ReverseAlternateWings:
+                    return tr("Reverse Alternate Wings");
                 case PTPositionMotionDirection::SymmetricPairs: return tr("Mirror Pairs");
             }
             break;
@@ -2421,6 +2443,7 @@ void PresetTableV2TransitionWidget::buildUi()
 
     m_curveLabel = new QLabel(tr("Dimmer wave"), m_leftPreview);
     m_curveWidget = new PTDimmerWaveCurveWidget(m_leftPreview);
+    m_curveWidget->setMinimumHeight(110);
     connect(m_curveWidget, &PTDimmerWaveCurveWidget::customCurveEditRequested,
             this, &PresetTableV2TransitionWidget::slotOpenCustomCurveEditor);
     m_previewRefreshTimer = new QTimer(this);
@@ -2439,17 +2462,33 @@ void PresetTableV2TransitionWidget::buildUi()
             updateEffectPreview();
     });
     m_previewRefreshTimer->start();
-    m_positionPreviewLabel = new QLabel(tr("Position motion"), m_leftPreview);
+    QWidget* positionPreviewHeader = new QWidget(m_leftPreview);
+    QHBoxLayout* positionPreviewHeaderLayout = new QHBoxLayout(positionPreviewHeader);
+    positionPreviewHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    positionPreviewHeaderLayout->setSpacing(4);
+    m_positionPreviewLabel = new QLabel(tr("Position motion"), positionPreviewHeader);
+    m_positionPreviewModeButton = new QToolButton(positionPreviewHeader);
+    m_positionPreviewModeButton->setText(tr("Pan/Tilt"));
+    m_positionPreviewModeButton->setCheckable(true);
+    m_positionPreviewModeButton->setAutoRaise(true);
+    m_positionPreviewModeButton->setToolTip(tr("Show 2D motion as separate Pan and Tilt curves"));
+    connect(m_positionPreviewModeButton, &QToolButton::toggled,
+            this, [this]() { updateEffectPreview(); });
+    positionPreviewHeaderLayout->addWidget(m_positionPreviewLabel, 1);
+    positionPreviewHeaderLayout->addWidget(m_positionPreviewModeButton);
     m_positionMotionStack = new QStackedWidget(m_leftPreview);
+    m_positionMotionStack->setMinimumHeight(110);
     m_positionMotion1DWidget = new PTPositionMotion1DPreviewWidget(m_positionMotionStack);
+    m_positionMotion1DWidget->setMinimumHeight(110);
     connect(m_positionMotion1DWidget, &PTPositionMotion1DPreviewWidget::motionCurveEditRequested,
             this, &PresetTableV2TransitionWidget::slotOpenMotionCurveEditor);
     m_positionPathWidget = new PTPositionPathPreviewWidget(m_positionMotionStack);
+    m_positionPathWidget->setMinimumHeight(110);
     m_positionMotionStack->addWidget(m_positionMotion1DWidget);
     m_positionMotionStack->addWidget(m_positionPathWidget);
     leftLayout->addWidget(m_curveLabel);
     leftLayout->addWidget(m_curveWidget, 2);
-    leftLayout->addWidget(m_positionPreviewLabel);
+    leftLayout->addWidget(positionPreviewHeader);
     leftLayout->addWidget(m_positionMotionStack, 2);
 
     m_spatialPreviewColumn = new QWidget(m_previewRow);
@@ -2742,10 +2781,46 @@ void PresetTableV2TransitionWidget::updateColumnHeaders(QTreeWidget* table)
     if (!table)
         return;
 
+    const PTTransitionMode tableMode = modeForTable(table);
+    const bool multiFxTable = tableMode == PTTransitionMode::MultiFx;
+    QTreeWidgetItem* multiFxCurrent = multiFxTable ? selectedPresetItem(table) : nullptr;
+    const bool multiFxRootContext = !multiFxCurrent
+            || !multiFxCurrent->data(0, kItemMultiFxRouteIndexRole).isValid();
+    const PTTransitionMode multiFxContextMode = multiFxTable
+            ? multiFxContextModeForItem(multiFxCurrent) : PTTransitionMode::MultiFx;
+    auto multiFxColumnTitle = [&](int col) -> QString {
+        switch (col)
+        {
+            case ColWaveShape:
+                if (multiFxRootContext)
+                    return tr("Curve");
+                return multiFxContextMode == PTTransitionMode::PositionMotion
+                        ? tr("Motion curve") : tr("Wave curve");
+            case ColFadeIn:
+                if (multiFxRootContext)
+                    return tr("Fade in");
+                return multiFxContextMode == PTTransitionMode::PositionMotion
+                        ? tr("Orbit fade in") : tr("Wave fade in");
+            case ColFadeOut:
+                if (multiFxRootContext)
+                    return tr("Fade out");
+                return multiFxContextMode == PTTransitionMode::PositionMotion
+                        ? tr("Orbit fade out") : tr("Wave fade out");
+            case ColWaveWidth:
+                if (multiFxRootContext)
+                    return tr("Width °");
+                return multiFxContextMode == PTTransitionMode::PositionMotion
+                        ? tr("Orbit width °") : tr("Wave width °");
+            default:
+                return columnTitleForCol(col);
+        }
+    };
+
     QStringList headers;
     for (int c = 0; c < ColCount; ++c)
     {
-        QString title = (c == ColName) ? tr("Name") : columnTitleForCol(c);
+        QString title = (c == ColName) ? tr("Name")
+                : (multiFxTable ? multiFxColumnTitle(c) : columnTitleForCol(c));
         if (PTEfxCol::hasExternalInput(c))
         {
             const auto src = inputSource(PTEfxCol::inputIdForColumn(c));
@@ -4452,16 +4527,8 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
         m_leftPreview->setVisible(showCurvePreview || showMotion);
     if (QHBoxLayout* previewLayout = qobject_cast<QHBoxLayout*>(m_previewRow->layout()))
     {
-        if (positionMode)
-        {
-            previewLayout->setStretch(0, 2);
-            previewLayout->setStretch(1, 3);
-        }
-        else
-        {
-            previewLayout->setStretch(0, 3);
-            previewLayout->setStretch(1, 2);
-        }
+        previewLayout->setStretch(0, 2);
+        previewLayout->setStretch(1, 3);
     }
 
     if (m_curveLabel)
@@ -4507,6 +4574,11 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                 m_positionPreviewLabel->setText(tr("Position motion"));
             }
         }
+    }
+    if (m_positionPreviewModeButton)
+    {
+        m_positionPreviewModeButton->setVisible(showMotion && !motion1D);
+        m_positionPreviewModeButton->setEnabled(showMotion && !motion1D);
     }
     if (m_positionMotionStack)
     {
@@ -4601,6 +4673,8 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
         const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
         if (motion != PTPositionMotion::Off)
         {
+            const bool showPanTiltGraph = !motion1D && m_positionPreviewModeButton
+                    && m_positionPreviewModeButton->isChecked();
             if (motion1D && m_positionMotion1DWidget)
             {
                 m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
@@ -4609,13 +4683,16 @@ void PresetTableV2TransitionWidget::updateEffectPreview()
                 m_positionMotion1DWidget->setMotionPreviewFromPreset(
                         preset, waveParams, markers, cycleMs);
             }
+            else if (showPanTiltGraph && m_positionMotion1DWidget)
+            {
+                m_positionMotionStack->setCurrentWidget(m_positionMotion1DWidget);
+                m_positionMotion1DWidget->setMotionPreview2DFromPreset(
+                        preset, markers, cycleMs);
+            }
             else if (m_positionPathWidget)
             {
                 m_positionMotionStack->setCurrentWidget(m_positionPathWidget);
-                if (PTPositionFxEngine::motionUsesCustomData(motion))
-                    m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
-                else
-                    m_positionPathWidget->setOrbitPreview(motion, 1.0, 1.0, balls, cycleMs);
+                m_positionPathWidget->setOrbitPreviewFromPreset(preset, balls, cycleMs);
             }
         }
         else

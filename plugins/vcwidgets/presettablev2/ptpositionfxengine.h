@@ -56,8 +56,8 @@ public:
                                                       int headOffsetDeg = 0);
 
     /**
-     * Map dimmer-wave iterator (rad) into orbit phase when inside waveWidth window.
-     * Returns false outside the window (fixture stays at base).
+     * Map dimmer-wave iterator (rad) into orbit phase.
+     * Outside waveWidth window, hold the loop start/end phase instead of falling back to base.
      */
     static bool orbitPhaseFromIterator(float iteratorRad, int waveWidthDeg, double& outPhaseRad);
 

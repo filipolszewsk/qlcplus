@@ -165,6 +165,8 @@ float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection dir
             return -unitOffset;
         case PTPositionMotionDirection::AlternateWings:
             return (spatial.wingIndex % 2 == 1) ? -unitOffset : unitOffset;
+        case PTPositionMotionDirection::ReverseAlternateWings:
+            return (spatial.wingIndex % 2 == 1) ? unitOffset : -unitOffset;
         case PTPositionMotionDirection::SymmetricPairs:
             return (spatial.localIndex % 2 == 1) ? -unitOffset : unitOffset;
         default:
@@ -417,8 +419,16 @@ bool PTPositionFxEngine::orbitPhaseFromIterator(float iteratorRad, int waveWidth
                                                 double& outPhaseRad)
 {
     const float widthRad = (float(qBound(1, waveWidthDeg, 360)) / 360.0f) * float(M_PI * 2.0);
-    if (widthRad <= 0.0f || iteratorRad >= widthRad)
-        return false;
+    if (widthRad <= 0.0f)
+    {
+        outPhaseRad = 0.0;
+        return true;
+    }
+    if (iteratorRad >= widthRad)
+    {
+        outPhaseRad = 2.0 * M_PI;
+        return true;
+    }
 
     outPhaseRad = double(iteratorRad / widthRad) * 2.0 * M_PI;
     return true;
@@ -434,6 +444,8 @@ double PTPositionFxEngine::applyMotionDirection(double phaseRad,
             return -phaseRad;
         case PTPositionMotionDirection::AlternateWings:
             return (spatial.wingIndex % 2 == 1) ? -phaseRad : phaseRad;
+        case PTPositionMotionDirection::ReverseAlternateWings:
+            return (spatial.wingIndex % 2 == 1) ? phaseRad : -phaseRad;
         case PTPositionMotionDirection::SymmetricPairs:
             return (spatial.localIndex % 2 == 1) ? -phaseRad : phaseRad;
         default:

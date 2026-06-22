@@ -1490,6 +1490,8 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_stagedMultiFxSourceSnapshotValid.fill(false);
         m_stagedMultiFxPhaseAnchorMs.resize(m_outputs.size());
         m_stagedMultiFxPhaseAnchorMs.fill(0);
+        m_stagedMultiFxSyncedPhaseAnchorMs.resize(m_outputs.size());
+        m_stagedMultiFxSyncedPhaseAnchorMs.fill(0);
         m_stagedSecondaryValid.resize(m_outputs.size());
         m_stagedSecondaryValid.fill(false);
         m_stagedSweepValid.resize(m_outputs.size());
@@ -1516,6 +1518,8 @@ void PresetTableV2Widget::setOutputs(const QVector<PTOutput>& outs)
         m_liveMultiFxSourceSnapshotValid.fill(false);
         m_liveMultiFxPhaseAnchorMs.resize(m_outputs.size());
         m_liveMultiFxPhaseAnchorMs.fill(0);
+        m_liveMultiFxSyncedPhaseAnchorMs.resize(m_outputs.size());
+        m_liveMultiFxSyncedPhaseAnchorMs.fill(0);
         m_multiFxElapsedMs.resize(m_outputs.size());
         m_multiFxStagedElapsedMs.resize(m_outputs.size());
         m_multiFxLastCycleMs.resize(m_outputs.size());
@@ -5711,6 +5715,8 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_liveMultiFxSourceSnapshotValid.fill(false);
     m_liveMultiFxPhaseAnchorMs.resize(m_outputs.size());
     m_liveMultiFxPhaseAnchorMs.fill(0);
+    m_liveMultiFxSyncedPhaseAnchorMs.resize(m_outputs.size());
+    m_liveMultiFxSyncedPhaseAnchorMs.fill(0);
     m_stagedMultiFxSourceEngineId.resize(m_outputs.size());
     m_stagedMultiFxSourceEngineId.fill(VCWidget::invalidId());
     m_stagedMultiFxSourceSnapshot.resize(m_outputs.size());
@@ -5718,6 +5724,8 @@ void PresetTableV2Widget::syncLiveTransitionFromOutputs()
     m_stagedMultiFxSourceSnapshotValid.fill(false);
     m_stagedMultiFxPhaseAnchorMs.resize(m_outputs.size());
     m_stagedMultiFxPhaseAnchorMs.fill(0);
+    m_stagedMultiFxSyncedPhaseAnchorMs.resize(m_outputs.size());
+    m_stagedMultiFxSyncedPhaseAnchorMs.fill(0);
     m_liveSecondaryRow.resize(m_outputs.size());
     m_stagedRow.resize(m_outputs.size());
     m_stagedRow.fill(-1);
@@ -6349,17 +6357,48 @@ bool PresetTableV2Widget::multiFxUsesSourceClockLocked(int outputIdx, bool stage
             && m_liveMultiFxPhaseAnchorMs.at(outputIdx) > 0;
 }
 
-quint32 PresetTableV2Widget::multiFxElapsedMsForOutputLocked(int outputIdx, bool staged) const
+void PresetTableV2Widget::syncMultiFxSourceElapsedLocked(int outputIdx, bool staged,
+                                                         quint32 cycleMs)
 {
+    if (outputIdx < 0)
+        return;
+
+    QVector<quint32>& elapsed = staged ? m_multiFxStagedElapsedMs : m_multiFxElapsedMs;
+    QVector<quint32>& lastCycle = staged ? m_multiFxStagedLastCycleMs : m_multiFxLastCycleMs;
+    QVector<quint64>& syncedAnchors = staged
+            ? m_stagedMultiFxSyncedPhaseAnchorMs : m_liveMultiFxSyncedPhaseAnchorMs;
+    const QVector<quint64>& anchors = staged
+            ? m_stagedMultiFxPhaseAnchorMs : m_liveMultiFxPhaseAnchorMs;
+
+    while (elapsed.size() <= outputIdx)
+        elapsed.append(0);
+    while (lastCycle.size() <= outputIdx)
+        lastCycle.append(0);
+    while (syncedAnchors.size() <= outputIdx)
+        syncedAnchors.append(0);
+
+    cycleMs = qMax(quint32(1), cycleMs);
+
     if (multiFxUsesSourceClockLocked(outputIdx, staged))
     {
-        const QVector<quint64>& anchors = staged
-                ? m_stagedMultiFxPhaseAnchorMs : m_liveMultiFxPhaseAnchorMs;
         const quint64 anchor = anchors.at(outputIdx);
-        const quint64 now = quint64(QDateTime::currentMSecsSinceEpoch());
-        return now > anchor ? quint32(now - anchor) : 0;
+        if (syncedAnchors.at(outputIdx) != anchor || lastCycle.at(outputIdx) == 0)
+        {
+            const quint64 now = quint64(QDateTime::currentMSecsSinceEpoch());
+            elapsed[outputIdx] = now > anchor
+                    ? quint32((now - anchor) % quint64(cycleMs + 1))
+                    : 0;
+            syncedAnchors[outputIdx] = anchor;
+            lastCycle[outputIdx] = cycleMs;
+            return;
+        }
     }
 
+    ensurePhaseStableCycleLocked(elapsed, lastCycle, outputIdx, cycleMs);
+}
+
+quint32 PresetTableV2Widget::multiFxElapsedMsForOutputLocked(int outputIdx, bool staged) const
+{
     const QVector<quint32>& elapsed = staged ? m_multiFxStagedElapsedMs : m_multiFxElapsedMs;
     return outputIdx >= 0 && outputIdx < elapsed.size() ? elapsed.at(outputIdx) : 0;
 }
@@ -6966,8 +7005,11 @@ void PresetTableV2Widget::syncMultiFxPhaseOnCrossfadeMotionLocked()
         m_multiFxStagedLastCycleMs.append(0);
     while (m_stagedMultiFxPhaseAnchorMs.size() < m_outputs.size())
         m_stagedMultiFxPhaseAnchorMs.append(0);
+    while (m_stagedMultiFxSyncedPhaseAnchorMs.size() < m_outputs.size())
+        m_stagedMultiFxSyncedPhaseAnchorMs.append(0);
     m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
     m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+    m_stagedMultiFxSyncedPhaseAnchorMs.fill(0, m_outputs.size());
     const quint64 now = quint64(QDateTime::currentMSecsSinceEpoch());
     for (int o = 0; o < m_outputs.size(); ++o)
     {
@@ -7902,9 +7944,12 @@ bool PresetTableV2Widget::multiButtonActivateStagedFromSourceAndPhase(
             m_stagedMultiFxSourceSnapshotValid.append(false);
         while (m_stagedMultiFxPhaseAnchorMs.size() <= outputIdx)
             m_stagedMultiFxPhaseAnchorMs.append(0);
+        while (m_stagedMultiFxSyncedPhaseAnchorMs.size() <= outputIdx)
+            m_stagedMultiFxSyncedPhaseAnchorMs.append(0);
         m_stagedMultiFxSourceEngineId[outputIdx] = sourceEngineId;
         m_stagedMultiFxPhaseAnchorMs[outputIdx] =
                 sourceEngineId != VCWidget::invalidId() ? effectivePhaseAnchorMs : 0;
+        m_stagedMultiFxSyncedPhaseAnchorMs[outputIdx] = 0;
         if (sourceEngineId != VCWidget::invalidId() && sourceSnapshotValid)
         {
             m_stagedMultiFxSourceSnapshot[outputIdx] = sourceSnapshot;
@@ -8168,9 +8213,12 @@ bool PresetTableV2Widget::multiButtonActivateFromSourceAndPhase(
                 m_stagedMultiFxSourceSnapshotValid.append(false);
             while (m_stagedMultiFxPhaseAnchorMs.size() <= outputIdx)
                 m_stagedMultiFxPhaseAnchorMs.append(0);
+            while (m_stagedMultiFxSyncedPhaseAnchorMs.size() <= outputIdx)
+                m_stagedMultiFxSyncedPhaseAnchorMs.append(0);
             m_stagedMultiFxSourceEngineId[outputIdx] = sourceEngineId;
             m_stagedMultiFxPhaseAnchorMs[outputIdx] =
                     sourceEngineId != VCWidget::invalidId() ? effectivePhaseAnchorMs : 0;
+            m_stagedMultiFxSyncedPhaseAnchorMs[outputIdx] = 0;
             if (sourceEngineId != VCWidget::invalidId() && sourceSnapshotValid)
             {
                 m_stagedMultiFxSourceSnapshot[outputIdx] = sourceSnapshot;
@@ -8195,9 +8243,12 @@ bool PresetTableV2Widget::multiButtonActivateFromSourceAndPhase(
             m_liveMultiFxSourceSnapshotValid.append(false);
         while (m_liveMultiFxPhaseAnchorMs.size() <= outputIdx)
             m_liveMultiFxPhaseAnchorMs.append(0);
+        while (m_liveMultiFxSyncedPhaseAnchorMs.size() <= outputIdx)
+            m_liveMultiFxSyncedPhaseAnchorMs.append(0);
         m_liveMultiFxSourceEngineId[outputIdx] = sourceEngineId;
         m_liveMultiFxPhaseAnchorMs[outputIdx] =
                 sourceEngineId != VCWidget::invalidId() ? effectivePhaseAnchorMs : 0;
+        m_liveMultiFxSyncedPhaseAnchorMs[outputIdx] = 0;
         if (sourceEngineId != VCWidget::invalidId() && sourceSnapshotValid)
         {
             m_liveMultiFxSourceSnapshot[outputIdx] = sourceSnapshot;
@@ -8215,6 +8266,8 @@ bool PresetTableV2Widget::multiButtonActivateFromSourceAndPhase(
             m_stagedMultiFxSourceEngineId[outputIdx] = VCWidget::invalidId();
         if (outputIdx < m_stagedMultiFxPhaseAnchorMs.size())
             m_stagedMultiFxPhaseAnchorMs[outputIdx] = 0;
+        if (outputIdx < m_stagedMultiFxSyncedPhaseAnchorMs.size())
+            m_stagedMultiFxSyncedPhaseAnchorMs[outputIdx] = 0;
         bumpMultiButtonStateRevisionLocked(
                 outputIdx, PresetTableV2MultiButtonTargetIface::MultiFxPreset);
         clearCrossfadeSessionIfNoStaged();
@@ -8745,6 +8798,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_liveMultiFxSourceSnapshotValid.append(false);
             while (m_liveMultiFxPhaseAnchorMs.size() <= o)
                 m_liveMultiFxPhaseAnchorMs.append(0);
+            while (m_liveMultiFxSyncedPhaseAnchorMs.size() <= o)
+                m_liveMultiFxSyncedPhaseAnchorMs.append(0);
             if (o < m_stagedMultiFxSourceEngineId.size())
                 m_liveMultiFxSourceEngineId[o] = m_stagedMultiFxSourceEngineId[o];
             else
@@ -8757,6 +8812,10 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
             m_liveMultiFxPhaseAnchorMs[o] =
                     o < m_stagedMultiFxPhaseAnchorMs.size()
                     ? m_stagedMultiFxPhaseAnchorMs[o] : 0;
+            m_liveMultiFxSyncedPhaseAnchorMs[o] =
+                    o < m_stagedMultiFxSyncedPhaseAnchorMs.size()
+                    ? m_stagedMultiFxSyncedPhaseAnchorMs[o]
+                    : m_liveMultiFxPhaseAnchorMs[o];
             if (o < m_multiFxElapsedMs.size() && o < m_multiFxStagedElapsedMs.size())
                 m_multiFxElapsedMs[o] = m_multiFxStagedElapsedMs[o];
             m_stagedMultiFxValid[o] = false;
@@ -8768,6 +8827,8 @@ void PresetTableV2Widget::promoteStagedToLiveLocked()
                 m_stagedMultiFxSourceSnapshotValid[o] = false;
             if (o < m_stagedMultiFxPhaseAnchorMs.size())
                 m_stagedMultiFxPhaseAnchorMs[o] = 0;
+            if (o < m_stagedMultiFxSyncedPhaseAnchorMs.size())
+                m_stagedMultiFxSyncedPhaseAnchorMs[o] = 0;
             if (o < m_outputs.size() && o < m_liveMultiFxPreset.size())
                 m_outputs[o].multiFxPresetIndex = m_liveMultiFxPreset[o];
             bumpMultiButtonStateRevisionLocked(
@@ -11804,21 +11865,13 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
                         multiFxGlobalSettingsLocked(o, false, global);
                 const quint32 cycleMs = qMax(
                         quint32(1), cycleDurationMsLocked(multiFxGlobal, preset));
-                ensurePhaseStableCycleLocked(m_multiFxElapsedMs, m_multiFxLastCycleMs, o, cycleMs);
-                if (multiFxUsesSourceClockLocked(o, false))
-                {
-                    m_multiFxElapsedMs[o] = multiFxElapsedMsForOutputLocked(o, false)
-                            % (cycleMs + 1);
-                }
-                else
-                {
-                    m_multiFxElapsedMs[o] += MasterTimer::tick();
-                    // Match native EFXFixture wrap (strict >, reset to 0) so the loop
-                    // period equals the native EFX (loopDuration + 1 tick) and stays
-                    // frame-locked to a cue-list EFX of the same duration.
-                    if (m_multiFxElapsedMs[o] > cycleMs)
-                        m_multiFxElapsedMs[o] = 0;
-                }
+                syncMultiFxSourceElapsedLocked(o, false, cycleMs);
+                m_multiFxElapsedMs[o] += MasterTimer::tick();
+                // Match native EFXFixture wrap (strict >, reset to 0) so the loop
+                // period equals the native EFX (loopDuration + 1 tick) and stays
+                // frame-locked to a cue-list EFX of the same duration.
+                if (m_multiFxElapsedMs[o] > cycleMs)
+                    m_multiFxElapsedMs[o] = 0;
             }
             const int stagedMultiFxIdx = stagedMultiFxPresetIndexLocked(o);
             if (hasStagedMultiFxPresetLocked(o))
@@ -11839,15 +11892,14 @@ void PresetTableV2Widget::writeDMX(MasterTimer* timer, QList<Universe*> universe
                     {
                         m_stagedMultiFxPhaseAnchorMs[o] =
                                 quint64(QDateTime::currentMSecsSinceEpoch());
+                        while (m_stagedMultiFxSyncedPhaseAnchorMs.size() <= o)
+                            m_stagedMultiFxSyncedPhaseAnchorMs.append(0);
+                        m_stagedMultiFxSyncedPhaseAnchorMs[o] = 0;
                     }
-                }
-                else if (multiFxUsesSourceClockLocked(o, true))
-                {
-                    m_multiFxStagedElapsedMs[o] =
-                            multiFxElapsedMsForOutputLocked(o, true) % (stagedCycleMs + 1);
                 }
                 else
                 {
+                    syncMultiFxSourceElapsedLocked(o, true, stagedCycleMs);
                     m_multiFxStagedElapsedMs[o] += MasterTimer::tick();
                     if (m_multiFxStagedElapsedMs[o] > stagedCycleMs)
                         m_multiFxStagedElapsedMs[o] = 0;
@@ -11911,6 +11963,8 @@ void PresetTableV2Widget::slotInputValueChanged(quint32 universe, quint32 channe
             m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
             m_multiFxLastCycleMs.fill(0, m_outputs.size());
             m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+            m_liveMultiFxSyncedPhaseAnchorMs.fill(0, m_outputs.size());
+            m_stagedMultiFxSyncedPhaseAnchorMs.fill(0, m_outputs.size());
             const quint64 now = quint64(QDateTime::currentMSecsSinceEpoch());
             for (int o = 0; o < m_outputs.size(); ++o)
             {
@@ -12393,6 +12447,8 @@ void PresetTableV2Widget::slotKeyPressed(const QKeySequence& keySequence)
         m_multiFxStagedElapsedMs.fill(0, m_outputs.size());
         m_multiFxLastCycleMs.fill(0, m_outputs.size());
         m_multiFxStagedLastCycleMs.fill(0, m_outputs.size());
+        m_liveMultiFxSyncedPhaseAnchorMs.fill(0, m_outputs.size());
+        m_stagedMultiFxSyncedPhaseAnchorMs.fill(0, m_outputs.size());
         const quint64 now = quint64(QDateTime::currentMSecsSinceEpoch());
         for (int o = 0; o < m_outputs.size(); ++o)
         {

@@ -316,7 +316,10 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     if (liveByColumn.contains(PTEfxCol::InputPositionMotion))
         p.positionMotion = int(val(PTEfxCol::InputPositionMotion)) % 9;
     if (liveByColumn.contains(PTEfxCol::InputPositionMotionDir))
-        p.positionMotionDirection = int(val(PTEfxCol::InputPositionMotionDir)) % 4;
+        p.positionMotionDirection = qBound(0,
+                int(val(PTEfxCol::InputPositionMotionDir))
+                * int(PTPositionMotionDirection::ReverseAlternateWings) / 255,
+                int(PTPositionMotionDirection::ReverseAlternateWings));
     if (liveByColumn.contains(PTEfxCol::InputPosition1DBuiltinMode))
         p.position1DBuiltinMode = int(val(PTEfxCol::InputPosition1DBuiltinMode)) % 2;
     if (liveByColumn.contains(PTEfxCol::InputChannel1DTarget))

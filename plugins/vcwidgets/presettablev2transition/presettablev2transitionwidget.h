@@ -615,6 +615,7 @@ private:
     PTDimmerWaveCurveWidget* m_curveWidget = nullptr;
     QTimer*                  m_previewRefreshTimer = nullptr;
     QLabel*                  m_positionPreviewLabel = nullptr;
+    class QToolButton*       m_positionPreviewModeButton = nullptr;
     class QStackedWidget*    m_positionMotionStack = nullptr;
     class PTPositionMotion1DPreviewWidget* m_positionMotion1DWidget = nullptr;
     class PTPositionPathPreviewWidget* m_positionPathWidget = nullptr;
