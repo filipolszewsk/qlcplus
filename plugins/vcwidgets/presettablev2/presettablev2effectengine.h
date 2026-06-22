@@ -86,6 +86,12 @@ enum class PTTransitionMode
     Channel1D = 5
 };
 
+enum class PTMultiFxInterpolationSourceMode : int
+{
+    Dynamic = 0,
+    Static = 1
+};
+
 enum class PTChannel1DTarget : int
 {
     Dimmer = 0,
@@ -242,6 +248,11 @@ struct PTTransitionPreset
     int                channel1DHigh = 255;
     int                channel1DAmount = 255;
     int                channel1DCustomColumn = 0;
+    /** MultiFX Interpolation route only: 0=target table live primary/secondary, 1=manual rows below. */
+    int                multiFxInterpolationSourceMode =
+            int(PTMultiFxInterpolationSourceMode::Dynamic);
+    int                multiFxInterpolationPrimaryRow = -1;
+    int                multiFxInterpolationSecondaryRow = -1;
 };
 
 struct PTSpatialChaseOutput

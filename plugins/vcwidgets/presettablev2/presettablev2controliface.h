@@ -64,6 +64,14 @@ public:
     /** True when linked table stores pan/tilt position presets (Position Mode). */
     virtual bool tableUsesPositionMode() const { return false; }
 
+    /** Preset row labels for cross-widget editors such as MultiFX Static Interpolation. */
+    virtual int presetTableRowCountForPresetOverride() const { return 0; }
+    virtual QString presetTableRowNameForPresetOverride(int rowIdx) const
+    {
+        Q_UNUSED(rowIdx);
+        return QString();
+    }
+
     /** All fixture-group grid points (Position / FixtureGroup mode). */
     virtual QList<QLCPoint> fixtureGroupPoints() const { return QList<QLCPoint>(); }
 
@@ -80,7 +88,7 @@ public:
     }
 };
 
-Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.5")
+Q_DECLARE_INTERFACE(PresetTableV2ControlIface, "org.qlcplus.PresetTableV2ControlIface/1.6")
 
 class PresetTableV2PreviewStateIface
 {

@@ -312,6 +312,8 @@ public:
                                      PTSpatialGridPreview& out) const override;
     double crossfadePreviewProgress01(bool* active) const override;
     bool tableUsesPositionMode() const override;
+    int presetTableRowCountForPresetOverride() const override;
+    QString presetTableRowNameForPresetOverride(int rowIdx) const override;
     QList<QLCPoint> fixtureGroupPoints() const override;
     PTPositionValue positionForPreview(int tableRow, int outputIdx, int selectionIdx,
                                        const QLCPoint& pt) const override;
@@ -625,6 +627,8 @@ private:
                                                         int outputIdx = -1,
                                                         const QLCPoint* point = nullptr,
                                                         bool staged = false) const;
+    PTTransitionMode multiFxRouteModeAtIndexLocked(int presetIndex, int outputIdx,
+                                                   bool staged) const;
     PTGlobalEffectSettings multiFxGlobalSettingsLocked(int outputIdx, bool staged,
                                                        const PTGlobalEffectSettings& fallback) const;
     bool multiFxUsesSourceClockLocked(int outputIdx, bool staged) const;

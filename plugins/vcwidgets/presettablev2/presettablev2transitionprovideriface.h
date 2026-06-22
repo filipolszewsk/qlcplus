@@ -34,7 +34,8 @@ enum class PTMultiFxTargetLayerKind : int
 {
     Auto = 0,
     Channel1D = 1,
-    PositionMotion = 2
+    PositionMotion = 2,
+    Interpolation = 3
 };
 
 struct PTMultiFxTargetOutputRoute

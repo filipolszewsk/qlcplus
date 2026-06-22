@@ -192,6 +192,10 @@ private:
         ColChannel1DHigh,
         ColChannel1DAmount,
         ColChannel1DCustomColumn,
+        ColMultiFxTargetMode,
+        ColMultiFxInterpolationSource,
+        ColMultiFxInterpolationPrimary,
+        ColMultiFxInterpolationSecondary,
         ColCount
     };
 
@@ -484,6 +488,7 @@ private:
     void applyDefaultColumnWidths(QTreeWidget* table);
     QString columnTooltipForCol(int col) const;
     QWidget* createEditorForColumn(QWidget* parent, int col) const;
+    QWidget* createEditorForItemColumn(QWidget* parent, QTreeWidgetItem* item, int col) const;
     QVariant normalizedColumnValue(int col, const QString& raw) const;
     QString displayTextForColumn(int col, const QVariant& value) const;
     QString comboDisplayTextForColumn(int col, const QVariant& value) const;

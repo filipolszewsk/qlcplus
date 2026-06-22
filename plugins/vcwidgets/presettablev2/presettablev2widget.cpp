@@ -6318,6 +6318,49 @@ PTTransitionPreset PresetTableV2Widget::multiFxPresetAtIndexStrictLocked(
     return finalizeFromSnapshot(applyLive(preset));
 }
 
+PTTransitionMode PresetTableV2Widget::multiFxRouteModeAtIndexLocked(
+        int presetIndex, int outputIdx, bool staged) const
+{
+    const PTTransitionProviderSnapshot* snapshot = &m_transitionProviderSnapshot;
+    if (outputIdx >= 0)
+    {
+        if (staged
+                && outputIdx < m_stagedMultiFxSourceSnapshotValid.size()
+                && m_stagedMultiFxSourceSnapshotValid.at(outputIdx)
+                && outputIdx < m_stagedMultiFxSourceSnapshot.size())
+        {
+            snapshot = &m_stagedMultiFxSourceSnapshot.at(outputIdx);
+        }
+        else if (!staged
+                 && outputIdx < m_liveMultiFxSourceSnapshotValid.size()
+                 && m_liveMultiFxSourceSnapshotValid.at(outputIdx)
+                 && outputIdx < m_liveMultiFxSourceSnapshot.size())
+        {
+            snapshot = &m_liveMultiFxSourceSnapshot.at(outputIdx);
+        }
+    }
+
+    if (presetIndex < 0 || presetIndex >= snapshot->multiFxTargetRoutes.size())
+        return m_mode == PTMode::Position ? PTTransitionMode::PositionMotion
+                                          : PTTransitionMode::Channel1D;
+
+    const PTMultiFxTargetTableRoute* route =
+            transitionSnapshotMultiFxRouteForThisTableLocked(*snapshot, presetIndex);
+    if (!route)
+        return m_mode == PTMode::Position ? PTTransitionMode::PositionMotion
+                                          : PTTransitionMode::Channel1D;
+
+    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(route->layerKind);
+    if (kind == PTMultiFxTargetLayerKind::Interpolation)
+        return PTTransitionMode::Continuous;
+    if (kind == PTMultiFxTargetLayerKind::PositionMotion)
+        return PTTransitionMode::PositionMotion;
+    if (kind == PTMultiFxTargetLayerKind::Channel1D)
+        return PTTransitionMode::Channel1D;
+    return m_mode == PTMode::Position ? PTTransitionMode::PositionMotion
+                                      : PTTransitionMode::Channel1D;
+}
+
 PTGlobalEffectSettings PresetTableV2Widget::multiFxGlobalSettingsLocked(
         int outputIdx, bool staged, const PTGlobalEffectSettings& fallback) const
 {
@@ -7284,6 +7327,21 @@ double PresetTableV2Widget::crossfadePreviewProgress01(bool* active) const
     if (!isActive)
         return 0.0;
     return qBound(0.0, crossfadeProgress01Locked(0), 1.0);
+}
+
+int PresetTableV2Widget::presetTableRowCountForPresetOverride() const
+{
+    QMutexLocker lk(&m_stateMutex);
+    return m_rows.size();
+}
+
+QString PresetTableV2Widget::presetTableRowNameForPresetOverride(int rowIdx) const
+{
+    QMutexLocker lk(&m_stateMutex);
+    if (rowIdx < 0 || rowIdx >= m_rows.size())
+        return QString();
+    const QString name = m_rows.at(rowIdx).name;
+    return name.isEmpty() ? tr("Preset %1").arg(rowIdx + 1) : name;
 }
 
 int PresetTableV2Widget::multiButtonOutputCount() const
@@ -9792,32 +9850,77 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         if (mixMultiFx)
         {
             const int liveMultiFxIdx = liveMultiFxPresetIndexLocked(outputIdx);
+            const PTTransitionMode liveMultiFxRouteMode =
+                    multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, false);
             const PTTransitionPreset pointMultiFxPreset = liveMultiFxIdx >= 0
                     ? multiFxPresetAtIndexStrictLocked(liveMultiFxIdx, outputIdx, &pt, false)
                     : multiFxPreset;
-            const PTSpatialFixturePlan& pointMultiFxPlan =
-                    oneDPlanForPreset(pointMultiFxPreset);
-            QVector<uchar> effectiveMultiValues = pointMultiFxPreset.enabled
-                    ? applyChannel1DFxToValuesLocked(
-                        outputIdx, pt, normalValues, pointMultiFxPreset, multiFxGlobal, gridSize,
-                        pointMultiFxPlan, qMax(1, pointMultiFxPlan.count()),
-                        multiFxElapsedMs, fxi)
-                    : normalValues;
+            auto multiFxInterpolationValues = [&](const PTTransitionPreset& p,
+                                                  double dimmerValue,
+                                                  const PTGlobalEffectSettings& g) {
+                if (!p.enabled)
+                    return normalValues;
+                int fromRow = primaryRow;
+                int toRow = secondaryRow;
+                if (p.multiFxInterpolationSourceMode
+                        == int(PTMultiFxInterpolationSourceMode::Static))
+                {
+                    fromRow = p.multiFxInterpolationPrimaryRow;
+                    toRow = p.multiFxInterpolationSecondaryRow;
+                }
+                if (toRow < 0 || toRow >= m_rows.size())
+                    return normalValues;
+                const QVector<uchar> fromVals = valuesForPoint(fromRow, &pointPriVals);
+                const QVector<uchar> toVals = valuesForPoint(toRow, &pointSecVals);
+                return continuousOutputValues(
+                            m_columns, fromVals, toVals, p, dimmerValue, g.intensity);
+            };
+            QVector<uchar> effectiveMultiValues = normalValues;
+            if (pointMultiFxPreset.enabled)
+            {
+                if (liveMultiFxRouteMode == PTTransitionMode::Continuous)
+                {
+                    effectiveMultiValues = multiFxInterpolationValues(
+                                pointMultiFxPreset, double(multiFxDimmer), multiFxGlobal);
+                }
+                else
+                {
+                    const PTSpatialFixturePlan& pointMultiFxPlan =
+                            oneDPlanForPreset(pointMultiFxPreset);
+                    effectiveMultiValues = applyChannel1DFxToValuesLocked(
+                                outputIdx, pt, normalValues, pointMultiFxPreset, multiFxGlobal,
+                                gridSize, pointMultiFxPlan, qMax(1, pointMultiFxPlan.count()),
+                                multiFxElapsedMs, fxi);
+                }
+            }
             if (hasStagedMultiFx)
             {
+                const PTTransitionMode stagedMultiFxRouteMode =
+                        multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, true);
                 const PTTransitionPreset pointStagedMultiFxPreset = stagedMultiFxIdx >= 0
                         ? multiFxPresetAtIndexStrictLocked(stagedMultiFxIdx, outputIdx, &pt,
                                                            true)
                         : stagedMultiFxPreset;
-                const PTSpatialFixturePlan& pointStagedMultiFxPlan =
-                        oneDPlanForPreset(pointStagedMultiFxPreset);
-                const QVector<uchar> stagedMultiValues = pointStagedMultiFxPreset.enabled
-                        ? applyChannel1DFxToValuesLocked(
-                            outputIdx, pt, normalValues, pointStagedMultiFxPreset, stagedMultiFxGlobal,
-                            gridSize, pointStagedMultiFxPlan,
-                            qMax(1, pointStagedMultiFxPlan.count()),
-                            stagedMultiFxElapsedMs, fxi)
-                        : normalValues;
+                QVector<uchar> stagedMultiValues = normalValues;
+                if (pointStagedMultiFxPreset.enabled)
+                {
+                    if (stagedMultiFxRouteMode == PTTransitionMode::Continuous)
+                    {
+                        stagedMultiValues = multiFxInterpolationValues(
+                                    pointStagedMultiFxPreset,
+                                    double(stagedMultiFxDimmer), stagedMultiFxGlobal);
+                    }
+                    else
+                    {
+                        const PTSpatialFixturePlan& pointStagedMultiFxPlan =
+                                oneDPlanForPreset(pointStagedMultiFxPreset);
+                        stagedMultiValues = applyChannel1DFxToValuesLocked(
+                                    outputIdx, pt, normalValues, pointStagedMultiFxPreset,
+                                    stagedMultiFxGlobal, gridSize, pointStagedMultiFxPlan,
+                                    qMax(1, pointStagedMultiFxPlan.count()),
+                                    stagedMultiFxElapsedMs, fxi);
+                    }
+                }
                 effectiveMultiValues = blendRowValues(effectiveMultiValues, stagedMultiValues,
                                                        morphProgress);
             }
@@ -10714,10 +10817,50 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 auto applyMultiFx = [&](const PTPositionValue& input,
                                         const PTTransitionPreset& mfPreset,
                                         const PTGlobalEffectSettings& mfGlobal,
-                                        quint32 mfElapsedMs) {
+                                        quint32 mfElapsedMs,
+                                        PTTransitionMode routeMode) {
                     PTPositionValue outPos = input;
-                    if (!mfPreset.enabled
-                            || mfPreset.positionMotion == int(PTPositionMotion::Off))
+                    if (!mfPreset.enabled)
+                        return outPos;
+                    if (routeMode == PTTransitionMode::Continuous)
+                    {
+                        int fromRow = -1;
+                        int toRow = secondaryRow;
+                        if (mfPreset.multiFxInterpolationSourceMode
+                                == int(PTMultiFxInterpolationSourceMode::Static))
+                        {
+                            fromRow = mfPreset.multiFxInterpolationPrimaryRow;
+                            toRow = mfPreset.multiFxInterpolationSecondaryRow;
+                        }
+                        if (toRow < 0 || toRow >= m_rows.size())
+                            return outPos;
+                        PTPositionValue fromPos = input;
+                        if (fromRow >= 0 && fromRow < m_rows.size())
+                        {
+                            const PTPositionValue explicitFrom =
+                                    effectivePositionValue(fromRow, o, sf.point);
+                            if (explicitFrom.valid)
+                                fromPos = explicitFrom;
+                        }
+                        const PTPositionValue toPos =
+                                effectivePositionValue(toRow, o, sf.point);
+                        if (!fromPos.valid || !toPos.valid)
+                            return outPos;
+                        const PTSpatialFixturePlan mfPlan = spatialPlanForPreset(mfPreset);
+                        const int mfSerialCount = qMax(1, mfPlan.count());
+                        const int serialIdx = mfPlan.indexByPoint.value(sf.point, 0);
+                        const quint32 mfCycle = qMax(
+                                quint32(1), cycleDurationMsLocked(mfGlobal, mfPreset));
+                        const float dimmer = matrixDimmerAtPoint(
+                                sf.point, mfElapsedMs, mfCycle, mfPreset, mfGlobal,
+                                gridSize, serialIdx, mfSerialCount);
+                        const PTPositionValue interpolated =
+                                PTPositionConverter::blendPositions(
+                                    fromPos, toPos, double(dimmer));
+                        return PTPositionConverter::blendPositions(
+                                    input, interpolated, double(m_multiFxBlend) / 255.0);
+                    }
+                    if (mfPreset.positionMotion == int(PTPositionMotion::Off))
                         return outPos;
                     const quint32 mfCycle = qMax(
                             quint32(1), cycleDurationMsLocked(mfGlobal, mfPreset));
@@ -10768,18 +10911,24 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                     return outPos;
                 };
 
+                const int liveMfIdx = liveMultiFxPresetIndexLocked(o);
+                const PTTransitionMode liveMfRouteMode =
+                        multiFxRouteModeAtIndexLocked(liveMfIdx, o, false);
                 const PTTransitionPreset liveMfPreset = multiFxPresetAtIndexStrictLocked(
-                        liveMultiFxPresetIndexLocked(o), o, &sf.point, false);
+                        liveMfIdx, o, &sf.point, false);
                 PTPositionValue liveMfOut = applyMultiFx(
                         base, liveMfPreset, multiFxGlobal,
-                        multiFxElapsedMsForOutputLocked(o, false));
+                        multiFxElapsedMsForOutputLocked(o, false), liveMfRouteMode);
                 if (hasStagedMultiFx)
                 {
+                    const int stagedMfIdx = stagedMultiFxPresetIndexLocked(o);
+                    const PTTransitionMode stagedMfRouteMode =
+                            multiFxRouteModeAtIndexLocked(stagedMfIdx, o, true);
                     const PTTransitionPreset stagedMfPreset = multiFxPresetAtIndexStrictLocked(
-                            stagedMultiFxPresetIndexLocked(o), o, &sf.point, true);
+                            stagedMfIdx, o, &sf.point, true);
                     const PTPositionValue stagedMfOut = applyMultiFx(
                             base, stagedMfPreset, stagedMultiFxGlobal,
-                            multiFxElapsedMsForOutputLocked(o, true));
+                            multiFxElapsedMsForOutputLocked(o, true), stagedMfRouteMode);
                     base = PTPositionConverter::blendPositions(liveMfOut, stagedMfOut,
                                                                xfProgress);
                 }
@@ -11369,29 +11518,79 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             }
             if (mixMultiFx)
             {
+                const int liveMultiFxIdx = liveMultiFxPresetIndexLocked(outputIdx);
+                const PTTransitionMode liveMultiFxRouteMode =
+                        multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, false);
                 const PTTransitionPreset pointMultiFxPreset = multiFxPresetForPoint(pt, false);
-                const PTSpatialFixturePlan& pointMultiFxPlan =
-                        oneDPlanForPreset(pointMultiFxPreset);
-                QVector<uchar> effectiveMultiValues = pointMultiFxPreset.enabled
-                        ? applyChannel1DFxToValuesLocked(
-                            outputIdx, pt, finalValues, pointMultiFxPreset, multiFxGlobal, gridSize,
-                            pointMultiFxPlan, qMax(1, pointMultiFxPlan.count()),
-                            multiFxElapsedMs, fxi)
-                        : finalValues;
+                auto multiFxInterpolationValues = [&](const PTTransitionPreset& p,
+                                                      double dimmerValue,
+                                                      const PTGlobalEffectSettings& g) {
+                    if (!p.enabled)
+                        return finalValues;
+                    int fromRow = blendFromRow;
+                    int toRow = blendToRow;
+                    if (p.multiFxInterpolationSourceMode
+                            == int(PTMultiFxInterpolationSourceMode::Static))
+                    {
+                        fromRow = p.multiFxInterpolationPrimaryRow;
+                        toRow = p.multiFxInterpolationSecondaryRow;
+                    }
+                    if (toRow < 0 || toRow >= m_rows.size())
+                        return finalValues;
+                    const QVector<uchar> fromVals = valuesForPoint(fromRow, &pointPriVals);
+                    const QVector<uchar> toVals = valuesForPoint(toRow, &pointSecVals);
+                    return continuousOutputValues(
+                                m_columns, fromVals, toVals, p, dimmerValue, g.intensity);
+                };
+                QVector<uchar> effectiveMultiValues = finalValues;
+                if (pointMultiFxPreset.enabled)
+                {
+                    if (liveMultiFxRouteMode == PTTransitionMode::Continuous)
+                    {
+                        effectiveMultiValues = multiFxInterpolationValues(
+                                    pointMultiFxPreset,
+                                    double(multiFxDimmerAtPoint(pt, multiFxElapsedMs)),
+                                    multiFxGlobal);
+                    }
+                    else
+                    {
+                        const PTSpatialFixturePlan& pointMultiFxPlan =
+                                oneDPlanForPreset(pointMultiFxPreset);
+                        effectiveMultiValues = applyChannel1DFxToValuesLocked(
+                                    outputIdx, pt, finalValues, pointMultiFxPreset,
+                                    multiFxGlobal, gridSize, pointMultiFxPlan,
+                                    qMax(1, pointMultiFxPlan.count()),
+                                    multiFxElapsedMs, fxi);
+                    }
+                }
                 if (hasStagedMultiFx)
                 {
+                    const PTTransitionMode stagedMultiFxRouteMode =
+                            multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, true);
                     const PTTransitionPreset pointStagedMultiFxPreset =
                             multiFxPresetForPoint(pt, true);
-                    const PTSpatialFixturePlan& pointStagedMultiFxPlan =
-                            oneDPlanForPreset(pointStagedMultiFxPreset);
-                    const QVector<uchar> stagedMultiValues = pointStagedMultiFxPreset.enabled
-                            ? applyChannel1DFxToValuesLocked(
-                                outputIdx, pt, finalValues, pointStagedMultiFxPreset,
-                                stagedMultiFxGlobal,
-                                gridSize, pointStagedMultiFxPlan,
-                                qMax(1, pointStagedMultiFxPlan.count()),
-                                stagedMultiFxElapsedMs, fxi)
-                            : finalValues;
+                    QVector<uchar> stagedMultiValues = finalValues;
+                    if (pointStagedMultiFxPreset.enabled)
+                    {
+                        if (stagedMultiFxRouteMode == PTTransitionMode::Continuous)
+                        {
+                            stagedMultiValues = multiFxInterpolationValues(
+                                        pointStagedMultiFxPreset,
+                                        double(stagedMultiFxDimmerAtPoint(
+                                                   pt, stagedMultiFxElapsedMs)),
+                                        stagedMultiFxGlobal);
+                        }
+                        else
+                        {
+                            const PTSpatialFixturePlan& pointStagedMultiFxPlan =
+                                    oneDPlanForPreset(pointStagedMultiFxPreset);
+                            stagedMultiValues = applyChannel1DFxToValuesLocked(
+                                        outputIdx, pt, finalValues, pointStagedMultiFxPreset,
+                                        stagedMultiFxGlobal, gridSize, pointStagedMultiFxPlan,
+                                        qMax(1, pointStagedMultiFxPlan.count()),
+                                        stagedMultiFxElapsedMs, fxi);
+                        }
+                    }
                     effectiveMultiValues = blendRowValues(effectiveMultiValues, stagedMultiValues,
                                                            morphProgress);
                 }
