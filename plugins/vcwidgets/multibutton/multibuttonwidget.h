@@ -289,6 +289,7 @@ public:
     VCWidget* createCopy(VCWidget* parent) override;
     void      toClipboardJson(QJsonObject &obj, const Doc *doc) const override;
     void      fromClipboardJson(const QJsonObject &obj, Doc *doc) override;
+    void      resize(const QSize& size) override;
     void      updateFeedback() override;
     bool      loadXML(QXmlStreamReader& root) override;
     bool      saveXML(QXmlStreamWriter* doc) override;

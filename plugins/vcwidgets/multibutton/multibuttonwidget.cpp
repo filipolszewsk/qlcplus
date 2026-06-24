@@ -77,6 +77,8 @@ static const QString KXMLWidgetEntryAppearance = QStringLiteral("WidgetEntryAppe
 
 static const int kWidgetBusPublishSuppressMs = 250;
 static const int kWidgetActionCacheMaxAgeMs = 250;
+static constexpr int kSingleButtonMinHeight = 15;
+static constexpr int kWidgetGridResolution = 5;
 static const QColor KDefaultTileBackground(58, 58, 58);
 
 static QString widgetBusPolicyToString(MultiButtonWidgetBusPolicy policy)
@@ -296,6 +298,7 @@ MultiButtonWidget::MultiButtonWidget(QWidget* parent, Doc* doc)
     setObjectName(MultiButtonWidget::staticMetaObject.className());
     setType(VCWidget::UnknownWidget);
     setCaption(QString());
+    setMinimumSize(QSize(20, kSingleButtonMinHeight));
     resize(QSize(120, 80));
     setAutoFillBackground(false);
     setAttribute(Qt::WA_TranslucentBackground, true);
@@ -572,6 +575,8 @@ void MultiButtonWidget::setWidgetLayout(MultiButtonLayout layout)
     if (m_layout == layout)
         return;
     m_layout = layout;
+    setMinimumSize(QSize(20, m_layout == MultiButtonLayout::Single
+                         ? kSingleButtonMinHeight : 20));
     recalcLayoutSize();
     update();
 }
@@ -614,7 +619,7 @@ void MultiButtonWidget::setSpreadTileWidth(int width)
 
 void MultiButtonWidget::setSpreadTileHeight(int height)
 {
-    m_spreadTileHeight = qBound(20, height, 400);
+    m_spreadTileHeight = qBound(kSingleButtonMinHeight, height, 400);
     recalcLayoutSize();
 }
 
@@ -1051,15 +1056,30 @@ QSize MultiButtonWidget::singleButtonSize() const
 {
     const int titleH = caption().isEmpty() ? 0 : 19;
     return QSize(qMax(40, m_spreadTileWidth),
-                 qMax(40, m_spreadTileHeight + titleH));
+                 qMax(kSingleButtonMinHeight, m_spreadTileHeight + titleH));
 }
 
 void MultiButtonWidget::recalcLayoutSize()
 {
     if (m_layout == MultiButtonLayout::Spread)
         resize(spreadTotalSize());
-    else
-        resize(singleButtonSize());
+}
+
+void MultiButtonWidget::resize(const QSize& size)
+{
+    if (m_layout != MultiButtonLayout::Single)
+    {
+        VCWidget::resize(size);
+        return;
+    }
+
+    setMinimumSize(QSize(20, kSingleButtonMinHeight));
+
+    QSize sz(size);
+    sz.setWidth(qMax(20, sz.width() - (sz.width() % kWidgetGridResolution)));
+    sz.setHeight(qMax(kSingleButtonMinHeight,
+                      sz.height() - (sz.height() % kWidgetGridResolution)));
+    QWidget::resize(sz);
 }
 
 bool MultiButtonWidget::widgetLinkEntryCountDynamic() const
@@ -3819,10 +3839,24 @@ void MultiButtonWidget::slotCheckChannelValues()
 
         if (!matches.isEmpty())
         {
-            if (m_currentIndex >= 0 && matches.contains(m_currentIndex))
+            if (m_layout == MultiButtonLayout::Single
+                    && m_monitorDisplayIndex >= 0
+                    && matches.contains(m_monitorDisplayIndex))
+            {
+                matchIdx = m_monitorDisplayIndex;
+            }
+            else if (m_monitorMatchIndex >= 0 && matches.contains(m_monitorMatchIndex))
+            {
+                matchIdx = m_monitorMatchIndex;
+            }
+            else if (m_currentIndex >= 0 && matches.contains(m_currentIndex))
+            {
                 matchIdx = m_currentIndex;
+            }
             else
+            {
                 matchIdx = matches.first();
+            }
         }
     }
 
@@ -3842,7 +3876,7 @@ void MultiButtonWidget::slotCheckChannelValues()
     }
 
     const int noMatchGraceCount = fastSingleLevelDisplay ? 7 : 3;
-    const int stableCount = (matchIdx < 0) ? 3 : (fastSingleLevelDisplay ? 1 : 2);
+    const int stableCount = (matchIdx < 0) ? 3 : (fastSingleLevelDisplay ? 3 : 2);
     if (m_pendingMonitorMatchCount < stableCount
             && matchIdx != m_monitorMatchIndex)
     {
@@ -3935,6 +3969,17 @@ void MultiButtonWidget::slotModeChanged(Doc::Mode mode)
 
 void MultiButtonWidget::mousePressEvent(QMouseEvent* e)
 {
+    if (mode() == Doc::Design && e->button() == Qt::RightButton)
+    {
+        m_contextMenuEntryIndex = -2;
+        if (m_layout == MultiButtonLayout::Spread)
+        {
+            const int hit = spreadHitTest(e->pos());
+            if (hit >= 0)
+                m_contextMenuEntryIndex = hit;
+        }
+    }
+
     if (mode() == Doc::Operate && e->button() == Qt::LeftButton)
     {
         m_pressActive = true;

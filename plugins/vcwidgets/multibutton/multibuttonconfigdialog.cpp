@@ -781,7 +781,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     tileSizeForm->addRow(tr("Tile width:"), m_tileWSpin);
 
     m_tileHSpin = new QSpinBox(tileSizeGrp);
-    m_tileHSpin->setRange(20, 400);
+    m_tileHSpin->setRange(15, 400);
     m_tileHSpin->setSuffix(tr(" px"));
     m_tileHSpin->setValue(spreadTileHeight);
     tileSizeForm->addRow(tr("Tile height:"), m_tileHSpin);
@@ -3332,6 +3332,10 @@ void MultiButtonConfigDialog::updatePresetNameCell(int row)
         item->setBackground(preset.color);
     else
         item->setBackground(QBrush());
+    if (preset.labelColor.isValid())
+        item->setForeground(preset.labelColor);
+    else
+        item->setForeground(QBrush());
     m_rebuildingPresetTable = false;
 }
 
@@ -3441,6 +3445,10 @@ void MultiButtonConfigDialog::syncPresetTableColumns()
                 nameItem->setBackground(preset.color);
             else
                 nameItem->setBackground(QBrush());
+            if (preset.labelColor.isValid())
+                nameItem->setForeground(preset.labelColor);
+            else
+                nameItem->setForeground(QBrush());
 
             QTableWidgetItem* inputItem = table->item(r, kPresetInputColumn);
             if (!inputItem)
