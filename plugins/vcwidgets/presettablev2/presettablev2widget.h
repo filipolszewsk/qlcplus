@@ -118,7 +118,7 @@ struct PTColumn {
     QString           name;
     Type              type         = Numeric;
     bool              fade         = true;    // true=interpolate, false=snap at 127
-    bool              useFor1DFx   = false;   // FixtureGroup: explicit 1D Channel FX target
+    bool              useFor1DFx   = false;   // Legacy: 1D FX now affects all table columns
     QVector<QSharedPointer<QLCInputSource>> intensityInputSources; // FixtureGroup: per-output multiplier input
     QVector<PTOption> options;                // used when type == Dropdown
     int               width        = -1;      // persisted pixel width; -1 = Qt default
@@ -153,6 +153,20 @@ struct PTPositionOutputLayer {
 struct PTCellValueOverrides {
     QMap<int, uchar> values;
     bool isEmpty() const { return values.isEmpty(); }
+};
+
+struct PTWidgetEffectFlashState
+{
+    bool active = false;
+    int parameter = -1;
+    int restoreIndex = -1;
+    quint32 sourceWidgetId = 0;
+    quint64 token = 0;
+    quint32 restoreMultiFxSourceEngineId = quint32(-1);
+    PTTransitionProviderSnapshot restoreMultiFxSourceSnapshot;
+    bool restoreMultiFxSourceSnapshotValid = false;
+    quint64 restoreMultiFxPhaseAnchorMs = 0;
+    quint64 restoreMultiFxSyncedPhaseAnchorMs = 0;
 };
 
 struct PTValueSelectionLayer {
@@ -354,8 +368,16 @@ public:
     bool multiButtonBeginFlash(int outputIdx, int parameter, int index,
                                quint32 sourceWidgetId, quint64 token,
                                double timeMultiplier = 1.0) override;
+    bool multiButtonBeginFlashFromSourceAndPhase(int outputIdx, int parameter, int index,
+                                                 quint32 sourceWidgetId, quint64 token,
+                                                 quint32 sourceEngineId,
+                                                 quint64 phaseAnchorMs,
+                                                 double timeMultiplier = 1.0) override;
     bool multiButtonEndFlash(int outputIdx, int parameter, int index,
                              quint32 sourceWidgetId, quint64 token) override;
+    bool multiButtonEndFlashFromSource(int outputIdx, int parameter, int index,
+                                       quint32 sourceWidgetId, quint64 token,
+                                       quint32 sourceEngineId) override;
     bool multiButtonFlashGateActive() const override;
 
     // ---- VCWidget overrides -----------------------------------------------
@@ -605,6 +627,8 @@ private:
     PTGlobalEffectSettings globalEffectSettingsLocked() const;
     quint32 cycleDurationMsLocked(const PTGlobalEffectSettings& global,
                                     const PTTransitionPreset& preset) const;
+    quint32 flashCycleDurationMsLocked(const PTGlobalEffectSettings& global,
+                                       const PTTransitionPreset& preset) const;
     static void rescaleElapsedForDurationChange(quint32& elapsedMs,
                                                 quint32 oldDurationMs,
                                                 quint32 newDurationMs);
@@ -628,7 +652,7 @@ private:
                                                         const QLCPoint* point = nullptr,
                                                         bool staged = false) const;
     PTTransitionMode multiFxRouteModeAtIndexLocked(int presetIndex, int outputIdx,
-                                                   bool staged) const;
+                                                   const QLCPoint* point, bool staged) const;
     PTGlobalEffectSettings multiFxGlobalSettingsLocked(int outputIdx, bool staged,
                                                        const PTGlobalEffectSettings& fallback) const;
     bool multiFxUsesSourceClockLocked(int outputIdx, bool staged) const;
@@ -773,6 +797,12 @@ private:
                                 double timeMultiplier = 1.0);
     bool endMatrixFlashLocked(int outputIdx, int rowIdx, quint32 sourceWidgetId,
                               quint64 token);
+    bool beginEffectFlashLocked(int outputIdx, int parameter, int presetIdx,
+                                quint32 sourceWidgetId, quint64 token,
+                                quint32 sourceEngineId = VCWidget::invalidId(),
+                                quint64 phaseAnchorMs = 0);
+    bool endEffectFlashLocked(int outputIdx, int parameter, int presetIdx,
+                              quint32 sourceWidgetId, quint64 token);
     void releaseMatrixFlashLocked(int outputIdx);
     void beginMatrixFlashWaveOutLocked(PTOutputMatrixState& st);
     void setWidgetFlashGateActiveLocked(bool active, uchar value);
@@ -896,6 +926,7 @@ public:
     QVector<int>            m_spatialAppliedRow;
     QVector<PTSpatialChaseOutput> m_spatialChase;
     QVector<PTOutputMatrixState>    m_matrixState;
+    QVector<PTWidgetEffectFlashState> m_widgetEffectFlash;
     QHash<quint64, int>             m_selectionMatrixStateSlots;
     QVector<int>                    m_flashInputHeldRow;
     bool                            m_widgetFlashGateActive = false;

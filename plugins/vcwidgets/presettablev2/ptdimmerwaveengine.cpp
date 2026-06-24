@@ -192,6 +192,7 @@ static int spatialIndexFromOffsetDirection(PTOffsetDirection dir)
         case PTOffsetDirection::SidesToCenter: return 3;
         case PTOffsetDirection::Alternate:    return 4;
         case PTOffsetDirection::Symmetric:    return 5;
+        case PTOffsetDirection::Random:       return 6;
         default:                              return 0;
     }
 }
@@ -205,6 +206,7 @@ static PTOffsetDirection offsetDirectionFromSpatialIndex(int index)
         case 3:  return PTOffsetDirection::SidesToCenter;
         case 4:  return PTOffsetDirection::Alternate;
         case 5:  return PTOffsetDirection::Symmetric;
+        case 6:  return PTOffsetDirection::Random;
         default: return PTOffsetDirection::LeftToRight;
     }
 }
@@ -213,6 +215,8 @@ PTOffsetDirection PTDimmerWaveEngine::wingOffsetDirection(int wingIndex, PTOffse
                                                           int wingsSymmetry, int totalWings)
 {
     if (wingsSymmetry == 0 || totalWings <= 0)
+        return baseDirection;
+    if (baseDirection == PTOffsetDirection::Random)
         return baseDirection;
 
     int dir = spatialIndexFromOffsetDirection(baseDirection);
@@ -388,6 +392,34 @@ float PTDimmerWaveEngine::iteratorFromElapsed(quint32 elapsedMs, quint32 duratio
     return iterator;
 }
 
+static int positiveGcd(int a, int b)
+{
+    a = qAbs(a);
+    b = qAbs(b);
+    while (b != 0)
+    {
+        const int t = a % b;
+        a = b;
+        b = t;
+    }
+    return qMax(1, a);
+}
+
+static int stableRandomOffsetIndex(int position, int span)
+{
+    if (span <= 1)
+        return 0;
+
+    int step = qMax(1, span / 2 + 1);
+    while (step < span && positiveGcd(step, span) != 1)
+        ++step;
+    if (step >= span)
+        step = span - 1;
+
+    const int offset = (span * 37 + 11) % span;
+    return (qBound(0, position, span - 1) * step + offset) % span;
+}
+
 static int templateOffsetIndex(int position, int span, PTOffsetDirection direction)
 {
     if (span <= 0)
@@ -427,6 +459,9 @@ static int templateOffsetIndex(int position, int span, PTOffsetDirection directi
             index = (position <= center) ? position : (span - 1 - position);
         }
         break;
+        case PTOffsetDirection::Random:
+            index = stableRandomOffsetIndex(position, span);
+            break;
     }
     return index;
 }

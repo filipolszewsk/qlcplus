@@ -159,6 +159,9 @@ float customCurveBipolar(float phase01, const PTDimmerWaveParams& waveParams)
 float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection direction,
                                  const PTDimmerWaveOffsetInfo& spatial)
 {
+    const bool afterCenter =
+            spatial.slotsPerWing > 1
+            && spatial.localIndex >= (spatial.slotsPerWing + 1) / 2;
     switch (direction)
     {
         case PTPositionMotionDirection::Reverse:
@@ -169,6 +172,8 @@ float applyDirectionToUnitOffset(float unitOffset, PTPositionMotionDirection dir
             return (spatial.wingIndex % 2 == 1) ? unitOffset : -unitOffset;
         case PTPositionMotionDirection::SymmetricPairs:
             return (spatial.localIndex % 2 == 1) ? -unitOffset : unitOffset;
+        case PTPositionMotionDirection::Mirror:
+            return afterCenter ? -unitOffset : unitOffset;
         default:
             return unitOffset;
     }
@@ -438,6 +443,9 @@ double PTPositionFxEngine::applyMotionDirection(double phaseRad,
                                                 PTPositionMotionDirection direction,
                                                 const PTDimmerWaveOffsetInfo& spatial)
 {
+    const bool afterCenter =
+            spatial.slotsPerWing > 1
+            && spatial.localIndex >= (spatial.slotsPerWing + 1) / 2;
     switch (direction)
     {
         case PTPositionMotionDirection::Reverse:
@@ -448,6 +456,8 @@ double PTPositionFxEngine::applyMotionDirection(double phaseRad,
             return (spatial.wingIndex % 2 == 1) ? phaseRad : -phaseRad;
         case PTPositionMotionDirection::SymmetricPairs:
             return (spatial.localIndex % 2 == 1) ? -phaseRad : phaseRad;
+        case PTPositionMotionDirection::Mirror:
+            return afterCenter ? -phaseRad : phaseRad;
         default:
             return phaseRad;
     }

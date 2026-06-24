@@ -99,6 +99,7 @@ public:
 
     PresetTableV2ControlIface* linkedTable() const;
     Doc* doc() const { return m_doc; }
+    bool multiFxShowInheritedValues() const { return m_multiFxShowInheritedValues; }
 
     const QVector<PTTransitionPreset>& sweepPresets() const { return m_sweepPresets; }
     const QVector<PTTransitionPreset>& continuousPresets() const { return m_continuousPresets; }
@@ -388,6 +389,10 @@ private:
     QString targetTableOutputName(quint32 tableId, int outputIdx) const;
     bool targetTableUsesPositionMode(quint32 tableId) const;
     PTTransitionMode multiFxRouteMode(const PTMultiFxTargetTableRoute& route) const;
+    PTTransitionMode multiFxRouteMode(const PTMultiFxTargetTableRoute& route,
+                                      int outputIdx, int selectionIdx) const;
+    int effectiveMultiFxLayerKind(const PTMultiFxTargetTableRoute& route,
+                                  int outputIdx, int selectionIdx) const;
     QString multiFxRouteModeLabel(const PTMultiFxTargetTableRoute& route) const;
     void normalizeMultiFxTargetRoutes();
     void displayDataForMode(PTTransitionMode mode,
@@ -466,6 +471,7 @@ private:
                                                int outputIdx, int selectionIdx,
                                                const QSet<int>& cols);
     QSet<int> applySmartWingsDefaults(PTTransitionMode mode, QTreeWidgetItem* item);
+    QSet<int> applySmartSpreadDirectionDefaults(PTTransitionMode mode, QTreeWidgetItem* item);
     bool overrideColumnDiffersFromParent(const PTTransitionPreset& parent,
                                          const PTTransitionPresetOverride& ov,
                                          int col) const;
@@ -502,6 +508,7 @@ private:
     QSet<int>& expandedSetForMode(PTTransitionMode mode);
     const QSet<int>& expandedSetForMode(PTTransitionMode mode) const;
     void captureExpandedState(PTTransitionMode mode);
+    QString multiFxExpansionKeyForItem(QTreeWidgetItem* item) const;
     PTTransitionMode modeForTable(QTreeWidget* table) const;
     QTreeWidget* tableFromFocusObject(QObject* watched) const;
     int focusColumn(QTreeWidget* table) const;
@@ -547,12 +554,14 @@ private:
     static QComboBox* makeOffsetDirCombo(QWidget* parent);
     static QComboBox* makeOffsetStepModeCombo(QWidget* parent);
     static QComboBox* makeWaveShapeCombo(QWidget* parent);
-    static QComboBox* makePositionMotionCombo(QWidget* parent);
+    static QComboBox* makePositionMotionCombo(QWidget* parent,
+                                              bool includeInterpolation = false);
     static QComboBox* makePosition1DBuiltinModeCombo(QWidget* parent);
     static QComboBox* makePositionMotionDirCombo(QWidget* parent);
     static QComboBox* makeChannel1DTargetCombo(QWidget* parent);
     static QComboBox* makeChannel1DTargetModeCombo(QWidget* parent);
-    static QComboBox* makeChannel1DApplyModeCombo(QWidget* parent);
+    static QComboBox* makeChannel1DApplyModeCombo(QWidget* parent,
+                                                  bool includeInterpolation = false);
     static QComboBox* makePropagationCombo(QWidget* parent);
     static QComboBox* makeWingsSymmetryCombo(QWidget* parent);
     static QComboBox* makeSpeedMultCombo(QWidget* parent);
@@ -590,6 +599,7 @@ private:
     PTGlobalEffectSettings m_globalSettings;
     bool m_crossfadeManualControl = true;
     bool m_logVisible = false;
+    bool m_multiFxShowInheritedValues = true;
     bool m_crossfadeManualInputMapped = false;
     bool m_rebuildingTable = false;
     bool m_committingPresetCell = false;
@@ -652,4 +662,5 @@ private:
     QSet<int> m_positionMotionExpandedPresets;
     QSet<int> m_channel1DExpandedPresets;
     QSet<int> m_multiFxExpandedPresets;
+    QSet<QString> m_multiFxExpandedPaths;
 };

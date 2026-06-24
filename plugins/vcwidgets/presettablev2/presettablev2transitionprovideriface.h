@@ -15,6 +15,7 @@ struct PTTransitionProviderPresetOverride
 {
     PTTransitionPreset values;
     QSet<int> columns;
+    int multiFxLayerKind = -1;
 };
 
 struct PTTransitionProviderSelection
@@ -152,4 +153,4 @@ public:
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2TransitionProviderIface,
-                    "org.qlcplus.PresetTableV2TransitionProvider/2.7")
+                    "org.qlcplus.PresetTableV2TransitionProvider/2.8")

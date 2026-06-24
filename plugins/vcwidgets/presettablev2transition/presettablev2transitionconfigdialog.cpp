@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QTabWidget>
 
 static QString bankLabel(PTTransitionMode mode)
 {
@@ -45,6 +46,11 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     hint->setWordWrap(true);
     root->addWidget(hint);
 
+    auto* tabs = new QTabWidget(this);
+    root->addWidget(tabs, 1);
+
+    auto* generalTab = new QWidget(tabs);
+    auto* generalLayout = new QVBoxLayout(generalTab);
     QFormLayout* form = new QFormLayout;
 
     m_captionEdit = new QLineEdit(this);
@@ -57,13 +63,23 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     m_logVisibleChk->setChecked(m_widget ? m_widget->logVisible() : false);
     form->addRow(tr("Log:"), m_logVisibleChk);
 
+    m_multiFxShowInheritedChk = new QCheckBox(tr("Show inherited values"), this);
+    m_multiFxShowInheritedChk->setChecked(m_widget ? m_widget->multiFxShowInheritedValues() : true);
+    m_multiFxShowInheritedChk->setToolTip(tr(
+            "When disabled, inherited MultiFX child cells are left blank instead of repeating the parent value in italic."));
+    form->addRow(tr("MultiFX rows:"), m_multiFxShowInheritedChk);
+
     m_tableCombo = new QComboBox(this);
     form->addRow(tr("Preset Table v2:"), m_tableCombo);
-    root->addLayout(form);
+    generalLayout->addLayout(form);
+    generalLayout->addStretch();
+    tabs->addTab(generalTab, tr("General"));
 
     rebuildTableCombo();
 
-    auto* sourceBox = new QGroupBox(tr("Bank sources"), this);
+    auto* banksTab = new QWidget(tabs);
+    auto* banksLayout = new QVBoxLayout(banksTab);
+    auto* sourceBox = new QGroupBox(tr("Bank sources"), banksTab);
     auto* sourceForm = new QFormLayout(sourceBox);
     for (PTTransitionMode mode : { PTTransitionMode::SweepOnly,
                                    PTTransitionMode::Continuous,
@@ -75,13 +91,17 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         m_bankSourceCombos.insert(int(mode), combo);
         sourceForm->addRow(bankLabel(mode) + QStringLiteral(":"), combo);
     }
-    root->addWidget(sourceBox);
+    banksLayout->addWidget(sourceBox);
+    banksLayout->addStretch();
+    tabs->addTab(banksTab, tr("Banks"));
     rebuildBankSourceCombos();
 
     const PTGlobalEffectSettings gs = m_widget ? m_widget->globalEffectSettings()
                                                : PTGlobalEffectSettings();
 
-    auto* globalBox = new QGroupBox(tr("Global effect"), this);
+    auto* timingTab = new QWidget(tabs);
+    auto* timingLayout = new QVBoxLayout(timingTab);
+    auto* globalBox = new QGroupBox(tr("Global effect"), timingTab);
     auto* globalForm = new QFormLayout(globalBox);
 
     m_speedSlider = new QSlider(Qt::Horizontal, globalBox);
@@ -155,7 +175,9 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
     m_effectiveCyclePreviewLabel->setWordWrap(true);
     globalForm->addRow(tr("Current cycle:"), m_effectiveCyclePreviewLabel);
 
-    root->addWidget(globalBox);
+    timingLayout->addWidget(globalBox);
+    timingLayout->addStretch();
+    tabs->addTab(timingTab, tr("Timing"));
 
     connect(m_speedSlider, &QSlider::valueChanged,
             this, &PresetTableV2TransitionConfigDialog::slotSpeedSliderChanged);
@@ -179,7 +201,9 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
             this, &PresetTableV2TransitionConfigDialog::slotTimingControlChanged);
     updateEffectiveCyclePreview();
 
-    auto* inputBox = new QGroupBox(tr("External inputs (global)"), this);
+    auto* inputTab = new QWidget(tabs);
+    auto* inputLayout = new QVBoxLayout(inputTab);
+    auto* inputBox = new QGroupBox(tr("External inputs (global)"), inputTab);
     auto* inputForm = new QFormLayout(inputBox);
 
     Doc* doc = m_widget ? m_widget->doc() : nullptr;
@@ -214,7 +238,9 @@ PresetTableV2TransitionConfigDialog::PresetTableV2TransitionConfigDialog(
         m_crossfadeManualInputSel->setInputSource(m_widget->inputSource(PTEfxCol::InputCrossfadeManual));
     inputForm->addRow(tr("Crossfade manual (>127=ON):"), m_crossfadeManualInputSel);
 
-    root->addWidget(inputBox);
+    inputLayout->addWidget(inputBox);
+    inputLayout->addStretch();
+    tabs->addTab(inputTab, tr("Inputs"));
 
     m_buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     root->addWidget(m_buttons);
@@ -350,6 +376,11 @@ PTGlobalEffectSettings PresetTableV2TransitionConfigDialog::globalSettings() con
 bool PresetTableV2TransitionConfigDialog::logVisible() const
 {
     return m_logVisibleChk && m_logVisibleChk->isChecked();
+}
+
+bool PresetTableV2TransitionConfigDialog::multiFxShowInheritedValues() const
+{
+    return !m_multiFxShowInheritedChk || m_multiFxShowInheritedChk->isChecked();
 }
 
 quint32 PresetTableV2TransitionConfigDialog::bankSourceEngineId(PTTransitionMode mode) const

@@ -2442,6 +2442,15 @@ bool MultiButtonWidget::entryIsFlash(int idx) const
     return idx < m_functionEntryFlash.size() && m_functionEntryFlash.at(idx);
 }
 
+bool MultiButtonWidget::widgetEntryIsFlash(int idx) const
+{
+    if (m_mode != MultiButtonMode::Widget || idx < 0 || idx >= entryCount())
+        return false;
+    if (idx >= m_widgetEntryAppearance.size())
+        return false;
+    return m_widgetEntryAppearance.at(idx).flashOnActivate;
+}
+
 void MultiButtonWidget::beginFlashHold(int idx)
 {
     if (idx < 0 || idx >= entryCount() || !entryIsFlash(idx))
@@ -2503,8 +2512,14 @@ void MultiButtonWidget::endFlashHold()
 
 bool MultiButtonWidget::widgetPrimaryFlashAvailable() const
 {
+    const bool flashParameter =
+            m_widgetParameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            || m_widgetParameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset
+            || m_widgetParameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset
+            || m_widgetParameter == PresetTableV2MultiButtonTargetIface::Channel1DPreset
+            || m_widgetParameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset;
     return m_mode == MultiButtonMode::Widget
-            && m_widgetParameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            && flashParameter
             && widgetLinkFlashTarget() != nullptr;
 }
 
@@ -2519,38 +2534,111 @@ bool MultiButtonWidget::beginWidgetFlashHold(int idx)
     if (!widgetPrimaryFlashAvailable() || idx < 0 || idx >= entryCount())
         return false;
 
-    PresetTableV2MultiButtonFlashIface* target = widgetLinkFlashTarget();
-    if (!target)
-        return false;
-
     if (m_widgetFlashHoldIndex >= 0)
         endWidgetFlashHold();
 
     const quint64 token = m_nextWidgetFlashToken++;
-    bool leaderOk = false;
+    const quint64 phaseAnchorMs = quint64(QDateTime::currentMSecsSinceEpoch());
+    QList<MultiButtonWidgetActionTarget> actions = effectiveWidgetActions();
+    if (actions.isEmpty())
+        actions.append(leaderWidgetAction());
 
-    if (!isAllOutputsMode())
+    for (MultiButtonWidgetActionTarget& action : actions)
     {
-        leaderOk = target->multiButtonBeginFlash(m_widgetOutputIndex, m_widgetParameter,
-                                                 idx, id(), token);
+        if (action.phaseAnchorMs == 0)
+            action.phaseAnchorMs = phaseAnchorMs;
     }
-    else if (PresetTableV2MultiButtonTargetIface* linked = widgetLinkTarget())
-    {
-        const int count = linked->multiButtonOutputCount();
-        for (int outputIdx = 0; outputIdx < count; ++outputIdx)
+
+    auto appendUniqueAction = [&](const MultiButtonWidgetActionTarget& action) {
+        if (!widgetActionLooksValid(action))
+            return;
+        MultiButtonWidgetActionTarget candidate = action;
+        if (candidate.phaseAnchorMs == 0)
+            candidate.phaseAnchorMs = phaseAnchorMs;
+        for (MultiButtonWidgetActionTarget& existing : actions)
         {
-            const bool ok = target->multiButtonBeginFlash(outputIdx, m_widgetParameter,
-                                                          idx, id(), token);
-            if (outputIdx == leaderOutputIndex())
-                leaderOk = ok;
+            if (existing.widgetId == candidate.widgetId
+                    && existing.outputIndex == candidate.outputIndex
+                    && existing.parameter == candidate.parameter)
+            {
+                if (existing.sourceEngineId == candidate.sourceEngineId)
+                    return;
+                if (existing.sourceEngineId == VCWidget::invalidId()
+                        && candidate.sourceEngineId != VCWidget::invalidId())
+                    existing = candidate;
+                return;
+            }
+        }
+        actions.append(candidate);
+    };
+
+    const int baseCount = actions.size();
+    for (int actionIndex = 0; actionIndex < baseCount; ++actionIndex)
+    {
+        const MultiButtonWidgetActionTarget base = actions.at(actionIndex);
+        VCWidget* targetWidget = widgetActionTargetObject(base);
+        auto* extras = qobject_cast<PresetTableV2MultiButtonTargetExtrasIface*>(targetWidget);
+        if (!extras)
+            continue;
+
+        const QList<PresetTableV2MultiButtonLinkedAction> linked =
+                extras->multiButtonLinkedSlaveActionsForIndex(
+                        base.outputIndex, base.parameter, idx);
+        for (const PresetTableV2MultiButtonLinkedAction& linkedAction : linked)
+        {
+            MultiButtonWidgetActionTarget action;
+            action.enabled = true;
+            action.widgetId = linkedAction.widgetId;
+            action.outputIndex = linkedAction.outputIndex;
+            action.parameter = linkedAction.parameter;
+            action.sourceEngineId = linkedAction.sourceEngineId;
+            action.phaseAnchorMs = linkedAction.phaseAnchorMs != 0
+                    ? linkedAction.phaseAnchorMs : phaseAnchorMs;
+            appendUniqueAction(action);
         }
     }
 
-    if (!leaderOk)
+    QList<MultiButtonWidgetActionTarget> begunActions;
+    bool anyOk = false;
+
+    auto beginActionFlash = [&](const MultiButtonWidgetActionTarget& action,
+                                int outputIdx) {
+        VCWidget* targetWidget = widgetActionTargetObject(action);
+        auto* target = qobject_cast<PresetTableV2MultiButtonFlashIface*>(targetWidget);
+        if (!target)
+            return false;
+        return target->multiButtonBeginFlashFromSourceAndPhase(
+                    outputIdx, action.parameter, idx, id(), token,
+                    action.sourceEngineId, action.phaseAnchorMs);
+    };
+
+    for (const MultiButtonWidgetActionTarget& action : actions)
+    {
+        bool actionOk = false;
+        if (!widgetActionUsesAllOutputs(action))
+        {
+            actionOk = beginActionFlash(action, action.outputIndex);
+        }
+        else if (PresetTableV2MultiButtonTargetIface* linked = widgetActionTarget(action))
+        {
+            const int count = linked->multiButtonOutputCount();
+            for (int outputIdx = 0; outputIdx < count; ++outputIdx)
+                actionOk = beginActionFlash(action, outputIdx) || actionOk;
+        }
+
+        if (actionOk)
+        {
+            anyOk = true;
+            begunActions.append(action);
+        }
+    }
+
+    if (!anyOk)
         return false;
 
     m_widgetFlashHoldIndex = idx;
     m_widgetFlashToken = token;
+    m_widgetFlashHoldActions = begunActions;
     update();
     return true;
 }
@@ -2560,27 +2648,33 @@ void MultiButtonWidget::endWidgetFlashHold()
     if (m_widgetFlashHoldIndex < 0)
         return;
 
-    PresetTableV2MultiButtonFlashIface* target = widgetLinkFlashTarget();
     const int idx = m_widgetFlashHoldIndex;
     const quint64 token = m_widgetFlashToken;
+    const QList<MultiButtonWidgetActionTarget> actions = m_widgetFlashHoldActions;
     m_widgetFlashHoldIndex = -1;
     m_widgetFlashToken = 0;
+    m_widgetFlashHoldActions.clear();
 
-    if (target)
+    auto endActionFlash = [&](const MultiButtonWidgetActionTarget& action,
+                              int outputIdx) {
+        VCWidget* targetWidget = widgetActionTargetObject(action);
+        auto* target = qobject_cast<PresetTableV2MultiButtonFlashIface*>(targetWidget);
+        if (!target)
+            return;
+        target->multiButtonEndFlashFromSource(outputIdx, action.parameter,
+                                              idx, id(), token,
+                                              action.sourceEngineId);
+    };
+
+    for (const MultiButtonWidgetActionTarget& action : actions)
     {
-        if (!isAllOutputsMode())
-        {
-            target->multiButtonEndFlash(m_widgetOutputIndex, m_widgetParameter,
-                                        idx, id(), token);
-        }
-        else if (PresetTableV2MultiButtonTargetIface* linked = widgetLinkTarget())
+        if (!widgetActionUsesAllOutputs(action))
+            endActionFlash(action, action.outputIndex);
+        else if (PresetTableV2MultiButtonTargetIface* linked = widgetActionTarget(action))
         {
             const int count = linked->multiButtonOutputCount();
             for (int outputIdx = 0; outputIdx < count; ++outputIdx)
-            {
-                target->multiButtonEndFlash(outputIdx, m_widgetParameter,
-                                            idx, id(), token);
-            }
+                endActionFlash(action, outputIdx);
         }
     }
 
@@ -3375,7 +3469,7 @@ QVector<int> MultiButtonWidget::buildAllowedAutomationSlots(
     const int n = entryCount();
     for (int i = 0; i < n; ++i)
     {
-        if (entryIsFlash(i))
+        if (entryIsFlash(i) || widgetEntryIsFlash(i))
             continue;
         if ((profile.excludeMask & (1u << i)) == 0)
             allowed.append(i);
@@ -3472,7 +3566,7 @@ void MultiButtonWidget::activate(int idx, bool allowFlashEntry)
     if (m_widgetFlashHoldIndex >= 0)
         endWidgetFlashHold();
 
-    if (!allowFlashEntry && entryIsFlash(idx))
+    if (!allowFlashEntry && (entryIsFlash(idx) || widgetEntryIsFlash(idx)))
         return;
 
     const bool allowPerActionStaging = (m_mode == MultiButtonMode::Widget)
@@ -3666,7 +3760,8 @@ void MultiButtonWidget::stageEntry(int idx, bool allowFlashEntry)
         return;
     if (idx < -1 || idx >= entryCount())
         return;
-    if (!allowFlashEntry && idx >= 0 && entryIsFlash(idx))
+    if (!allowFlashEntry && idx >= 0
+            && (entryIsFlash(idx) || widgetEntryIsFlash(idx)))
         return;
 
     if (actionSetUsesInternalStaging)
@@ -3991,7 +4086,7 @@ void MultiButtonWidget::mousePressEvent(QMouseEvent* e)
             m_pressTileIndex = spreadHitTest(e->pos());
             if (m_pressTileIndex >= 0
                     && widgetPrimaryFlashAvailable()
-                    && widgetFlashModifierActive())
+                    && (widgetFlashModifierActive() || widgetEntryIsFlash(m_pressTileIndex)))
                 beginWidgetFlashHold(m_pressTileIndex);
             else if (m_pressTileIndex >= 0 && entryIsFlash(m_pressTileIndex))
                 beginFlashHold(m_pressTileIndex);
@@ -4054,14 +4149,14 @@ void MultiButtonWidget::mouseReleaseEvent(QMouseEvent* e)
                     {
                         if (hit < 0)
                             stageEntry(-1);
-                        else if (!entryIsFlash(hit))
+                        else if (!entryIsFlash(hit) && !widgetEntryIsFlash(hit))
                             stageEntry(hit);
                     }
                     else if (hit < 0)
                     {
                         activate(-1);
                     }
-                    else if (!entryIsFlash(hit))
+                    else if (!entryIsFlash(hit) && !widgetEntryIsFlash(hit))
                     {
                         activate(hit);
                     }
@@ -5186,7 +5281,8 @@ void MultiButtonWidget::slotInputValueChanged(quint32 universe, quint32 channel,
             if (i < m_entryInputValueMatched.size())
                 m_entryInputValueMatched[i] = matchedValue;
 
-            if (widgetPrimaryFlashAvailable() && widgetFlashModifierActive())
+            if (widgetPrimaryFlashAvailable()
+                    && (widgetFlashModifierActive() || widgetEntryIsFlash(i)))
             {
                 if (matchedValue)
                     beginWidgetFlashHold(i);
@@ -5264,7 +5360,8 @@ void MultiButtonWidget::slotKeyPressed(const QKeySequence& keySequence)
     {
         if (stripKeySequence(entryKeySource(i)) == key)
         {
-            if (widgetPrimaryFlashAvailable() && widgetFlashModifierActive())
+            if (widgetPrimaryFlashAvailable()
+                    && (widgetFlashModifierActive() || widgetEntryIsFlash(i)))
             {
                 beginWidgetFlashHold(i);
                 return;
@@ -7396,7 +7493,7 @@ void MultiButtonWidget::drawTile(QPainter& p, const QRect& tileRect, int tileInd
             p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, cap);
     }
 
-    if (tileIndex >= 0 && entryIsFlash(tileIndex))
+    if (tileIndex >= 0 && (entryIsFlash(tileIndex) || widgetEntryIsFlash(tileIndex)))
         drawFlashEmblem(p, r);
 
     p.restore();
@@ -7641,7 +7738,7 @@ void MultiButtonWidget::paintSingle(QPainter& p)
         }
     }
 
-    if (displayIdx >= 0 && entryIsFlash(displayIdx))
+    if (displayIdx >= 0 && (entryIsFlash(displayIdx) || widgetEntryIsFlash(displayIdx)))
         drawFlashEmblem(p, rect());
 
     if (automationVisualActive())

@@ -34,6 +34,8 @@
 #include <QVector>
 #include <QSet>
 #include <QMessageBox>
+#include <QMenu>
+#include <QAction>
 #include <algorithm>
 
 constexpr int kWidgetTargetMissingRole = Qt::UserRole + 3;
@@ -642,6 +644,10 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     QPushButton* widgetClearColorBtn = new QPushButton(tr("Clear button"), widgetAppearanceGrp);
     QPushButton* widgetChooseLabelColorBtn = new QPushButton(tr("Text color..."), widgetAppearanceGrp);
     QPushButton* widgetClearLabelColorBtn = new QPushButton(tr("Clear text"), widgetAppearanceGrp);
+    m_widgetFlashCheck = new QCheckBox(tr("Flash (hold)"), widgetAppearanceGrp);
+    m_widgetFlashCheck->setTristate(true);
+    m_widgetFlashCheck->setToolTip(
+        tr("In Widget mode this entry flashes the linked Preset Table row/effect while held."));
 
     QList<QPushButton*> widgetAppearanceButtons = {
         widgetEditLblBtn, widgetScribbleBtn, widgetChooseIconBtn, widgetClearIconBtn,
@@ -667,6 +673,7 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
     widgetEntryActions->addWidget(widgetScribbleBtn);
     widgetEntryActions->addWidget(widgetChooseIconBtn);
     widgetEntryActions->addWidget(widgetClearIconBtn);
+    widgetEntryActions->addWidget(m_widgetFlashCheck);
     widgetEntryActions->addStretch();
     widgetAppearanceLayout->addLayout(widgetEntryActions);
 
@@ -715,6 +722,65 @@ MultiButtonConfigDialog::MultiButtonConfigDialog(
             this, &MultiButtonConfigDialog::slotLevelSelectionChanged);
     connect(m_widgetAppearanceTable, &QTableWidget::itemChanged,
             this, &MultiButtonConfigDialog::slotPresetTableItemChanged);
+    connect(m_widgetFlashCheck, &QCheckBox::stateChanged,
+            this, &MultiButtonConfigDialog::slotLevelFlashToggled);
+    m_widgetAppearanceTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_widgetAppearanceTable, &QTableWidget::customContextMenuRequested,
+            this, [this](const QPoint& pos) {
+        if (!m_widgetAppearanceTable)
+            return;
+        const QModelIndex idx = m_widgetAppearanceTable->indexAt(pos);
+        if (idx.isValid())
+        {
+            m_widgetAppearanceTable->setCurrentCell(idx.row(), idx.column());
+            if (!m_widgetAppearanceTable->selectionModel()->isRowSelected(
+                    idx.row(), QModelIndex()))
+                m_widgetAppearanceTable->selectRow(idx.row());
+        }
+
+        const QList<int> rows = selectedPresetRows();
+        if (rows.isEmpty())
+            return;
+
+        QMenu menu(this);
+        QAction* flashAction = menu.addAction(tr("Flash while held"));
+        flashAction->setCheckable(true);
+        const int parameter = m_widgetParameterCombo
+                ? m_widgetParameterCombo->currentData().toInt() : -1;
+        const bool flashParameter =
+                parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+                || parameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset
+                || parameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset
+                || parameter == PresetTableV2MultiButtonTargetIface::Channel1DPreset
+                || parameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset;
+        flashAction->setEnabled(flashParameter);
+        int flashRows = 0;
+        for (int row : rows)
+        {
+            if (row >= 0 && row < m_widgetEntryAppearance.size()
+                    && m_widgetEntryAppearance.at(row).flashOnActivate)
+                ++flashRows;
+        }
+        flashAction->setChecked(flashRows == rows.size());
+        flashAction->setToolTip(flashParameter
+            ? tr("Momentary flash for linked Preset Table row/effect entries.")
+            : tr("Flash while held is available for Primary Row, Interpolation, 1D FX, 2D FX and MultiFX."));
+
+        QAction* chosen = menu.exec(m_widgetAppearanceTable->viewport()->mapToGlobal(pos));
+        if (chosen == flashAction)
+        {
+            const bool enable = flashRows != rows.size();
+            applyAppearanceToSelectedRows([enable](LevelPreset& preset) {
+                preset.flashOnActivate = enable;
+                if (!enable)
+                {
+                    preset.flashOverride = false;
+                    preset.flashForceLtp = false;
+                }
+            });
+            slotLevelSelectionChanged();
+        }
+    });
     connect(widgetEditLblBtn, &QPushButton::clicked, this, &MultiButtonConfigDialog::slotLevelEditLabel);
     connect(widgetScribbleBtn, &QPushButton::clicked, this, &MultiButtonConfigDialog::slotLevelScribbleIcon);
     connect(widgetChooseIconBtn, &QPushButton::clicked, this, &MultiButtonConfigDialog::slotLevelChooseIcon);
@@ -3633,6 +3699,7 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
         m_entryInputGrp->setEnabled(rows.size() == 1);
 
     const bool levelMode = widgetMode() == MultiButtonMode::Level;
+    const bool widgetAppearanceMode = widgetMode() == MultiButtonMode::Widget;
     m_lvlRemoveBtn->setEnabled(levelMode && has);
     m_lvlEditLblBtn->setEnabled(levelMode && rows.size() == 1);
     m_lvlScribbleBtn->setEnabled(levelMode && has);
@@ -3654,33 +3721,49 @@ void MultiButtonConfigDialog::slotLevelSelectionChanged()
     if (m_lvlClearFormulaBtn)
         m_lvlClearFormulaBtn->setEnabled(currentDmxCellHasFormula);
 
-    if (m_lvlFlashCheck)
-    {
-        QSignalBlocker blocker(m_lvlFlashCheck);
-        m_lvlFlashCheck->setEnabled(levelMode && has);
-        if (!levelMode || !has)
+    auto syncFlashCheck = [&](QCheckBox* check, bool enabled) {
+        if (!check)
+            return;
+        QSignalBlocker blocker(check);
+        check->setEnabled(enabled && has);
+        if (!enabled || !has)
         {
-            m_lvlFlashCheck->setCheckState(Qt::Unchecked);
+            check->setCheckState(Qt::Unchecked);
+            return;
         }
+
+        commitLevelPresetsFromTable();
+        const QList<LevelPreset>& presets = widgetAppearanceMode
+                ? m_widgetEntryAppearance : m_levelPresets;
+        int flashOn = 0;
+        for (int r : rows)
+        {
+            if (r >= 0 && r < presets.size()
+                    && presets.at(r).flashOnActivate)
+                flashOn++;
+        }
+        if (flashOn == 0)
+            check->setCheckState(Qt::Unchecked);
+        else if (flashOn == rows.size())
+            check->setCheckState(Qt::Checked);
         else
-        {
-            commitLevelPresetsFromTable();
-            int flashOn = 0;
-            for (int r : rows)
-            {
-                if (r >= 0 && r < m_levelPresets.size()
-                    && m_levelPresets.at(r).flashOnActivate)
-                {
-                    flashOn++;
-                }
-            }
-            if (flashOn == 0)
-                m_lvlFlashCheck->setCheckState(Qt::Unchecked);
-            else if (flashOn == rows.size())
-                m_lvlFlashCheck->setCheckState(Qt::Checked);
-            else
-                m_lvlFlashCheck->setCheckState(Qt::PartiallyChecked);
-        }
+            check->setCheckState(Qt::PartiallyChecked);
+    };
+    const int widgetParameter = m_widgetParameterCombo
+            ? m_widgetParameterCombo->currentData().toInt() : -1;
+    const bool flashParameter =
+            widgetParameter == PresetTableV2MultiButtonTargetIface::PrimaryRow
+            || widgetParameter == PresetTableV2MultiButtonTargetIface::ContinuousPreset
+            || widgetParameter == PresetTableV2MultiButtonTargetIface::PositionMotionPreset
+            || widgetParameter == PresetTableV2MultiButtonTargetIface::Channel1DPreset
+            || widgetParameter == PresetTableV2MultiButtonTargetIface::MultiFxPreset;
+    syncFlashCheck(m_lvlFlashCheck, levelMode);
+    syncFlashCheck(m_widgetFlashCheck, widgetAppearanceMode && flashParameter);
+    if (m_widgetFlashCheck)
+    {
+        m_widgetFlashCheck->setToolTip(flashParameter
+            ? tr("This entry flashes the linked Preset Table row/effect while held.")
+            : tr("Flash while held is available for Primary Row, Interpolation, 1D FX, 2D FX and MultiFX."));
     }
 
     auto updateLevelFlashOption = [&](QCheckBox* check, bool LevelPreset::*member) {
@@ -4046,6 +4129,11 @@ void MultiButtonConfigDialog::slotLevelFlashToggled(int state)
     {
         QSignalBlocker blocker(m_lvlFlashCheck);
         m_lvlFlashCheck->setCheckState(enable ? Qt::Checked : Qt::Unchecked);
+    }
+    if (m_widgetFlashCheck)
+    {
+        QSignalBlocker blocker(m_widgetFlashCheck);
+        m_widgetFlashCheck->setCheckState(enable ? Qt::Checked : Qt::Unchecked);
     }
     slotLevelSelectionChanged();
 }

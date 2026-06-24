@@ -57,6 +57,31 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
     if (global.fxOrientation == 1)
         waveParams.axis = PTTransitionAxis::Y;
 
+    QHash<QLCPoint, int> sweepGroupByPoint;
+    int sweepGroupCount = 0;
+    if (sweepMode)
+    {
+        int lastOffset = 0;
+        bool haveLastOffset = false;
+        int currentGroup = -1;
+        for (int i = 0; i < chaseOrder.size(); ++i)
+        {
+            const QLCPoint& pt = chaseOrder.at(i);
+            const int offsetKey = waveParams.offsetDirection == PTOffsetDirection::Random
+                    ? i
+                    : PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
+                              pt.x(), pt.y(), gridWidth, gridHeight, waveParams);
+            if (!haveLastOffset || offsetKey != lastOffset)
+            {
+                ++currentGroup;
+                lastOffset = offsetKey;
+                haveLastOffset = true;
+            }
+            sweepGroupByPoint.insert(pt, currentGroup);
+        }
+        sweepGroupCount = qMax(1, currentGroup + 1);
+    }
+
     plan.entries.reserve(chaseOrder.size());
     for (int i = 0; i < chaseOrder.size(); ++i)
     {
@@ -66,7 +91,10 @@ PTSpatialFixturePlan PTSpatialFixturePlan::build(const QList<QLCPoint>& scopePoi
         e.serialIndex = i;
         if (sweepMode)
         {
-            e.phaseStart01 = count <= 1 ? 0.0 : double(i) / double(count);
+            const int groupIndex = sweepGroupByPoint.value(pt, i);
+            e.phaseStart01 = sweepGroupCount <= 1
+                    ? 0.0
+                    : double(groupIndex) / double(sweepGroupCount);
             e.headOffsetDeg = int(std::round(e.phaseStart01 * 360.0));
         }
         else

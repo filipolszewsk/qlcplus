@@ -59,7 +59,8 @@ enum class PTOffsetDirection
     CenterToSides,
     SidesToCenter,
     Alternate,
-    Symmetric
+    Symmetric,
+    Random
 };
 
 enum class PTOffsetStepMode : int
@@ -142,7 +143,8 @@ enum class PTPositionMotionDirection : int
     Reverse,
     AlternateWings,
     SymmetricPairs,
-    ReverseAlternateWings
+    ReverseAlternateWings,
+    Mirror
 };
 
 struct PTCustomCurvePoint

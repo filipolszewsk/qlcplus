@@ -25,6 +25,8 @@ public:
 
     explicit PTTransitionColumnGroupBar(QWidget* parent = nullptr);
 
+    void setAllButtonVisible(bool visible);
+    void setAllButtonLabel(const QString& label);
     void setGroups(const QVector<Group>& groups);
     QString activeGroupId() const;
     void setActiveGroupId(const QString& id);
@@ -38,4 +40,6 @@ private slots:
 private:
     QButtonGroup* m_group = nullptr;
     QString m_activeId;
+    QString m_allButtonLabel;
+    bool m_allButtonVisible = true;
 };

@@ -16,7 +16,6 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QSpinBox>
-#include <QCheckBox>
 
 #include "presettablev2widget.h"
 
@@ -85,7 +84,6 @@ private:
     QList<FxTypeEntry> m_fxTypeEntries;
 
     QLineEdit*        m_nameEdit      = nullptr;
-    QCheckBox*        m_useFor1DFxChk = nullptr;
     QGroupBox*        m_intensityGrp  = nullptr;
     QVector<InputSelectionWidget*> m_intensityInputSels;
     QRadioButton*     m_rbNumeric     = nullptr;

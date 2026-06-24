@@ -115,10 +115,30 @@ public:
     virtual bool multiButtonBeginFlash(int outputIdx, int parameter, int index,
                                        quint32 sourceWidgetId, quint64 token,
                                        double timeMultiplier = 1.0) = 0;
+    virtual bool multiButtonBeginFlashFromSourceAndPhase(int outputIdx, int parameter,
+                                                         int index,
+                                                         quint32 sourceWidgetId,
+                                                         quint64 token,
+                                                         quint32 sourceEngineId,
+                                                         quint64 phaseAnchorMs,
+                                                         double timeMultiplier = 1.0)
+    {
+        Q_UNUSED(sourceEngineId);
+        Q_UNUSED(phaseAnchorMs);
+        return multiButtonBeginFlash(outputIdx, parameter, index,
+                                     sourceWidgetId, token, timeMultiplier);
+    }
     virtual bool multiButtonEndFlash(int outputIdx, int parameter, int index,
                                      quint32 sourceWidgetId, quint64 token) = 0;
+    virtual bool multiButtonEndFlashFromSource(int outputIdx, int parameter, int index,
+                                               quint32 sourceWidgetId, quint64 token,
+                                               quint32 sourceEngineId)
+    {
+        Q_UNUSED(sourceEngineId);
+        return multiButtonEndFlash(outputIdx, parameter, index, sourceWidgetId, token);
+    }
     virtual bool multiButtonFlashGateActive() const = 0;
 };
 
 Q_DECLARE_INTERFACE(PresetTableV2MultiButtonFlashIface,
-                    "org.qlcplus.PresetTableV2MultiButtonFlashIface/1.2")
+                    "org.qlcplus.PresetTableV2MultiButtonFlashIface/1.3")

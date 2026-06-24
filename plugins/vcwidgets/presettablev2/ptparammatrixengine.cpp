@@ -316,6 +316,7 @@ int PTParamMatrixEngine::waveFrontFromOffset(PTOffsetDirection dir)
         case PTOffsetDirection::SidesToCenter: return 4;
         case PTOffsetDirection::Alternate:
         case PTOffsetDirection::Symmetric:      return 0;
+        case PTOffsetDirection::Random:         return 1;
         default:                                return 1;
     }
 }

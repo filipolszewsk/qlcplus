@@ -13,6 +13,7 @@
 PTTransitionColumnGroupBar::PTTransitionColumnGroupBar(QWidget* parent)
     : QWidget(parent)
     , m_group(new QButtonGroup(this))
+    , m_allButtonLabel(tr("All"))
 {
     m_group->setExclusive(true);
     connect(m_group, &QButtonGroup::buttonClicked,
@@ -20,6 +21,16 @@ PTTransitionColumnGroupBar::PTTransitionColumnGroupBar(QWidget* parent)
     auto* layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 4);
     layout->setSpacing(4);
+}
+
+void PTTransitionColumnGroupBar::setAllButtonVisible(bool visible)
+{
+    m_allButtonVisible = visible;
+}
+
+void PTTransitionColumnGroupBar::setAllButtonLabel(const QString& label)
+{
+    m_allButtonLabel = label.isEmpty() ? tr("All") : label;
 }
 
 void PTTransitionColumnGroupBar::onButtonClicked(QAbstractButton* btn)
@@ -67,7 +78,8 @@ void PTTransitionColumnGroupBar::setGroups(const QVector<Group>& groups)
         hLayout->addWidget(btn);
     };
 
-    addButton(QString(), tr("All"), m_activeId.isEmpty());
+    if (m_allButtonVisible)
+        addButton(QString(), m_allButtonLabel, m_activeId.isEmpty());
     for (const Group& group : groups)
         addButton(group.id, group.label, m_activeId == group.id);
     hLayout->addStretch(1);

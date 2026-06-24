@@ -75,6 +75,7 @@ static const QString KXMLPluginId = QStringLiteral("PluginId");
 static const QString KXMLPluginIdVal = QStringLiteral("org.qlcplus.vcwidgets.presettablev2transition");
 static const QString KXMLTargetTable = QStringLiteral("TargetTableId");
 static const QString KXMLShowLog = QStringLiteral("ShowLog");
+static const QString KXMLShowInheritedValues = QStringLiteral("ShowInheritedValues");
 static const QString KDefaultEngineCaption = QStringLiteral("Preset Table Engine");
 
 static bool isDefaultPresetTableEngineCaption(const QString& caption)
@@ -216,6 +217,26 @@ static void migrateLegacyPositionMotionFields(PTTransitionPreset& p,
         p.customCurveEnabled = true;
     }
 }
+
+static const int kPositionMotionBuiltinDataBase = 1000;
+
+static int encodePositionMotionBuiltin(PTPositionMotion motion, int builtinMode)
+{
+    return kPositionMotionBuiltinDataBase + int(motion) * 10 + qBound(0, builtinMode, 1);
+}
+
+static bool decodePositionMotionBuiltin(int value, int* motion, int* builtinMode)
+{
+    if (value < kPositionMotionBuiltinDataBase)
+        return false;
+    const int encoded = value - kPositionMotionBuiltinDataBase;
+    if (motion)
+        *motion = encoded / 10;
+    if (builtinMode)
+        *builtinMode = encoded % 10;
+    return true;
+}
+
 static const QString KXMLPresetPositionPath2D = QStringLiteral("PositionPath2D");
 static const QString KXMLPresetPositionPath2DClosed = QStringLiteral("PositionPath2DClosed");
 static const QString KXMLCustomCurveItem = QStringLiteral("CustomCurveItem");
@@ -279,6 +300,11 @@ static PTTransitionPreset defaultPreset(int index, PTTransitionMode bankMode)
                       || bankMode == PTTransitionMode::Channel1D)
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
     p.offsetDirection = PTOffsetDirection::CenterToSides;
+    if (bankMode == PTTransitionMode::MultiFx)
+    {
+        p.offsetStepMode = PTOffsetStepMode::CoveragePercent;
+        p.offsetCoverage = 10;
+    }
     if (bankMode == PTTransitionMode::Channel1D)
     {
         p.name = QObject::tr("1D FX %1").arg(index + 1);
@@ -449,6 +475,13 @@ static void setComboDataIndex(QComboBox* combo, int value)
     }
 }
 
+static constexpr int kMultiFxModeInterpolationValue = 2000;
+
+static bool isMultiFxModeInterpolationValue(int value)
+{
+    return value == kMultiFxModeInterpolationValue;
+}
+
 static bool isLegacyChannel1DApplyMode(int value)
 {
     return value == int(PTChannel1DApplyMode::AbsoluteRange)
@@ -484,15 +517,85 @@ QWidget* PresetTableV2TransitionDelegate::createEditor(
                 .contains(index.column()))
             return nullptr;
         QWidget* editor = m_owner->createEditorForItemColumn(parent, item, index.column());
-        if (index.column() == PresetTableV2TransitionWidget::ColMultiFxTargetMode)
+        if (index.column() == PresetTableV2TransitionWidget::ColMultiFxTargetMode
+                || index.column() == PresetTableV2TransitionWidget::ColPositionMotion
+                || index.column() == PresetTableV2TransitionWidget::ColMultiFxInterpolationPrimary
+                || index.column() == PresetTableV2TransitionWidget::ColMultiFxInterpolationSecondary)
         {
             if (auto* combo = qobject_cast<QComboBox*>(editor))
             {
-                auto* self = const_cast<PresetTableV2TransitionDelegate*>(this);
+                QPointer<PresetTableV2TransitionWidget> owner(m_owner);
+                QPointer<QComboBox> safeCombo(combo);
+                QPersistentModelIndex persistentIndex(index);
                 connect(combo, QOverload<int>::of(&QComboBox::activated),
-                        self, [self, combo]() {
-                    emit self->commitData(combo);
-                    emit self->closeEditor(combo, QAbstractItemDelegate::NoHint);
+                        combo, [owner, safeCombo, persistentIndex](int activatedIndex) {
+                    if (!owner || !safeCombo || !persistentIndex.isValid()
+                            || owner->m_rebuildingTable
+                            || owner->m_closingTableEditors
+                            || owner->m_editingCustomCurve
+                            || owner->m_committingCustomDialog)
+                        return;
+                    if (activatedIndex < 0 || activatedIndex >= safeCombo->count())
+                        return;
+
+                    QAbstractItemModel* model =
+                            const_cast<QAbstractItemModel*>(persistentIndex.model());
+                    auto* tree = qobject_cast<QTreeWidget*>(model ? model->parent() : nullptr);
+                    if (!tree)
+                        return;
+
+                    QTreeWidgetItem* item = tree->itemFromIndex(persistentIndex);
+                    const int col = persistentIndex.column();
+                    if (!item || col <= PresetTableV2TransitionWidget::ColName
+                            || col >= PresetTableV2TransitionWidget::ColCount)
+                        return;
+
+                    const PTTransitionMode mode = owner->modeForTable(tree);
+                    PTTransitionCellAddress address;
+                    address.row = item->data(0, kItemPresetIndexRole).toInt();
+                    address.outputIdx = item->data(0, kItemOutputIndexRole).toInt();
+                    address.selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+                    address.multiFxRouteIdx =
+                            item->data(0, kItemMultiFxRouteIndexRole).isValid()
+                            ? item->data(0, kItemMultiFxRouteIndexRole).toInt() : -1;
+                    address.multiFxRouteOutputIdx =
+                            item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+                            ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : -1;
+                    address.col = col;
+
+                    QTreeWidgetItem* expectedItem = nullptr;
+                    if (mode == PTTransitionMode::MultiFx && address.multiFxRouteIdx >= 0)
+                    {
+                        expectedItem = owner->itemForMultiFxRouteAddress(
+                                address.row, address.multiFxRouteIdx,
+                                address.multiFxRouteOutputIdx, address.selectionIdx);
+                    }
+                    else
+                    {
+                        expectedItem = owner->itemForPresetAddress(
+                                mode, address.row, address.outputIdx, address.selectionIdx);
+                    }
+                    if (expectedItem != item)
+                    {
+                        VCPluginDiagnostics::breadcrumb(
+                                QStringLiteral("presettablev2transition"),
+                                owner->id(), owner->caption(),
+                                QStringLiteral("combo direct commit stale item ignored mode=%1 row=%2 output=%3 selection=%4 col=%5")
+                                        .arg(int(mode)).arg(address.row)
+                                        .arg(address.outputIdx).arg(address.selectionIdx)
+                                        .arg(PresetTableV2TransitionWidget::presetColumnXmlName(col)));
+                        return;
+                    }
+
+                    const QVariant value = safeCombo->itemData(activatedIndex);
+                    safeCombo->setCurrentIndex(activatedIndex);
+                    safeCombo->setProperty("_ptv2_directCommitted", true);
+                    ScopedBoolFlag delegateGuard(owner->m_committingDelegateEditor);
+                    QSignalBlocker tableBlocker(tree);
+                    const bool inherited =
+                            item->data(col, kPresetCellInheritedRole).toBool();
+                    owner->setPresetCellValue(item, col, value, inherited);
+                    owner->commitPresetCellEdit(tree, address, value);
                 });
             }
         }
@@ -508,7 +611,26 @@ QWidget* PresetTableV2TransitionDelegate::createEditor(
 void PresetTableV2TransitionDelegate::setEditorData(QWidget* editor,
                                                     const QModelIndex& index) const
 {
-    const QVariant value = index.data(kPresetCellValueRole);
+    QVariant value = index.data(kPresetCellValueRole);
+    if (m_owner && index.column() == PresetTableV2TransitionWidget::ColPositionMotion)
+    {
+        auto* tree = qobject_cast<QTreeWidget*>(index.model() ? index.model()->parent() : nullptr);
+        QTreeWidgetItem* item = tree ? tree->itemFromIndex(index) : nullptr;
+        if (item && m_owner->modeForTable(tree) == PTTransitionMode::MultiFx)
+        {
+            const PTTransitionMode contextMode = m_owner->multiFxContextModeForItem(item);
+            if (contextMode == PTTransitionMode::Continuous)
+            {
+                value = kMultiFxModeInterpolationValue;
+            }
+            else if (contextMode == PTTransitionMode::Channel1D)
+            {
+                value = index.siblingAtColumn(
+                            PresetTableV2TransitionWidget::ColChannel1DApplyMode)
+                        .data(kPresetCellValueRole);
+            }
+        }
+    }
     if (auto* combo = qobject_cast<QComboBox*>(editor))
     {
         if (m_owner && index.column() == PresetTableV2TransitionWidget::ColWaveShape
@@ -522,6 +644,24 @@ void PresetTableV2TransitionDelegate::setEditorData(QWidget* editor,
                 && isLegacyChannel1DApplyMode(value.toInt()))
         {
             combo->addItem(m_owner->comboDisplayTextForColumn(index.column(), value), value.toInt());
+        }
+        if (index.column() == PresetTableV2TransitionWidget::ColPositionMotion)
+        {
+            const int motion = value.toInt();
+            if (motion == int(PTPositionMotion::Pan1D)
+                    || motion == int(PTPositionMotion::Tilt1D))
+            {
+                const int builtin = index.siblingAtColumn(
+                            PresetTableV2TransitionWidget::ColPosition1DBuiltinMode)
+                        .data(kPresetCellValueRole).toInt();
+                const int encoded = encodePositionMotionBuiltin(
+                            PTPositionMotion(motion), builtin);
+                if (combo->findData(encoded) >= 0)
+                {
+                    setComboDataIndex(combo, encoded);
+                    return;
+                }
+            }
         }
         setComboDataIndex(combo, value.toInt());
         return;
@@ -551,6 +691,8 @@ void PresetTableV2TransitionDelegate::setModelData(QWidget* editor,
             || m_owner->m_closingTableEditors
             || m_owner->m_editingCustomCurve
             || m_owner->m_committingCustomDialog)
+        return;
+    if (editor && editor->property("_ptv2_directCommitted").toBool())
         return;
 
     QVariant value;
@@ -891,56 +1033,112 @@ void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
             : itemForPresetAddress(mode, address.row,
                                    address.outputIdx,
                                    address.selectionIdx);
-    if (mode == PTTransitionMode::MultiFx && address.col == ColMultiFxTargetMode)
-    {
+    auto setMultiFxLayerKind = [&](int newKind, bool rebuildNow,
+                                   const QString& reason) -> bool {
         if (address.row < 0 || address.multiFxRouteIdx < 0)
-            return;
+            return false;
         normalizeMultiFxTargetRoutes();
         if (address.row >= m_multiFxTargetRoutes.size()
                 || address.multiFxRouteIdx >= m_multiFxTargetRoutes.at(address.row).size())
-            return;
+            return false;
 
         PTMultiFxTargetTableRoute& route =
                 m_multiFxTargetRoutes[address.row][address.multiFxRouteIdx];
-        const int oldKind = route.layerKind;
-        if (value.toInt() == 1)
+        const int oldKind = effectiveMultiFxLayerKind(
+                    route, address.multiFxRouteOutputIdx,
+                    address.selectionIdx > 0 ? address.selectionIdx - 1 : -1);
+        if (address.multiFxRouteOutputIdx >= 0)
         {
-            route.layerKind = int(PTMultiFxTargetLayerKind::Interpolation);
+            bool hasOutputRoute = false;
+            for (const PTMultiFxTargetOutputRoute& outputRoute : route.outputs)
+            {
+                if (outputRoute.outputIndex == address.multiFxRouteOutputIdx)
+                {
+                    hasOutputRoute = true;
+                    break;
+                }
+            }
+            if (!hasOutputRoute)
+            {
+                PTMultiFxTargetOutputRoute outputRoute;
+                outputRoute.outputIndex = address.multiFxRouteOutputIdx;
+                route.outputs.append(outputRoute);
+            }
+
+            PTTransitionProviderOutputLayer layer =
+                    route.outputOverrides.value(address.multiFxRouteOutputIdx);
+            if (address.selectionIdx > 0)
+            {
+                while (layer.selections.size() < address.selectionIdx)
+                {
+                    PTTransitionProviderSelection selection;
+                    selection.name = tr("Selection %1").arg(layer.selections.size() + 1);
+                    layer.selections.append(selection);
+                }
+                layer.selections[address.selectionIdx - 1].overrides.multiFxLayerKind = newKind;
+            }
+            else
+            {
+                layer.all.multiFxLayerKind = newKind;
+                for (PTTransitionProviderSelection& selection : layer.selections)
+                    selection.overrides.multiFxLayerKind = -1;
+            }
+            route.outputOverrides.insert(address.multiFxRouteOutputIdx, layer);
         }
         else
         {
-            route.layerKind = targetTableUsesPositionMode(route.tableId)
-                    ? int(PTMultiFxTargetLayerKind::PositionMotion)
-                    : int(PTMultiFxTargetLayerKind::Channel1D);
+            route.layerKind = newKind;
+            for (auto it = route.outputOverrides.begin();
+                 it != route.outputOverrides.end(); ++it)
+            {
+                PTTransitionProviderOutputLayer& layer = it.value();
+                layer.all.multiFxLayerKind = -1;
+                for (PTTransitionProviderSelection& selection : layer.selections)
+                    selection.overrides.multiFxLayerKind = -1;
+            }
         }
         VCPluginDiagnostics::breadcrumb(
                 QStringLiteral("presettablev2transition"), id(), caption(),
                 QStringLiteral("multifx route mode commit row=%1 route=%2 output=%3 selection=%4 table=%5 old=%6 new=%7")
                         .arg(address.row).arg(address.multiFxRouteIdx)
                         .arg(address.multiFxRouteOutputIdx).arg(address.selectionIdx)
-                        .arg(route.tableId).arg(oldKind).arg(route.layerKind));
-        publishProviderSnapshot(QStringLiteral("multifx route mode"));
-        rebuildPresetTable(mode);
-        if (QTreeWidgetItem* parent = parentItemForPreset(mode, address.row))
+                        .arg(route.tableId).arg(oldKind).arg(newKind));
+        if (rebuildNow)
         {
-            parent->setExpanded(true);
-            if (QTreeWidgetItem* routeItem = itemForMultiFxRouteAddress(
-                        address.row, address.multiFxRouteIdx, -1, -1))
-            {
-                routeItem->setExpanded(true);
-                if (address.multiFxRouteOutputIdx >= 0)
-                {
-                    if (QTreeWidgetItem* outputItem = itemForMultiFxRouteAddress(
-                                address.row, address.multiFxRouteIdx,
-                                address.multiFxRouteOutputIdx, 0))
-                        outputItem->setExpanded(true);
-                }
-            }
+            publishProviderSnapshot(reason);
+            rebuildPresetTable(mode);
+            notifyTablePresetCacheRefresh();
+            updateEffectPreview();
+            if (m_doc)
+                m_doc->setModified();
         }
-        notifyTablePresetCacheRefresh();
-        updateEffectPreview();
-        if (m_doc)
-            m_doc->setModified();
+        return true;
+    };
+
+    const bool multiFxModeColumn = mode == PTTransitionMode::MultiFx
+            && address.col == ColPositionMotion
+            && address.multiFxRouteIdx >= 0;
+    const bool multiFxInterpolationModeValue =
+            multiFxModeColumn && isMultiFxModeInterpolationValue(value.toInt());
+    if (mode == PTTransitionMode::MultiFx
+            && (address.col == ColMultiFxTargetMode || multiFxInterpolationModeValue))
+    {
+        int newKind = int(PTMultiFxTargetLayerKind::Interpolation);
+        if (address.col == ColMultiFxTargetMode && value.toInt() != 1)
+        {
+            if (address.row < 0 || address.multiFxRouteIdx < 0)
+                return;
+            normalizeMultiFxTargetRoutes();
+            if (address.row >= m_multiFxTargetRoutes.size()
+                    || address.multiFxRouteIdx >= m_multiFxTargetRoutes.at(address.row).size())
+                return;
+            const PTMultiFxTargetTableRoute& route =
+                    m_multiFxTargetRoutes.at(address.row).at(address.multiFxRouteIdx);
+            newKind = targetTableUsesPositionMode(route.tableId)
+                    ? int(PTMultiFxTargetLayerKind::PositionMotion)
+                    : int(PTMultiFxTargetLayerKind::Channel1D);
+        }
+        setMultiFxLayerKind(newKind, true, QStringLiteral("multifx route mode"));
         return;
     }
     if (mode == PTTransitionMode::MultiFx)
@@ -983,12 +1181,63 @@ void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
         return;
     }
 
+    bool multiFxModeColumnPositionTarget = false;
+    bool multiFxModeColumnHasTarget = false;
+    if (multiFxModeColumn && !multiFxInterpolationModeValue)
+    {
+        normalizeMultiFxTargetRoutes();
+        if (address.row >= 0 && address.row < m_multiFxTargetRoutes.size()
+                && address.multiFxRouteIdx >= 0
+                && address.multiFxRouteIdx < m_multiFxTargetRoutes.at(address.row).size())
+        {
+            const PTMultiFxTargetTableRoute& route =
+                    m_multiFxTargetRoutes.at(address.row).at(address.multiFxRouteIdx);
+            multiFxModeColumnHasTarget = true;
+            multiFxModeColumnPositionTarget =
+                    targetTableUsesPositionMode(route.tableId);
+            const int fxKind = multiFxModeColumnPositionTarget
+                    ? int(PTMultiFxTargetLayerKind::PositionMotion)
+                    : int(PTMultiFxTargetLayerKind::Channel1D);
+            if (!setMultiFxLayerKind(fxKind, false,
+                                     QStringLiteral("multifx route mode")))
+                return;
+        }
+    }
+
     ScopedBoolFlag guard(m_committingPresetCell);
+    const bool multiFxChannel1DModeColumn = mode == PTTransitionMode::MultiFx
+            && address.col == ColPositionMotion
+            && multiFxModeColumnHasTarget
+            && !multiFxModeColumnPositionTarget;
+    QVariant displayValue = value;
+    int decodedMotion = -1;
+    int decodedBuiltin = -1;
+    const bool decodedMotionBuiltin = address.col == ColPositionMotion
+            && !multiFxChannel1DModeColumn
+            && decodePositionMotionBuiltin(value.toInt(), &decodedMotion, &decodedBuiltin);
+    if (decodedMotionBuiltin)
+        displayValue = decodedMotion;
     if (item)
     {
         QSignalBlocker blocker(table);
-        setPresetCellValue(item, address.col, value,
-                           item->data(address.col, kPresetCellInheritedRole).toBool());
+        if (multiFxChannel1DModeColumn)
+        {
+            setPresetCellValue(item, ColChannel1DApplyMode, value,
+                               item->data(ColChannel1DApplyMode,
+                                          kPresetCellInheritedRole).toBool());
+            item->setText(ColPositionMotion,
+                          displayTextForColumn(ColChannel1DApplyMode, value));
+            item->setData(ColPositionMotion, kPresetCellValueRole, QVariant());
+        }
+        else
+        {
+            setPresetCellValue(item, address.col, displayValue,
+                               item->data(address.col, kPresetCellInheritedRole).toBool());
+        }
+        if (decodedMotionBuiltin)
+            setPresetCellValue(item, ColPosition1DBuiltinMode, decodedBuiltin,
+                               item->data(ColPosition1DBuiltinMode,
+                                          kPresetCellInheritedRole).toBool());
     }
 
     VCPluginDiagnostics::breadcrumb(
@@ -998,10 +1247,27 @@ void PresetTableV2TransitionWidget::commitPresetCellEdit(QTreeWidget* table,
                     .arg(address.selectionIdx)
                     .arg(presetColumnXmlName(address.col), value.toString())
                     .arg(item ? 1 : 0).arg(m_committingDelegateEditor ? 1 : 0));
-    slotPresetChanged(mode, address.row, address.col,
-                      address.outputIdx, address.selectionIdx,
-                      address.multiFxRouteIdx,
-                      address.multiFxRouteOutputIdx);
+    if (!multiFxChannel1DModeColumn)
+    {
+        slotPresetChanged(mode, address.row, address.col,
+                          address.outputIdx, address.selectionIdx,
+                          address.multiFxRouteIdx,
+                          address.multiFxRouteOutputIdx);
+    }
+    if (multiFxChannel1DModeColumn)
+    {
+        slotPresetChanged(mode, address.row, ColChannel1DApplyMode,
+                          address.outputIdx, address.selectionIdx,
+                          address.multiFxRouteIdx,
+                          address.multiFxRouteOutputIdx);
+    }
+    if (decodedMotionBuiltin)
+    {
+        slotPresetChanged(mode, address.row, ColPosition1DBuiltinMode,
+                          address.outputIdx, address.selectionIdx,
+                          address.multiFxRouteIdx,
+                          address.multiFxRouteOutputIdx);
+    }
     VCPluginDiagnostics::breadcrumb(
             QStringLiteral("presettablev2transition"), id(), caption(),
             QStringLiteral("transition parameter commit end mode=%1 row=%2 output=%3 selection=%4 col=%5 value=%6")
@@ -1056,6 +1322,56 @@ QSet<int> PresetTableV2TransitionWidget::applySmartWingsDefaults(PTTransitionMod
     return changed;
 }
 
+QSet<int> PresetTableV2TransitionWidget::applySmartSpreadDirectionDefaults(
+        PTTransitionMode mode, QTreeWidgetItem* item)
+{
+    QSet<int> changed;
+    if (!item)
+        return changed;
+    if (!linkedTableUsesPositionMode()
+            || (mode != PTTransitionMode::PositionMotion
+                && mode != PTTransitionMode::MultiFx))
+        return changed;
+
+    const int motionDirection =
+            item->data(ColPositionMotionDir, kPresetCellValueRole).toInt();
+    if (motionDirection != int(PTPositionMotionDirection::Forward))
+        return changed;
+
+    const PTOffsetDirection spreadDirection =
+            PTOffsetDirection(item->data(ColOffsetDir, kPresetCellValueRole).toInt());
+    bool wantsSymmetricMotion = false;
+    switch (spreadDirection)
+    {
+        case PTOffsetDirection::CenterToSides:
+        case PTOffsetDirection::SidesToCenter:
+        case PTOffsetDirection::Alternate:
+        case PTOffsetDirection::Symmetric:
+            wantsSymmetricMotion = true;
+            break;
+        case PTOffsetDirection::LeftToRight:
+        case PTOffsetDirection::RightToLeft:
+        case PTOffsetDirection::Random:
+            break;
+    }
+    if (!wantsSymmetricMotion)
+        return changed;
+
+    setPresetCellValue(item, ColPositionMotionDir,
+                       int(PTPositionMotionDirection::Mirror), false);
+    changed.insert(ColPositionMotionDir);
+    VCPluginDiagnostics::breadcrumb(
+            QStringLiteral("presettablev2transition"), id(), caption(),
+            QStringLiteral("smart spread defaults mode=%1 row=%2 output=%3 selection=%4 dir=%5 motionDir=%6")
+                    .arg(int(mode))
+                    .arg(item->data(0, kItemPresetIndexRole).toInt())
+                    .arg(item->data(0, kItemOutputIndexRole).toInt())
+                    .arg(item->data(0, kItemSelectionIndexRole).toInt())
+                    .arg(int(spreadDirection))
+                    .arg(int(PTPositionMotionDirection::Mirror)));
+    return changed;
+}
+
 void PresetTableV2TransitionWidget::configureTransitionCombo(QComboBox* combo, int popupMinWidth)
 {
     if (!combo)
@@ -1100,10 +1416,10 @@ QString PresetTableV2TransitionWidget::columnTitle(int col)
         case ColFadeIn:        return QObject::tr("Fade in %");
         case ColFadeOut:       return QObject::tr("Fade out %");
         case ColWaveLevel:     return QObject::tr("Wave level");
-        case ColStartOffset:   return QObject::tr("Start offset");
+        case ColStartOffset:   return QObject::tr("Offset");
         case ColPropagation:   return QObject::tr("Propagation");
         case ColSpeedMult:     return QObject::tr("Mult.");
-        case ColPositionMotion:  return QObject::tr("Motion");
+        case ColPositionMotion:  return QObject::tr("Mode");
         case ColPositionMotionDir: return QObject::tr("Motion direction");
         case ColPosition1DBuiltinMode: return QObject::tr("1D builtin");
         case ColPositionPanSize: return QObject::tr("Pan size °");
@@ -1115,7 +1431,7 @@ QString PresetTableV2TransitionWidget::columnTitle(int col)
         case ColChannel1DHigh: return QObject::tr("Range Max");
         case ColChannel1DAmount: return QObject::tr("Wave level");
         case ColChannel1DCustomColumn: return QObject::tr("Column");
-        case ColMultiFxTargetMode: return QObject::tr("Mode");
+        case ColMultiFxTargetMode: return QObject::tr("Layer");
         case ColMultiFxInterpolationSource: return QObject::tr("Source");
         case ColMultiFxInterpolationPrimary: return QObject::tr("Primary row");
         case ColMultiFxInterpolationSecondary: return QObject::tr("Secondary row");
@@ -1177,8 +1493,8 @@ QString PresetTableV2TransitionWidget::columnTooltipForCol(int col) const
     {
         switch (col)
         {
-            case ColChannel1DApplyMode:
-                return tr("Dimmer FX stays under the base value; Bump adds above the base value");
+        case ColChannel1DApplyMode:
+            return tr("Normal stays under the base value; Override can add above the base value");
             case ColChannel1DAmount:
                 return tr("Main wave level of the 1D effect");
             case ColChannel1DLow:
@@ -1246,7 +1562,11 @@ void PresetTableV2TransitionWidget::applyDefaultColumnWidths(QTreeWidget* table)
     setFixed(ColBlocks, 56);
     setFixed(ColWingsSymmetry, 116);
     setFixed(ColOffsetStepMode, 86);
-    setFixed(ColOffsetStep, 76);
+    setFixed(ColOffsetStep, 58);
+    setFixed(ColWaveWidth, 58);
+    setFixed(ColFadeIn, 48);
+    setFixed(ColFadeOut, 48);
+    setFixed(ColStartOffset, 54);
     setFixed(ColSpeedMult, 36);
     setFixed(ColPositionMotion, 88);
     setFixed(ColPositionMotionDir, 52);
@@ -1353,7 +1673,12 @@ PTTransitionMode PresetTableV2TransitionWidget::multiFxContextModeForItem(
     if (row < 0 || row >= m_multiFxTargetRoutes.size()
             || routeIdx < 0 || routeIdx >= m_multiFxTargetRoutes.at(row).size())
         return PTTransitionMode::MultiFx;
-    return multiFxRouteMode(m_multiFxTargetRoutes.at(row).at(routeIdx));
+    const int outputIdx = item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+            ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : -1;
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+    return multiFxRouteMode(m_multiFxTargetRoutes.at(row).at(routeIdx),
+                            outputIdx,
+                            selectionIdx > 0 ? selectionIdx - 1 : -1);
 }
 
 QSet<int> PresetTableV2TransitionWidget::allowedMultiFxColumnsForContext(
@@ -1376,14 +1701,14 @@ QSet<int> PresetTableV2TransitionWidget::allowedMultiFxColumnsForContext(
 
     add({ ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
           ColOffsetStepMode, ColOffsetStep, ColWaveWidth, ColWaveShape,
-          ColFadeIn, ColFadeOut, ColStartOffset, ColSpeedMult,
-          ColMultiFxTargetMode });
+          ColFadeIn, ColFadeOut, ColStartOffset, ColSpeedMult });
     if (contextMode == PTTransitionMode::PositionMotion)
         add({ ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode });
     else if (contextMode == PTTransitionMode::Channel1D)
-        add({ ColChannel1DApplyMode, ColChannel1DAmount });
+        add({ ColPositionMotion, ColChannel1DApplyMode, ColChannel1DAmount });
     else if (contextMode == PTTransitionMode::Continuous)
-        add({ ColMultiFxInterpolationPrimary, ColMultiFxInterpolationSecondary });
+        add({ ColPositionMotion, ColMultiFxInterpolationPrimary,
+              ColMultiFxInterpolationSecondary });
     return cols;
 }
 
@@ -1391,6 +1716,8 @@ QVector<PTTransitionColumnGroupBar::Group>
 PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
         PTTransitionMode contextMode, bool rootContext) const
 {
+    Q_UNUSED(contextMode);
+    Q_UNUSED(rootContext);
     QVector<PTTransitionColumnGroupBar::Group> groups;
     QSet<int> visible;
     auto addVisible = [&visible](std::initializer_list<int> list) {
@@ -1400,13 +1727,10 @@ PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
     addVisible({ ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
                  ColOffsetStepMode, ColOffsetStep, ColWaveWidth, ColWaveShape,
                  ColFadeIn, ColFadeOut, ColStartOffset, ColSpeedMult,
-                 ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
-                 ColChannel1DApplyMode, ColChannel1DAmount,
-                 ColMultiFxTargetMode,
+                 ColPositionMotion, ColPositionMotionDir,
+                 ColChannel1DAmount,
                  ColMultiFxInterpolationPrimary,
                  ColMultiFxInterpolationSecondary });
-    Q_UNUSED(rootContext);
-
     auto add = [&](const QString& id, const QString& label, std::initializer_list<int> cols) {
         PTTransitionColumnGroupBar::Group group;
         group.id = id;
@@ -1420,19 +1744,28 @@ PresetTableV2TransitionWidget::columnGroupsForMultiFxContext(
             groups.append(group);
     };
 
-    add(QStringLiteral("common"), tr("Common"),
-        { ColWaveWidth, ColWaveShape, ColFadeIn, ColFadeOut });
+    add(QStringLiteral("simple"), tr("Simple"),
+        { ColOffsetDir, ColOffsetStep, ColWaveWidth, ColWaveShape,
+          ColFadeIn, ColFadeOut, ColStartOffset, ColPositionMotion });
     add(QStringLiteral("fx"), tr("FX"),
-        { ColMultiFxTargetMode,
-          ColPositionMotion, ColPositionMotionDir, ColPosition1DBuiltinMode,
-          ColChannel1DApplyMode, ColChannel1DAmount,
+        { ColPositionMotion, ColWaveWidth, ColPositionMotionDir,
+          ColWaveShape, ColFadeIn, ColFadeOut,
           ColMultiFxInterpolationPrimary,
-          ColMultiFxInterpolationSecondary });
+          ColMultiFxInterpolationSecondary,
+          ColChannel1DAmount });
     add(QStringLiteral("spread"), tr("Spread"),
         { ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
           ColOffsetStepMode, ColOffsetStep });
     add(QStringLiteral("timing"), tr("Timing"),
         { ColStartOffset, ColSpeedMult });
+    add(QStringLiteral("advanced"), tr("Advanced"),
+        { ColAxis, ColOffsetDir, ColWings, ColBlocks, ColWingsSymmetry,
+          ColOffsetStepMode, ColOffsetStep, ColWaveWidth, ColWaveShape,
+          ColFadeIn, ColFadeOut, ColStartOffset, ColSpeedMult,
+          ColPositionMotion, ColPositionMotionDir,
+          ColChannel1DAmount,
+          ColMultiFxInterpolationPrimary,
+          ColMultiFxInterpolationSecondary });
     return groups;
 }
 
@@ -1531,9 +1864,8 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
         };
         const bool hasStoredActive = m_columnGroupFilterByMode.contains(int(mode));
         QString activeId = m_columnGroupFilterByMode.value(int(mode));
-        const QString preferredId = rootContext ? QStringLiteral("common")
-                                                : QStringLiteral("fx");
-        if (!hasStoredActive || (!activeId.isEmpty() && !groupExists(activeId)))
+        const QString preferredId = QStringLiteral("simple");
+        if (!hasStoredActive || activeId.isEmpty() || !groupExists(activeId))
         {
             activeId = groupExists(preferredId) ? preferredId
                                                 : (groups.isEmpty() ? QString() : groups.first().id);
@@ -1545,6 +1877,8 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
         if (PTTransitionColumnGroupBar* bar = columnGroupBarForMode(mode))
         {
             bar->blockSignals(true);
+            bar->setAllButtonVisible(false);
+            bar->setAllButtonLabel(tr("Advanced"));
             bar->setGroups(groups);
             bar->setActiveGroupId(activeId);
             bar->blockSignals(false);
@@ -1583,6 +1917,46 @@ void PresetTableV2TransitionWidget::applyColumnGroupFilter(QTreeWidget* table,
         }
         for (int col = ColAxis; col < ColCount; ++col)
             table->setColumnHidden(col, !filtered.contains(col));
+        auto applyVisualOrder = [table](std::initializer_list<int> cols) {
+            QHeaderView* header = table->header();
+            if (!header)
+                return;
+            int targetVisual = 1;
+            for (int col : cols)
+            {
+                if (col <= ColName || col >= ColCount || table->isColumnHidden(col))
+                    continue;
+                const int currentVisual = header->visualIndex(col);
+                if (currentVisual >= 0 && currentVisual != targetVisual)
+                    header->moveSection(currentVisual, targetVisual);
+                ++targetVisual;
+            }
+        };
+        if (groupId == QStringLiteral("simple"))
+        {
+            applyVisualOrder({ ColOffsetDir, ColOffsetStep, ColWaveWidth,
+                               ColWaveShape, ColFadeIn, ColFadeOut,
+                               ColStartOffset, ColPositionMotion });
+        }
+        else if (groupId == QStringLiteral("fx"))
+        {
+            applyVisualOrder({ ColPositionMotion, ColWaveWidth, ColPositionMotionDir,
+                               ColWaveShape, ColFadeIn, ColFadeOut,
+                               ColMultiFxInterpolationPrimary,
+                               ColMultiFxInterpolationSecondary,
+                               ColChannel1DAmount });
+        }
+        else if (groupId == QStringLiteral("advanced"))
+        {
+            applyVisualOrder({ ColAxis, ColOffsetDir, ColWings, ColBlocks,
+                               ColWingsSymmetry, ColOffsetStepMode,
+                               ColOffsetStep, ColWaveWidth, ColWaveShape,
+                               ColFadeIn, ColFadeOut, ColStartOffset,
+                               ColSpeedMult, ColPositionMotion, ColPositionMotionDir,
+                               ColMultiFxInterpolationPrimary,
+                               ColMultiFxInterpolationSecondary,
+                               ColChannel1DAmount });
+        }
         return;
     }
 
@@ -1638,6 +2012,8 @@ void PresetTableV2TransitionWidget::refreshColumnGroupBarForActiveTab()
             continue;
         const QString activeId = m_columnGroupFilterByMode.value(int(mode));
         bar->blockSignals(true);
+        bar->setAllButtonVisible(true);
+        bar->setAllButtonLabel(tr("All"));
         bar->setGroups(columnGroupsForMode(mode));
         bar->setActiveGroupId(activeId);
         bar->blockSignals(false);
@@ -1799,6 +2175,7 @@ QComboBox* PresetTableV2TransitionWidget::makeOffsetDirCombo(QWidget* parent)
     c->addItem(QObject::tr("Edges → Center"), int(PTOffsetDirection::SidesToCenter));
     c->addItem(QObject::tr("Odd/Even Split"), int(PTOffsetDirection::Alternate));
     c->addItem(QObject::tr("Mirror Pairs"), int(PTOffsetDirection::Symmetric));
+    c->addItem(QObject::tr("Random"), int(PTOffsetDirection::Random));
     configureTransitionCombo(c, 160);
     return c;
 }
@@ -1824,17 +2201,26 @@ QComboBox* PresetTableV2TransitionWidget::makeWaveShapeCombo(QWidget* parent)
     return c;
 }
 
-QComboBox* PresetTableV2TransitionWidget::makePositionMotionCombo(QWidget* parent)
+QComboBox* PresetTableV2TransitionWidget::makePositionMotionCombo(
+        QWidget* parent, bool includeInterpolation)
 {
     auto* c = new QComboBox(parent);
     c->addItem(QObject::tr("Off"), int(PTPositionMotion::Off));
-    c->addItem(QObject::tr("Pan 1D"), int(PTPositionMotion::Pan1D));
+    c->addItem(QObject::tr("Pan 1D - Morph"), encodePositionMotionBuiltin(PTPositionMotion::Pan1D, 0));
     c->setItemData(c->count() - 1,
-                   QObject::tr("Pan oscillates; tilt stays at base. Engine preview: offset vs time."),
+                   QObject::tr("Pan follows the motion packet; tilt stays at base."),
                    Qt::ToolTipRole);
-    c->addItem(QObject::tr("Tilt 1D"), int(PTPositionMotion::Tilt1D));
+    c->addItem(QObject::tr("Pan 1D - Oscillate"), encodePositionMotionBuiltin(PTPositionMotion::Pan1D, 1));
     c->setItemData(c->count() - 1,
-                   QObject::tr("Tilt oscillates; pan stays at base. Engine preview: offset vs time."),
+                   QObject::tr("Pan oscillates; tilt stays at base."),
+                   Qt::ToolTipRole);
+    c->addItem(QObject::tr("Tilt 1D - Morph"), encodePositionMotionBuiltin(PTPositionMotion::Tilt1D, 0));
+    c->setItemData(c->count() - 1,
+                   QObject::tr("Tilt follows the motion packet; pan stays at base."),
+                   Qt::ToolTipRole);
+    c->addItem(QObject::tr("Tilt 1D - Oscillate"), encodePositionMotionBuiltin(PTPositionMotion::Tilt1D, 1));
+    c->setItemData(c->count() - 1,
+                   QObject::tr("Tilt oscillates; pan stays at base."),
                    Qt::ToolTipRole);
     c->addItem(QObject::tr("Circle"), int(PTPositionMotion::Circle2D));
     c->addItem(QObject::tr("Line"), int(PTPositionMotion::Line2D));
@@ -1843,7 +2229,9 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionCombo(QWidget* paren
                    Qt::ToolTipRole);
     c->addItem(QObject::tr("Figure-8"), int(PTPositionMotion::Figure8_2D));
     c->addItem(QObject::tr("Custom 2D"), int(PTPositionMotion::Custom2D));
-    configureTransitionCombo(c, 120);
+    if (includeInterpolation)
+        c->addItem(QObject::tr("Interpolation"), kMultiFxModeInterpolationValue);
+    configureTransitionCombo(c, 152);
     return c;
 }
 
@@ -1855,6 +2243,7 @@ QComboBox* PresetTableV2TransitionWidget::makePositionMotionDirCombo(QWidget* pa
     c->addItem(QObject::tr("Alternate Wings"), int(PTPositionMotionDirection::AlternateWings));
     c->addItem(QObject::tr("Reverse Alternate Wings"),
                int(PTPositionMotionDirection::ReverseAlternateWings));
+    c->addItem(QObject::tr("Mirror"), int(PTPositionMotionDirection::Mirror));
     c->addItem(QObject::tr("Mirror Pairs"), int(PTPositionMotionDirection::SymmetricPairs));
     configureTransitionCombo(c, 180);
     return c;
@@ -1896,11 +2285,14 @@ QComboBox* PresetTableV2TransitionWidget::makeChannel1DTargetModeCombo(QWidget* 
     return c;
 }
 
-QComboBox* PresetTableV2TransitionWidget::makeChannel1DApplyModeCombo(QWidget* parent)
+QComboBox* PresetTableV2TransitionWidget::makeChannel1DApplyModeCombo(
+        QWidget* parent, bool includeInterpolation)
 {
     auto* c = new QComboBox(parent);
-    c->addItem(QObject::tr("Dimmer FX"), int(PTChannel1DApplyMode::MultiplyBase));
-    c->addItem(QObject::tr("Bump"), int(PTChannel1DApplyMode::BumpAdd));
+    c->addItem(QObject::tr("Normal"), int(PTChannel1DApplyMode::MultiplyBase));
+    c->addItem(QObject::tr("Override"), int(PTChannel1DApplyMode::BumpAdd));
+    if (includeInterpolation)
+        c->addItem(QObject::tr("Interpolation"), kMultiFxModeInterpolationValue);
     configureTransitionCombo(c, 140);
     return c;
 }
@@ -2018,6 +2410,35 @@ QWidget* PresetTableV2TransitionWidget::createEditorForColumn(QWidget* parent, i
 QWidget* PresetTableV2TransitionWidget::createEditorForItemColumn(
         QWidget* parent, QTreeWidgetItem* item, int col) const
 {
+    if (col == ColPositionMotion && item)
+    {
+        const int routeIdx = item->data(0, kItemMultiFxRouteIndexRole).isValid()
+                ? item->data(0, kItemMultiFxRouteIndexRole).toInt() : -1;
+        const int row = item->data(0, kItemPresetIndexRole).toInt();
+        bool positionTarget = false;
+        bool hasRoute = false;
+        if (row >= 0 && row < m_multiFxTargetRoutes.size()
+                && routeIdx >= 0
+                && routeIdx < m_multiFxTargetRoutes.at(row).size())
+        {
+            hasRoute = true;
+            positionTarget = targetTableUsesPositionMode(
+                        m_multiFxTargetRoutes.at(row).at(routeIdx).tableId);
+        }
+        QComboBox* c = hasRoute
+                ? (positionTarget
+                   ? const_cast<PresetTableV2TransitionWidget*>(this)
+                     ->makePositionMotionCombo(parent, true)
+                   : const_cast<PresetTableV2TransitionWidget*>(this)
+                     ->makeChannel1DApplyModeCombo(parent, true))
+                : nullptr;
+        if (!c)
+            return createEditorForColumn(parent, col);
+        c->setFrame(false);
+        c->installEventFilter(const_cast<PresetTableV2TransitionWidget*>(this));
+        return c;
+    }
+
     if (col == ColMultiFxInterpolationSource)
     {
         QComboBox* c = new QComboBox(parent);
@@ -2084,10 +2505,16 @@ QVariant PresetTableV2TransitionWidget::normalizedColumnValue(int col, const QSt
         const QString normalized = QString(trimmed).remove(QLatin1Char('['))
                 .remove(QLatin1Char(']')).trimmed().toLower();
         if (normalized == QStringLiteral("dimmer fx")
-                || normalized == QStringLiteral("multiply base"))
+                || normalized == QStringLiteral("multiply base")
+                || normalized == QStringLiteral("subtractive")
+                || normalized == QStringLiteral("normal"))
             return int(PTChannel1DApplyMode::MultiplyBase);
         if (normalized == QStringLiteral("bump")
-                || normalized == QStringLiteral("bump/add"))
+                || normalized == QStringLiteral("bump/add")
+                || normalized == QStringLiteral("bump / add")
+                || normalized == QStringLiteral("additive")
+                || normalized == QStringLiteral("override")
+                || normalized == QStringLiteral("overwrite"))
             return int(PTChannel1DApplyMode::BumpAdd);
         if (normalized == QStringLiteral("legacy absolute range")
                 || normalized == QStringLiteral("absolute range"))
@@ -2185,6 +2612,7 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
                 case PTOffsetDirection::SidesToCenter:  return tr("Edges → Center");
                 case PTOffsetDirection::Alternate:      return tr("Odd/Even Split");
                 case PTOffsetDirection::Symmetric:      return tr("Mirror Pairs");
+                case PTOffsetDirection::Random:         return tr("Random");
             }
             break;
         case ColOffsetStepMode:
@@ -2206,6 +2634,20 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
             }
             break;
         case ColPositionMotion:
+            if (isMultiFxModeInterpolationValue(v))
+                return tr("Interpolation");
+            {
+                int motion = -1;
+                int builtin = -1;
+                if (decodePositionMotionBuiltin(v, &motion, &builtin))
+                {
+                    const QString builtinText = builtin == 1 ? tr("Oscillate") : tr("Morph");
+                    if (motion == int(PTPositionMotion::Pan1D))
+                        return tr("Pan 1D - %1").arg(builtinText);
+                    if (motion == int(PTPositionMotion::Tilt1D))
+                        return tr("Tilt 1D - %1").arg(builtinText);
+                }
+            }
             switch (PTPositionMotion(v))
             {
                 case PTPositionMotion::Off:        return tr("Off");
@@ -2226,6 +2668,7 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
                 case PTPositionMotionDirection::AlternateWings: return tr("Alternate Wings");
                 case PTPositionMotionDirection::ReverseAlternateWings:
                     return tr("Reverse Alternate Wings");
+                case PTPositionMotionDirection::Mirror:         return tr("Mirror");
                 case PTPositionMotionDirection::SymmetricPairs: return tr("Mirror Pairs");
             }
             break;
@@ -2264,8 +2707,8 @@ QString PresetTableV2TransitionWidget::comboDisplayTextForColumn(int col,
             {
                 case PTChannel1DApplyMode::AbsoluteRange: return tr("[Legacy] Absolute Range");
                 case PTChannel1DApplyMode::RelativeAroundBase: return tr("[Legacy] Relative Base");
-                case PTChannel1DApplyMode::MultiplyBase: return tr("Dimmer FX");
-                case PTChannel1DApplyMode::BumpAdd: return tr("Bump");
+                case PTChannel1DApplyMode::MultiplyBase: return tr("Normal");
+                case PTChannel1DApplyMode::BumpAdd: return tr("Override");
             }
             break;
         case ColPropagation:
@@ -2446,13 +2889,19 @@ void PresetTableV2TransitionWidget::setPresetColumnValue(PTTransitionPreset& pre
             preset.speedMultiplier = value.toInt();
             break;
         case ColPositionMotion:
-            preset.positionMotion = value.toInt();
+        {
+            int motion = value.toInt();
+            int builtin = preset.position1DBuiltinMode;
+            if (decodePositionMotionBuiltin(value.toInt(), &motion, &builtin))
+                preset.position1DBuiltinMode = qBound(0, builtin, 1);
+            preset.positionMotion = motion;
             if (preset.positionMotion == int(PTPositionMotion::Custom2D)
                     && preset.positionPath2D.size() < 2)
             {
                 preset.positionPath2D = PTShapesGallery::defaultMotionPath2D();
             }
             break;
+        }
         case ColPositionMotionDir:
             preset.positionMotionDirection = value.toInt();
             break;
@@ -2803,6 +3252,12 @@ void PresetTableV2TransitionWidget::buildUi()
                 mode = PTTransitionMode::Channel1D;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
+            if (mode == PTTransitionMode::MultiFx)
+            {
+                const QString key = multiFxExpansionKeyForItem(item);
+                if (!key.isEmpty())
+                    m_multiFxExpandedPaths.insert(key);
+            }
             if (!item->parent())
             {
                 const int row = item->data(0, kItemPresetIndexRole).toInt();
@@ -2828,6 +3283,12 @@ void PresetTableV2TransitionWidget::buildUi()
                 mode = PTTransitionMode::Channel1D;
             else if (table == m_multiFxTable)
                 mode = PTTransitionMode::MultiFx;
+            if (mode == PTTransitionMode::MultiFx)
+            {
+                const QString key = multiFxExpansionKeyForItem(item);
+                if (!key.isEmpty())
+                    m_multiFxExpandedPaths.remove(key);
+            }
             if (!item->parent())
             {
                 const int row = item->data(0, kItemPresetIndexRole).toInt();
@@ -2926,6 +3387,12 @@ void PresetTableV2TransitionWidget::buildUi()
                 ScopedBoolFlag syncGuard(m_syncingFrozenExpansion);
                 item->setExpanded(true);
             }
+            if (mode == PTTransitionMode::MultiFx && item)
+            {
+                const QString key = multiFxExpansionKeyForItem(item);
+                if (!key.isEmpty())
+                    m_multiFxExpandedPaths.insert(key);
+            }
             if (item && !item->parent())
             {
                 const int row = item->data(0, kItemPresetIndexRole).toInt();
@@ -2943,6 +3410,12 @@ void PresetTableV2TransitionWidget::buildUi()
             {
                 ScopedBoolFlag syncGuard(m_syncingFrozenExpansion);
                 item->setExpanded(false);
+            }
+            if (mode == PTTransitionMode::MultiFx && item)
+            {
+                const QString key = multiFxExpansionKeyForItem(item);
+                if (!key.isEmpty())
+                    m_multiFxExpandedPaths.remove(key);
             }
             if (item && !item->parent())
             {
@@ -3032,10 +3505,7 @@ void PresetTableV2TransitionWidget::updateColumnHeaders(QTreeWidget* table)
                 return multiFxContextMode == PTTransitionMode::PositionMotion
                         ? tr("Orbit fade out") : tr("Wave fade out");
             case ColWaveWidth:
-                if (multiFxRootContext)
-                    return tr("Width °");
-                return multiFxContextMode == PTTransitionMode::PositionMotion
-                        ? tr("Orbit width °") : tr("Wave width °");
+                return tr("Width");
             default:
                 return columnTitleForCol(col);
         }
@@ -3084,6 +3554,12 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
     const int currentRow = currentBefore ? currentBefore->data(0, kItemPresetIndexRole).toInt() : -1;
     const int currentOutput = currentBefore ? currentBefore->data(0, kItemOutputIndexRole).toInt() : -1;
     const int currentSelection = currentBefore ? currentBefore->data(0, kItemSelectionIndexRole).toInt() : -1;
+    const int currentMultiFxRoute = currentBefore
+            && currentBefore->data(0, kItemMultiFxRouteIndexRole).isValid()
+            ? currentBefore->data(0, kItemMultiFxRouteIndexRole).toInt() : -1;
+    const int currentMultiFxRouteOutput = currentBefore
+            && currentBefore->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+            ? currentBefore->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : -1;
     QSignalBlocker tableBlocker(table);
     m_rebuildingTable = true;
     m_nameRowContextItemByTable.remove(table);
@@ -3167,6 +3643,8 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
                 routeItem->setText(ColName, routeRow.label);
                 routeItem->setToolTip(ColName, routeRow.tooltip);
                 renderPresetRowCells(routeItem, routeRow);
+                routeItem->setExpanded(
+                        m_multiFxExpandedPaths.contains(multiFxExpansionKeyForItem(routeItem)));
 
                 const QVector<int> outputIndices = multiFxOutputIndicesForRoute(route);
                 for (int routeOutputIdx : outputIndices)
@@ -3188,6 +3666,8 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
                     outputItem->setText(ColName, outputRow.label);
                     outputItem->setToolTip(ColName, outputRow.tooltip);
                     renderPresetRowCells(outputItem, outputRow);
+                    outputItem->setExpanded(
+                            m_multiFxExpandedPaths.contains(multiFxExpansionKeyForItem(outputItem)));
 
                     const PTTransitionProviderOutputLayer outputLayer =
                             route.outputOverrides.value(routeOutputIdx);
@@ -3223,7 +3703,9 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
         if (mode == PTTransitionMode::MultiFx)
         {
             refreshMultiFxRouteVisualsForPreset(r, displayPresets, displayMultiFxRoutes);
-            parent->setExpanded(expandedSetForMode(mode).contains(r));
+            parent->setExpanded(
+                    m_multiFxExpandedPaths.contains(multiFxExpansionKeyForItem(parent))
+                    || expandedSetForMode(mode).contains(r));
             continue;
         }
 
@@ -3289,8 +3771,18 @@ void PresetTableV2TransitionWidget::rebuildPresetTable(PTTransitionMode mode)
     updateBankSourceUi(mode);
     if (currentRow >= 0)
     {
-        if (QTreeWidgetItem* restore =
-                itemForPresetAddress(mode, currentRow, currentOutput, currentSelection))
+        QTreeWidgetItem* restore = nullptr;
+        if (mode == PTTransitionMode::MultiFx && currentMultiFxRoute >= 0)
+        {
+            restore = itemForMultiFxRouteAddress(currentRow, currentMultiFxRoute,
+                                                 currentMultiFxRouteOutput,
+                                                 currentSelection);
+        }
+        else
+        {
+            restore = itemForPresetAddress(mode, currentRow, currentOutput, currentSelection);
+        }
+        if (restore)
             table->setCurrentItem(restore);
     }
     if (table->verticalScrollBar())
@@ -3323,6 +3815,13 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromItem(PTTransitionMod
             ? PTTransitionMode::Continuous : PTTransitionMode::SweepOnly;
 
     const QVariant routeVar = item->data(0, kItemMultiFxRouteIndexRole);
+    const PTTransitionMode multiFxItemRouteMode =
+            (mode == PTTransitionMode::MultiFx && routeVar.isValid())
+            ? multiFxContextModeForItem(item) : PTTransitionMode::Off;
+    const bool multiFxModeColumnAlias = mode == PTTransitionMode::MultiFx
+            && routeVar.isValid()
+            && (multiFxItemRouteMode == PTTransitionMode::Channel1D
+                || multiFxItemRouteMode == PTTransitionMode::Continuous);
     if (mode == PTTransitionMode::MultiFx && routeVar.isValid())
     {
         const int routeIndex = routeVar.toInt();
@@ -3351,6 +3850,8 @@ PTTransitionPreset PresetTableV2TransitionWidget::presetFromItem(PTTransitionMod
 
     for (int col = ColAxis; col < ColCount; ++col)
     {
+        if (multiFxModeColumnAlias && col == ColPositionMotion)
+            continue;
         const QVariant value = item->data(col, kPresetCellValueRole);
         if (!value.isValid())
             continue;
@@ -3493,11 +3994,24 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
             return;
 
         PTMultiFxTargetTableRoute& route = m_multiFxTargetRoutes[row][routeIdx];
-        const PTTransitionMode routeMode = multiFxRouteMode(route);
+        const PTTransitionMode routeMode = multiFxRouteMode(
+                    route, routeOutputIdx,
+                    selectionIdx > 0 ? selectionIdx - 1 : -1);
         if (!allowedMultiFxColumnsForContext(routeMode, false).contains(col))
             return;
-        const QSet<int> smartDefaultCols =
-                (col == ColWings) ? applySmartWingsDefaults(routeMode, item) : QSet<int>();
+        QSet<int> smartDefaultCols;
+        if (col == ColWings)
+            smartDefaultCols.unite(applySmartWingsDefaults(routeMode, item));
+        if (col == ColOffsetDir)
+            smartDefaultCols.unite(applySmartSpreadDirectionDefaults(routeMode, item));
+        if (col == ColPositionMotion
+                && routeMode == PTTransitionMode::PositionMotion)
+        {
+            const int motion = item->data(ColPositionMotion, kPresetCellValueRole).toInt();
+            if (motion == int(PTPositionMotion::Pan1D)
+                    || motion == int(PTPositionMotion::Tilt1D))
+                smartDefaultCols.insert(ColPosition1DBuiltinMode);
+        }
         QSet<int> changedCols = smartDefaultCols;
         changedCols.insert(col);
         updatePresetRowUiForItem(item, routeMode);
@@ -3647,8 +4161,19 @@ void PresetTableV2TransitionWidget::slotPresetChanged(PTTransitionMode mode, int
     if (!item)
         return;
 
-    const QSet<int> smartDefaultCols =
-            (col == ColWings) ? applySmartWingsDefaults(mode, item) : QSet<int>();
+    QSet<int> smartDefaultCols;
+    if (col == ColWings)
+        smartDefaultCols.unite(applySmartWingsDefaults(mode, item));
+    if (col == ColOffsetDir)
+        smartDefaultCols.unite(applySmartSpreadDirectionDefaults(mode, item));
+    if (col == ColPositionMotion
+            && mode == PTTransitionMode::PositionMotion)
+    {
+        const int motion = item->data(ColPositionMotion, kPresetCellValueRole).toInt();
+        if (motion == int(PTPositionMotion::Pan1D)
+                || motion == int(PTPositionMotion::Tilt1D))
+            smartDefaultCols.insert(ColPosition1DBuiltinMode);
+    }
     QSet<int> changedCols = smartDefaultCols;
     changedCols.insert(col);
 
@@ -5392,7 +5917,8 @@ bool PresetTableV2TransitionWidget::targetTableUsesPositionMode(quint32 tableId)
 PTTransitionMode PresetTableV2TransitionWidget::multiFxRouteMode(
         const PTMultiFxTargetTableRoute& route) const
 {
-    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(route.layerKind);
+    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(
+            effectiveMultiFxLayerKind(route, -1, -1));
     if (kind == PTMultiFxTargetLayerKind::Interpolation)
         return PTTransitionMode::Continuous;
     if (kind == PTMultiFxTargetLayerKind::PositionMotion)
@@ -5401,6 +5927,40 @@ PTTransitionMode PresetTableV2TransitionWidget::multiFxRouteMode(
         return PTTransitionMode::Channel1D;
     return targetTableUsesPositionMode(route.tableId)
             ? PTTransitionMode::PositionMotion : PTTransitionMode::Channel1D;
+}
+
+PTTransitionMode PresetTableV2TransitionWidget::multiFxRouteMode(
+        const PTMultiFxTargetTableRoute& route, int outputIdx, int selectionIdx) const
+{
+    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(
+            effectiveMultiFxLayerKind(route, outputIdx, selectionIdx));
+    if (kind == PTMultiFxTargetLayerKind::Interpolation)
+        return PTTransitionMode::Continuous;
+    if (kind == PTMultiFxTargetLayerKind::PositionMotion)
+        return PTTransitionMode::PositionMotion;
+    if (kind == PTMultiFxTargetLayerKind::Channel1D)
+        return PTTransitionMode::Channel1D;
+    return targetTableUsesPositionMode(route.tableId)
+            ? PTTransitionMode::PositionMotion : PTTransitionMode::Channel1D;
+}
+
+int PresetTableV2TransitionWidget::effectiveMultiFxLayerKind(
+        const PTMultiFxTargetTableRoute& route, int outputIdx, int selectionIdx) const
+{
+    int kind = route.layerKind;
+    if (outputIdx >= 0 && route.outputOverrides.contains(outputIdx))
+    {
+        const PTTransitionProviderOutputLayer layer =
+                route.outputOverrides.value(outputIdx);
+        if (layer.all.multiFxLayerKind >= 0)
+            kind = layer.all.multiFxLayerKind;
+        if (selectionIdx >= 0 && selectionIdx < layer.selections.size()
+                && layer.selections.at(selectionIdx).overrides.multiFxLayerKind >= 0)
+        {
+            kind = layer.selections.at(selectionIdx).overrides.multiFxLayerKind;
+        }
+    }
+    return kind;
 }
 
 QString PresetTableV2TransitionWidget::multiFxRouteModeLabel(
@@ -5425,7 +5985,7 @@ PresetTableV2TransitionWidget::multiFxRouteCellContext(
         return context;
 
     const PTMultiFxTargetTableRoute& route = displayRoutes.at(row).at(routeIndex);
-    context.routeMode = multiFxRouteMode(route);
+    context.routeMode = multiFxRouteMode(route, outputIdx, selectionIdx);
     context.allowedColumns = allowedMultiFxColumnsForContext(context.routeMode, false);
 
     PTTransitionPreset p = displayPresets.at(row);
@@ -5442,6 +6002,8 @@ PresetTableV2TransitionWidget::multiFxRouteCellContext(
                     route.outputOverrides.value(outputIdx);
             applyOverrideColumnsToPreset(p, layer.all);
             context.overrideColumns = layer.all.columns;
+            if (layer.all.multiFxLayerKind >= 0)
+                context.overrideColumns.insert(ColPositionMotion);
 
             if (selectionIdx >= 0)
             {
@@ -5450,6 +6012,8 @@ PresetTableV2TransitionWidget::multiFxRouteCellContext(
                 {
                     applyOverrideColumnsToPreset(p, layer.selections.at(selectionIdx).overrides);
                     context.overrideColumns = layer.selections.at(selectionIdx).overrides.columns;
+                    if (layer.selections.at(selectionIdx).overrides.multiFxLayerKind >= 0)
+                        context.overrideColumns.insert(ColPositionMotion);
                 }
             }
         }
@@ -5600,6 +6164,28 @@ void PresetTableV2TransitionWidget::renderPresetRowCells(
     };
 
     bool renderedCommonValue = false;
+    auto multiFxRowLabel = [this, &row](int rowIndex) {
+        if (rowIndex < 0)
+            return tr("Dynamic");
+        if (PresetTableV2ControlIface* table =
+                PresetTableV2VCLookup::controlIfaceByVcId(row.tableId))
+        {
+            QString name = table->presetTableRowNameForPresetOverride(rowIndex).trimmed();
+            if (!name.isEmpty())
+                return tr("%1: %2").arg(rowIndex + 1).arg(name);
+        }
+        return tr("Row %1").arg(rowIndex + 1);
+    };
+    auto motionLabel = [this](const PTTransitionPreset& preset) {
+        const PTPositionMotion motion = PTPositionMotion(preset.positionMotion);
+        const QString builtin = preset.position1DBuiltinMode == 1
+                ? tr("Oscillate") : tr("Morph");
+        if (motion == PTPositionMotion::Pan1D)
+            return tr("Pan 1D - %1").arg(builtin);
+        if (motion == PTPositionMotion::Tilt1D)
+            return tr("Tilt 1D - %1").arg(builtin);
+        return displayTextForColumn(ColPositionMotion, preset.positionMotion);
+    };
     for (int col = ColAxis; col < ColCount; ++col)
     {
         if (!row.allowedColumns.contains(col))
@@ -5611,21 +6197,76 @@ void PresetTableV2TransitionWidget::renderPresetRowCells(
         if (col == ColMultiFxTargetMode)
         {
             const int modeValue = row.routeMode == PTTransitionMode::Continuous ? 1 : 0;
+            const bool inherited = row.kind != MultiFxUiRowKind::TargetTable
+                    && !row.overrideColumns.contains(ColMultiFxTargetMode);
             setPresetCellValue(item, col, modeValue,
-                               row.kind != MultiFxUiRowKind::TargetTable,
+                               inherited,
                                false, false);
+            if (inherited && !m_multiFxShowInheritedValues)
+                item->setText(col, QString());
             item->setToolTip(col, row.routeMode == PTTransitionMode::Continuous
                              ? tr("This target runs MultiFX as Interpolation.")
                              : tr("FX is automatic: Position tables use 2D FX, fixture tables use 1D FX."));
             continue;
         }
 
-        const bool inherited = !row.overrideColumns.contains(col);
+        const PTPositionMotion rowMotion = PTPositionMotion(row.effective.positionMotion);
+        const bool fixed2DMotionShape = row.routeMode == PTTransitionMode::PositionMotion
+                && (rowMotion == PTPositionMotion::Circle2D
+                    || rowMotion == PTPositionMotion::Figure8_2D
+                    || rowMotion == PTPositionMotion::Custom2D);
+        if (fixed2DMotionShape
+                && (col == ColWaveShape || col == ColFadeIn || col == ColFadeOut))
+        {
+            setUnsupportedCell(col);
+            item->setToolTip(col, tr("Not used by this 2D motion shape"));
+            continue;
+        }
+
+        if (col == ColPositionMotion && row.routeMode == PTTransitionMode::Continuous)
+        {
+            const bool inherited = !row.overrideColumns.contains(col);
+            const bool selected = cellSelection && table
+                    && m_selectedCellsByTable.value(table).contains(
+                            PTTransitionCellKey { item, col });
+            setPresetCellValue(item, col, kMultiFxModeInterpolationValue,
+                               inherited, false, selected);
+            item->setText(col, tr("Interpolation"));
+            if (inherited && !m_multiFxShowInheritedValues)
+                item->setText(col, QString());
+            item->setToolTip(col, tr("This target runs MultiFX as Interpolation."));
+            continue;
+        }
+
+        const int sourceCol = (col == ColPositionMotion
+                               && row.routeMode == PTTransitionMode::Channel1D)
+                ? ColChannel1DApplyMode : col;
+        const bool inherited = !row.overrideColumns.contains(sourceCol);
         const bool selected = cellSelection && table
                 && m_selectedCellsByTable.value(table).contains(
                         PTTransitionCellKey { item, col });
-        setPresetCellValue(item, col, presetColumnValue(row.effective, col),
+        setPresetCellValue(item, col, presetColumnValue(row.effective, sourceCol),
                            inherited, false, selected);
+        if (col == ColMultiFxInterpolationPrimary
+                || col == ColMultiFxInterpolationSecondary)
+        {
+            const int rowIndex = presetColumnValue(row.effective, col).toInt();
+            item->setText(col, multiFxRowLabel(rowIndex));
+        }
+        else if (col == ColPositionMotion
+                 && row.routeMode == PTTransitionMode::Channel1D)
+        {
+            item->setText(col, displayTextForColumn(
+                              ColChannel1DApplyMode,
+                              presetColumnValue(row.effective, ColChannel1DApplyMode)));
+            item->setData(col, kPresetCellValueRole, QVariant());
+        }
+        else if (col == ColPositionMotion)
+        {
+            item->setText(col, motionLabel(row.effective));
+        }
+        if (inherited && !m_multiFxShowInheritedValues)
+            item->setText(col, QString());
         if (col == ColWaveWidth || col == ColWaveShape || col == ColFadeIn
                 || col == ColFadeOut || col == ColStartOffset || col == ColSpeedMult)
             renderedCommonValue = true;
@@ -5655,6 +6296,19 @@ void PresetTableV2TransitionWidget::renderPresetRowCells(
 
     updatePresetRowUiForItem(item, row.routeMode);
     updateOffsetStepLimitForItem(item, row.routeMode);
+    const PTPositionMotion finalMotion = PTPositionMotion(row.effective.positionMotion);
+    const bool finalFixed2DMotionShape = row.routeMode == PTTransitionMode::PositionMotion
+            && (finalMotion == PTPositionMotion::Circle2D
+                || finalMotion == PTPositionMotion::Figure8_2D
+                || finalMotion == PTPositionMotion::Custom2D);
+    if (finalFixed2DMotionShape)
+    {
+        for (int col : { ColWaveShape, ColFadeIn, ColFadeOut })
+        {
+            setUnsupportedCell(col);
+            item->setToolTip(col, tr("Not used by this 2D motion shape"));
+        }
+    }
     for (int col = ColAxis; col < ColCount; ++col)
     {
         if (!row.allowedColumns.contains(col))
@@ -6056,6 +6710,12 @@ QTreeWidgetItem* PresetTableV2TransitionWidget::selectedPresetItem(QTreeWidget* 
 {
     if (!table)
         return nullptr;
+    if (QTreeWidgetItem* item =
+            m_frozenNameContextItemByTable.value(table, nullptr))
+    {
+        if (item->treeWidget() == table)
+            return item;
+    }
     QWidget* focus = QApplication::focusWidget();
     if (focus)
     {
@@ -6466,11 +7126,50 @@ void PresetTableV2TransitionWidget::captureExpandedState(PTTransitionMode mode)
         return;
     QSet<int>& expanded = expandedSetForMode(mode);
     expanded.clear();
+    if (mode == PTTransitionMode::MultiFx)
+        m_multiFxExpandedPaths.clear();
     for (int r = 0; r < table->topLevelItemCount(); ++r)
     {
         if (QTreeWidgetItem* item = table->topLevelItem(r); item && item->isExpanded())
             expanded.insert(r);
     }
+    if (mode == PTTransitionMode::MultiFx)
+    {
+        QTreeWidgetItemIterator it(table);
+        while (*it)
+        {
+            QTreeWidgetItem* item = *it;
+            if (item && item->isExpanded())
+            {
+                const QString key = multiFxExpansionKeyForItem(item);
+                if (!key.isEmpty())
+                    m_multiFxExpandedPaths.insert(key);
+            }
+            ++it;
+        }
+    }
+}
+
+QString PresetTableV2TransitionWidget::multiFxExpansionKeyForItem(QTreeWidgetItem* item) const
+{
+    if (!item)
+        return QString();
+    const int row = item->data(0, kItemPresetIndexRole).toInt();
+    if (row < 0)
+        return QString();
+    const int routeIndex = item->data(0, kItemMultiFxRouteIndexRole).isValid()
+            ? item->data(0, kItemMultiFxRouteIndexRole).toInt() : -1;
+    if (routeIndex < 0)
+        return QStringLiteral("p:%1").arg(row);
+    const int routeOutputIdx = item->data(0, kItemMultiFxRouteOutputIndexRole).isValid()
+            ? item->data(0, kItemMultiFxRouteOutputIndexRole).toInt() : -1;
+    if (routeOutputIdx < 0)
+        return QStringLiteral("p:%1/r:%2").arg(row).arg(routeIndex);
+    const int selectionIdx = item->data(0, kItemSelectionIndexRole).toInt();
+    if (selectionIdx == 0)
+        return QStringLiteral("p:%1/r:%2/o:%3")
+                .arg(row).arg(routeIndex).arg(routeOutputIdx);
+    return QString();
 }
 
 void PresetTableV2TransitionWidget::configureFrozenNameView(PTTransitionMode mode)
@@ -6588,19 +7287,22 @@ void PresetTableV2TransitionWidget::configureFrozenNameView(PTTransitionMode mod
                         table, syncSelectionToTable));
     }
 
-    for (int r = 0; r < table->topLevelItemCount(); ++r)
+    QTreeWidgetItemIterator expansionIt(table);
+    while (*expansionIt)
     {
-        if (QTreeWidgetItem* parent = table->topLevelItem(r))
+        QTreeWidgetItem* item = *expansionIt;
+        if (item)
         {
-            const QModelIndex idx = table->indexFromItem(parent);
-            parent->setToolTip(ColName, parent->childCount() > 0
+            const QModelIndex idx = table->indexFromItem(item);
+            item->setToolTip(ColName, item->childCount() > 0
                     ? tr("Expand to edit per-output overrides")
                     : tr("No linked outputs available"));
-            if (parent->isExpanded())
+            if (item->isExpanded())
                 frozen->expand(idx);
             else
                 frozen->collapse(idx);
         }
+        ++expansionIt;
     }
 }
 
@@ -7759,6 +8461,7 @@ void PresetTableV2TransitionWidget::showNameContextMenu(
     QAction* removeSelectionAct = nullptr;
     QAction* addTargetMenuAction = nullptr;
     QAction* removeTargetAct = nullptr;
+    QAction* showInheritedAct = nullptr;
     QMenu* addTargetMenu = nullptr;
     if (!slaved)
     {
@@ -7786,6 +8489,14 @@ void PresetTableV2TransitionWidget::showNameContextMenu(
             else if (routeIdx > 0 && routeOutputIdx < 0 && selectionIdx <= 0)
                 removeTargetAct = menu.addAction(tr("Remove target table"));
         }
+    }
+
+    if (mode == PTTransitionMode::MultiFx)
+    {
+        menu.addSeparator();
+        showInheritedAct = menu.addAction(tr("Show inherited values"));
+        showInheritedAct->setCheckable(true);
+        showInheritedAct->setChecked(m_multiFxShowInheritedValues);
     }
 
     QAction* toggleAct = nullptr;
@@ -7818,6 +8529,13 @@ void PresetTableV2TransitionWidget::showNameContextMenu(
     if (chosen == toggleAct)
     {
         item->setExpanded(!item->isExpanded());
+        return;
+    }
+    if (chosen == showInheritedAct)
+    {
+        m_multiFxShowInheritedValues = showInheritedAct->isChecked();
+        rebuildPresetTable(PTTransitionMode::MultiFx);
+        updateEffectPreview();
         return;
     }
     if (chosen == removeTargetAct)
@@ -9987,6 +10705,7 @@ void PresetTableV2TransitionWidget::editProperties()
     setCaption(dlg.widgetCaption());
     setTargetTableId(dlg.targetTableId());
     m_logVisible = dlg.logVisible();
+    m_multiFxShowInheritedValues = dlg.multiFxShowInheritedValues();
 
     const PTGlobalEffectSettings gs = dlg.globalSettings();
     m_globalSettings.speed = gs.speed;
@@ -10052,6 +10771,7 @@ VCWidget* PresetTableV2TransitionWidget::createCopy(VCWidget* parent)
     copy->m_shapeGallery = m_shapeGallery;
     copy->m_globalSettings = m_globalSettings;
     copy->m_logVisible = m_logVisible;
+    copy->m_multiFxShowInheritedValues = m_multiFxShowInheritedValues;
     copy->m_bankSourceEngineIds = m_bankSourceEngineIds;
     copy->rebuildAllPresetTables();
     copy->updateGlobalSummaryLabel();
@@ -10371,6 +11091,8 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
     m_targetTableId = rootAttrs.value(KXMLTargetTable).toUInt();
     m_logVisible = rootAttrs.hasAttribute(KXMLShowLog)
             && rootAttrs.value(KXMLShowLog).toInt() != 0;
+    m_multiFxShowInheritedValues = !rootAttrs.hasAttribute(KXMLShowInheritedValues)
+            || rootAttrs.value(KXMLShowInheritedValues).toInt() != 0;
     if (rootAttrs.hasAttribute(KXMLGlobalMinMsRoot))
         m_globalSettings.minDurationMs = rootAttrs.value(KXMLGlobalMinMsRoot).toUInt();
     if (rootAttrs.hasAttribute(KXMLGlobalMaxMsRoot))
@@ -10860,6 +11582,9 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                                     readOutputOverride(outputOv, root.attributes(), outputBase);
                                     layer.all.values = outputOv.values;
                                     layer.all.columns = outputOv.columns;
+                                    if (root.attributes().hasAttribute(KXMLMultiFxTargetLayerKind))
+                                        layer.all.multiFxLayerKind =
+                                                root.attributes().value(KXMLMultiFxTargetLayerKind).toInt();
                                     while (root.readNextStartElement())
                                     {
                                         if (root.name() == KXMLSelection)
@@ -10876,6 +11601,9 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                                                                selectionBase);
                                             selection.overrides.values = selectionOv.values;
                                             selection.overrides.columns = selectionOv.columns;
+                                            if (root.attributes().hasAttribute(KXMLMultiFxTargetLayerKind))
+                                                selection.overrides.multiFxLayerKind =
+                                                        root.attributes().value(KXMLMultiFxTargetLayerKind).toInt();
                                             layer.selections.append(selection);
                                             root.skipCurrentElement();
                                         }
@@ -10886,6 +11614,7 @@ bool PresetTableV2TransitionWidget::loadXML(QXmlStreamReader& root)
                                     {
                                         tableRoute.outputs.append(outputRoute);
                                         if (!layer.all.columns.isEmpty()
+                                                || layer.all.multiFxLayerKind >= 0
                                                 || !layer.selections.isEmpty())
                                             tableRoute.outputOverrides.insert(
                                                     outputRoute.outputIndex, layer);
@@ -11026,6 +11755,9 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
         doc->writeAttribute(KXMLTargetTable, QString::number(m_targetTableId));
     doc->writeAttribute(KXMLShowLog, m_logVisible ? QStringLiteral("1")
                                                   : QStringLiteral("0"));
+    doc->writeAttribute(KXMLShowInheritedValues,
+                        m_multiFxShowInheritedValues ? QStringLiteral("1")
+                                                     : QStringLiteral("0"));
     doc->writeAttribute(KXMLGlobalMinMsRoot, QString::number(m_globalSettings.minDurationMs));
     doc->writeAttribute(KXMLGlobalMaxMsRoot, QString::number(m_globalSettings.maxDurationMs));
     saveXMLCommon(doc);
@@ -11154,6 +11886,9 @@ bool PresetTableV2TransitionWidget::saveXML(QXmlStreamWriter* doc)
             doc->writeAttribute(KXMLPresetCustomCurve,
                                 serializeCustomCurve(ov.values.customCurve));
         }
+        if (ov.multiFxLayerKind >= 0)
+            doc->writeAttribute(KXMLMultiFxTargetLayerKind,
+                                QString::number(ov.multiFxLayerKind));
     };
 
     doc->writeStartElement(KXMLMultiFxTargets);

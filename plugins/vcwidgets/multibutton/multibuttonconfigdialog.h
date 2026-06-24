@@ -347,6 +347,7 @@ private:
     QPushButton*  m_lvlAddFormulaBtn       = nullptr;
     QPushButton*  m_lvlClearFormulaBtn     = nullptr;
     QCheckBox*    m_lvlFlashCheck         = nullptr;
+    QCheckBox*    m_widgetFlashCheck      = nullptr;
     QCheckBox*    m_lvlFlashOverrideCheck = nullptr;
     QCheckBox*    m_lvlFlashForceLtpCheck = nullptr;
     QCheckBox*    m_functionFlashCheck     = nullptr;

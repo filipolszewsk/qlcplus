@@ -34,6 +34,20 @@ struct PointOffset
     int      offset = 0;
 };
 
+static int stablePointShuffleKey(const QLCPoint& pt, int gridWidth, int gridHeight)
+{
+    quint32 h = 2166136261u;
+    auto mix = [&h](quint32 v) {
+        h ^= v;
+        h *= 16777619u;
+    };
+    mix(quint32(pt.x() + 1024));
+    mix(quint32(pt.y() + 2048));
+    mix(quint32(qMax(1, gridWidth)));
+    mix(quint32(qMax(1, gridHeight)));
+    return int(h & 0x7fffffffu);
+}
+
 } // namespace
 
 QList<QLCPoint> PresetTableV2SpatialEngine::sortedPoints(const QList<QLCPoint>& points,
@@ -113,6 +127,7 @@ QString PresetTableV2SpatialEngine::offsetDirectionToString(PTOffsetDirection di
         case PTOffsetDirection::SidesToCenter: return QStringLiteral("OUT");
         case PTOffsetDirection::Alternate:    return QStringLiteral("ALT");
         case PTOffsetDirection::Symmetric:      return QStringLiteral("SYM");
+        case PTOffsetDirection::Random:         return QStringLiteral("RND");
         default:                              return QStringLiteral("LR");
     }
 }
@@ -129,6 +144,8 @@ PTOffsetDirection PresetTableV2SpatialEngine::offsetDirectionFromString(const QS
         return PTOffsetDirection::Alternate;
     if (s == QLatin1String("SYM") || s == QLatin1String("Symmetric") || s == QLatin1String("Mirror"))
         return PTOffsetDirection::Symmetric;
+    if (s == QLatin1String("RND") || s == QLatin1String("Random"))
+        return PTOffsetDirection::Random;
     if (s == QLatin1String("OUTIN"))
         return PTOffsetDirection::CenterToSides;
     return PTOffsetDirection::LeftToRight;
@@ -143,6 +160,7 @@ PTTransitionDirection PresetTableV2SpatialEngine::chaseDirectionFromOffset(PTOff
         case PTOffsetDirection::SidesToCenter: return PTTransitionDirection::Out;
         case PTOffsetDirection::Alternate:    return PTTransitionDirection::Even;
         case PTOffsetDirection::Symmetric:      return PTTransitionDirection::OutIn;
+        case PTOffsetDirection::Random:         return PTTransitionDirection::LR;
         default:                              return PTTransitionDirection::LR;
     }
 }
@@ -188,8 +206,10 @@ QList<QLCPoint> PresetTableV2SpatialEngine::buildChaseOrder(const QList<QLCPoint
 
     for (const QLCPoint& pt : points)
     {
-        const int off = PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
-                pt.x(), pt.y(), gridWidth, gridHeight, waveParams);
+        const int off = (waveParams.offsetDirection == PTOffsetDirection::Random)
+                ? stablePointShuffleKey(pt, gridWidth, gridHeight)
+                : PTDimmerWaveEngine::calculateHeadStartOffsetExtended(
+                          pt.x(), pt.y(), gridWidth, gridHeight, waveParams);
         items.push_back({pt, off});
     }
 
@@ -266,7 +286,7 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     }
     if (liveByColumn.contains(PTEfxCol::InputOffsetDir))
     {
-        const int v = int(val(PTEfxCol::InputOffsetDir)) % 6;
+        const int v = int(val(PTEfxCol::InputOffsetDir)) % 7;
         p.offsetDirection = PTOffsetDirection(v);
     }
     if (liveByColumn.contains(PTEfxCol::InputWings))
@@ -318,8 +338,8 @@ PTTransitionPreset PresetTableV2SpatialEngine::mergePreset(const PTTransitionPre
     if (liveByColumn.contains(PTEfxCol::InputPositionMotionDir))
         p.positionMotionDirection = qBound(0,
                 int(val(PTEfxCol::InputPositionMotionDir))
-                * int(PTPositionMotionDirection::ReverseAlternateWings) / 255,
-                int(PTPositionMotionDirection::ReverseAlternateWings));
+                * int(PTPositionMotionDirection::Mirror) / 255,
+                int(PTPositionMotionDirection::Mirror));
     if (liveByColumn.contains(PTEfxCol::InputPosition1DBuiltinMode))
         p.position1DBuiltinMode = int(val(PTEfxCol::InputPosition1DBuiltinMode)) % 2;
     if (liveByColumn.contains(PTEfxCol::InputChannel1DTarget))

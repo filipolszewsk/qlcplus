@@ -722,13 +722,12 @@ PresetTableV2ConfigDialog::PresetTableV2ConfigDialog(Doc* doc,
     QWidget* colTab = new QWidget(tabs);
     QVBoxLayout* colLayout = new QVBoxLayout(colTab);
 
-    m_colTable = new QTableWidget(0, 5, colTab);
-    m_colTable->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Fade"), tr("1D FX"), tr("Binding")});
+    m_colTable = new QTableWidget(0, 4, colTab);
+    m_colTable->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Fade"), tr("Binding")});
     m_colTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_colTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_colTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_colTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_colTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    m_colTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     m_colTable->verticalHeader()->setVisible(false);
     m_colTable->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_colTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -1654,7 +1653,7 @@ void PresetTableV2ConfigDialog::rebuildColumnTable()
                     if (capturedRow < 0 || capturedRow >= m_columns.size()) return;
                     m_columns[capturedRow].type = PTColumn::Type(comboIdx);
                     // Refresh the Binding cell summary
-                    if (auto* bi = m_colTable->item(capturedRow, 4))
+                    if (auto* bi = m_colTable->item(capturedRow, 3))
                         bi->setText(bindingSummary(m_columns[capturedRow]));
                 });
         m_colTable->setCellWidget(r, 1, typeCombo);
@@ -1665,17 +1664,10 @@ void PresetTableV2ConfigDialog::rebuildColumnTable()
         fadeItem->setCheckState(col.fade ? Qt::Checked : Qt::Unchecked);
         m_colTable->setItem(r, 2, fadeItem);
 
-        // Col 3: 1D FX — explicit effect target
-        QTableWidgetItem* fxItem = new QTableWidgetItem();
-        fxItem->setFlags((fxItem->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
-        fxItem->setCheckState(col.useFor1DFx ? Qt::Checked : Qt::Unchecked);
-        fxItem->setToolTip(tr("1D FX presets affect this column."));
-        m_colTable->setItem(r, 3, fxItem);
-
-        // Col 4: Binding — read-only summary
+        // Col 3: Binding — read-only summary
         QTableWidgetItem* bindItem = new QTableWidgetItem(bindingSummary(col));
         bindItem->setFlags(bindItem->flags() & ~Qt::ItemIsEditable);
-        m_colTable->setItem(r, 4, bindItem);
+        m_colTable->setItem(r, 3, bindItem);
     }
 
     m_colTable->blockSignals(false);
@@ -1762,13 +1754,10 @@ void PresetTableV2ConfigDialog::slotColTableCellChanged(int row, int col)
 void PresetTableV2ConfigDialog::slotColTableItemChanged(QTableWidgetItem* item)
 {
     if (m_updatingColTable) return;
-    if (!item || (item->column() != 2 && item->column() != 3)) return;
+    if (!item || item->column() != 2) return;
     int row = item->row();
     if (row < 0 || row >= m_columns.size()) return;
-    if (item->column() == 2)
-        m_columns[row].fade = (item->checkState() == Qt::Checked);
-    else
-        m_columns[row].useFor1DFx = (item->checkState() == Qt::Checked);
+    m_columns[row].fade = (item->checkState() == Qt::Checked);
 }
 
 // ---------------------------------------------------------------------------

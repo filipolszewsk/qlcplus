@@ -5984,9 +5984,19 @@ void PresetTableV2Widget::applyTransitionSnapshotOverrideColumnsLocked(
                 break;
             case SnapshotColMultiFxInterpolationPrimary:
                 preset.multiFxInterpolationPrimaryRow = v.multiFxInterpolationPrimaryRow;
+                preset.multiFxInterpolationSourceMode =
+                        (preset.multiFxInterpolationPrimaryRow >= 0
+                         || preset.multiFxInterpolationSecondaryRow >= 0)
+                        ? int(PTMultiFxInterpolationSourceMode::Static)
+                        : int(PTMultiFxInterpolationSourceMode::Dynamic);
                 break;
             case SnapshotColMultiFxInterpolationSecondary:
                 preset.multiFxInterpolationSecondaryRow = v.multiFxInterpolationSecondaryRow;
+                preset.multiFxInterpolationSourceMode =
+                        (preset.multiFxInterpolationPrimaryRow >= 0
+                         || preset.multiFxInterpolationSecondaryRow >= 0)
+                        ? int(PTMultiFxInterpolationSourceMode::Static)
+                        : int(PTMultiFxInterpolationSourceMode::Dynamic);
                 break;
             default: break;
         }
@@ -6361,7 +6371,7 @@ PTTransitionPreset PresetTableV2Widget::multiFxPresetAtIndexStrictLocked(
 }
 
 PTTransitionMode PresetTableV2Widget::multiFxRouteModeAtIndexLocked(
-        int presetIndex, int outputIdx, bool staged) const
+        int presetIndex, int outputIdx, const QLCPoint* point, bool staged) const
 {
     const PTTransitionProviderSnapshot* snapshot = &m_transitionProviderSnapshot;
     if (outputIdx >= 0)
@@ -6392,7 +6402,28 @@ PTTransitionMode PresetTableV2Widget::multiFxRouteModeAtIndexLocked(
         return m_mode == PTMode::Position ? PTTransitionMode::PositionMotion
                                           : PTTransitionMode::Channel1D;
 
-    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(route->layerKind);
+    int layerKind = route->layerKind;
+    if (outputIdx >= 0 && route->outputOverrides.contains(outputIdx))
+    {
+        const PTTransitionProviderOutputLayer layer =
+                route->outputOverrides.value(outputIdx);
+        if (layer.all.multiFxLayerKind >= 0)
+            layerKind = layer.all.multiFxLayerKind;
+        if (point)
+        {
+            for (const PTTransitionProviderSelection& selection : layer.selections)
+            {
+                if (selection.cells.contains(*point)
+                        && selection.overrides.multiFxLayerKind >= 0)
+                {
+                    layerKind = selection.overrides.multiFxLayerKind;
+                    break;
+                }
+            }
+        }
+    }
+
+    const PTMultiFxTargetLayerKind kind = PTMultiFxTargetLayerKind(layerKind);
     if (kind == PTMultiFxTargetLayerKind::Interpolation)
         return PTTransitionMode::Continuous;
     if (kind == PTMultiFxTargetLayerKind::PositionMotion)
@@ -8089,27 +8120,51 @@ bool PresetTableV2Widget::multiButtonBeginFlash(int outputIdx, int parameter, in
                                                 quint32 sourceWidgetId, quint64 token,
                                                 double timeMultiplier)
 {
-    if (parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
-        return false;
+    return multiButtonBeginFlashFromSourceAndPhase(outputIdx, parameter, index,
+                                                   sourceWidgetId, token,
+                                                   VCWidget::invalidId(), 0,
+                                                   timeMultiplier);
+}
 
+bool PresetTableV2Widget::multiButtonBeginFlashFromSourceAndPhase(
+        int outputIdx, int parameter, int index, quint32 sourceWidgetId, quint64 token,
+        quint32 sourceEngineId, quint64 phaseAnchorMs, double timeMultiplier)
+{
     QMutexLocker lk(&m_stateMutex);
-    if (outputIdx < 0 || outputIdx >= m_outputs.size()
-            || index < 0 || index >= m_rows.size())
-        return false;
+    if (parameter == PresetTableV2MultiButtonTargetIface::PrimaryRow)
+    {
+        if (outputIdx < 0 || outputIdx >= m_outputs.size()
+                || index < 0 || index >= m_rows.size())
+            return false;
 
-    const int presetIdx = liveSweepPresetIndexLocked(outputIdx);
-    timeMultiplier = widgetFlashTimeMultiplierValue(m_widgetFlashTimeMultiplierIndex);
-    return beginMatrixFlashLocked(outputIdx, index, presetIdx, sourceWidgetId, token,
-                                  timeMultiplier);
+        const int presetIdx = liveSweepPresetIndexLocked(outputIdx);
+        timeMultiplier = widgetFlashTimeMultiplierValue(m_widgetFlashTimeMultiplierIndex);
+        return beginMatrixFlashLocked(outputIdx, index, presetIdx, sourceWidgetId, token,
+                                      timeMultiplier);
+    }
+
+    return beginEffectFlashLocked(outputIdx, parameter, index, sourceWidgetId, token,
+                                  sourceEngineId, phaseAnchorMs);
 }
 
 bool PresetTableV2Widget::multiButtonEndFlash(int outputIdx, int parameter, int index,
                                               quint32 sourceWidgetId, quint64 token)
 {
-    if (parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
-        return false;
+    return multiButtonEndFlashFromSource(outputIdx, parameter, index,
+                                         sourceWidgetId, token,
+                                         VCWidget::invalidId());
+}
+
+bool PresetTableV2Widget::multiButtonEndFlashFromSource(
+        int outputIdx, int parameter, int index, quint32 sourceWidgetId, quint64 token,
+        quint32 sourceEngineId)
+{
+    Q_UNUSED(sourceEngineId)
 
     QMutexLocker lk(&m_stateMutex);
+    if (parameter != PresetTableV2MultiButtonTargetIface::PrimaryRow)
+        return endEffectFlashLocked(outputIdx, parameter, index, sourceWidgetId, token);
+
     return endMatrixFlashLocked(outputIdx, index, sourceWidgetId, token);
 }
 
@@ -9001,6 +9056,17 @@ quint32 PresetTableV2Widget::cycleDurationMsLocked(const PTGlobalEffectSettings&
     PTTransitionPreset timingPreset = preset;
     timingPreset.durationMs = 0;
     return PTParamMatrixEngine::effectiveDurationMs(global, timingPreset, false);
+}
+
+quint32 PresetTableV2Widget::flashCycleDurationMsLocked(
+        const PTGlobalEffectSettings& global,
+        const PTTransitionPreset& preset) const
+{
+    static constexpr double kFlashBaseSpeedBoost = 3.0;
+    const quint32 cycleMs = qMax(quint32(1), cycleDurationMsLocked(global, preset));
+    const double activeWindow01 = PTSpatialFixturePlan::windowWidth01(preset);
+    return qMax(quint32(MasterTimer::tick()),
+                quint32(qRound64(double(cycleMs) * activeWindow01 / kFlashBaseSpeedBoost)));
 }
 
 void PresetTableV2Widget::rescaleElapsedForDurationChange(quint32& elapsedMs,
@@ -9910,7 +9976,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
         {
             const int liveMultiFxIdx = liveMultiFxPresetIndexLocked(outputIdx);
             const PTTransitionMode liveMultiFxRouteMode =
-                    multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, false);
+                    multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, &pt, false);
             const PTTransitionPreset pointMultiFxPreset = liveMultiFxIdx >= 0
                     ? multiFxPresetAtIndexStrictLocked(liveMultiFxIdx, outputIdx, &pt, false)
                     : multiFxPreset;
@@ -9952,7 +10018,7 @@ void PresetTableV2Widget::writeContinuousSpatial(int outputIdx, MasterTimer* tim
             if (hasStagedMultiFx)
             {
                 const PTTransitionMode stagedMultiFxRouteMode =
-                        multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, true);
+                        multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, &pt, true);
                 const PTTransitionPreset pointStagedMultiFxPreset = stagedMultiFxIdx >= 0
                         ? multiFxPresetAtIndexStrictLocked(stagedMultiFxIdx, outputIdx, &pt,
                                                            true)
@@ -10221,6 +10287,225 @@ bool PresetTableV2Widget::beginMatrixFlashLocked(int outputIdx, int rowIdx,
     return true;
 }
 
+bool PresetTableV2Widget::beginEffectFlashLocked(int outputIdx, int parameter, int presetIdx,
+                                                 quint32 sourceWidgetId, quint64 token,
+                                                 quint32 sourceEngineId,
+                                                 quint64 phaseAnchorMs)
+{
+    if (outputIdx < 0 || outputIdx >= m_outputs.size() || presetIdx < 0)
+        return false;
+
+    const PTTransitionMode mode = multiButtonParamToTransitionMode(parameter);
+    if (mode != PTTransitionMode::Continuous
+            && mode != PTTransitionMode::PositionMotion
+            && mode != PTTransitionMode::Channel1D
+            && mode != PTTransitionMode::MultiFx)
+        return false;
+
+    PTTransitionProviderSnapshot sourceSnapshot;
+    bool sourceSnapshotValid = false;
+    const quint64 effectivePhaseAnchorMs =
+            (sourceEngineId != VCWidget::invalidId() && phaseAnchorMs == 0)
+            ? quint64(QDateTime::currentMSecsSinceEpoch()) : phaseAnchorMs;
+    int bankSize = transitionSnapshotPresetsForModeLocked(mode).size();
+    if (mode == PTTransitionMode::MultiFx && sourceEngineId != VCWidget::invalidId())
+    {
+        if (PresetTableV2TransitionProviderIface* provider =
+                PresetTableV2VCLookup::transitionProviderByVcId(sourceEngineId))
+        {
+            sourceSnapshot = provider->transitionProviderSnapshot();
+            sourceSnapshotValid = true;
+            bankSize = sourceSnapshot.multiFxPresets.size();
+        }
+        else
+            bankSize = 0;
+    }
+    if (presetIdx >= bankSize)
+        return false;
+
+    while (m_widgetEffectFlash.size() <= outputIdx)
+        m_widgetEffectFlash.append(PTWidgetEffectFlashState());
+
+    PTWidgetEffectFlashState& flash = m_widgetEffectFlash[outputIdx];
+    if (flash.active)
+        endEffectFlashLocked(outputIdx, flash.parameter, -1,
+                             flash.sourceWidgetId, flash.token);
+
+    flash = PTWidgetEffectFlashState();
+    flash.active = true;
+    flash.parameter = parameter;
+    flash.sourceWidgetId = sourceWidgetId;
+    flash.token = token;
+
+    auto ensureIntVector = [outputIdx](QVector<int>& v) {
+        while (v.size() <= outputIdx)
+            v.append(-1);
+    };
+    auto resetClock = [outputIdx](QVector<quint32>& elapsed, QVector<quint32>& lastCycle) {
+        while (elapsed.size() <= outputIdx)
+            elapsed.append(0);
+        while (lastCycle.size() <= outputIdx)
+            lastCycle.append(0);
+        elapsed[outputIdx] = 0;
+        lastCycle[outputIdx] = 0;
+    };
+
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            flash.restoreIndex = liveContinuousPresetIndexLocked(outputIdx);
+            ensureIntVector(m_liveContinuousPreset);
+            m_liveContinuousPreset[outputIdx] = presetIdx;
+            resetClock(m_continuousElapsedMs, m_continuousLastCycleMs);
+            bumpMultiButtonStateRevisionLocked(outputIdx, parameter);
+            sendFeedback(presetIdx + 1, PTInputId::transContinuousBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            flash.restoreIndex = livePositionMotionPresetIndexLocked(outputIdx);
+            ensureIntVector(m_livePositionMotionPreset);
+            m_livePositionMotionPreset[outputIdx] = presetIdx;
+            resetClock(m_positionMotionElapsedMs, m_positionMotionLastCycleMs);
+            bumpMultiButtonStateRevisionLocked(outputIdx, parameter);
+            sendFeedback(presetIdx + 1, PTInputId::positionMotionBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::Channel1DPreset:
+            flash.restoreIndex = liveChannel1DPresetIndexLocked(outputIdx);
+            ensureIntVector(m_liveChannel1DPreset);
+            m_liveChannel1DPreset[outputIdx] = presetIdx;
+            resetClock(m_channel1DElapsedMs, m_channel1DLastCycleMs);
+            bumpMultiButtonStateRevisionLocked(outputIdx, parameter);
+            sendFeedback(presetIdx + 1, PTInputId::channel1DBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            flash.restoreIndex = liveMultiFxPresetIndexLocked(outputIdx);
+            if (outputIdx < m_liveMultiFxSourceEngineId.size())
+                flash.restoreMultiFxSourceEngineId =
+                        m_liveMultiFxSourceEngineId.at(outputIdx);
+            if (outputIdx < m_liveMultiFxSourceSnapshot.size())
+                flash.restoreMultiFxSourceSnapshot =
+                        m_liveMultiFxSourceSnapshot.at(outputIdx);
+            if (outputIdx < m_liveMultiFxSourceSnapshotValid.size())
+                flash.restoreMultiFxSourceSnapshotValid =
+                        m_liveMultiFxSourceSnapshotValid.at(outputIdx);
+            if (outputIdx < m_liveMultiFxPhaseAnchorMs.size())
+                flash.restoreMultiFxPhaseAnchorMs =
+                        m_liveMultiFxPhaseAnchorMs.at(outputIdx);
+            if (outputIdx < m_liveMultiFxSyncedPhaseAnchorMs.size())
+                flash.restoreMultiFxSyncedPhaseAnchorMs =
+                        m_liveMultiFxSyncedPhaseAnchorMs.at(outputIdx);
+
+            ensureIntVector(m_liveMultiFxPreset);
+            while (m_liveMultiFxSourceEngineId.size() <= outputIdx)
+                m_liveMultiFxSourceEngineId.append(VCWidget::invalidId());
+            while (m_liveMultiFxSourceSnapshot.size() <= outputIdx)
+                m_liveMultiFxSourceSnapshot.append(PTTransitionProviderSnapshot());
+            while (m_liveMultiFxSourceSnapshotValid.size() <= outputIdx)
+                m_liveMultiFxSourceSnapshotValid.append(false);
+            while (m_liveMultiFxPhaseAnchorMs.size() <= outputIdx)
+                m_liveMultiFxPhaseAnchorMs.append(0);
+            while (m_liveMultiFxSyncedPhaseAnchorMs.size() <= outputIdx)
+                m_liveMultiFxSyncedPhaseAnchorMs.append(0);
+            m_liveMultiFxPreset[outputIdx] = presetIdx;
+            m_liveMultiFxSourceEngineId[outputIdx] = sourceEngineId;
+            if (sourceEngineId != VCWidget::invalidId() && sourceSnapshotValid)
+            {
+                m_liveMultiFxSourceSnapshot[outputIdx] = sourceSnapshot;
+                m_liveMultiFxSourceSnapshotValid[outputIdx] = true;
+            }
+            else
+                m_liveMultiFxSourceSnapshotValid[outputIdx] = false;
+            m_liveMultiFxPhaseAnchorMs[outputIdx] =
+                    sourceEngineId != VCWidget::invalidId() ? effectivePhaseAnchorMs : 0;
+            m_liveMultiFxSyncedPhaseAnchorMs[outputIdx] = 0;
+            resetClock(m_multiFxElapsedMs, m_multiFxLastCycleMs);
+            bumpMultiButtonStateRevisionLocked(outputIdx, parameter);
+            sendFeedback(presetIdx + 1, PTInputId::multiFxBank(outputIdx));
+            break;
+        default:
+            flash = PTWidgetEffectFlashState();
+            return false;
+    }
+
+    update();
+    return true;
+}
+
+bool PresetTableV2Widget::endEffectFlashLocked(int outputIdx, int parameter, int presetIdx,
+                                               quint32 sourceWidgetId, quint64 token)
+{
+    Q_UNUSED(presetIdx)
+
+    if (outputIdx < 0 || outputIdx >= m_widgetEffectFlash.size())
+        return false;
+
+    PTWidgetEffectFlashState flash = m_widgetEffectFlash.at(outputIdx);
+    if (!flash.active)
+        return false;
+    if (flash.parameter != parameter || flash.sourceWidgetId != sourceWidgetId
+            || flash.token != token)
+        return false;
+
+    auto ensureIntVector = [outputIdx](QVector<int>& v) {
+        while (v.size() <= outputIdx)
+            v.append(-1);
+    };
+
+    switch (parameter)
+    {
+        case PresetTableV2MultiButtonTargetIface::ContinuousPreset:
+            ensureIntVector(m_liveContinuousPreset);
+            m_liveContinuousPreset[outputIdx] = flash.restoreIndex;
+            sendFeedback(flash.restoreIndex < 0 ? 0 : flash.restoreIndex + 1,
+                         PTInputId::transContinuousBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::PositionMotionPreset:
+            ensureIntVector(m_livePositionMotionPreset);
+            m_livePositionMotionPreset[outputIdx] = flash.restoreIndex;
+            sendFeedback(flash.restoreIndex < 0 ? 0 : flash.restoreIndex + 1,
+                         PTInputId::positionMotionBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::Channel1DPreset:
+            ensureIntVector(m_liveChannel1DPreset);
+            m_liveChannel1DPreset[outputIdx] = flash.restoreIndex;
+            sendFeedback(flash.restoreIndex < 0 ? 0 : flash.restoreIndex + 1,
+                         PTInputId::channel1DBank(outputIdx));
+            break;
+        case PresetTableV2MultiButtonTargetIface::MultiFxPreset:
+            ensureIntVector(m_liveMultiFxPreset);
+            while (m_liveMultiFxSourceEngineId.size() <= outputIdx)
+                m_liveMultiFxSourceEngineId.append(VCWidget::invalidId());
+            while (m_liveMultiFxSourceSnapshot.size() <= outputIdx)
+                m_liveMultiFxSourceSnapshot.append(PTTransitionProviderSnapshot());
+            while (m_liveMultiFxSourceSnapshotValid.size() <= outputIdx)
+                m_liveMultiFxSourceSnapshotValid.append(false);
+            while (m_liveMultiFxPhaseAnchorMs.size() <= outputIdx)
+                m_liveMultiFxPhaseAnchorMs.append(0);
+            while (m_liveMultiFxSyncedPhaseAnchorMs.size() <= outputIdx)
+                m_liveMultiFxSyncedPhaseAnchorMs.append(0);
+            m_liveMultiFxPreset[outputIdx] = flash.restoreIndex;
+            m_liveMultiFxSourceEngineId[outputIdx] =
+                    flash.restoreMultiFxSourceEngineId;
+            m_liveMultiFxSourceSnapshot[outputIdx] =
+                    flash.restoreMultiFxSourceSnapshot;
+            m_liveMultiFxSourceSnapshotValid[outputIdx] =
+                    flash.restoreMultiFxSourceSnapshotValid;
+            m_liveMultiFxPhaseAnchorMs[outputIdx] =
+                    flash.restoreMultiFxPhaseAnchorMs;
+            m_liveMultiFxSyncedPhaseAnchorMs[outputIdx] =
+                    flash.restoreMultiFxSyncedPhaseAnchorMs;
+            sendFeedback(flash.restoreIndex < 0 ? 0 : flash.restoreIndex + 1,
+                         PTInputId::multiFxBank(outputIdx));
+            break;
+        default:
+            return false;
+    }
+
+    m_widgetEffectFlash[outputIdx] = PTWidgetEffectFlashState();
+    bumpMultiButtonStateRevisionLocked(outputIdx, parameter);
+    update();
+    return true;
+}
+
 void PresetTableV2Widget::beginMatrixFlashWaveOutLocked(PTOutputMatrixState& st)
 {
     if (st.flashPhase == PTFlashPhase::WaveIn)
@@ -10292,9 +10577,6 @@ void PresetTableV2Widget::releaseMatrixFlashLocked(int outputIdx)
 
 void PresetTableV2Widget::beginWidgetStagedFlashLocked()
 {
-    if (m_mode == PTMode::Position)
-        return;
-
     const quint64 token = m_nextWidgetStagedFlashToken++;
     bool anyStarted = false;
     const double timeMultiplier =
@@ -10397,6 +10679,8 @@ QVector<uchar> PresetTableV2Widget::applyChannel1DFxToValuesLocked(
         const QSize& gridSize, const PTSpatialFixturePlan& plan, int serialCount,
         quint32 elapsedMs, Fixture* fxi) const
 {
+    Q_UNUSED(outputIdx)
+
     if (!preset.enabled || !fxi || m_mode != PTMode::FixtureGroup)
         return baseValues;
 
@@ -10410,52 +10694,13 @@ QVector<uchar> PresetTableV2Widget::applyChannel1DFxToValuesLocked(
     if (out.size() < m_columns.size())
         out.resize(m_columns.size());
 
-    bool hasExplicitTargets = false;
-    for (const PTColumn& col : m_columns)
-    {
-        if (col.useFor1DFx)
-        {
-            hasExplicitTargets = true;
-            break;
-        }
-    }
-
-    const PTChannel1DTarget target = PTChannel1DTarget(preset.channel1DTarget);
-    if (!hasExplicitTargets)
-    {
-        VCPluginDiagnostics::breadcrumbRateLimited(
-                QStringLiteral("presettablev2"), id(), caption(),
-                QStringLiteral("presettablev2/1dfx-no-explicit-target/%1/%2")
-                        .arg(id()).arg(outputIdx),
-                2000,
-                QStringLiteral("1D FX no explicit target columns output=%1 fallbackTarget=%2")
-                        .arg(outputIdx).arg(int(target)));
-    }
-    const bool firstOnly = !hasExplicitTargets
-            && PTChannel1DTargetMode(preset.channel1DTargetMode) == PTChannel1DTargetMode::First;
     bool applied = false;
 
     for (int c = 0; c < m_columns.size(); ++c)
     {
-        const PTColumn& col = m_columns.at(c);
-        bool match = hasExplicitTargets && col.useFor1DFx;
-        if (!hasExplicitTargets && target == PTChannel1DTarget::CustomColumn)
-        {
-            match = (c == qBound(0, preset.channel1DCustomColumn, 255));
-        }
-        else if (!hasExplicitTargets)
-        {
-            const QLCChannel* ch = boundChannelForFixtureColumn(col, fxi);
-            match = channel1DTargetMatches(ch, target);
-        }
-        if (!match)
-            continue;
-
         const uchar base = (c < baseValues.size()) ? baseValues.at(c) : 0;
         out[c] = channel1DApplyValue(base, wave01, preset);
         applied = true;
-        if (firstOnly)
-            break;
     }
 
     return applied ? out : baseValues;
@@ -10535,12 +10780,16 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
 
     for (int o = 0; o < m_outputs.size(); ++o)
     {
+        ensureMatrixState(o);
+        PTOutputMatrixState& st = m_matrixState[o];
         const int activeRow = (o < m_activeRow.size()) ? m_activeRow[o] : -1;
         const bool stagedPrimaryValid = o < m_stagedRowValid.size() && m_stagedRowValid[o];
         const int stagedRow = (stagedPrimaryValid && o < m_stagedRow.size()) ? m_stagedRow[o] : -1;
         const bool activeRowValid = activeRow >= 0 && activeRow < m_rows.size();
         const bool stagedRowValid = stagedRow >= 0 && stagedRow < m_rows.size();
-        if (!activeRowValid && !stagedRowValid)
+        const bool flashRowValid = st.flashActive
+                && st.flashRow >= 0 && st.flashRow < m_rows.size();
+        if (!activeRowValid && !stagedRowValid && !flashRowValid)
             continue;
 
         const PTOutput& out = m_outputs[o];
@@ -10646,6 +10895,55 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
         const PTTransitionPreset sweepPreset = sweepPresetForOutputLocked(o);
         const PTSpatialFixturePlan sweepPlan = spatialPlanForPreset(sweepPreset);
         const double xfProgress = crossfadeProgress01Locked(xfEffective);
+        const PTTransitionPreset activeFlashPreset = st.flashActive
+                ? st.flashPreset : sweepPreset;
+        const PTSpatialFixturePlan flashPlan = st.flashActive
+                ? spatialPlanForPreset(activeFlashPreset) : sweepPlan;
+
+        if (st.flashActive)
+        {
+            const double flashTimeMultiplier = qBound(0.05, st.flashTimeMultiplier, 16.0);
+            const quint32 baseFlashCycleMs = flashCycleDurationMsLocked(globalFx, activeFlashPreset);
+            const quint32 flashCycleMs = qMax(quint32(MasterTimer::tick()),
+                    quint32(qRound64(double(baseFlashCycleMs) * flashTimeMultiplier)));
+            const quint32 activeFlashCycleMs = (st.flashPhase == PTFlashPhase::WaveOut)
+                    ? qMax(quint32(MasterTimer::tick()),
+                           quint32(qRound64(double(flashCycleMs) * st.flashReleaseProgress)))
+                    : flashCycleMs;
+
+            if (st.flashLastCycleMs > 0 && st.flashLastCycleMs != activeFlashCycleMs)
+                rescaleElapsedForDurationChange(st.flashElapsedMs,
+                                                st.flashLastCycleMs,
+                                                activeFlashCycleMs);
+            st.flashLastCycleMs = activeFlashCycleMs;
+            st.flashElapsedMs += MasterTimer::tick();
+            st.flashWaveProgress = qMin(1.0, double(st.flashElapsedMs)
+                    / double(activeFlashCycleMs));
+
+            if (st.flashPhase == PTFlashPhase::WaveIn && st.flashWaveProgress >= 1.0)
+            {
+                st.flashPhase = PTFlashPhase::Hold;
+                st.flashWaveProgress = 0.0;
+                st.flashElapsedMs = 0;
+                st.flashLastCycleMs = 0;
+            }
+            else if (st.flashPhase == PTFlashPhase::WaveOut
+                     && st.flashWaveProgress >= 1.0)
+            {
+                st.flashActive = false;
+                st.flashPhase = PTFlashPhase::Idle;
+                st.flashWaveProgress = 0.0;
+                st.flashReleaseProgress = 1.0;
+                st.flashElapsedMs = 0;
+                st.flashLastCycleMs = 0;
+                st.flashSourceWidgetId = 0;
+                st.flashToken = 0;
+                st.flashRow = -1;
+                st.flashReturnRow = -1;
+                st.flashValues.clear();
+                st.flashReturnValues.clear();
+            }
+        }
 
         for (const PTOutputScopeFixture& sf : scopeFixtures)
         {
@@ -10712,10 +11010,48 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
             }
             if (!base.valid && stagedRowValid)
                 base = effectivePositionValue(stagedRow, o, sf.point);
+            if (st.flashActive && st.flashRow >= 0 && st.flashRow < m_rows.size())
+            {
+                const PTPositionValue flashPos =
+                        effectivePositionValue(st.flashRow, o, sf.point);
+                if (flashPos.valid)
+                {
+                    PTPositionValue returnPos;
+                    if (st.flashReturnRow >= 0 && st.flashReturnRow < m_rows.size())
+                        returnPos = effectivePositionValue(st.flashReturnRow, o, sf.point);
+                    if (!returnPos.valid)
+                        returnPos = base.valid ? base : flashPos;
+
+                    if (st.flashPhase == PTFlashPhase::Hold)
+                    {
+                        base = flashPos;
+                    }
+                    else if (st.flashPhase == PTFlashPhase::WaveIn)
+                    {
+                        const float blend = flashPlan.sweepBlend01(
+                                st.flashWaveProgress, sf.point, activeFlashPreset,
+                                globalFx);
+                        base = PTPositionConverter::blendPositions(
+                                returnPos, flashPos, double(blend));
+                    }
+                    else if (st.flashPhase == PTFlashPhase::WaveOut)
+                    {
+                        const float waveOutBlend = flashPlan.sweepBlend01(
+                                st.flashWaveProgress, sf.point, activeFlashPreset,
+                                globalFx);
+                        const float peakBlend = flashPlan.sweepBlend01(
+                                st.flashReleaseProgress, sf.point, activeFlashPreset,
+                                globalFx);
+                        const float releaseBlend = peakBlend * (1.0f - waveOutBlend);
+                        base = PTPositionConverter::blendPositions(
+                                returnPos, flashPos, double(releaseBlend));
+                    }
+                }
+            }
             if (!base.valid)
                 continue;
 
-            if (positionXfActive)
+            if (positionXfActive && !st.flashActive)
             {
                 const PTPositionValue staged = effectivePositionValue(stagedRow, o, sf.point);
                 double blend = double(xfEffective) / 255.0;
@@ -10960,7 +11296,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
 
                 const int liveMfIdx = liveMultiFxPresetIndexLocked(o);
                 const PTTransitionMode liveMfRouteMode =
-                        multiFxRouteModeAtIndexLocked(liveMfIdx, o, false);
+                        multiFxRouteModeAtIndexLocked(liveMfIdx, o, &sf.point, false);
                 const PTTransitionPreset liveMfPreset = multiFxPresetAtIndexStrictLocked(
                         liveMfIdx, o, &sf.point, false);
                 PTPositionValue liveMfOut = applyMultiFx(
@@ -10970,7 +11306,7 @@ void PresetTableV2Widget::writeDMXPositionFixtureGroup(MasterTimer* /*timer*/,
                 {
                     const int stagedMfIdx = stagedMultiFxPresetIndexLocked(o);
                     const PTTransitionMode stagedMfRouteMode =
-                            multiFxRouteModeAtIndexLocked(stagedMfIdx, o, true);
+                            multiFxRouteModeAtIndexLocked(stagedMfIdx, o, &sf.point, true);
                     const PTTransitionPreset stagedMfPreset = multiFxPresetAtIndexStrictLocked(
                             stagedMfIdx, o, &sf.point, true);
                     const PTPositionValue stagedMfOut = applyMultiFx(
@@ -11367,7 +11703,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
 
     const double flashTimeMultiplier = st.flashActive
             ? qBound(0.05, st.flashTimeMultiplier, 16.0) : 1.0;
-    const quint32 baseFlashCycleMs = cycleDurationMsLocked(global, activeFlashPreset);
+    const quint32 baseFlashCycleMs = flashCycleDurationMsLocked(global, activeFlashPreset);
     const quint32 flashCycleMs = qMax(quint32(MasterTimer::tick()),
             quint32(qRound64(double(baseFlashCycleMs) * flashTimeMultiplier)));
 
@@ -11567,7 +11903,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
             {
                 const int liveMultiFxIdx = liveMultiFxPresetIndexLocked(outputIdx);
                 const PTTransitionMode liveMultiFxRouteMode =
-                        multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, false);
+                        multiFxRouteModeAtIndexLocked(liveMultiFxIdx, outputIdx, &pt, false);
                 const PTTransitionPreset pointMultiFxPreset = multiFxPresetForPoint(pt, false);
                 auto multiFxInterpolationValues = [&](const PTTransitionPreset& p,
                                                       double dimmerValue,
@@ -11610,7 +11946,7 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 if (hasStagedMultiFx)
                 {
                     const PTTransitionMode stagedMultiFxRouteMode =
-                            multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, true);
+                            multiFxRouteModeAtIndexLocked(stagedMultiFxIdx, outputIdx, &pt, true);
                     const PTTransitionPreset pointStagedMultiFxPreset =
                             multiFxPresetForPoint(pt, true);
                     QVector<uchar> stagedMultiValues = finalValues;
@@ -11655,19 +11991,25 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
 
         if (st.flashActive)
         {
+            const QVector<uchar> pointFlashValues =
+                    valuesForPoint(st.flashRow,
+                                   st.flashValues.isEmpty() ? nullptr : &st.flashValues);
+            const QVector<uchar> pointFlashReturnValues =
+                    valuesForPoint(st.flashReturnRow,
+                                   st.flashReturnValues.isEmpty()
+                                   ? nullptr : &st.flashReturnValues);
             if (st.flashPhase == PTFlashPhase::Hold)
-                applyRow(st.flashValues);
+                applyRow(pointFlashValues);
             else if (st.flashPhase == PTFlashPhase::WaveIn)
             {
                 const float blend = flashSpatialPlan.sweepBlend01(
                         st.flashWaveProgress, pt, activeFlashPreset, global);
                 const QVector<uchar> fromValues = continuousFx
                         ? continuousValuesAtPoint()
-                        : PTParamMatrixEngine::blendWithIntensity(
-                            st.flashReturnValues.isEmpty() ? pointPriVals : st.flashReturnValues,
-                            global.intensity);
+                        : PTParamMatrixEngine::blendWithIntensity(pointFlashReturnValues,
+                                                                  global.intensity);
                 const QVector<uchar> toValues =
-                        PTParamMatrixEngine::blendWithIntensity(st.flashValues,
+                        PTParamMatrixEngine::blendWithIntensity(pointFlashValues,
                                                                 global.intensity);
                 const QVector<uchar> finalValues = applyOutputIntensityLocked(
                         outputIdx, blendRowValues(fromValues, toValues, blend));
@@ -11684,11 +12026,10 @@ void PresetTableV2Widget::writeMatrixSpatial(int outputIdx, MasterTimer* timer,
                 const float releaseBlend = peakBlend * (1.0f - waveOutBlend);
                 const QVector<uchar> fromValues = continuousFx
                         ? continuousValuesAtPoint()
-                        : PTParamMatrixEngine::blendWithIntensity(
-                            st.flashReturnValues.isEmpty() ? pointPriVals : st.flashReturnValues,
-                            global.intensity);
+                        : PTParamMatrixEngine::blendWithIntensity(pointFlashReturnValues,
+                                                                  global.intensity);
                 const QVector<uchar> toValues =
-                        PTParamMatrixEngine::blendWithIntensity(st.flashValues,
+                        PTParamMatrixEngine::blendWithIntensity(pointFlashValues,
                                                                 global.intensity);
                 const QVector<uchar> finalValues = applyOutputIntensityLocked(
                         outputIdx, blendRowValues(fromValues, toValues, releaseBlend));

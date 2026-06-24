@@ -356,6 +356,7 @@ private:
     void updateChannelMonitorTimerInterval();
     void updateChannelMonitorTimerState();
     bool entryIsFlash(int idx) const;
+    bool widgetEntryIsFlash(int idx) const;
     void beginFlashHold(int idx);
     void endFlashHold();
     bool widgetPrimaryFlashAvailable() const;
@@ -646,6 +647,7 @@ private:
     int     m_restoreIndex   = -1;   // latched index before flash hold
     int     m_widgetFlashHoldIndex = -1;
     quint64 m_widgetFlashToken = 0;
+    QList<MultiButtonWidgetActionTarget> m_widgetFlashHoldActions;
     quint64 m_nextWidgetFlashToken = 1;
 
     QPointer<EntrySelectOverlay> m_entrySelectOverlay;

@@ -28,6 +28,7 @@ public:
     QString widgetCaption() const;
     PTGlobalEffectSettings globalSettings() const;
     bool logVisible() const;
+    bool multiFxShowInheritedValues() const;
     quint32 bankSourceEngineId(PTTransitionMode mode) const;
     QSharedPointer<QLCInputSource> globalSpeedInputSource() const;
     QSharedPointer<QLCInputSource> globalIntensityInputSource() const;
@@ -50,6 +51,7 @@ private:
     QLineEdit*                     m_captionEdit = nullptr;
     QComboBox*                     m_tableCombo = nullptr;
     QCheckBox*                     m_logVisibleChk = nullptr;
+    QCheckBox*                     m_multiFxShowInheritedChk = nullptr;
     QHash<int, QComboBox*>         m_bankSourceCombos;
     QSlider*                       m_speedSlider = nullptr;
     QLabel*                        m_speedValueLabel = nullptr;
