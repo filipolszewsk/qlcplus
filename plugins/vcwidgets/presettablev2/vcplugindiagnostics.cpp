@@ -369,7 +369,9 @@ void installEmergencyHandlers()
     std::set_terminate(terminateHandler);
     std::signal(SIGSEGV, signalHandler);
     std::signal(SIGABRT, signalHandler);
+#ifdef SIGBUS
     std::signal(SIGBUS, signalHandler);
+#endif
     std::signal(SIGILL, signalHandler);
     std::signal(SIGFPE, signalHandler);
     std::signal(SIGTERM, signalHandler);
